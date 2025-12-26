@@ -51,7 +51,7 @@ export default function PostCard({ post, setPosts, isFeed, hideMedia }) {
     useEffect(() => {
         const fetchAuthor = async () => {
             try {
-                const res = await fetch(`https://oreblogda.com/api/users/${post.authorId}`);
+                const res = await fetch(`https://oreblogda.com/api/users/${post.authorId || post.authorUserId}`);
                 if (res.ok) {
                     const data = await res.json();
                     setAuthor({
@@ -62,8 +62,8 @@ export default function PostCard({ post, setPosts, isFeed, hideMedia }) {
             } catch (err) {
             }
         };
-        if (post.authorId) fetchAuthor();
-    }, [post.authorId]);
+        if (post.authorId || post.authorUserId) fetchAuthor();
+    }, [post.authorId, post.authorUserId, post.authorName]);
 
     // View Tracking (Once per device)
     useEffect(() => {
@@ -409,7 +409,7 @@ export default function PostCard({ post, setPosts, isFeed, hideMedia }) {
             {/* Header: Author & Views */}
             <View className="flex-row justify-between items-center">
                 <Pressable
-                    onPress={() => router.push(`/author/${post.authorId}`)}
+                    onPress={() => router.push(`/author/${post.authorId || post.authorUserId}`)}
                     className="flex-row items-center"
                 >
                     {author.image ? (

@@ -16,9 +16,9 @@ SplashScreen.preventAutoHideAsync();
 // --- AD CONFIGURATION ---
 const FIRST_AD_DELAY_MS = 60000; // 1 minute delay after app opens
 const COOLDOWN_MS = 90000; // 90 seconds between subsequent ads
+const GAME_ID = "6013445";
 
 // We set the lastShownTime to "now minus (cooldown - first delay)" 
-// This trick makes the logic wait exactly 60 seconds before the first ad is eligible.
 let lastShownTime = Date.now() - (COOLDOWN_MS - FIRST_AD_DELAY_MS);
 let interstitial = null;
 
@@ -67,53 +67,33 @@ function RootLayoutContent() {
     const router = useRouter();
     const { user } = useUser();
     const [isSyncing, setIsSyncing] = useState(true);
+    const [adLoading, setAdLoading] = useState(false); // New Loading State
 
     const [fontsLoaded, fontError] = useFonts({
         "SpaceGrotesk": require("../assets/fonts/SpaceGrotesk.ttf"),
         "SpaceGroteskBold": require("../assets/fonts/SpaceGrotesk.ttf"),
     });
 
-    // 1. AdMob Logic with Session Delay
-    // useEffect(() => {
-    //     if (Platform.OS !== 'web') {
-    //         try {
-    //             const { InterstitialAd, AdEventType, TestIds } = require('react-native-google-mobile-ads');
-    //             const mobileAds = require('react-native-google-mobile-ads').default;
+    /* --- ORIGINAL ADMOB LOGIC (COMMENTED OUT) ---
+    useEffect(() => {
+        if (Platform.OS !== 'web') {
+            try {
+                const { InterstitialAd, AdEventType, TestIds } = require('react-native-google-mobile-ads');
+                const mobileAds = require('react-native-google-mobile-ads').default;
+                mobileAds().initialize().then(() => {
+                    interstitial = InterstitialAd.createForAdRequest(TestIds.INTERSTITIAL);
+                    interstitial.load();
+                    // ... (rest of your logic)
+                });
+            } catch (err) { console.log("AdMob error:", err); }
+        }
+    }, []);
+    */
 
-    //             mobileAds().initialize().then(() => {
-    //                 interstitial = InterstitialAd.createForAdRequest(TestIds.INTERSTITIAL);
-    //                 interstitial.load();
-
-    //                 const adTriggerSub = DeviceEventEmitter.addListener("tryShowInterstitial", () => {
-    //                     const now = Date.now();
-    //                     // Only show if ad is loaded AND cooldown has passed
-    //                     if (interstitial?.loaded && (now - lastShownTime > COOLDOWN_MS)) {
-    //                         lastShownTime = now;
-    //                         interstitial.show();
-    //                         interstitial.load();
-    //                     } else {
-    //                     }
-    //                 });
-
-    //                 const backHandler = BackHandler.addEventListener('hardwareBackPress', () => {
-    //                     DeviceEventEmitter.emit("tryShowInterstitial");
-    //                     return false;
-    //                 });
-
-    //                 return () => {
-    //                     adTriggerSub.remove();
-    //                     backHandler.remove();
-    //                 };
-    //             });
-    //         } catch (err) { console.log("AdMob error:", err); }
-    //     }
-    // }, []);
-
-    // 2. Account Sync & Push Token (The Migration Fix)
+    // 2. Account Sync & Push Token
     useEffect(() => {
         async function performSync() {
             if (!fontsLoaded) return;
-
             const token = await registerForPushNotificationsAsync();
 
             if (token && user?.deviceId) {
@@ -130,11 +110,8 @@ function RootLayoutContent() {
                     console.log("Token sync failed:", err);
                 }
             }
-
-            // Artificial delay for loading animation as requested
             setTimeout(() => setIsSyncing(false), 1500);
         }
-
         performSync();
     }, [fontsLoaded, user?.deviceId]);
 
@@ -172,6 +149,7 @@ function RootLayoutContent() {
     return (
         <SafeAreaProvider>
             <View key={colorScheme} className="flex-1 bg-white dark:bg-gray-900">
+
                 <StatusBar
                     barStyle={isDark ? "light-content" : "dark-content"}
                     backgroundColor={isDark ? "#0a0a0a" : "#ffffff"}
@@ -182,7 +160,6 @@ function RootLayoutContent() {
                         contentStyle: { backgroundColor: isDark ? "#0a0a0a" : "#ffffff" },
                     }}
                     onStateChange={() => {
-                        // 💡 THE FIX: Delay the ad check by 500ms so the screen transition finishes first
                         setTimeout(() => {
                             DeviceEventEmitter.emit("tryShowInterstitial");
                         }, 500);
