@@ -4,23 +4,22 @@ import { Video } from "expo-av";
 import { useRouter } from "expo-router";
 import { useEffect, useMemo, useState } from "react";
 import {
-    Alert,
-    Image,
-    Linking,
-    Modal,
-    Pressable,
-    Share,
-    useColorScheme,
-    Dimensions,
-    useWindowDimensions,
-    View
+	Alert,
+	Dimensions,
+	Image,
+	Linking,
+	Modal,
+	Pressable,
+	Share,
+	useColorScheme,
+	View
 } from "react-native";
 // 🔹 New Imports for Zooming
 import { Gesture, GestureDetector, GestureHandlerRootView } from 'react-native-gesture-handler';
 import Animated, {
-    useSharedValue,
-    useAnimatedStyle,
-    withTiming,
+	useAnimatedStyle,
+	useSharedValue,
+	withTiming,
 } from 'react-native-reanimated';
 import { WebView } from "react-native-webview";
 import YoutubePlayer from "react-native-youtube-iframe";
