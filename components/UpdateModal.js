@@ -3,11 +3,9 @@ import Constants from 'expo-constants';
 import { useEffect, useState } from 'react';
 import { Linking, Modal, Pressable, Text as RNText, useColorScheme, View, ActivityIndicator } from 'react-native';
 
-// 1. Remote Config URL
-// Replace this with your actual API endpoint or a raw JSON file URL (e.g., GitHub Gist)
-const VERSION_CHECK_URL = 'https://oreblogda.com/version-check'; 
+// UPDATE THIS TO YOUR DEPLOYED NEXT.JS URL
+const VERSION_CHECK_URL = 'https://oreblogda.com/api/version'; 
 
-// Use expoConfig for modern Expo apps, fallback to manifest for older ones
 const INSTALLED_VERSION = Constants.expoConfig?.version || Constants.manifest?.version || '1.0.0';
 
 const isUpdateRequired = (installed, latest) => {
@@ -36,19 +34,18 @@ export default function UpdateHandler() {
   const fetchLatestVersion = async () => {
     try {
       setIsLoading(true);
-      // Example expected JSON: { "version": "1.5.0" }
       const response = await fetch(VERSION_CHECK_URL);
       const data = await response.json();
       
       if (data?.version) {
         setLatestVersion(data.version);
         if (isUpdateRequired(INSTALLED_VERSION, data.version)) {
-          // Small delay for smooth UI transition
-          setTimeout(() => setVisible(true), 1000);
+          // Small delay so it doesn't pop up the split second the app opens
+          setTimeout(() => setVisible(true), 1500);
         }
       }
     } catch (error) {
-      console.error("Failed to fetch latest version:", error);
+      console.error("Failed to fetch version from server:", error);
     } finally {
       setIsLoading(false);
     }
@@ -58,9 +55,8 @@ export default function UpdateHandler() {
     Linking.openURL('https://play.google.com/store/apps/details?id=com.kaytee.oreblogda');
   };
 
-  // If still loading and we haven't decided to show the modal yet, 
-  // you could return null or a small loader. 
-  // For this UI, we keep the modal hidden until it's actually needed.
+  // While checking the server, we don't show the modal yet.
+  // The app continues to run in the background.
   if (isLoading && !visible) return null;
 
   return (
