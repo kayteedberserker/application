@@ -11,10 +11,10 @@ import {
 } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import AnimeLoading from "../../../components/AnimeLoading";
+import AppBanner from "../../../components/AppBanner";
 import PostCard from "../../../components/PostCard";
 import { SyncLoading } from "../../../components/SyncLoading";
 import { Text } from "../../../components/Text";
-// import AppBanner from "../../../components/AppBanner";
 const { width } = Dimensions.get('window');
 
 const API_BASE = "https://oreblogda.com/api";
@@ -85,7 +85,7 @@ export default function CategoryPage() {
                 {showAd && (
                     <View className="mb-8 mt-2 items-center bg-gray-50 dark:bg-gray-800/30 py-4 rounded-2xl border border-gray-100 dark:border-gray-800">
                         <RNText className="text-[10px] text-gray-400 mb-2 uppercase tracking-widest">Sponsored Transmission</RNText>
-                        {/* <AppBanner size="MEDIUM_RECTANGLE" /> */}
+                        <AppBanner size="MEDIUM_RECTANGLE" />
                     </View>
                 )}
             </View>
