@@ -16,8 +16,8 @@ import {
     TouchableOpacity,
     View
 } from "react-native";
-import Toast from "react-native-toast-message";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
+import Toast from "react-native-toast-message";
 import useSWRInfinite from "swr/infinite";
 import AnimeLoading from "../../components/AnimeLoading";
 import AppOnboarding from "../../components/AppOnboarding";
@@ -93,7 +93,7 @@ export default function MobileProfilePage() {
                 if (res.ok) {
                     setUser(dbUser);
                     setDescription(dbUser.description || "");
-                    
+
                     // Fetch total count for ranking
                     const postRes = await fetch(`${API_BASE}/posts?author=${dbUser._id}&limit=1`);
                     const postData = await postRes.json();
@@ -192,58 +192,58 @@ export default function MobileProfilePage() {
     };
 
     const handleDelete = (postId) => {
-    Alert.alert("Confirm Deletion", "Erase this transmission log?", [
-        { text: "Cancel", style: "cancel" },
-        {
-            text: "Delete",
-            style: "destructive",
-            onPress: async () => {
-                // Show a loading toast immediately
-                Toast.show({
-                    type: 'info',
-                    text1: 'Processing...',
-                    text2: 'Attempting to delete post',
-                    autoHide: false
-                });
-
-                try {
-                    const response = await fetch(`${API_BASE}/posts/delete`, {
-                        method: "DELETE",
-                        headers: { "Content-Type": "application/json" },
-                        body: JSON.stringify({ postId, fingerprint: user?.deviceId }),
+        Alert.alert("Confirm Deletion", "Erase this transmission log?", [
+            { text: "Cancel", style: "cancel" },
+            {
+                text: "Delete",
+                style: "destructive",
+                onPress: async () => {
+                    // Show a loading toast immediately
+                    Toast.show({
+                        type: 'info',
+                        text1: 'Processing...',
+                        text2: 'Attempting to delete post',
+                        autoHide: false
                     });
 
-                    const data = await response.json();
-
-                    if (response.ok) {
-                        // Success path
-                        mutate();
-                        setTotalPosts(prev => prev - 1);
-                        Toast.show({
-                            type: 'success',
-                            text1: 'Deleted',
-                            text2: data.message || 'Post removed successfully'
+                    try {
+                        const response = await fetch(`${API_BASE}/posts/delete`, {
+                            method: "DELETE",
+                            headers: { "Content-Type": "application/json" },
+                            body: JSON.stringify({ postId, fingerprint: user?.deviceId }),
                         });
-                    } else {
-                        // Backend blocked deletion (e.g., status was pending/rejected)
+
+                        const data = await response.json();
+
+                        if (response.ok) {
+                            // Success path
+                            mutate();
+                            setTotalPosts(prev => prev - 1);
+                            Toast.show({
+                                type: 'success',
+                                text1: 'Deleted',
+                                text2: data.message || 'Post removed successfully'
+                            });
+                        } else {
+                            // Backend blocked deletion (e.g., status was pending/rejected)
+                            Toast.show({
+                                type: 'error',
+                                text1: 'Deletion Blocked',
+                                text2: data.message || 'This post cannot be deleted.'
+                            });
+                        }
+                    } catch (err) {
+                        console.error("Delete Error:", err);
                         Toast.show({
                             type: 'error',
-                            text1: 'Deletion Blocked',
-                            text2: data.message || 'This post cannot be deleted.'
+                            text1: 'Connection Error',
+                            text2: 'Failed to reach the server.'
                         });
                     }
-                } catch (err) {
-                    console.error("Delete Error:", err);
-                    Toast.show({
-                        type: 'error',
-                        text1: 'Connection Error',
-                        text2: 'Failed to reach the server.'
-                    });
-                }
+                },
             },
-        },
-    ]);
-};
+        ]);
+    };
 
     const listHeader = useMemo(() => (
         <View className="px-6">
@@ -255,12 +255,12 @@ export default function MobileProfilePage() {
             {/* AVATAR SECTION */}
             <View className="items-center mb-10">
                 <View className="relative">
-                    <Animated.View 
+                    <Animated.View
                         style={{ transform: [{ rotate: spin }] }}
-                        className="absolute -inset-4 border border-dashed border-blue-600/30 rounded-full" 
+                        className="absolute -inset-4 border border-dashed border-blue-600/30 rounded-full"
                     />
                     <View className="absolute -inset-1 border-2 border-blue-600 rounded-full opacity-50" />
-                    
+
                     <TouchableOpacity onPress={pickImage} className="w-40 h-40 rounded-full overflow-hidden border-4 border-white dark:border-[#0a0a0a] bg-gray-900 shadow-2xl">
                         <Image
                             source={{ uri: preview || user?.profilePic?.url || "https://via.placeholder.com/150" }}
@@ -289,7 +289,7 @@ export default function MobileProfilePage() {
                         </Text>
                     </View>
                     <View className="h-1.5 w-full bg-gray-100 dark:bg-gray-800 rounded-full overflow-hidden border border-gray-200 dark:border-white/10">
-                        <View 
+                        <View
                             style={{ width: `${progress}%` }}
                             className="h-full bg-blue-600 shadow-lg"
                         />
@@ -335,7 +335,7 @@ export default function MobileProfilePage() {
                         {isUpdating ? "Syncing Changes..." : "Update Character Data"}
                     </Text>
                     {isUpdating && (
-                        <Animated.View 
+                        <Animated.View
                             className="absolute bottom-0 h-1 bg-white/40 w-full"
                             style={{ transform: [{ translateX }] }}
                         />
@@ -356,7 +356,7 @@ export default function MobileProfilePage() {
 
     return (
         <View className="flex-1 bg-white dark:bg-[#0a0a0a]" style={{ paddingTop: insets.top }}>
-			<AppOnboarding />
+            <AppOnboarding />
             {/* Ambient background deco */}
             <View className="absolute top-0 right-0 w-80 h-80 bg-blue-600/5 rounded-full" pointerEvents="none" />
             <View className="absolute bottom-0 left-0 w-60 h-60 bg-purple-600/5 rounded-full" pointerEvents="none" />
