@@ -17,11 +17,19 @@ import Toast from "react-native-toast-message";
 import useSWR from "swr";
 import AnimeLoading from "../../components/AnimeLoading";
 import { Text } from "../../components/Text";
-import THEME from "../../components/useAppTheme";
 import { useStreak } from "../../context/StreakContext";
 import { useUser } from "../../context/UserContext";
 import { AdConfig } from "../../utils/AdConfig";
-
+const THEME = {
+  bg: "#0a0a0a",
+  card: "#111111",
+  accent: "#2563eb",
+  border: "#1e293b",
+  success: "#22c55e",
+  danger: "#ef4444",
+  glowBlue: "rgba(37, 99, 235, 0.08)",
+  glowRed: "rgba(239, 68, 68, 0.05)"
+};
 // 🔹 Notification Handler Configuration
 Notifications.setNotificationHandler({
     handleNotification: async () => ({
