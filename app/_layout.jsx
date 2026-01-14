@@ -73,8 +73,9 @@ function RootLayoutContent() {
     const [isSyncing, setIsSyncing] = useState(true);
     const appState = useRef(AppState.currentState);
     
-    // Safety guard to prevent double-navigation from notifications
+    // Safety guards for notifications
     const lastProcessedNotificationId = useRef(null);
+    const hasCheckedColdStart = useRef(false); // 🔹 Prevents re-running cold start logic
 
     useEffect(() => {
         loadAppOpenAd();
@@ -162,14 +163,13 @@ function RootLayoutContent() {
         performSync();
     }, [fontsLoaded, user?.deviceId]);
 
-    // 3. Notification Interaction (Fixed for Cold Start & Deep Links)
+    // 3. Notification Interaction
     useEffect(() => {
         if (isSyncing) return;
 
         const handleNotificationResponse = (response) => {
             const notificationId = response?.notification?.request?.identifier;
             
-            // Prevent processing the same notification interaction twice
             if (lastProcessedNotificationId.current === notificationId) return;
             lastProcessedNotificationId.current = notificationId;
 
@@ -179,27 +179,32 @@ function RootLayoutContent() {
             console.log("🔔 Notification Data Payload:", JSON.stringify(data));
 
             const targetId = data?.postId || data?.body?.postId || data?.id;
-            const type = data?.type;
+            const type = data?.type || data?.body?.type;
 
-            // Ensure targetId is valid and not an empty object/string
+            // Priority 1: Navigation via Post ID
             if (targetId && typeof targetId !== 'object') {
                 console.log("🚀 Navigating to Post ID:", targetId);
                 router.push({
                     pathname: "/post/[id]",
                     params: { id: targetId }
                 });
-            } else if (type === "open_diary") {
+            } 
+            // Priority 2: Navigation via Type
+            else if (type === "open_diary" || type === "diary") {
                 console.log("📓 Navigating to Author Diary");
                 router.push("/authordiary");
             }
         };
 
-        // Handle cold start
-        Notifications.getLastNotificationResponseAsync().then(response => {
-            if (response) {
-                handleNotificationResponse(response);
-            }
-        });
+        // Handle cold start - ONLY RUNS ONCE per session
+        if (!hasCheckedColdStart.current) {
+            Notifications.getLastNotificationResponseAsync().then(response => {
+                if (response) {
+                    handleNotificationResponse(response);
+                }
+            });
+            hasCheckedColdStart.current = true;
+        }
 
         // Handle background/foreground taps
         const responseSub = Notifications.addNotificationResponseReceivedListener(handleNotificationResponse);
