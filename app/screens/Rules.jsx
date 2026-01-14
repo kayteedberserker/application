@@ -2,19 +2,8 @@ import { Ionicons } from '@expo/vector-icons';
 import { useRouter } from 'expo-router';
 import { Dimensions, SafeAreaView, ScrollView, TouchableOpacity, View } from 'react-native';
 import { Text } from '../../components/Text';
-
+import THEME from '../../components/useAppTheme';
 const { width } = Dimensions.get('window');
-
-const THEME = {
-  bg: "#0a0a0a",
-  card: "#111111",
-  accent: "#2563eb",
-  border: "#1e293b",
-  success: "#22c55e",
-  error: "#ef4444",
-  glowBlue: "rgba(37, 99, 235, 0.08)",
-  glowRed: "rgba(239, 68, 68, 0.05)"
-};
 
 export default function Rules() {
   const router = useRouter();
@@ -23,7 +12,7 @@ export default function Rules() {
     <View 
       style={{ 
         backgroundColor: THEME.card, 
-        borderColor: type === 'success' ? `${THEME.success}40` : `${THEME.error}40` 
+        borderColor: type === 'success' ? `${THEME.success}40` : `${THEME.danger}40` 
       }}
       className="p-6 rounded-[32px] mb-4 border-2 shadow-sm"
     >
@@ -31,19 +20,19 @@ export default function Rules() {
         <View 
           className="w-8 h-8 rounded-lg items-center justify-center border"
           style={{ 
-            backgroundColor: type === 'success' ? `${THEME.success}10` : `${THEME.error}10`,
-            borderColor: type === 'success' ? `${THEME.success}30` : `${THEME.error}30`
+            backgroundColor: type === 'success' ? `${THEME.success}10` : `${THEME.danger}10`,
+            borderColor: type === 'success' ? `${THEME.success}30` : `${THEME.danger}30`
           }}
         >
           <Ionicons 
             name={icon} 
             size={18} 
-            color={type === 'success' ? THEME.success : THEME.error} 
+            color={type === 'success' ? THEME.success : THEME.danger} 
           />
         </View>
         <Text 
           className="ml-3 font-black uppercase italic tracking-tight"
-          style={{ color: type === 'success' ? THEME.success : THEME.error }}
+          style={{ color: type === 'success' ? THEME.success : THEME.danger }}
         >
           {title}
         </Text>
