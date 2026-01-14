@@ -14,17 +14,9 @@ import {
   View
 } from 'react-native';
 import { Text } from '../../components/Text';
+import THEME from '../../components/useAppTheme';
 
 const { width } = Dimensions.get('window');
-
-const THEME = {
-  bg: "#0a0a0a",
-  card: "#111111",
-  accent: "#2563eb",
-  border: "#1e293b",
-  glowBlue: "rgba(37, 99, 235, 0.08)",
-  glowRed: "rgba(239, 68, 68, 0.03)"
-};
 
 export default function Contact() {
   const router = useRouter();
