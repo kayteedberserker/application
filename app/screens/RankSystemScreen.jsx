@@ -2,18 +2,8 @@ import { Ionicons } from '@expo/vector-icons';
 import { useRouter } from 'expo-router';
 import { Dimensions, SafeAreaView, ScrollView, TouchableOpacity, View } from 'react-native';
 import { Text } from '../../components/Text';
-
+import THEME from '../../components/useAppTheme';
 const { width } = Dimensions.get('window');
-
-const THEME = {
-  bg: "#0a0a0a",
-  card: "#111111",
-  accent: "#2563eb",
-  border: "#1e293b",
-  streak: "#f97316",
-  glowBlue: "rgba(37, 99, 235, 0.08)",
-  glowOrange: "rgba(249, 115, 22, 0.05)"
-};
 
 export default function RankSystemScreen() {
   const router = useRouter();
@@ -69,7 +59,7 @@ export default function RankSystemScreen() {
             
             <View style={{ backgroundColor: THEME.card, borderColor: THEME.border }} className="p-6 rounded-[35px] border-2">
                 <RankRow icon="👑" title="Master_Writer" count={200} limit={3} />
-                <RankRow icon="💎" title="Elite_Writer" count={121} limit={3} />
+                <RankRow icon="💎" title="Elite_Writer" count={151} limit={3} />
                 <RankRow icon="🔥" title="Senior_Writer" count={101} limit={2} />
                 <RankRow icon="⚔️" title="Novice_Writer" count={51} limit={2} />
                 <RankRow icon="📜" title="Senior_Researcher" count={26} limit={1} />
