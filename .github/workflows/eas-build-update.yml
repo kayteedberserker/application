@@ -30,8 +30,8 @@ jobs:
 
       - name: Run EAS Update (production)
         if: ${{ github.event.inputs.action == 'update' || github.event.inputs.action == 'both' }}
-        run: eas update --branch production --message "Manual production update"
-
+        run: eas update --branch production --platform android --message "Manual production update"
+        
       - name: Run EAS Build (Android production)
         if: ${{ github.event.inputs.action == 'build' || github.event.inputs.action == 'both' }}
         run: eas build --platform android --profile production --non-interactive
