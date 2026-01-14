@@ -2,17 +2,18 @@ import { MaterialCommunityIcons } from '@expo/vector-icons';
 import { useColorScheme } from "nativewind";
 import { useEffect, useMemo, useRef, useState } from "react";
 import {
-	Animated,
-	DeviceEventEmitter,
-	Dimensions,
-	Easing,
-	FlatList,
-	InteractionManager,
-	View
+    Animated,
+    DeviceEventEmitter,
+    Dimensions,
+    Easing,
+    FlatList,
+    InteractionManager,
+    View
 } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import useSWRInfinite from "swr/infinite";
 import AnimeLoading from "./AnimeLoading";
+import AppBanner from './AppBanner';
 import PostCard from "./PostCard";
 import { SyncLoading } from "./SyncLoading";
 import { Text } from "./Text";
@@ -109,6 +110,7 @@ export default function PostsViewer() {
                         <Text className="text-[10px] font-bold text-gray-400 uppercase tracking-[0.2em] italic text-center">
                             Sponsored Transmission
                         </Text>
+                        <AppBanner size="MEDIUM_RECTANGLE" />
                     </View>
                 )}
             </View>
