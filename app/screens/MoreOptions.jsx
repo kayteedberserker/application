@@ -15,17 +15,8 @@ import {
   View
 } from 'react-native';
 import { Text } from '../../components/Text';
-
+import THEME from '../../components/useAppTheme';
 const { width } = Dimensions.get('window');
-
-const THEME = {
-  bg: "#0a0a0a",
-  card: "#111111",
-  accent: "#2563eb",
-  border: "#1e293b",
-  glowBlue: "rgba(37, 99, 235, 0.08)",
-  glowPurple: "rgba(139, 92, 246, 0.05)"
-};
 
 export default function MoreOptions() {
   const router = useRouter();
@@ -90,7 +81,7 @@ export default function MoreOptions() {
       <View className="w-10 h-10 rounded-xl items-center justify-center" style={{ backgroundColor: `${color}15` }}>
         <Ionicons name={icon} size={20} color={color} />
       </View>
-      <Text className="flex-1 ml-4 text-sm font-black uppercase italic text-white tracking-tight">{title}</Text>
+      <Text style={{color: THEME.text}} className='flex-1 ml-4 text-sm font-black uppercase italic text-white tracking-tight'>{title}</Text>
       <Ionicons name="chevron-forward" size={16} color={THEME.border} />
     </TouchableOpacity>
   );
@@ -130,7 +121,7 @@ export default function MoreOptions() {
             <Ionicons name="notifications-outline" size={20} color={THEME.accent} />
           </View>
           <View className="flex-1 ml-4">
-            <Text className="text-sm font-black italic uppercase text-white">Push Notifications</Text>
+            <Text style={{color: THEME.text}} className="text-sm font-black italic uppercase text-white">Push Notifications</Text>
             <Text className="text-[10px] font-bold text-gray-500 uppercase tracking-tighter">
                 Status: {isNotificationsEnabled ? "Active Uplink" : "Signal Blocked"}
             </Text>
@@ -218,7 +209,7 @@ export default function MoreOptions() {
         {/* --- Footer Info --- */}
         <View className="items-center mt-16 mb-12">
           <View className="bg-gray-900 px-4 py-2 rounded-full border border-gray-800 mb-2">
-            <Text className="text-gray-500 font-mono text-[9px] uppercase tracking-widest">
+            <Text style={{color: "white"}} className="text-gray-500 font-mono text-[9px] uppercase tracking-widest">
                 Firmware: v1.0.5-STABLE
             </Text>
           </View>
