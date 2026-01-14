@@ -1,9 +1,10 @@
 import React, { useEffect, useState } from "react";
 import { ScrollView, View } from "react-native";
+import { BannerAdSize } from "react-native-google-mobile-ads";
 import useSWR from "swr";
+import AppBanner from "./AppBanner";
 import PostCard from "./PostCard";
-// import AppBanner from "./AppBanner";
-// import { Text } from "./Text";
+import { Text } from "./Text";
 
 const API_URL = "https://oreblogda.com";
 const fetcher = (url) => fetch(url).then((res) => res.json());
@@ -54,7 +55,7 @@ export default function SimilarPosts({ category, currentPostId }) {
               </View>
 
               {/* Ad placement every 2 posts */}
-              {/* {(index + 1) % 3 === 0 && (
+              {(index + 1) % 3 === 0 && (
                 <View 
                   className="mr-4 w-[300px] h-[400px] bg-gray-50 dark:bg-gray-800/40 rounded-2xl border border-gray-100 dark:border-gray-800 items-center justify-center"
                 >
@@ -68,7 +69,7 @@ export default function SimilarPosts({ category, currentPostId }) {
                     Relevant content for you
                   </Text>
                 </View>
-              )} */}
+              )}
             </React.Fragment>
           );
         })}
