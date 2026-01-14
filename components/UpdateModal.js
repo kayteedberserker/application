@@ -1,14 +1,17 @@
 import { Feather, Ionicons } from "@expo/vector-icons";
 import Constants from 'expo-constants';
 import { useEffect, useState } from 'react';
-import { Linking, Modal, Pressable, Text as RNText, useColorScheme, View } from 'react-native';
+import { Linking, Modal, Pressable, Text as RNText, useColorScheme, View, ActivityIndicator } from 'react-native';
 
-// 1. Version Config
-const LATEST_VERSION = '1.5.0'; 
+// 1. Remote Config URL
+// Replace this with your actual API endpoint or a raw JSON file URL (e.g., GitHub Gist)
+const VERSION_CHECK_URL = 'https://oreblogda.com/version-check'; 
+
 // Use expoConfig for modern Expo apps, fallback to manifest for older ones
 const INSTALLED_VERSION = Constants.expoConfig?.version || Constants.manifest?.version || '1.0.0';
 
 const isUpdateRequired = (installed, latest) => {
+  if (!latest) return false;
   const parse = v => v.split('.').map(n => parseInt(n, 10));
   const [iMajor, iMinor, iPatch] = parse(installed);
   const [lMajor, lMinor, lPatch] = parse(latest);
@@ -21,19 +24,44 @@ const isUpdateRequired = (installed, latest) => {
 
 export default function UpdateHandler() {
   const [visible, setVisible] = useState(false);
+  const [latestVersion, setLatestVersion] = useState(null);
+  const [isLoading, setIsLoading] = useState(true);
   const colorScheme = useColorScheme();
   const isDark = colorScheme === "dark";
 
   useEffect(() => {
-    if (isUpdateRequired(INSTALLED_VERSION, LATEST_VERSION)) {
-      // Small delay so it doesn't pop up the split second the app opens
-      setTimeout(() => setVisible(true), 1500);
-    }
+    fetchLatestVersion();
   }, []);
+
+  const fetchLatestVersion = async () => {
+    try {
+      setIsLoading(true);
+      // Example expected JSON: { "version": "1.5.0" }
+      const response = await fetch(VERSION_CHECK_URL);
+      const data = await response.json();
+      
+      if (data?.version) {
+        setLatestVersion(data.version);
+        if (isUpdateRequired(INSTALLED_VERSION, data.version)) {
+          // Small delay for smooth UI transition
+          setTimeout(() => setVisible(true), 1000);
+        }
+      }
+    } catch (error) {
+      console.error("Failed to fetch latest version:", error);
+    } finally {
+      setIsLoading(false);
+    }
+  };
 
   const handleUpdate = () => {
     Linking.openURL('https://play.google.com/store/apps/details?id=com.kaytee.oreblogda');
   };
+
+  // If still loading and we haven't decided to show the modal yet, 
+  // you could return null or a small loader. 
+  // For this UI, we keep the modal hidden until it's actually needed.
+  if (isLoading && !visible) return null;
 
   return (
     <Modal visible={visible} transparent animationType="fade">
@@ -66,7 +94,7 @@ export default function UpdateHandler() {
             </RNText>
             
             <RNText className="text-center text-[10px] text-blue-500 font-black uppercase tracking-[3px] mb-4">
-              Version v{LATEST_VERSION} Detected
+              Version v{latestVersion} Detected
             </RNText>
 
             <RNText className="text-center text-sm leading-6 text-gray-500 dark:text-gray-400 mb-8 px-2">
