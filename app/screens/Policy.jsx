@@ -2,17 +2,8 @@ import { Ionicons } from '@expo/vector-icons';
 import { useRouter } from 'expo-router';
 import { Dimensions, SafeAreaView, ScrollView, TouchableOpacity, View } from 'react-native';
 import { Text } from '../../components/Text';
-
+import THEME from '../../components/useAppTheme';
 const { width } = Dimensions.get('window');
-
-const THEME = {
-  bg: "#0a0a0a",
-  card: "#111111",
-  accent: "#2563eb",
-  border: "#1e293b",
-  glowBlue: "rgba(37, 99, 235, 0.08)",
-  glowIndigo: "rgba(79, 70, 229, 0.05)"
-};
 
 export default function PrivacyPolicy() {
   const router = useRouter();
