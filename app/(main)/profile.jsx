@@ -1,4 +1,4 @@
-import { Ionicons, Feather } from "@expo/vector-icons"; // 👈 Added Feather
+import { Ionicons, Feather } from "@expo/vector-icons"; 
 import * as ImagePicker from "expo-image-picker";
 import { useRouter } from "expo-router";
 import { useEffect, useMemo, useRef, useState } from "react";
@@ -38,6 +38,7 @@ export default function MobileProfilePage() {
     const insets = useSafeAreaInsets();
 
     const [description, setDescription] = useState("");
+    const [username, setUsername] = useState(""); // 👈 Added state for username
     const [preview, setPreview] = useState(null);
     const [imageFile, setImageFile] = useState(null);
     const [isUpdating, setIsUpdating] = useState(false);
@@ -93,7 +94,7 @@ export default function MobileProfilePage() {
         outputRange: [-width, width],
     });
 
-    // 🔹 1. Sync User & Lifetime Post Count for Ranking
+    // 🔹 1. Sync User & Lifetime Post Count
     useEffect(() => {
         const syncUserWithDB = async () => {
             if (!user?.deviceId) return;
@@ -103,8 +104,8 @@ export default function MobileProfilePage() {
                 if (res.ok) {
                     setUser(dbUser);
                     setDescription(dbUser.description || "");
+                    setUsername(dbUser.username || ""); // 👈 Load existing username
 
-                    // Fetch total count for ranking
                     const postRes = await fetch(`${API_BASE}/posts?author=${dbUser._id}&limit=1`);
                     const postData = await postRes.json();
                     if (postRes.ok) {
@@ -166,12 +167,18 @@ export default function MobileProfilePage() {
     };
 
     const handleUpdate = async () => {
+        if (!username.trim()) {
+            Alert.alert("Error", "Username cannot be empty.");
+            return;
+        }
+
         setIsUpdating(true);
         try {
             const formData = new FormData();
             formData.append("userId", user?._id || "");
             formData.append("fingerprint", user?.deviceId || "");
             formData.append("description", description);
+            formData.append("username", username); // 👈 Added username to payload
 
             if (imageFile) {
                 if (Platform.OS === "web") {
@@ -193,6 +200,8 @@ export default function MobileProfilePage() {
                 setPreview(null);
                 setImageFile(null);
                 Alert.alert("Success", "Character Data Updated.");
+            } else {
+                Alert.alert("Error", result.message || "Failed to update.");
             }
         } catch (err) {
             Alert.alert("Error", "Failed to sync changes.");
@@ -303,21 +312,26 @@ export default function MobileProfilePage() {
             </View>
 
             <View className="space-y-6">
+                {/* 🔹 EDITABLE USERNAME FIELD */}
                 <View className="space-y-1">
-                    <Text className="text-[9px] font-black uppercase tracking-widest text-gray-400 ml-1">Account ID</Text>
-                    <View className="bg-gray-50 dark:bg-gray-900 border border-gray-100 dark:border-gray-800 p-4 rounded-2xl">
-                        <Text className="text-sm font-bold text-gray-500">{user?.username || "UNSET"}</Text>
-                    </View>
+                    <Text className="text-[9px] font-black uppercase tracking-widest text-gray-400 ml-1">Display Name / Alias</Text>
+                    <TextInput
+                        value={username}
+                        onChangeText={setUsername}
+                        placeholder="Enter alias..."
+                        placeholderTextColor="#4b5563"
+                        className="w-full bg-gray-50 dark:bg-gray-900 border border-gray-100 dark:border-gray-800 p-4 rounded-2xl text-sm font-bold dark:text-white"
+                    />
                 </View>
 
+                {/* 🔹 STATIC ACCOUNT ID / RECOVERY SECTION */}
                 <View className="space-y-1 mt-4">
                     <Text className="text-[9px] font-black uppercase tracking-widest text-gray-400 ml-1">
-                        Neural Uplink - <Text className="text-[9px] font-black tracking-widest text-gray-500">Used for account recovery/removal</Text>
+                        Neural Uplink - <Text className="text-[9px] font-black tracking-widest text-gray-500">Used for account recovery</Text>
                     </Text>
                     
                     <View 
                         className="bg-gray-50 dark:bg-[#0a0a0a] border border-gray-100 dark:border-gray-800 p-4 rounded-2xl flex-row justify-between items-center"
-                        style={{ shadowColor: '#3b82f6', shadowOffset: { width: 0, height: 0 }, shadowOpacity: copied ? 0.2 : 0, shadowRadius: 10 }}
                     >
                         <View className="flex-1 mr-4">
                             <Text 
@@ -340,12 +354,6 @@ export default function MobileProfilePage() {
                             />
                         </Pressable>
                     </View>
-                    
-                    {copied && (
-                        <Text className="text-[8px] font-black text-green-500 uppercase tracking-widest mt-1 ml-1">
-                            ID Copied to Clipboard
-                        </Text>
-                    )}
                 </View>
 
                 <View className="space-y-1 mt-4">
@@ -383,7 +391,7 @@ export default function MobileProfilePage() {
                 <View className="h-[1px] flex-1 bg-gray-100 dark:bg-gray-800" />
             </View>
         </View>
-    ), [user, preview, description, isUpdating, spin, translateX, totalPosts, copied]); // 👈 Added 'copied' here
+    ), [user, preview, description, username, isUpdating, spin, translateX, totalPosts, copied]); 
 
     if (contextLoading) {
         return <AnimeLoading message="Syncing Profile" subMessage="Please wait..." />;
