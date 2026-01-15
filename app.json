@@ -34,6 +34,9 @@
               "scheme": "https",
               "host": "oreblogda.com",
               "pathPrefix": "/"
+            },
+            {
+              "scheme": "oreblogda"
             }
           ],
           "category": [
@@ -41,7 +44,10 @@
             "DEFAULT"
           ]
         }
-      ]
+      ],
+      "config": {
+        "googleMobileAdsAppId": "ca-app-pub-7937601457401494~9318002029"
+      }
     },
     "web": {
       "output": "static",
@@ -66,7 +72,8 @@
         "react-native-google-mobile-ads",
         {
           "androidAppId": "ca-app-pub-7937601457401494~9318002029",
-          "iosAppId": "ca-app-pub-3940256099942544~1458002511"
+          "iosAppId": "ca-app-pub-3940256099942544~1458002511",
+          "userTrackingUsageDescription": "This identifier will be used to deliver personalized ads to you."
         }
       ],
       [
