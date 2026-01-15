@@ -632,7 +632,7 @@ export default function AuthorDiaryDashboard() {
                                         value={title}
                                         onChangeText={setTitle}
                                         placeholderTextColor="#334155"
-                                        style={{ backgroundColor: THEME.card, borderColor: THEME.border, color: '#fff' }}
+                                        style={{ backgroundColor: THEME.card, borderColor: THEME.border, color: THEME.text}}
                                         className="w-full border-2 p-5 rounded-2xl text-white font-black text-lg"
                                     />
                                 </View>
@@ -655,7 +655,7 @@ export default function AuthorDiaryDashboard() {
                                         onChangeText={(text) => setMessage(sanitizeMessage(text))}
                                         onSelectionChange={(e) => setSelection(e.nativeEvent.selection)}
                                         multiline
-                                        style={{ backgroundColor: THEME.card, borderColor: THEME.border, textAlignVertical: 'top', color: '#fff' }}
+                                        style={{ backgroundColor: THEME.card, borderColor: THEME.border, textAlignVertical: 'top', color: THEME.text }}
                                         className="border-2 p-5 rounded-3xl font-medium h-64"
                                     />
                                 </View>
@@ -683,7 +683,7 @@ export default function AuthorDiaryDashboard() {
                                         value={mediaUrlLink}
                                         onChangeText={setMediaUrlLink}
                                         placeholderTextColor="#334155"
-                                        style={{ backgroundColor: THEME.card, borderColor: THEME.border, color: '#fff' }}
+                                        style={{ backgroundColor: THEME.card, borderColor: THEME.border, color: THEME.text }}
                                         className="border-2 p-5 rounded-2xl text-white font-bold"
                                     />
 
