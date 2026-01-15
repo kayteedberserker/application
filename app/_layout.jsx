@@ -3,6 +3,7 @@ import { useFonts } from "expo-font";
 import * as Notifications from "expo-notifications";
 import { Stack, usePathname, useRouter } from "expo-router";
 import * as SplashScreen from "expo-splash-screen";
+import * as Updates from 'expo-updates'; // 👈 Added for EAS Updates
 import { useColorScheme } from "nativewind";
 import { useEffect, useRef, useState } from "react";
 import { AppState, BackHandler, DeviceEventEmitter, Platform, StatusBar, View } from "react-native";
@@ -18,8 +19,8 @@ import "./globals.css";
 SplashScreen.preventAutoHideAsync();
 
 // --- AD CONFIGURATION ---
-const FIRST_AD_DELAY_MS = 120000; // 2 minute delay after app opens
-const COOLDOWN_MS = 480000; // 8 minutes between subsequent ads
+const FIRST_AD_DELAY_MS = 120000; 
+const COOLDOWN_MS = 480000; 
 
 let lastShownTime = Date.now() - (COOLDOWN_MS - FIRST_AD_DELAY_MS);
 let interstitial = null;
@@ -64,19 +65,45 @@ async function registerForPushNotificationsAsync() {
 }
 
 function RootLayoutContent() {
-    const { refreshStreak } = useStreak()
+    const { refreshStreak } = useStreak();
     const { colorScheme } = useColorScheme();
     const isDark = colorScheme === "dark";
     const router = useRouter();
     const pathname = usePathname();
     const { user } = useUser();
-    const [isSyncing, setIsSyncing] = useState(true);
-    const appState = useRef(AppState.currentState);
     
-    // Safety guards for notifications
+    const [isSyncing, setIsSyncing] = useState(true);
+    const [isUpdating, setIsUpdating] = useState(false); // 👈 Added for update UI tracking
+    
+    const appState = useRef(AppState.currentState);
     const lastProcessedNotificationId = useRef(null);
-    const hasCheckedColdStart = useRef(false); // 🔹 Prevents re-running cold start logic
+    const hasCheckedColdStart = useRef(false);
 
+    // --- 0. EAS UPDATE GUARDIAN (Instant Sync) ---
+    useEffect(() => {
+        async function onFetchUpdateAsync() {
+            if (__DEV__) return; // Don't check in development
+
+            try {
+                const update = await Updates.checkForUpdateAsync();
+                if (update.isAvailable) {
+                    setIsUpdating(true); // Triggers AnimeLoading
+                    await Updates.fetchUpdateAsync();
+                    
+                    // Delay slightly so the user sees the "Syncing" state before the soft restart
+                    setTimeout(async () => {
+                        await Updates.reloadAsync();
+                    }, 1500);
+                }
+            } catch (error) {
+                console.log("EAS Sync Error:", error);
+                setIsUpdating(false);
+            }
+        }
+        onFetchUpdateAsync();
+    }, []);
+
+    // --- 1. App Open Ad Logic ---
     useEffect(() => {
         loadAppOpenAd();
         
@@ -102,7 +129,7 @@ function RootLayoutContent() {
         "SpaceGroteskBold": require("../assets/fonts/SpaceGrotesk.ttf"),
     });
 
-    // 1. AdMob Logic with Session Delay
+    // --- 2. Interstitial Ad Logic ---
     useEffect(() => {
         if (Platform.OS !== 'web') {
             try {
@@ -134,10 +161,10 @@ function RootLayoutContent() {
         }
     }, []);
 
-    // 2. Account Sync & Push Token
+    // --- 3. Account Sync & Push Token ---
     useEffect(() => {
         async function performSync() {
-            if (!fontsLoaded) return;
+            if (!fontsLoaded || isUpdating) return; // Don't sync if we are about to restart for an update
 
             const token = await registerForPushNotificationsAsync();
 
@@ -156,16 +183,15 @@ function RootLayoutContent() {
                 }
             }
 
-            // Always include loading animation for 1.5s
             setTimeout(() => setIsSyncing(false), 1500);
         }
 
         performSync();
-    }, [fontsLoaded, user?.deviceId]);
+    }, [fontsLoaded, user?.deviceId, isUpdating]);
 
-    // 3. Notification Interaction
+    // --- 4. Notification Interaction ---
     useEffect(() => {
-        if (isSyncing) return;
+        if (isSyncing || isUpdating) return;
 
         const handleNotificationResponse = (response) => {
             const notificationId = response?.notification?.request?.identifier;
@@ -176,27 +202,20 @@ function RootLayoutContent() {
             const data = response?.notification?.request?.content?.data;
             if (!data) return;
 
-            console.log("🔔 Notification Data Payload:", JSON.stringify(data));
-
             const targetId = data?.postId || data?.body?.postId || data?.id;
             const type = data?.type || data?.body?.type;
 
-            // Priority 1: Navigation via Post ID
             if (targetId && typeof targetId !== 'object') {
-                console.log("🚀 Navigating to Post ID:", targetId);
                 router.push({
                     pathname: "/post/[id]",
                     params: { id: targetId }
                 });
             } 
-            // Priority 2: Navigation via Type
             else if (type === "open_diary" || type === "diary") {
-                console.log("📓 Navigating to Author Diary");
                 router.push("/authordiary");
             }
         };
 
-        // Handle cold start - ONLY RUNS ONCE per session
         if (!hasCheckedColdStart.current) {
             Notifications.getLastNotificationResponseAsync().then(response => {
                 if (response) {
@@ -206,11 +225,9 @@ function RootLayoutContent() {
             hasCheckedColdStart.current = true;
         }
 
-        // Handle background/foreground taps
         const responseSub = Notifications.addNotificationResponseReceivedListener(handleNotificationResponse);
-
         return () => responseSub.remove();
-    }, [isSyncing]);
+    }, [isSyncing, isUpdating]);
 
     useEffect(() => {
         if (fontsLoaded || fontError) {
@@ -218,9 +235,14 @@ function RootLayoutContent() {
         }
     }, [fontsLoaded, fontError]);
 
-    // --- LOADING VIEW ---
-    if (!fontsLoaded || isSyncing) {
-        return <AnimeLoading message="Loading Page" subMessage="Syncing Account" />
+    // --- LOADING VIEW (FOR FONTS, ACCOUNT SYNC, OR EAS UPDATES) ---
+    if (!fontsLoaded || isSyncing || isUpdating) {
+        return (
+            <AnimeLoading 
+                message={isUpdating ? "CORE_SYNC" : "LOADING_PAGE"} 
+                subMessage={isUpdating ? "Optimizing system transmissions..." : "Syncing Account"} 
+            />
+        );
     }
 
     return (
