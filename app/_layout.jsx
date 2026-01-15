@@ -3,7 +3,7 @@ import { useFonts } from "expo-font";
 import * as Notifications from "expo-notifications";
 import { Stack, usePathname, useRouter } from "expo-router";
 import * as SplashScreen from "expo-splash-screen";
-import * as Updates from 'expo-updates'; // 👈 Added for EAS Updates
+import * as Updates from 'expo-updates'; 
 import { useColorScheme } from "nativewind";
 import { useEffect, useRef, useState } from "react";
 import { AppState, BackHandler, DeviceEventEmitter, Platform, StatusBar, View } from "react-native";
@@ -18,7 +18,6 @@ import "./globals.css";
 
 SplashScreen.preventAutoHideAsync();
 
-// --- AD CONFIGURATION ---
 const FIRST_AD_DELAY_MS = 120000; 
 const COOLDOWN_MS = 480000; 
 
@@ -73,24 +72,21 @@ function RootLayoutContent() {
     const { user } = useUser();
     
     const [isSyncing, setIsSyncing] = useState(true);
-    const [isUpdating, setIsUpdating] = useState(false); // 👈 Added for update UI tracking
+    const [isUpdating, setIsUpdating] = useState(false); 
     
     const appState = useRef(AppState.currentState);
     const lastProcessedNotificationId = useRef(null);
     const hasCheckedColdStart = useRef(false);
 
-    // --- 0. EAS UPDATE GUARDIAN (Instant Sync) ---
+    // --- 0. EAS UPDATE GUARDIAN ---
     useEffect(() => {
         async function onFetchUpdateAsync() {
-            if (__DEV__) return; // Don't check in development
-
+            if (__DEV__) return; 
             try {
                 const update = await Updates.checkForUpdateAsync();
                 if (update.isAvailable) {
-                    setIsUpdating(true); // Triggers AnimeLoading
+                    setIsUpdating(true); 
                     await Updates.fetchUpdateAsync();
-                    
-                    // Delay slightly so the user sees the "Syncing" state before the soft restart
                     setTimeout(async () => {
                         await Updates.reloadAsync();
                     }, 1500);
@@ -103,15 +99,59 @@ function RootLayoutContent() {
         onFetchUpdateAsync();
     }, []);
 
-    // --- 1. App Open Ad Logic ---
+    const [fontsLoaded, fontError] = useFonts({
+        "SpaceGrotesk": require("../assets/fonts/SpaceGrotesk.ttf"),
+        "SpaceGroteskBold": require("../assets/fonts/SpaceGrotesk.ttf"),
+    });
+
+    // --- 1 & 2. CONSOLIDATED AD INITIALIZATION ---
     useEffect(() => {
-        loadAppOpenAd();
-        
+        if (Platform.OS === 'web') return;
+
+        const setupAds = async () => {
+            try {
+                const mobileAds = require('react-native-google-mobile-ads').default;
+                const { InterstitialAd } = require('react-native-google-mobile-ads');
+
+                // Wait for SDK to be ready
+                await mobileAds().initialize();
+                
+                // 1. Setup App Open Ad
+                loadAppOpenAd();
+
+                // 2. Setup Interstitial Ad
+                interstitial = InterstitialAd.createForAdRequest(AdConfig.interstitial);
+                interstitial.load();
+
+                // Listeners
+                const adTriggerSub = DeviceEventEmitter.addListener("tryShowInterstitial", () => {
+                    const now = Date.now();
+                    if (interstitial?.loaded && (now - lastShownTime > COOLDOWN_MS)) {
+                        lastShownTime = now;
+                        interstitial.show();
+                        interstitial.load();
+                    }
+                });
+
+                const backHandler = BackHandler.addEventListener('hardwareBackPress', () => {
+                    DeviceEventEmitter.emit("tryShowInterstitial");
+                    return false;
+                });
+
+                return () => {
+                    adTriggerSub.remove();
+                    backHandler.remove();
+                };
+            } catch (err) {
+                console.log("AdMob Setup Error:", err);
+            }
+        };
+
+        setupAds();
+
+        // App State Listener for App Open Ad
         const sub = AppState.addEventListener('change', nextState => {
-            if (
-                appState.current.match(/inactive|background/) &&
-                nextState === 'active'
-            ) {
+            if (appState.current.match(/inactive|background/) && nextState === 'active') {
                 showAppOpenAd();
             }
             appState.current = nextState;
@@ -124,47 +164,10 @@ function RootLayoutContent() {
         refreshStreak();
     }, [pathname, refreshStreak]);
 
-    const [fontsLoaded, fontError] = useFonts({
-        "SpaceGrotesk": require("../assets/fonts/SpaceGrotesk.ttf"),
-        "SpaceGroteskBold": require("../assets/fonts/SpaceGrotesk.ttf"),
-    });
-
-    // --- 2. Interstitial Ad Logic ---
-    useEffect(() => {
-        if (Platform.OS !== 'web') {
-            try {
-                const { InterstitialAd } = require('react-native-google-mobile-ads');
-                const mobileAds = require('react-native-google-mobile-ads').default;
-
-                mobileAds().initialize().then(() => {
-                    interstitial = InterstitialAd.createForAdRequest(AdConfig.interstitial);
-                    interstitial.load();
-                    const adTriggerSub = DeviceEventEmitter.addListener("tryShowInterstitial", () => {
-                        const now = Date.now();
-                        if (interstitial?.loaded && (now - lastShownTime > COOLDOWN_MS)) {
-                            lastShownTime = now;
-                            interstitial.show();
-                            interstitial.load();
-                        }
-                    });
-                    const backHandler = BackHandler.addEventListener('hardwareBackPress', () => {
-                        DeviceEventEmitter.emit("tryShowInterstitial");
-                        return false;
-                    });
-
-                    return () => {
-                        adTriggerSub.remove();
-                        backHandler.remove();
-                    };
-                });
-            } catch (err) { console.log("AdMob error:", err); }
-        }
-    }, []);
-
     // --- 3. Account Sync & Push Token ---
     useEffect(() => {
         async function performSync() {
-            if (!fontsLoaded || isUpdating) return; // Don't sync if we are about to restart for an update
+            if (!fontsLoaded || isUpdating) return; 
 
             const token = await registerForPushNotificationsAsync();
 
@@ -182,10 +185,8 @@ function RootLayoutContent() {
                     console.log("Token sync failed:", err);
                 }
             }
-
             setTimeout(() => setIsSyncing(false), 1500);
         }
-
         performSync();
     }, [fontsLoaded, user?.deviceId, isUpdating]);
 
@@ -195,7 +196,6 @@ function RootLayoutContent() {
 
         const handleNotificationResponse = (response) => {
             const notificationId = response?.notification?.request?.identifier;
-            
             if (lastProcessedNotificationId.current === notificationId) return;
             lastProcessedNotificationId.current = notificationId;
 
@@ -218,9 +218,7 @@ function RootLayoutContent() {
 
         if (!hasCheckedColdStart.current) {
             Notifications.getLastNotificationResponseAsync().then(response => {
-                if (response) {
-                    handleNotificationResponse(response);
-                }
+                if (response) handleNotificationResponse(response);
             });
             hasCheckedColdStart.current = true;
         }
@@ -235,7 +233,6 @@ function RootLayoutContent() {
         }
     }, [fontsLoaded, fontError]);
 
-    // --- LOADING VIEW (FOR FONTS, ACCOUNT SYNC, OR EAS UPDATES) ---
     if (!fontsLoaded || isSyncing || isUpdating) {
         return (
             <AnimeLoading 
