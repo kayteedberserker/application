@@ -16,6 +16,7 @@ import {
     TouchableOpacity,
     View
 } from "react-native";
+import * as Clipboard from 'expo-clipboard';
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import Toast from "react-native-toast-message";
 import useSWRInfinite from "swr/infinite";
@@ -45,6 +46,15 @@ export default function MobileProfilePage() {
     // Animations
     const scanAnim = useRef(new Animated.Value(0)).current;
     const loadingAnim = useRef(new Animated.Value(0)).current;
+    const [copied, setCopied] = useState(false);
+
+const copyToClipboard = async () => {
+    if (user?.deviceId) {
+        await Clipboard.setStringAsync(user.deviceId);
+        setCopied(true);
+        setTimeout(() => setCopied(false), 2000); // Reset after 2 seconds
+    }
+};
 
     useEffect(() => {
         Animated.loop(
@@ -307,11 +317,42 @@ export default function MobileProfilePage() {
                 </View>
 
                 <View className="space-y-1 mt-4">
-                    <Text className="text-[9px] font-black uppercase tracking-widest text-gray-400 ml-1">Neural Uplink - <Text className="text-[9px] font-black tracking-widest text-gray-400">Used for account recovery/removal</Text></Text>
-                    <View className="bg-gray-50 dark:bg-gray-900 border border-gray-100 dark:border-gray-800 p-4 rounded-2xl">
-                        <Text className="text-sm font-bold text-gray-500">{user?.deviceId || "SEARCHING..."}</Text>
-                    </View>
-                </View>
+    <Text className="text-[9px] font-black uppercase tracking-widest text-gray-400 ml-1">
+        Neural Uplink - <Text className="text-[9px] font-black tracking-widest text-gray-500">Used for account recovery/removal</Text>
+    </Text>
+    
+    <View 
+        className="bg-gray-50 dark:bg-[#0a0a0a] border border-gray-100 dark:border-gray-800 p-4 rounded-2xl flex-row justify-between items-center"
+        style={{ shadowColor: '#3b82f6', shadowOffset: { width: 0, height: 0 }, shadowOpacity: copied ? 0.2 : 0, shadowRadius: 10 }}
+    >
+        <View className="flex-1 mr-4">
+            <Text 
+                numberOfLines={1} 
+                ellipsizeMode="middle" 
+                className="text-xs font-bold text-gray-500 dark:text-gray-400 font-mono"
+            >
+                {user?.deviceId || "SEARCHING..."}
+            </Text>
+        </View>
+
+        <Pressable 
+            onPress={copyToClipboard}
+            className={`p-2 rounded-xl ${copied ? 'bg-green-500/10' : 'bg-blue-500/10'}`}
+        >
+            <Feather 
+                name={copied ? "check" : "copy"} 
+                size={16} 
+                color={copied ? "#22c55e" : "#3b82f6"} 
+            />
+        </Pressable>
+    </View>
+    
+    {copied && (
+        <Text className="text-[8px] font-black text-green-500 uppercase tracking-widest mt-1 ml-1">
+            ID Copied to Clipboard
+        </Text>
+    )}
+</View>
 
                 <View className="space-y-1 mt-4">
                     <Text className="text-[9px] font-black uppercase tracking-widest text-gray-400 ml-1">Biography / Lore</Text>
