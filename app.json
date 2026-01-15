@@ -11,13 +11,15 @@
     "ios": {
       "supportsTablet": true,
       "bundleIdentifier": "com.kaytee.oreblogda",
-      "associatedDomains": ["applinks:oreblogda.com"]
+      "associatedDomains": [
+        "applinks:oreblogda.com"
+      ]
     },
     "android": {
       "adaptiveIcon": {
         "backgroundColor": "#E6F4FE",
         "foregroundImage": "./assets/images/myicon.png",
-        "backgroundImage": "./assets/images/myicon.png",
+        "backgroundImage": "./assets/images/myicon.png"
       },
       "package": "com.kaytee.oreblogda",
       "googleServicesFile": "./google-services.json",
@@ -34,7 +36,10 @@
               "pathPrefix": "/"
             }
           ],
-          "category": ["BROWSABLE", "DEFAULT"]
+          "category": [
+            "BROWSABLE",
+            "DEFAULT"
+          ]
         }
       ]
     },
@@ -89,7 +94,10 @@
       "policy": "appVersion"
     },
     "updates": {
-      "url": "https://u.expo.dev/b6b7afd1-028a-425e-a84e-6a2af706a736"
+      "url": "https://u.expo.dev/b6b7afd1-028a-425e-a84e-6a2af706a736",
+      "enabled": true,
+      "checkAutomatically": "ON_LOAD",
+      "fallbackToCacheTimeout": 10000 
     },
     "owner": "oreblogda"
   }
