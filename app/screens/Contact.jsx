@@ -77,12 +77,12 @@ export default function Contact() {
               <Ionicons name="chevron-back" size={24} color={THEME.accent} />
             </TouchableOpacity>
             <View className="ml-5">
-              <Text className="text-[10px] font-black uppercase tracking-[0.3em] text-blue-600 mb-1">Comms Channel</Text>
-              <Text className="text-3xl font-black italic uppercase text-white">Contact Us</Text>
+              <Text style={{ color: THEME.accent }} className="text-[10px] font-black uppercase tracking-[0.3em] mb-1">Comms Channel</Text>
+              <Text style={{ color: THEME.text }} className="text-3xl font-black italic uppercase">Contact Us</Text>
             </View>
           </View>
 
-          <Text className="text-gray-500 font-medium mb-10 leading-6 px-1">
+          <Text style={{ color: THEME.textSecondary || '#64748b' }} className="font-medium mb-10 leading-6 px-1">
             Have a bug to report or a suggestion for the community? Initiate an uplink and our THE SYSTEM will decrypt your message.
           </Text>
 
@@ -91,65 +91,64 @@ export default function Contact() {
             
             {/* Name Input */}
             <View>
-              <Text className="text-gray-600 font-black uppercase text-[9px] tracking-[0.2em] mb-2 ml-1">Identity Tag</Text>
+              <Text style={{ color: THEME.textSecondary || '#475569' }} className="font-black uppercase text-[9px] tracking-[0.2em] mb-2 ml-1">Identity Tag</Text>
               <TextInput
                 value={form.name}
                 onChangeText={(v) => handleChange("name", v)}
                 placeholder="ENTER YOUR NAME..."
-                placeholderTextColor="#334155"
-                style={{ backgroundColor: THEME.card, borderColor: THEME.border }}
-                className="border-2 p-5 rounded-2xl text-white font-black italic uppercase"
+                placeholderTextColor={THEME.textSecondary + '80' || "#334155"}
+                style={{ backgroundColor: THEME.card, borderColor: THEME.border, color: THEME.text }}
+                className="border-2 p-5 rounded-2xl font-black italic uppercase"
               />
             </View>
 
             {/* Email Input */}
             <View className="mt-6">
-              <Text className="text-gray-600 font-black uppercase text-[9px] tracking-[0.2em] mb-2 ml-1">Digital Address</Text>
+              <Text style={{ color: THEME.textSecondary || '#475569' }} className="font-black uppercase text-[9px] tracking-[0.2em] mb-2 ml-1">Digital Address</Text>
               <TextInput
                 value={form.email}
                 onChangeText={(v) => handleChange("email", v)}
                 placeholder="YOU@EXAMPLE.COM"
-                placeholderTextColor="#334155"
+                placeholderTextColor={THEME.textSecondary + '80' || "#334155"}
                 keyboardType="email-address"
                 autoCapitalize="none"
-                style={{ backgroundColor: THEME.card, borderColor: THEME.border }}
-                className="border-2 p-5 rounded-2xl text-white font-black italic uppercase"
+                style={{ backgroundColor: THEME.card, borderColor: THEME.border, color: THEME.text }}
+                className="border-2 p-5 rounded-2xl font-black italic uppercase"
               />
             </View>
 
             {/* Category Picker */}
             <View className="mt-6">
-              <Text className="text-gray-600 font-black uppercase text-[9px] tracking-[0.2em] mb-2 ml-1">Subject Priority</Text>
+              <Text style={{ color: THEME.textSecondary || '#475569' }} className="font-black uppercase text-[9px] tracking-[0.2em] mb-2 ml-1">Subject Priority</Text>
               <View style={{ backgroundColor: THEME.card, borderColor: THEME.border }} className="rounded-2xl border-2 overflow-hidden">
                 <Picker
                   selectedValue={form.type}
                   onValueChange={(v) => handleChange("type", v)}
                   dropdownIconColor={THEME.accent}
-                  style={{ color: '#fff' }}
-                  itemStyle={{ fontSize: 14, color: '#fff' }}
+                  style={{ color: THEME.text }}
                 >
-                  <Picker.Item label="General Inquiry" value="General" />
-                  <Picker.Item label="Community Join Request" value="Community" />
-                  <Picker.Item label="Bug Report" value="Bug" />
-                  <Picker.Item label="Suggestion" value="Suggestion" />
-                  <Picker.Item label="Request Account Removal" value="Account Removal" />
+                  <Picker.Item label="General Inquiry" value="General" color={Platform.OS === 'ios' ? THEME.text : undefined} />
+                  <Picker.Item label="Community Join Request" value="Community" color={Platform.OS === 'ios' ? THEME.text : undefined} />
+                  <Picker.Item label="Bug Report" value="Bug" color={Platform.OS === 'ios' ? THEME.text : undefined} />
+                  <Picker.Item label="Suggestion" value="Suggestion" color={Platform.OS === 'ios' ? THEME.text : undefined} />
+                  <Picker.Item label="Request Account Removal" value="Account Removal" color={Platform.OS === 'ios' ? THEME.text : undefined} />
                 </Picker>
               </View>
             </View>
 
             {/* Message Input */}
             <View className="mt-6">
-              <Text className="text-gray-600 font-black uppercase text-[9px] tracking-[0.2em] mb-2 ml-1">Data Payload</Text>
+              <Text style={{ color: THEME.textSecondary || '#475569' }} className="font-black uppercase text-[9px] tracking-[0.2em] mb-2 ml-1">Data Payload</Text>
               <TextInput
                 value={form.message}
                 onChangeText={(v) => handleChange("message", v)}
                 placeholder="TYPE YOUR MESSAGE HERE..."
-                placeholderTextColor="#334155"
+                placeholderTextColor={THEME.textSecondary + '80' || "#334155"}
                 multiline
                 numberOfLines={6}
                 textAlignVertical="top"
-                style={{ backgroundColor: THEME.card, borderColor: THEME.border }}
-                className="p-5 rounded-3xl text-white font-medium border-2 min-h-[160px]"
+                style={{ backgroundColor: THEME.card, borderColor: THEME.border, color: THEME.text }}
+                className="p-5 rounded-3xl font-medium border-2 min-h-[160px]"
               />
             </View>
 
@@ -173,7 +172,8 @@ export default function Contact() {
               disabled={status.loading}
               onPress={handleSubmit}
               activeOpacity={0.8}
-              className={`mt-8 py-6 rounded-[24px] flex-row justify-center items-center shadow-2xl ${status.loading ? 'bg-blue-800 opacity-50' : 'bg-blue-600'}`}
+              style={{ backgroundColor: status.loading ? THEME.accent + '80' : THEME.accent }}
+              className="mt-8 py-6 rounded-[24px] flex-row justify-center items-center shadow-2xl"
             >
               {status.loading ? (
                 <ActivityIndicator color="white" size="small" className="mr-2" />
@@ -188,7 +188,7 @@ export default function Contact() {
           </View>
 
           <View className="h-24 items-center justify-center">
-              <Text className="text-gray-800 font-black text-[8px] uppercase tracking-[0.4em]">Secure Transmission Channel v1.2</Text>
+              <Text style={{ color: THEME.textSecondary || '#334155' }} className="font-black text-[8px] uppercase tracking-[0.4em]">Secure Transmission Channel v1.2</Text>
           </View>
         </ScrollView>
       </KeyboardAvoidingView>
