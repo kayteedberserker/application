@@ -5,6 +5,7 @@ import * as Notifications from "expo-notifications";
 import { Stack, usePathname, useRouter } from "expo-router";
 import * as SplashScreen from "expo-splash-screen";
 import * as Updates from 'expo-updates'; 
+import AsyncStorage from '@react-native-async-storage/async-storage'; // 👈 Added for persistent notification tracking
 import { useColorScheme } from "nativewind";
 import { useEffect, useRef, useState } from "react";
 import { AppState, BackHandler, DeviceEventEmitter, Platform, StatusBar, View } from "react-native";
@@ -124,35 +125,6 @@ function RootLayoutContent() {
         if (Platform.OS === 'web') return;
 
         const setupAds = async () => {
-            try {
-                const mobileAds = require('react-native-google-mobile-ads').default;
-                const { InterstitialAd } = require('react-native-google-mobile-ads');
-                await mobileAds().initialize();
-                loadAppOpenAd();
-                interstitial = InterstitialAd.createForAdRequest(AdConfig.interstitial);
-                interstitial.load();
-
-                const adTriggerSub = DeviceEventEmitter.addListener("tryShowInterstitial", () => {
-                    const now = Date.now();
-                    if (interstitial?.loaded && (now - lastShownTime > COOLDOWN_MS)) {
-                        lastShownTime = now;
-                        interstitial.show();
-                        interstitial.load();
-                    }
-                });
-
-                const backHandler = BackHandler.addEventListener('hardwareBackPress', () => {
-                    DeviceEventEmitter.emit("tryShowInterstitial");
-                    return false;
-                });
-
-                return () => {
-                    adTriggerSub.remove();
-                    backHandler.remove();
-                };
-            } catch (err) {
-                console.log("AdMob Setup Error:", err);
-            }
         };
         setupAds();
 
@@ -190,14 +162,23 @@ function RootLayoutContent() {
         performSync();
     }, [fontsLoaded, user?.deviceId, isUpdating]);
 
-    // --- 5. NOTIFICATION INTERACTION (STRENGTHENED) ---
+    // --- 5. NOTIFICATION INTERACTION (STRENGTHENED & FIXED) ---
     useEffect(() => {
         if (isSyncing || isUpdating) return;
 
-        const handleNotificationResponse = (response) => {
+        const handleNotificationResponse = async (response) => {
             const notificationId = response?.notification?.request?.identifier;
-            if (lastProcessedNotificationId.current === notificationId) return;
+            if (!notificationId) return;
+
+            // Check if this ID has already been handled in the past (persistent)
+            const alreadyHandledId = await AsyncStorage.getItem('last_handled_notification_id');
+            if (alreadyHandledId === notificationId || lastProcessedNotificationId.current === notificationId) {
+                return;
+            }
+
+            // Mark as handled both in memory and storage
             lastProcessedNotificationId.current = notificationId;
+            await AsyncStorage.setItem('last_handled_notification_id', notificationId);
 
             const data = response?.notification?.request?.content?.data;
             if (!data) return;
@@ -219,7 +200,7 @@ function RootLayoutContent() {
             }
         };
 
-        // Cold Start Check
+        // Cold Start Check (Now using the async storage aware handler)
         Notifications.getLastNotificationResponseAsync().then(response => {
             if (response && !hasHandledRedirect.current) {
                 handleNotificationResponse(response);
