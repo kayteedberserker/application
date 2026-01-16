@@ -73,7 +73,8 @@
         {
           "androidAppId": "ca-app-pub-8021671365048667~3586113443",
           "iosAppId": "ca-app-pub-3940256099942544~1458002511",
-          "userTrackingUsageDescription": "This identifier will be used to deliver personalized ads to you."
+          "userTrackingUsageDescription": "This identifier will be used to deliver personalized ads to you.",
+          "delayAppMeasurementInit": true
         }
       ],
       [
