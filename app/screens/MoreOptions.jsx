@@ -81,7 +81,7 @@ export default function MoreOptions() {
       <View className="w-10 h-10 rounded-xl items-center justify-center" style={{ backgroundColor: `${color}15` }}>
         <Ionicons name={icon} size={20} color={color} />
       </View>
-      <Text style={{color: THEME.text}} className='flex-1 ml-4 text-sm font-black uppercase italic text-white tracking-tight'>{title}</Text>
+      <Text style={{color: THEME.text}} className='flex-1 ml-4 text-sm font-black uppercase italic text-gray-900 dark:text-white tracking-tight'>{title}</Text>
       <Ionicons name="chevron-forward" size={16} color={THEME.border} />
     </TouchableOpacity>
   );
