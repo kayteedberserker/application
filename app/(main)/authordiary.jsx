@@ -915,7 +915,13 @@ export default function AuthorDiaryDashboard() {
                                 <View style={{ backgroundColor: THEME.card, borderColor: hasPoll ? THEME.accent : THEME.border }} className="p-6 rounded-3xl border-2 mt-4">
                                     <View className="flex-row justify-between items-center mb-4">
                                         <Text className="font-black uppercase tracking-widest text-[11px]">Deploy Poll Module</Text>
-                                        <Switch value={hasPoll} onValueChange={setHasPoll} trackColor={{ true: '#2563eb' }} thumbColor=THEME.text />
+                                        <Switch 
+  value={hasPoll} 
+  onValueChange={setHasPoll} 
+  trackColor={{ false: '#3f3f46', true: '#2563eb' }} 
+  thumbColor={THEME.text} 
+/>
+
                                     </View>
                                     {hasPoll && (
                                         <View className="space-y-3">
