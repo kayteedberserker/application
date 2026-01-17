@@ -31,10 +31,7 @@ const INTERSTITIAL_ID = __DEV__
     ? TestIds.INTERSTITIAL 
     : AdConfig.interstitial;
 
-// 🔹 MATH FIX: Offset the start time so the first check passes after 30s, not 180s
-// Logic: If we want to trigger when (Now - Last) > 180,000...
-// We set 'Last' to effectively be "150,000ms ago" right now.
-// So in 30,000ms, the diff will be 180,000.
+// Logic: We set 'Last' to effectively be "150,000ms ago" so that in 30s the diff is 180,000.
 let lastShownTime = Date.now() - (COOLDOWN_MS - FIRST_AD_DELAY_MS);
 
 let interstitial = null;
@@ -81,7 +78,7 @@ async function registerForPushNotificationsAsync() {
 
 // 🔹 HELPER: Load Interstitial
 const loadInterstitial = () => {
-    if (interstitial) return; // Already exists
+    if (interstitial) return; 
 
     const ad = InterstitialAd.createForAdRequest(INTERSTITIAL_ID, {
         requestNonPersonalizedAdsOnly: true,
@@ -94,8 +91,8 @@ const loadInterstitial = () => {
     ad.addAdEventListener(AdEventType.CLOSED, () => {
         interstitialLoaded = false;
         interstitial = null;
-        lastShownTime = Date.now(); // Reset timer to NOW
-        loadInterstitial(); // Pre-load the next one
+        lastShownTime = Date.now(); 
+        loadInterstitial(); 
     });
 
     ad.load();
@@ -157,17 +154,13 @@ function RootLayoutContent() {
         "SpaceGroteskBold": require("../assets/fonts/SpaceGrotesk.ttf"),
     });
 
-    // --- 3. AD LOGIC ---
+    // --- 3. AD LOGIC (Including Back Button) ---
     useEffect(() => {
         if (Platform.OS === 'web') return;
 
-        // A. Load App Open Ad
         loadAppOpenAd();
-
-        // B. Load Interstitial Ad
         loadInterstitial();
 
-        // C. Setup AppOpen Listener (Background -> Active)
         const sub = AppState.addEventListener('change', nextState => {
             if (appState.current.match(/inactive|background/) && nextState === 'active') {
                 showAppOpenAd();
@@ -175,20 +168,29 @@ function RootLayoutContent() {
             appState.current = nextState;
         });
 
-        // D. Setup Interstitial Trigger Listener (Listens to Stack change)
+        // 🔹 Listen for the "tryShowInterstitial" event
         const interstitialListener = DeviceEventEmitter.addListener("tryShowInterstitial", () => {
             const now = Date.now();
             const timeSinceLast = now - lastShownTime;
 
-            // Only show if: Loaded AND Timer passed AND App running long enough
             if (interstitialLoaded && interstitial && timeSinceLast > COOLDOWN_MS) {
                 interstitial.show();
             }
         });
 
+        // 🔹 TRIGGER ON ANDROID BACK BUTTON
+        const backHandler = BackHandler.addEventListener("hardwareBackPress", () => {
+            // When back is pressed, we emit the event to check if an ad should show
+            DeviceEventEmitter.emit("tryShowInterstitial");
+            
+            // Return false so the back button still performs the actual navigation
+            return false; 
+        });
+
         return () => {
             sub.remove();
             interstitialListener.remove();
+            backHandler.remove();
         };
     }, []);
 
@@ -282,13 +284,13 @@ function RootLayoutContent() {
                 barStyle={isDark ? "light-content" : "dark-content"}
                 backgroundColor={isDark ? "#0a0a0a" : "#ffffff"}
             />
-            {/* Stack sends "tryShowInterstitial" event on screen changes */}
             <Stack
                 screenOptions={{
                     headerShown: false,
                     contentStyle: { backgroundColor: isDark ? "#0a0a0a" : "#ffffff" },
                 }}
                 onStateChange={() => {
+                    // This covers screen changes NOT triggered by the back button
                     setTimeout(() => {
                         DeviceEventEmitter.emit("tryShowInterstitial");
                     }, 500);
