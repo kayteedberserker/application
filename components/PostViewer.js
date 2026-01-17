@@ -12,7 +12,7 @@ import {
 } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import useSWRInfinite from "swr/infinite";
-import AsyncStorage from "@react-native-async-storage/async-storage"; // 👈 Added for caching
+import AsyncStorage from "@react-native-async-storage/async-storage"; 
 import AnimeLoading from "./AnimeLoading";
 import AppBanner from './AppBanner';
 import PostCard from "./PostCard";
@@ -22,9 +22,8 @@ import { Text } from "./Text";
 const { width, height } = Dimensions.get('window');
 const LIMIT = 5;
 const API_URL = "https://oreblogda.com/api/posts";
-const CACHE_KEY = "POSTS_CACHE_V1"; // 👈 Unique key for storage
+const CACHE_KEY = "POSTS_CACHE_V1"; 
 
-// Standard fetcher
 const fetcher = (url) => fetch(url).then(res => res.json());
 
 export default function PostsViewer() {
@@ -34,8 +33,8 @@ export default function PostsViewer() {
     const isDark = colorScheme === "dark";
     
     const [ready, setReady] = useState(false);
-    const [cachedData, setCachedData] = useState(null); // 👈 State for old data
-    const [isOfflineMode, setIsOfflineMode] = useState(false); // 👈 State for UI toggle
+    const [cachedData, setCachedData] = useState(null); 
+    const [isOfflineMode, setIsOfflineMode] = useState(false); 
 
     const pulseAnim = useRef(new Animated.Value(0)).current;
 
@@ -43,18 +42,18 @@ export default function PostsViewer() {
     useEffect(() => {
         const prepare = async () => {
             try {
-                // Try to load saved data immediately
                 const local = await AsyncStorage.getItem(CACHE_KEY);
                 if (local) {
                     setCachedData(JSON.parse(local));
                 }
             } catch (e) {
                 console.error("Cache load error", e);
+            } finally {
+                // Ensure we don't render list until we've at least checked storage
+                InteractionManager.runAfterInteractions(() => {
+                    setReady(true);
+                });
             }
-            
-            InteractionManager.runAfterInteractions(() => {
-                setReady(true);
-            });
         };
         prepare();
     }, []);
@@ -86,24 +85,21 @@ export default function PostsViewer() {
         return `${API_URL}?page=${pageIndex + 1}&limit=${LIMIT}`;
     };
 
-    // 2. SWR Implementation with Fallback & Error Handling
     const { data, size, setSize, isLoading, isValidating, mutate } = useSWRInfinite(getKey, fetcher, {
-        refreshInterval: isOfflineMode ? 0 : 15000, // Stop polling if offline
+        refreshInterval: isOfflineMode ? 0 : 15000, 
         revalidateOnFocus: false,
         dedupingInterval: 5000,
-        fallbackData: cachedData, // 👈 Use cached data while loading
+        fallbackData: cachedData, 
         onSuccess: (newData) => {
-            setIsOfflineMode(false); // Connection is good!
-            AsyncStorage.setItem(CACHE_KEY, JSON.stringify(newData)); // Save fresh data
+            setIsOfflineMode(false); 
+            AsyncStorage.setItem(CACHE_KEY, JSON.stringify(newData)); 
         },
         onError: (err) => {
             console.log("Fetch failed, assuming offline mode");
-            setIsOfflineMode(true); // Connection failed, show cached UI
+            setIsOfflineMode(true); 
         }
     });
 
-    // OPTIMIZATION: Memoize the posts array
-    // We prioritize 'data' (live), but fallback to 'cachedData' if data is empty/null
     const posts = useMemo(() => {
         const sourceData = data || cachedData;
         if (!sourceData) return [];
@@ -130,8 +126,10 @@ export default function PostsViewer() {
         if (!hasMore || isValidating || !ready || isLoading || isOfflineMode) return;
         setSize(size + 1);
     };
-    if(!ready) {
-        <AnimeLoading message="Loading posts" subMessage="Prepping Otaku content" />
+
+    // 🔹 FIX: Added 'return' keyword so this actually renders
+    if (!ready) {
+        return <AnimeLoading message="Loading posts" subMessage="Prepping Otaku content" />;
     }
 
     const renderItem = ({ item, index }) => {
@@ -152,12 +150,9 @@ export default function PostsViewer() {
         );
     };
 
-    
-
     const ListHeader = () => (
         <View className="mb-10 pb-2">
             <View className="flex-row items-center gap-3 mb-1">
-                {/* Status Dot changes color based on Offline Mode */}
                 <View className={`h-2 w-2 rounded-full ${isOfflineMode ? 'bg-orange-500' : 'bg-blue-600'}`} />
                 <Text className={`text-[10px] font-[900] uppercase tracking-[0.4em] ${isOfflineMode ? 'text-orange-500' : 'text-blue-600'}`}>
                     {isOfflineMode ? "Archived Intel // Offline" : "Live Feed Active"}
@@ -173,6 +168,41 @@ export default function PostsViewer() {
             </View>
         </View>
     );
+
+    // 🔹 Helper to determine what to show in the footer
+    const FooterComponent = () => {
+        // If we are actively fetching AND we have 0 posts, show loading
+        if (isLoading || (isValidating && posts.length === 0)) {
+            return <SyncLoading />;
+        }
+        
+        // If we have data and no more to load
+        if (!hasMore && posts.length > 0) {
+            return (
+                <Text className="text-[10px] font-[900] uppercase tracking-[0.5em] text-gray-400">
+                    End of Transmission
+                </Text>
+            );
+        }
+
+        // Only show "No Intel" if we are DONE loading and have 0 posts
+        if (posts.length === 0 && !isLoading && !isValidating) {
+            return (
+                <View className="py-20 px-10">
+                    <Text className="text-2xl font-[900] uppercase italic text-gray-400 text-center mb-2">
+                        No Intel Found
+                    </Text>
+                    {isOfflineMode && (
+                        <Text className="text-[10px] font-bold uppercase tracking-widest text-orange-500 text-center">
+                            Check your connection
+                        </Text>
+                    )}
+                </View>
+            );
+        }
+
+        return null;
+    };
 
     return (
         <View className={`flex-1 ${isDark ? "bg-[#050505]" : "bg-white"}`}>
@@ -213,25 +243,7 @@ export default function PostsViewer() {
                 scrollEventThrottle={32}
                 ListFooterComponent={
                     <View className="py-12 items-center justify-center min-h-[140px]">
-                        {isLoading || isValidating ? (
-                            <SyncLoading />
-                        ) : !hasMore && posts.length > 0 ? (
-                            <Text className="text-[10px] font-[900] uppercase tracking-[0.5em] text-gray-400">
-                                End of Transmission
-                            </Text>
-                        ) : posts.length === 0 ? (
-                            <View className="py-20 px-10">
-                                <Text className="text-2xl font-[900] uppercase italic text-gray-400 text-center mb-2">
-                                    No Intel Found
-                                </Text>
-                                {isOfflineMode && (
-                                    <Text className="text-[10px] font-bold uppercase tracking-widest text-orange-500 text-center">
-                                        Check your connection
-                                    </Text>
-                                )}
-                            </View>
-                        ) : null
-                        }
+                        <FooterComponent />
                     </View>
                 }
             />
