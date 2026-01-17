@@ -8,7 +8,7 @@ import {
     FlatList,
     Text as RNText,
     View,
-    BackHandler // 🔹 Added to handle back button within pager
+    BackHandler
 } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import AnimeLoading from "../../../components/AnimeLoading";
@@ -21,11 +21,11 @@ const { width } = Dimensions.get('window');
 const API_BASE = "https://oreblogda.com/api";
 const LIMIT = 5;
 
-// 🔹 Accept passedId for the PagerView setup
+// 🔹 Reusable component for both URL navigation and Swiper
 export default function CategoryPage({ id: passedId }) {
     const { id: paramId } = useLocalSearchParams();
     
-    // 🔹 Priority: Prop ID (from Pager) > URL Param ID
+    // 🔹 Priority: Prop ID (from Swiper) > URL Param ID
     const id = passedId || paramId;
 
     const insets = useSafeAreaInsets();
@@ -77,7 +77,7 @@ export default function CategoryPage({ id: passedId }) {
         }
     };
 
-    // 🔹 Refetch if ID changes (important for pager reuse)
+    // 🔹 Refetch if ID changes (important when swiping between categories)
     useEffect(() => {
         if (id) {
             fetchPosts(1, true);
@@ -101,7 +101,7 @@ export default function CategoryPage({ id: passedId }) {
         );
     };
 
-    // 🔹 Loading state wrapped in a View to maintain background color during swipe
+    // 🔹 Full screen loader for the initial category load
     if (loading && posts.length === 0) {
         return (
             <View style={{ flex: 1, backgroundColor: isDark ? "#050505" : "#ffffff" }}>
@@ -110,7 +110,6 @@ export default function CategoryPage({ id: passedId }) {
         );
     }
 
-    // --- HEADER: Archive Sector HUD ---
     const ListHeader = () => (
         <View className="px-5 mb-10 pb-6 border-b-2 border-gray-100 dark:border-gray-800">
             <View className="flex-row items-center gap-3 mb-2">
@@ -135,41 +134,29 @@ export default function CategoryPage({ id: passedId }) {
 
     return (
         <View style={{ flex: 1, backgroundColor: isDark ? "#050505" : "#ffffff" }}>
-            {/* --- LAYER 1: ATMOSPHERIC BACKGROUND EFFECTS --- */}
+            {/* Atmospheric Backgrounds */}
             <View 
                 pointerEvents="none"
                 className="absolute -top-20 -right-20 rounded-full opacity-[0.08]"
-                style={{ 
-                    width: width * 0.7, 
-                    height: width * 0.7, 
-                    backgroundColor: isDark ? '#2563eb' : '#3b82f6',
-                }} 
+                style={{ width: width * 0.7, height: width * 0.7, backgroundColor: isDark ? '#2563eb' : '#3b82f6' }} 
             />
             
             <View 
                 pointerEvents="none"
                 className="absolute bottom-20 -left-20 rounded-full opacity-[0.05]"
-                style={{ 
-                    width: width * 0.6, 
-                    height: width * 0.6, 
-                    backgroundColor: isDark ? '#4f46e5' : '#60a5fa',
-                }} 
+                style={{ width: width * 0.6, height: width * 0.6, backgroundColor: isDark ? '#4f46e5' : '#60a5fa' }} 
             />
 
-            {/* --- MAIN CONTENT ENGINE --- */}
             <FlatList
                 ref={scrollRef}
                 data={posts}
                 keyExtractor={(item) => item._id}
                 renderItem={renderItem}
                 ListHeaderComponent={ListHeader}
-                
                 contentContainerStyle={{
-                    // 🔹 Reduced padding top because the Nav is now inside the main index layout
                     paddingTop: 20, 
                     paddingBottom: insets.bottom + 100,
                 }}
-
                 ListFooterComponent={() => (
                     <View className="py-12 items-center justify-center min-h-[140px]">
                         {loading ? (
@@ -192,7 +179,6 @@ export default function CategoryPage({ id: passedId }) {
                         ) : null}
                     </View>
                 )}
-
                 onEndReached={() => fetchPosts(page)}
                 onEndReachedThreshold={0.5}
                 onRefresh={() => fetchPosts(1, true)}
