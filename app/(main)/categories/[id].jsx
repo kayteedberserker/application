@@ -7,7 +7,8 @@ import {
     Dimensions,
     FlatList,
     Text as RNText,
-    View
+    View,
+    BackHandler // 🔹 Added to handle back button within pager
 } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import AnimeLoading from "../../../components/AnimeLoading";
@@ -20,8 +21,13 @@ const { width } = Dimensions.get('window');
 const API_BASE = "https://oreblogda.com/api";
 const LIMIT = 5;
 
-export default function CategoryPage() {
-    const { id } = useLocalSearchParams();
+// 🔹 Accept passedId for the PagerView setup
+export default function CategoryPage({ id: passedId }) {
+    const { id: paramId } = useLocalSearchParams();
+    
+    // 🔹 Priority: Prop ID (from Pager) > URL Param ID
+    const id = passedId || paramId;
+
     const insets = useSafeAreaInsets();
     const { colorScheme } = useColorScheme();
     const isDark = colorScheme === "dark";
@@ -71,8 +77,11 @@ export default function CategoryPage() {
         }
     };
 
+    // 🔹 Refetch if ID changes (important for pager reuse)
     useEffect(() => {
-        fetchPosts(1, true);
+        if (id) {
+            fetchPosts(1, true);
+        }
     }, [id]);
 
     const renderItem = ({ item, index }) => {
@@ -92,8 +101,13 @@ export default function CategoryPage() {
         );
     };
 
+    // 🔹 Loading state wrapped in a View to maintain background color during swipe
     if (loading && posts.length === 0) {
-        return <AnimeLoading message="Loading Posts" subMessage={`Category: ${categoryName}`} />;
+        return (
+            <View style={{ flex: 1, backgroundColor: isDark ? "#050505" : "#ffffff" }}>
+                <AnimeLoading message="Loading Posts" subMessage={`Category: ${categoryName}`} />
+            </View>
+        );
     }
 
     // --- HEADER: Archive Sector HUD ---
@@ -114,7 +128,6 @@ export default function CategoryPage() {
                 >
                     Folder: <Text className="text-blue-600">{categoryName}</Text>
                 </Text>
-                {/* Tactical Accent */}
                 <View className="absolute -bottom-2 left-0 h-[2px] w-20 bg-blue-600 shadow-[0_0_8px_#2563eb]" />
             </View>
         </View>
@@ -123,7 +136,6 @@ export default function CategoryPage() {
     return (
         <View style={{ flex: 1, backgroundColor: isDark ? "#050505" : "#ffffff" }}>
             {/* --- LAYER 1: ATMOSPHERIC BACKGROUND EFFECTS --- */}
-            {/* Top Right Glow */}
             <View 
                 pointerEvents="none"
                 className="absolute -top-20 -right-20 rounded-full opacity-[0.08]"
@@ -134,7 +146,6 @@ export default function CategoryPage() {
                 }} 
             />
             
-            {/* Bottom Left Glow */}
             <View 
                 pointerEvents="none"
                 className="absolute bottom-20 -left-20 rounded-full opacity-[0.05]"
@@ -154,7 +165,8 @@ export default function CategoryPage() {
                 ListHeaderComponent={ListHeader}
                 
                 contentContainerStyle={{
-                    paddingTop: insets.top + 20,
+                    // 🔹 Reduced padding top because the Nav is now inside the main index layout
+                    paddingTop: 20, 
                     paddingBottom: insets.bottom + 100,
                 }}
 
@@ -181,7 +193,6 @@ export default function CategoryPage() {
                     </View>
                 )}
 
-                // --- FUNCTIONAL LOGIC (Kept intact) ---
                 onEndReached={() => fetchPosts(page)}
                 onEndReachedThreshold={0.5}
                 onRefresh={() => fetchPosts(1, true)}
@@ -192,7 +203,6 @@ export default function CategoryPage() {
                 scrollEventThrottle={16}
             />
 
-            {/* --- TACTICAL HUD DECOR (Sidebar-style element for Mobile) --- */}
             <View 
                 className="absolute right-0 top-1/2 -translate-y-1/2 h-20 w-1 bg-blue-600 opacity-20 rounded-l-full" 
                 pointerEvents="none"
