@@ -1,80 +1,80 @@
 import React, { useRef, useState, useEffect } from 'react';
-import { View, DeviceEventEmitter, Dimensions } from "react-native";
-import PagerView from 'react-native-pager-view';
+import { View, DeviceEventEmitter, Dimensions, FlatList } from "react-native";
 import PostsViewer from "./../../components/PostViewer";
-import CategoryPage from "./categories/[id]"; // Adjust this path if your Category file is elsewhere
+import CategoryPage from "./categories/[id]"; 
 
 const { width } = Dimensions.get('window');
 
-// 🔹 Define your swipe order (Ensure these match your Nav exactly)
+// 🔹 Swipe order: Matches your CategoryNav exactly
 const CATEGORIES = ["Home", "News", "Memes", "Polls", "Review", "Gaming"];
 
 export default function HomePage() {
-  const pagerRef = useRef(null);
+  const flatListRef = useRef(null);
   const [activePageIndex, setActivePageIndex] = useState(0);
 
-  // 🔹 Listen for clicks from your Category Nav Bar
+  // 🔹 Listen for clicks from your Category Nav Bar (Jump to page)
   useEffect(() => {
     const sub = DeviceEventEmitter.addListener("jumpToCategory", (categoryName) => {
-      // Find index regardless of case
       const index = CATEGORIES.findIndex(cat => cat.toLowerCase() === categoryName.toLowerCase());
       
-      if (index !== -1 && pagerRef.current) {
-        pagerRef.current.setPage(index);
+      if (index !== -1 && flatListRef.current) {
+        flatListRef.current.scrollToIndex({ index, animated: true });
       }
     });
     return () => sub.remove();
   }, []);
 
-  const onPageSelected = (e) => {
-    const index = e.nativeEvent.position;
-    setActivePageIndex(index);
+  // 🔹 Triggered when the user finishes swiping manually
+  const onMomentumScrollEnd = (e) => {
+    const contentOffset = e.nativeEvent.contentOffset.x;
+    const index = Math.round(contentOffset / width);
     
-    // 🔹 Emit BOTH the name (for Nav highlight) and the index (for Back Button logic in Layout)
-    DeviceEventEmitter.emit("categoryChanged", CATEGORIES[index]);
-    DeviceEventEmitter.emit("categoryIndexChanged", index); // Helps MainLayout track state
+    if (index !== activePageIndex) {
+      setActivePageIndex(index);
+      // 🔹 Notify CategoryNav to move the highlight
+      DeviceEventEmitter.emit("categoryChanged", CATEGORIES[index]);
+      // 🔹 Notify MainLayout for the Hardware Back Button logic
+      DeviceEventEmitter.emit("categoryIndexChanged", index);
+    }
+  };
+
+  const renderPage = ({ item }) => {
+    return (
+      <View style={{ width }}>
+        {item === "Home" ? (
+          <PostsViewer />
+        ) : (
+          <CategoryPage id={item.toLowerCase()} />
+        )}
+      </View>
+    );
   };
 
   return (
     <View className="flex-1 bg-white dark:bg-gray-900">
-      <PagerView 
-        ref={pagerRef}
-        style={{ flex: 1 }} 
-        initialPage={0}
-        onPageSelected={onPageSelected}
-        // Use 'overdrag' so users feel a resistance at the end of the list
-        overdrag={true}
-      >
-        {/* PAGE 0: MAIN HOME FEED */}
-        <View key="0">
-          <PostsViewer />
-        </View>
-
-        {/* PAGE 1: NEWS */}
-        <View key="1">
-          <CategoryPage id="news" />
-        </View>
-
-        {/* PAGE 2: MEMES */}
-        <View key="2">
-          <CategoryPage id="memes" />
-        </View>
-
-        {/* PAGE 3: POLLS */}
-        <View key="3">
-          <CategoryPage id="polls" />
-        </View>
-
-        {/* PAGE 4: REVIEWS */}
-        <View key="4">
-          <CategoryPage id="review" />
-        </View>
-
-        {/* PAGE 5: GAMING */}
-        <View key="5">
-          <CategoryPage id="gaming" />
-        </View>
-      </PagerView>
+      <FlatList
+        ref={flatListRef}
+        data={CATEGORIES}
+        keyExtractor={(item) => item}
+        renderItem={renderPage}
+        horizontal
+        pagingEnabled // 🔹 This makes it snap to pages like a swiper
+        showsHorizontalScrollIndicator={false}
+        onMomentumScrollEnd={onMomentumScrollEnd}
+        bounces={true}
+        // Optimization: Pre-calculates positions so the swipe is fast
+        getItemLayout={(data, index) => ({
+          length: width,
+          offset: width * index,
+          index,
+        })}
+        // Memory management
+        removeClippedSubviews={true}
+        initialNumToRender={1}
+        maxToRenderPerBatch={1}
+        windowSize={2}
+        scrollEventThrottle={16}
+      />
     </View>
   );
 }
