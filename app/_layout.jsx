@@ -8,10 +8,11 @@ import * as Updates from 'expo-updates';
 import AsyncStorage from '@react-native-async-storage/async-storage'; 
 import { useColorScheme } from "nativewind";
 import { useEffect, useRef, useState } from "react";
-import { AppState, BackHandler, DeviceEventEmitter, Platform, StatusBar, View, Text, TouchableOpacity, Modal, TextInput } from "react-native";
+import { AppState, BackHandler, DeviceEventEmitter, Platform, StatusBar, View } from "react-native";
 import { SafeAreaProvider } from "react-native-safe-area-context";
 import Toast from 'react-native-toast-message';
 import { InterstitialAd, AdEventType, TestIds, MobileAds } from 'react-native-google-mobile-ads';
+import { Audio } from 'expo-av'; // 🔹 Added for sound
 
 import AnimeLoading from "../components/AnimeLoading";
 import { loadAppOpenAd, showAppOpenAd } from "../components/appOpenAd";
@@ -25,9 +26,8 @@ SplashScreen.preventAutoHideAsync();
 // 🔹 AD CONFIGURATION
 const FIRST_AD_DELAY_MS = 30000; 
 const COOLDOWN_MS = 180000;      
-const SECRET_PIN = "1807";
-const ADMIN_ENABLED_KEY = "@admin_cooldown_toast_enabled";
-const ADMIN_BANNED_KEY = "@admin_cooldown_banned";
+const ADMIN_DEVICE_ID = "4bfe2b53-7591-462f-927e-68eedd7a6447"; 
+const ADMIN_SOUND_URL = 'https://assets.mixkit.co/active_storage/sfx/2358/2358-preview.mp3'; // Futuristic Ping
 
 const INTERSTITIAL_ID = __DEV__ ? TestIds.INTERSTITIAL : AdConfig.interstitial;
 
@@ -43,7 +43,7 @@ Notifications.setNotificationHandler({
     }),
 });
 
-// 🔹 HELPER: Load Interstitial (With Auto-Reload)
+// 🔹 HELPER: Load Interstitial
 const loadInterstitial = () => {
     if (interstitial) return; 
 
@@ -59,14 +59,14 @@ const loadInterstitial = () => {
         interstitialLoaded = false;
         interstitial = null;
         lastShownTime = Date.now(); 
-        // 🔹 LOAD NEXT IMMEDIATELY
+        // 🔹 Notify the app that the cooldown timer has started
+        DeviceEventEmitter.emit("adClosedTimerStart");
         loadInterstitial(); 
     });
 
-    ad.addAdEventListener(AdEventType.ERROR, () => {
+    ad.addAdEventListener(AdEventType.ERROR, (err) => {
         interstitial = null;
         interstitialLoaded = false;
-        // Retry loading after a short delay if it fails
         setTimeout(loadInterstitial, 30000);
     });
 
@@ -109,44 +109,27 @@ function RootLayoutContent() {
     const [isSyncing, setIsSyncing] = useState(true);
     const [isUpdating, setIsUpdating] = useState(false); 
     
-    // --- ADMIN STATES ---
-    const [isAdmin, setIsAdmin] = useState(false);
-    const [isBanned, setIsBanned] = useState(false);
-    const [modalVisible, setModalVisible] = useState(false);
-    const [pinInput, setPinInput] = useState("");
-
     const appState = useRef(AppState.currentState);
     const lastProcessedNotificationId = useRef(null);
     const hasHandledRedirect = useRef(false);
+    const soundTimer = useRef(null);
 
-    // --- 1. ADMIN INITIALIZATION ---
-    useEffect(() => {
-        const checkAdminStatus = async () => {
-            const banned = await AsyncStorage.getItem(ADMIN_BANNED_KEY);
-            if (banned === "true") {
-                setIsBanned(true);
-                return;
-            }
-            const enabled = await AsyncStorage.getItem(ADMIN_ENABLED_KEY);
-            if (enabled === "true") setIsAdmin(true);
-        };
-        checkAdminStatus();
-    }, []);
+    // 🔹 Derived Admin Status
+    const isAdmin = user?.deviceId === ADMIN_DEVICE_ID;
 
-    const handlePinSubmit = async () => {
-        if (pinInput === SECRET_PIN) {
-            await AsyncStorage.setItem(ADMIN_ENABLED_KEY, "true");
-            setIsAdmin(true);
-            setModalVisible(false);
-            Toast.show({ type: 'success', text1: 'Admin Debug Enabled' });
-        } else {
-            await AsyncStorage.setItem(ADMIN_BANNED_KEY, "true");
-            setIsBanned(true);
-            setModalVisible(false);
-        }
+    // 🔹 Admin Sound Player
+    const playAdminSound = async () => {
+        try {
+            const { sound } = await Audio.Sound.createAsync({ uri: ADMIN_SOUND_URL });
+            await sound.playAsync();
+            // Automatically unload sound from memory when finished
+            sound.setOnPlaybackStatusUpdate((status) => {
+                if (status.didJustFinish) sound.unloadAsync();
+            });
+        } catch (e) { console.log("Sound error:", e); }
     };
 
-    // --- 2. AD LOGIC ---
+    // --- 1. AD LOGIC ---
     useEffect(() => {
         if (Platform.OS === 'web') return;
 
@@ -156,29 +139,29 @@ function RootLayoutContent() {
         });
 
         const sub = AppState.addEventListener('change', nextState => {
-            // 🔹 APP OPEN ADS: No cooldown, show every time app is resumed
             if (appState.current.match(/inactive|background/) && nextState === 'active') {
                 showAppOpenAd();
             }
             appState.current = nextState;
         });
 
+        // 🔹 Toast Trigger on Navigation/Back
         const interstitialListener = DeviceEventEmitter.addListener("tryShowInterstitial", () => {
             const now = Date.now();
             const timeSinceLast = now - lastShownTime;
             const remaining = Math.max(0, Math.ceil((COOLDOWN_MS - timeSinceLast) / 1000));
 
-            // 🔹 If Admin: Show the toast regardless of success/fail
             if (isAdmin) {
                 if (remaining > 0) {
                     Toast.show({
                         type: 'info',
-                        text1: 'Ad Cooldown Active',
-                        text2: `Next ad available in ${remaining}s`,
-                        position: 'bottom'
+                        text1: 'Ad Cooldown',
+                        text2: `Available in ${remaining}s`,
+                        position: 'bottom',
+                        visibilityTime: 1500,
                     });
                 } else if (!interstitialLoaded) {
-                    Toast.show({ type: 'error', text1: 'Ad Ready but Not Loaded (No Fill)' });
+                    Toast.show({ type: 'error', text1: 'Ready but Not Loaded', text2: 'Waiting for AdMob fill...' });
                 }
             }
 
@@ -186,6 +169,27 @@ function RootLayoutContent() {
                 interstitial.show();
             }
         });
+
+        // 🔹 Sound Trigger Logic: Set a timer when an ad closes
+        const timerListener = DeviceEventEmitter.addListener("adClosedTimerStart", () => {
+            if (!isAdmin) return;
+            
+            if (soundTimer.current) clearTimeout(soundTimer.current);
+            
+            // Set timer to play sound exactly when cooldown ends
+            soundTimer.current = setTimeout(() => {
+                playAdminSound();
+                Toast.show({ type: 'success', text1: 'Ad System Ready', text2: 'Interstitial is now available.' });
+            }, COOLDOWN_MS);
+        });
+
+        // Handle initial load delay sound
+        if (isAdmin) {
+            const initialRemaining = COOLDOWN_MS - (Date.now() - lastShownTime);
+            if (initialRemaining > 0) {
+                soundTimer.current = setTimeout(playAdminSound, initialRemaining);
+            }
+        }
 
         const backHandler = BackHandler.addEventListener("hardwareBackPress", () => {
             if (router.canGoBack()) {
@@ -199,11 +203,13 @@ function RootLayoutContent() {
         return () => {
             sub.remove();
             interstitialListener.remove();
+            timerListener.remove();
             backHandler.remove();
+            if (soundTimer.current) clearTimeout(soundTimer.current);
         };
     }, [isAdmin, router]);
 
-    // --- 3. CORE SYSTEM EFFECTS ---
+    // --- 2. DEEP LINKING ---
     const url = Linking.useURL(); 
     useEffect(() => {
         if (url && !isSyncing && !isUpdating && !hasHandledRedirect.current) {
@@ -216,6 +222,7 @@ function RootLayoutContent() {
         }
     }, [url, isSyncing, isUpdating]);
 
+    // --- 3. EAS UPDATES ---
     useEffect(() => {
         async function onFetchUpdateAsync() {
             if (__DEV__) return; 
@@ -238,6 +245,7 @@ function RootLayoutContent() {
 
     useEffect(() => { refreshStreak(); }, [pathname, refreshStreak]);
 
+    // --- 4. SYNC & PUSH TOKEN ---
     useEffect(() => {
         async function performSync() {
             if (!fontsLoaded || isUpdating) return; 
@@ -256,6 +264,7 @@ function RootLayoutContent() {
         performSync();
     }, [fontsLoaded, user?.deviceId, isUpdating]);
 
+    // --- 5. NOTIFICATIONS ---
     useEffect(() => {
         if (isSyncing || isUpdating) return;
         const handleNotificationResponse = async (response) => {
@@ -287,65 +296,19 @@ function RootLayoutContent() {
     useEffect(() => { if (fontsLoaded || fontError) SplashScreen.hideAsync(); }, [fontsLoaded, fontError]);
 
     if (!fontsLoaded || isSyncing || isUpdating) {
-        return (
-            <AnimeLoading 
-                message={isUpdating ? "CORE_SYNC" : "LOADING_PAGE"} 
-                subMessage={isUpdating ? "Optimizing system transmissions..." : "Syncing Account"} 
-            />
-        );
+        return <AnimeLoading message={isUpdating ? "CORE_SYNC" : "LOADING_PAGE"} subMessage={isUpdating ? "Optimizing system transmissions..." : "Syncing Account"} />;
     }
 
     return (
         <View key={colorScheme} className="flex-1 bg-white dark:bg-gray-900">
-            <StatusBar
-                barStyle={isDark ? "light-content" : "dark-content"}
-                backgroundColor={isDark ? "#0a0a0a" : "#ffffff"}
-            />
-
-            {/* 🔹 INVISIBLE ADMIN TRIGGER (Small box at top) */}
-            {!isAdmin && !isBanned && (
-                <TouchableOpacity 
-                    onPress={() => setModalVisible(true)}
-                    style={{ position: 'absolute', top: 0, left: 0, right: 0, height: 20, zIndex: 9999, backgroundColor: 'transparent' }}
-                />
-            )}
-
+            <StatusBar barStyle={isDark ? "light-content" : "dark-content"} backgroundColor={isDark ? "#0a0a0a" : "#ffffff"} />
             <Stack
-                screenOptions={{
-                    headerShown: false,
-                    contentStyle: { backgroundColor: isDark ? "#0a0a0a" : "#ffffff" },
-                }}
+                screenOptions={{ headerShown: false, contentStyle: { backgroundColor: isDark ? "#0a0a0a" : "#ffffff" } }}
                 onStateChange={() => {
                     setTimeout(() => { DeviceEventEmitter.emit("tryShowInterstitial"); }, 500);
                 }}
             />
-            
             <Toast />
-
-            {/* 🔹 ADMIN PIN MODAL */}
-            <Modal visible={modalVisible} transparent animationType="fade">
-                <View style={{ flex: 1, backgroundColor: 'rgba(0,0,0,0.9)', justifyContent: 'center', alignItems: 'center' }}>
-                    <View style={{ backgroundColor: '#111', padding: 30, borderRadius: 20, width: '80%', borderWide: 1, borderColor: '#333' }}>
-                        <Text style={{ color: 'white', fontWeight: 'bold', fontSize: 16, marginBottom: 20, textAlign: 'center' }}>SYSTEM_AUTH</Text>
-                        <TextInput 
-                            style={{ backgroundColor: '#222', color: 'white', padding: 15, borderRadius: 10, textAlign: 'center', fontSize: 20, marginBottom: 20 }}
-                            keyboardType="numeric"
-                            secureTextEntry
-                            autoFocus
-                            value={pinInput}
-                            onChangeText={setPinInput}
-                            placeholder="----"
-                            placeholderTextColor="#444"
-                        />
-                        <TouchableOpacity 
-                            onPress={handlePinSubmit}
-                            style={{ backgroundColor: '#3b82f6', padding: 15, borderRadius: 10 }}
-                        >
-                            <Text style={{ color: 'white', textAlign: 'center', fontWeight: 'bold' }}>VERIFY</Text>
-                        </TouchableOpacity>
-                    </View>
-                </View>
-            </Modal>
         </View>
     );
 }
