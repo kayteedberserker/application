@@ -81,8 +81,12 @@
         "expo-build-properties",
         {
           "android": {
+            "extraMavenRepos": [
+              "https://dl-maven-android.mintegral.com/repository/mbridge_android_sdk_oversea"
+            ],
             "dependencies": [
-              "com.google.ads.mediation:applovin:13.5.1.0"
+              "com.google.ads.mediation:applovin:13.1.0.0",
+              "com.google.ads.mediation:mintegral:17.0.51.0"
             ]
           }
         }
@@ -103,7 +107,7 @@
       "url": "https://u.expo.dev/b6b7afd1-028a-425e-a84e-6a2af706a736",
       "enabled": true,
       "checkAutomatically": "ON_LOAD",
-      "fallbackToCacheTimeout": 10000 
+      "fallbackToCacheTimeout": 0 
     },
     "owner": "oreblogda"
   }
