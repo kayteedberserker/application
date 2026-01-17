@@ -17,6 +17,7 @@ import {
     View
 } from "react-native";
 import * as Clipboard from 'expo-clipboard';
+import AsyncStorage from '@react-native-async-storage/async-storage'; // 🔹 Added for caching
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import Toast from "react-native-toast-message";
 import useSWRInfinite from "swr/infinite";
@@ -37,17 +38,23 @@ export default function MobileProfilePage() {
     const router = useRouter();
     const insets = useSafeAreaInsets();
 
+    // 🔹 CACHED DATA STATES (Prevents flickering)
     const [description, setDescription] = useState("");
-    const [username, setUsername] = useState(""); // 👈 Added state for username
+    const [username, setUsername] = useState("");
+    const [totalPosts, setTotalPosts] = useState(0); 
+    const [isRestoringCache, setIsRestoringCache] = useState(true);
+
     const [preview, setPreview] = useState(null);
     const [imageFile, setImageFile] = useState(null);
     const [isUpdating, setIsUpdating] = useState(false);
-    const [totalPosts, setTotalPosts] = useState(0); 
 
     // Animations
     const scanAnim = useRef(new Animated.Value(0)).current;
     const loadingAnim = useRef(new Animated.Value(0)).current;
     const [copied, setCopied] = useState(false);
+
+    // Cache Keys
+    const CACHE_KEY_USER_EXTRAS = `user_profile_cache_${user?.deviceId}`;
 
     const copyToClipboard = async () => {
         if (user?.deviceId) {
@@ -94,7 +101,28 @@ export default function MobileProfilePage() {
         outputRange: [-width, width],
     });
 
-    // 🔹 1. Sync User & Lifetime Post Count
+    // 🔹 1. INITIAL CACHE RESTORATION
+    useEffect(() => {
+        const loadProfileCache = async () => {
+            if (!user?.deviceId) return;
+            try {
+                const cached = await AsyncStorage.getItem(CACHE_KEY_USER_EXTRAS);
+                if (cached) {
+                    const data = JSON.parse(cached);
+                    if (data.username) setUsername(data.username);
+                    if (data.description) setDescription(data.description);
+                    if (data.totalPosts) setTotalPosts(data.totalPosts);
+                }
+            } catch (e) {
+                console.error("Cache load error", e);
+            } finally {
+                setIsRestoringCache(false);
+            }
+        };
+        loadProfileCache();
+    }, [user?.deviceId]);
+
+    // 🔹 2. SYNC WITH DB (SILENT UPDATE)
     useEffect(() => {
         const syncUserWithDB = async () => {
             if (!user?.deviceId) return;
@@ -104,13 +132,21 @@ export default function MobileProfilePage() {
                 if (res.ok) {
                     setUser(dbUser);
                     setDescription(dbUser.description || "");
-                    setUsername(dbUser.username || ""); // 👈 Load existing username
+                    setUsername(dbUser.username || "");
 
                     const postRes = await fetch(`${API_BASE}/posts?author=${dbUser._id}&limit=1`);
                     const postData = await postRes.json();
+                    const newTotal = postData.total || 0;
                     if (postRes.ok) {
-                        setTotalPosts(postData.total || 0);
+                        setTotalPosts(newTotal);
                     }
+
+                    // Update Cache for next visit
+                    await AsyncStorage.setItem(CACHE_KEY_USER_EXTRAS, JSON.stringify({
+                        username: dbUser.username,
+                        description: dbUser.description,
+                        totalPosts: newTotal
+                    }));
                 }
             } catch (err) {
                 console.error("Sync User Error:", err);
@@ -119,7 +155,7 @@ export default function MobileProfilePage() {
         syncUserWithDB();
     }, [user?.deviceId]);
 
-    // 🔹 2. SWR Infinite
+    // 🔹 3. SWR Infinite
     const getKey = (pageIndex, previousPageData) => {
         if (!user?._id) return null;
         if (previousPageData && previousPageData.posts.length < LIMIT) return null;
@@ -178,7 +214,7 @@ export default function MobileProfilePage() {
             formData.append("userId", user?._id || "");
             formData.append("fingerprint", user?.deviceId || "");
             formData.append("description", description);
-            formData.append("username", username); // 👈 Added username to payload
+            formData.append("username", username);
 
             if (imageFile) {
                 if (Platform.OS === "web") {
@@ -199,6 +235,14 @@ export default function MobileProfilePage() {
                 setUser(result.user);
                 setPreview(null);
                 setImageFile(null);
+                
+                // 🔹 Immediate cache update after success
+                await AsyncStorage.setItem(CACHE_KEY_USER_EXTRAS, JSON.stringify({
+                    username: result.user.username,
+                    description: result.user.description,
+                    totalPosts: totalPosts
+                }));
+                
                 Alert.alert("Success", "Character Data Updated.");
             } else {
                 Alert.alert("Error", result.message || "Failed to update.");
@@ -288,7 +332,7 @@ export default function MobileProfilePage() {
                 </View>
 
                 <View className="mt-6 items-center">
-                    <Text className="text-xl font-black uppercase tracking-tighter text-blue-600">{user?.username || "GUEST"}</Text>
+                    <Text className="text-xl font-black uppercase tracking-tighter text-blue-600">{username || user?.username || "GUEST"}</Text>
                     <Text className="text-[10px] font-bold text-gray-500 uppercase tracking-[0.3em] mt-1">Class: {rankTitle}</Text>
                 </View>
 
@@ -312,7 +356,6 @@ export default function MobileProfilePage() {
             </View>
 
             <View className="space-y-6">
-                {/* 🔹 EDITABLE USERNAME FIELD */}
                 <View className="space-y-1">
                     <Text className="text-[9px] font-black uppercase tracking-widest text-gray-400 ml-1">Display Name / Alias</Text>
                     <TextInput
@@ -324,34 +367,19 @@ export default function MobileProfilePage() {
                     />
                 </View>
 
-                {/* 🔹 STATIC ACCOUNT ID / RECOVERY SECTION */}
                 <View className="space-y-1 mt-4">
                     <Text className="text-[9px] font-black uppercase tracking-widest text-gray-400 ml-1">
                         Neural Uplink - <Text className="text-[9px] font-black tracking-widest text-gray-500">Used for account recovery</Text>
                     </Text>
                     
-                    <View 
-                        className="bg-gray-50 dark:bg-[#0a0a0a] border border-gray-100 dark:border-gray-800 p-4 rounded-2xl flex-row justify-between items-center"
-                    >
+                    <View className="bg-gray-50 dark:bg-[#0a0a0a] border border-gray-100 dark:border-gray-800 p-4 rounded-2xl flex-row justify-between items-center">
                         <View className="flex-1 mr-4">
-                            <Text 
-                                numberOfLines={1} 
-                                ellipsizeMode="middle" 
-                                className="text-xs font-bold text-gray-500 dark:text-gray-400 font-mono"
-                            >
+                            <Text numberOfLines={1} ellipsizeMode="middle" className="text-xs font-bold text-gray-500 dark:text-gray-400 font-mono">
                                 {user?.deviceId || "SEARCHING..."}
                             </Text>
                         </View>
-
-                        <Pressable 
-                            onPress={copyToClipboard}
-                            className={`p-2 rounded-xl ${copied ? 'bg-green-500/10' : 'bg-blue-500/10'}`}
-                        >
-                            <Feather 
-                                name={copied ? "check" : "copy"} 
-                                size={16} 
-                                color={copied ? "#22c55e" : "#3b82f6"} 
-                            />
+                        <Pressable onPress={copyToClipboard} className={`p-2 rounded-xl ${copied ? 'bg-green-500/10' : 'bg-blue-500/10'}`}>
+                            <Feather name={copied ? "check" : "copy"} size={16} color={copied ? "#22c55e" : "#3b82f6"} />
                         </Pressable>
                     </View>
                 </View>
@@ -391,10 +419,10 @@ export default function MobileProfilePage() {
                 <View className="h-[1px] flex-1 bg-gray-100 dark:bg-gray-800" />
             </View>
         </View>
-    ), [user, preview, description, username, isUpdating, spin, translateX, totalPosts, copied]); 
+    ), [user, preview, description, username, isUpdating, spin, translateX, totalPosts, copied, rankTitle, rankIcon, progress, nextMilestone, count]); 
 
-    if (contextLoading) {
-        return <AnimeLoading message="Syncing Profile" subMessage="Please wait..." />;
+    if (contextLoading || isRestoringCache) {
+        return <AnimeLoading message="Syncing Profile" subMessage="Checking local cache..." />;
     }
 
     return (
