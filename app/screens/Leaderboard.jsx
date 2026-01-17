@@ -1,4 +1,4 @@
-import { Ionicons } from '@expo/vector-icons';
+import { Ionicons, MaterialCommunityIcons } from '@expo/vector-icons';
 import { useRouter } from "expo-router";
 import { useEffect, useMemo, useState } from "react";
 import {
@@ -15,14 +15,14 @@ import Animated, {
     useSharedValue,
     withSpring
 } from "react-native-reanimated";
-import useSWR from 'swr'; // Import SWR
+import useSWR from 'swr';
+import AsyncStorage from "@react-native-async-storage/async-storage"; // 👈 Added
 import { SyncLoading } from '../../components/SyncLoading';
 import { Text } from "../../components/Text";
 
 const { width } = Dimensions.get('window');
 const API_URL = "https://oreblogda.com";
 
-// 1. Define the fetcher function
 const fetcher = (url) => fetch(url).then((res) => res.json());
 
 export default function Leaderboard() {
@@ -30,22 +30,47 @@ export default function Leaderboard() {
     const colorScheme = useColorScheme();
     const isDark = colorScheme === 'dark';
     const [type, setType] = useState("posts");
+    
+    // 👈 New State for Offline Logic
+    const [cachedData, setCachedData] = useState(null);
+    const [isOfflineMode, setIsOfflineMode] = useState(false);
 
-    // 2. SWR Hook for Caching
-    // Key changes based on 'type' so 'posts' and 'streak' have separate caches
-    const { data: swrData, error, isLoading, isValidating } = useSWR(
+    // Dynamic Cache Key based on tab (Posts vs Streak)
+    const CACHE_KEY = `LEADERBOARD_CACHE_${type.toUpperCase()}`;
+
+    // 1. Load Cache when tab changes
+    useEffect(() => {
+        const loadCache = async () => {
+            try {
+                const local = await AsyncStorage.getItem(CACHE_KEY);
+                if (local) setCachedData(JSON.parse(local));
+            } catch (e) { console.error(e); }
+        };
+        loadCache();
+    }, [type]); // Re-run when switching tabs
+
+    // 2. SWR Hook with Offline Handling
+    const { data: swrData, error, isLoading } = useSWR(
         `${API_URL}/api/leaderboard?type=${type}&limit=200`,
         fetcher,
         {
-            dedupingInterval: 1000 * 60 * 60 * 24, // Cache for 24 hours
-            revalidateOnFocus: false,            // Don't refetch when app opens
-            revalidateIfStale: false,             // Don't refetch if we have cache
-            focusThrottleInterval: 0,
+            dedupingInterval: 1000 * 60 * 5, // 5 minutes in-memory cache
+            revalidateOnFocus: false,
+            fallbackData: cachedData, // 👈 Instant load
+            onSuccess: (newData) => {
+                setIsOfflineMode(false); // We are online
+                AsyncStorage.setItem(CACHE_KEY, JSON.stringify(newData)); // Save to phone
+            },
+            onError: () => {
+                setIsOfflineMode(true); // Fetch failed, switch UI to offline
+            }
         }
     );
 
-    // Extract leaderboard array from SWR response
-    const leaderboardData = useMemo(() => swrData?.leaderboard || [], [swrData]);
+    // Prioritize SWR data, fall back to Cache, then empty array
+    const leaderboardData = useMemo(() => {
+        return swrData?.leaderboard || cachedData?.leaderboard || [];
+    }, [swrData, cachedData]);
 
     // Animation for the sliding toggle
     const tabOffset = useSharedValue(0);
@@ -53,7 +78,6 @@ export default function Leaderboard() {
     const TAB_WIDTH = (TOGGLE_WIDTH - 8) / 2;
 
     useEffect(() => {
-        // Move the slider when type changes
         tabOffset.value = withSpring(type === "posts" ? 0 : TAB_WIDTH, { damping: 15 });
     }, [type]);
 
@@ -62,6 +86,9 @@ export default function Leaderboard() {
         backgroundColor: type === "posts" ? '#1e293b' : '#2d1b0d',
         borderColor: type === "posts" ? '#60a5fa' : '#f59e0b',
     }));
+
+    // Status Colors (Blue/Green for Online, Orange for Offline)
+    const statusColor = isOfflineMode ? "#f59e0b" : "#60a5fa";
 
     const resolveUserRank = (totalPosts) => {
         const count = totalPosts;
@@ -86,7 +113,7 @@ export default function Leaderboard() {
 
         return (
             <Animated.View
-                entering={FadeInDown.delay(index * 50).springify()}
+                entering={FadeInDown.delay(index * 30).springify()} // Reduced delay for snappier feel
                 layout={LinearTransition}
                 style={{
                     backgroundColor: isTop3 ? (isDark ? 'rgba(30, 41, 59, 0.4)' : '#f0f9ff') : 'transparent',
@@ -154,21 +181,30 @@ export default function Leaderboard() {
 
     return (
         <View style={{ flex: 1, backgroundColor: isDark ? "#000" : "#fff", paddingHorizontal: 16, paddingTop: 60 }}>
+            {/* Header with Offline Indication */}
             <View style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', marginBottom: 25 }}>
                 <View style={{ flexDirection: 'row', alignItems: 'center' }}>
                     <TouchableOpacity
                         onPress={() => router.back()}
                         style={{ padding: 10, borderRadius: 12, backgroundColor: isDark ? '#111' : '#f8fafc', borderWidth: 1, borderColor: isDark ? '#222' : '#eee' }}
                     >
-                        <Ionicons name="chevron-back" size={20} color="#60a5fa" />
+                        <Ionicons name="chevron-back" size={20} color={statusColor} />
                     </TouchableOpacity>
                     <View style={{ marginLeft: 15 }}>
                         <Text style={{ fontSize: 24, fontWeight: '900', color: isDark ? '#fff' : '#000' }}>COMMAND_CENTER</Text>
-                        <Text style={{ fontSize: 9, color: '#60a5fa', fontWeight: 'bold', letterSpacing: 2 }}>LIVE_OPERATIONS // GLOBAL_RANK</Text>
+                        
+                        <View className="flex-row items-center gap-2">
+                             {/* Status Dot */}
+                            <View style={{ width: 6, height: 6, borderRadius: 4, backgroundColor: statusColor }} />
+                            <Text style={{ fontSize: 9, color: statusColor, fontWeight: 'bold', letterSpacing: 2 }}>
+                                {isOfflineMode ? "OFFLINE_MODE // ARCHIVED_RANK" : "LIVE_OPERATIONS // GLOBAL_RANK"}
+                            </Text>
+                        </View>
                     </View>
                 </View>
             </View>
 
+            {/* Toggle Switch */}
             <View style={{ 
                 backgroundColor: isDark ? '#0a0a0a' : '#f1f5f9', 
                 borderRadius: 16, 
@@ -237,10 +273,16 @@ export default function Leaderboard() {
                 <Text style={{ width: 105, fontSize: 10, fontWeight: 'bold', color: '#475569', textAlign: 'center' }}>PERFORMANCE</Text>
             </View>
 
-            {/* SWR handles the loading state automatically */}
-            {isLoading && leaderboardData.length === 0 ? (
+            {/* Content Logic */}
+            {(isLoading && leaderboardData.length === 0) ? (
                 <View className="mt-[50%]">
-                    <SyncLoading message='Scanning Core'/>
+                    <SyncLoading message='Scanning Core' />
+                </View>
+            ) : leaderboardData.length === 0 ? (
+                 // Empty State (Cache empty + Offline)
+                <View style={{ alignItems: 'center', marginTop: 100 }}>
+                    <MaterialCommunityIcons name="cloud-off-outline" size={40} color="#64748b" />
+                    <Text style={{ color: '#64748b', fontWeight: '900', marginTop: 10, letterSpacing: 1 }}>NO DATA AVAILABLE</Text>
                 </View>
             ) : (
                 <Animated.FlatList
