@@ -130,8 +130,8 @@ export default function PostsViewer() {
         if (!hasMore || isValidating || !ready || isLoading || isOfflineMode) return;
         setSize(size + 1);
     };
-    if(ready == false) {
-        <SyncLoading />
+    if(!ready) {
+        <AnimeLoading message="Loading posts" subMessage="Prepping Otaku content" />
     }
 
     const renderItem = ({ item, index }) => {
