@@ -130,6 +130,9 @@ export default function PostsViewer() {
         if (!hasMore || isValidating || !ready || isLoading || isOfflineMode) return;
         setSize(size + 1);
     };
+    if(ready == false) {
+        <SyncLoading />
+    }
 
     const renderItem = ({ item, index }) => {
         const showAd = (index + 1) % 4 === 0;
