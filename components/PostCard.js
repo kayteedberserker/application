@@ -474,7 +474,7 @@ export default function PostCard({ post, setPosts, isFeed, hideMedia, similarPos
     return (
         <View className={`mb-8 overflow-hidden rounded-[32px] border ${isDark ? "bg-[#0d1117] border-gray-800" : "bg-white border-gray-100 shadow-sm"}`}>
             <View className="h-[2px] w-full bg-blue-600 opacity-20" />
-            <View className="p-5">
+            <View className="p-4 px-2">
                 <View className="flex-row justify-between items-center mb-5">
                     <Pressable onPress={() => router.push(`/author/${post.authorId || post.authorUserId}`)} className="flex-row items-center gap-3">
                         <View className="relative">
