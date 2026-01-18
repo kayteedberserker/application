@@ -4,22 +4,22 @@ import { Video } from "expo-av";
 import { useRouter } from "expo-router";
 import { useEffect, useMemo, useState } from "react";
 import {
-	Alert,
-	Dimensions,
-	Image,
-	Linking,
-	Modal,
-	Pressable,
-	Share,
-	useColorScheme,
-	View
+    Alert,
+    Dimensions,
+    Image,
+    Linking,
+    Modal,
+    Pressable,
+    Share,
+    useColorScheme,
+    View
 } from "react-native";
 // 🔹 New Imports for Zooming
 import { Gesture, GestureDetector, GestureHandlerRootView } from 'react-native-gesture-handler';
 import Animated, {
-	useAnimatedStyle,
-	useSharedValue,
-	withTiming,
+    useAnimatedStyle,
+    useSharedValue,
+    withTiming,
 } from 'react-native-reanimated';
 import { WebView } from "react-native-webview";
 import YoutubePlayer from "react-native-youtube-iframe";
@@ -76,6 +76,25 @@ const MediaSkeleton = ({ height = 250 }) => (
     </View>
 );
 
+// --- DATA SAVER COMPONENT ---
+const MediaPlaceholder = ({ height = 250, onPress, type }) => (
+    <Pressable
+        onPress={onPress}
+        style={{ height, width: '100%' }}
+        className="bg-gray-100 dark:bg-gray-800/80 items-center justify-center overflow-hidden rounded-2xl border border-dashed border-gray-300 dark:border-gray-700"
+    >
+        <View className="bg-white/50 dark:bg-black/20 p-4 rounded-full mb-2">
+            <Feather name={type === "video" ? "play-circle" : "image"} size={32} color="#60a5fa" />
+        </View>
+        <Text className="text-gray-500 dark:text-gray-400 font-bold text-xs uppercase tracking-widest">
+            Tap to Load {type === "video" ? "Video" : "Image"}
+        </Text>
+        <Text className="text-gray-400 dark:text-gray-600 text-[10px] mt-1">
+            Data Saver Mode
+        </Text>
+    </Pressable>
+);
+
 export default function PostCard({ post, setPosts, isFeed, hideMedia, similarPosts }) {
     const router = useRouter();
     const { user } = useUser();
@@ -86,6 +105,8 @@ export default function PostCard({ post, setPosts, isFeed, hideMedia, similarPos
     const [liked, setLiked] = useState(false);
     const [author, setAuthor] = useState({ name: post.authorName, image: null, streak: null });
 
+    // Media Loading States
+    const [loadMedia, setLoadMedia] = useState(false); // Controls data saver
     const [videoReady, setVideoReady] = useState(false);
     const [tikTokReady, setTikTokReady] = useState(false);
     const [imageReady, setImageReady] = useState(false);
@@ -294,29 +315,56 @@ export default function PostCard({ post, setPosts, isFeed, hideMedia, similarPos
         }
     };
 
-    const parseMessageSections = (msg) => {
-        const regex = /\[section\](.*?)\[\/section\]|\[h\](.*?)\[\/h\]|\[li\](.*?)\[\/li\]|\[source="(.*?)" text:(.*?)\]|\[br\]/gs;
+    // --- CUSTOM TEXT PARSING & RENDERING ---
+
+    const parseCustomSyntax = (text) => {
+        if (!text) return [];
+
+        // Regex for the new format:
+        // s(...) -> Section
+        // h(...) -> Heading
+        // l(...) -> List Item
+        // link(...)-text(...) -> Hyperlink
+        // br() -> Line Break
+        // We also handle normal text in between.
+        
+        const regex = /s\((.*?)\)|h\((.*?)\)|l\((.*?)\)|link\((.*?)\)-text\((.*?)\)|br\(\)/gs;
+        
         const parts = [];
         let lastIndex = 0;
         let match;
 
-        while ((match = regex.exec(msg)) !== null) {
+        while ((match = regex.exec(text)) !== null) {
+            // Push preceding text if any
             if (match.index > lastIndex) {
-                parts.push({ type: "text", content: msg.slice(lastIndex, match.index) });
+                parts.push({ type: 'text', content: text.slice(lastIndex, match.index) });
             }
 
-            if (match[1] !== undefined) parts.push({ type: "section", content: match[1] });
-            else if (match[2] !== undefined) parts.push({ type: "heading", content: match[2] });
-            else if (match[3] !== undefined) parts.push({ type: "listItem", content: match[3] });
-            else if (match[4] !== undefined) parts.push({ type: "link", url: match[4], content: match[5] });
-            else parts.push({ type: "br" });
+            if (match[1]) {
+                // s(content) - Section
+                parts.push({ type: 'section', content: match[1] });
+            } else if (match[2]) {
+                // h(content) - Heading
+                parts.push({ type: 'heading', content: match[2] });
+            } else if (match[3]) {
+                // l(content) - List Item
+                parts.push({ type: 'listItem', content: match[3] });
+            } else if (match[4] && match[5]) {
+                // link(url)-text(content)
+                parts.push({ type: 'link', url: match[4], content: match[5] });
+            } else if (match[0] === 'br()') {
+                // br()
+                parts.push({ type: 'br' });
+            }
 
             lastIndex = regex.lastIndex;
         }
 
-        if (lastIndex < msg.length) {
-            parts.push({ type: "text", content: msg.slice(lastIndex) });
+        // Push any remaining text at the end
+        if (lastIndex < text.length) {
+            parts.push({ type: 'text', content: text.slice(lastIndex) });
         }
+
         return parts;
     };
 
@@ -324,18 +372,23 @@ export default function PostCard({ post, setPosts, isFeed, hideMedia, similarPos
         const maxLength = similarPosts ? 200 : 150;
 
         if (isFeed) {
-            const plainText = post.message.replace(/\[section\](.*?)\[\/section\]|\[h\](.*?)\[\/h\]|\[li\](.*?)\[\/li\]|\[source=".*?" text:.*?\]|\[br\]/gs, "");
+            // Strip formatters for feed preview
+            const plainText = post.message
+                .replace(/s\((.*?)\)|h\((.*?)\)|l\((.*?)\)|link\((.*?)\)-text\((.*?)\)|br\(\)/g, '$1$2$3$5 ')
+                .trim();
+                
             const truncated = plainText.length > maxLength ? plainText.slice(0, maxLength) + "..." : plainText;
             return <Text style={{ color: isDark ? "#9ca3af" : "#4b5563" }} className="text-base leading-6">{truncated}</Text>;
         }
 
-        const parts = parseMessageSections(post.message);
-        return parts.map((p, i) => {
-            switch (p.type) {
+        const parts = parseCustomSyntax(post.message);
+
+        return parts.map((part, i) => {
+            switch (part.type) {
                 case "text":
                     return (
                         <Text key={i} className="text-base leading-7 text-gray-800 dark:text-gray-200">
-                            {p.content}
+                            {part.content}
                         </Text>
                     );
 
@@ -346,17 +399,17 @@ export default function PostCard({ post, setPosts, isFeed, hideMedia, similarPos
                     return (
                         <Text
                             key={i}
-                            onPress={() => Linking.openURL(p.url)}
+                            onPress={() => Linking.openURL(part.url)}
                             className="text-blue-500 font-bold underline text-base"
                         >
-                            {p.content}
+                            {part.content}
                         </Text>
                     );
 
                 case "heading":
                     return (
                         <Text key={i} className="text-xl font-bold mt-4 mb-2 text-black dark:text-white uppercase tracking-tight">
-                            {p.content}
+                            {part.content}
                         </Text>
                     );
 
@@ -365,7 +418,7 @@ export default function PostCard({ post, setPosts, isFeed, hideMedia, similarPos
                         <View key={i} className="flex-row items-start ml-4 my-1">
                             <Text className="text-blue-500 mr-2 text-lg">•</Text>
                             <Text className="flex-1 text-base leading-6 text-gray-800 dark:text-gray-200">
-                                {p.content}
+                                {part.content}
                             </Text>
                         </View>
                     );
@@ -377,7 +430,7 @@ export default function PostCard({ post, setPosts, isFeed, hideMedia, similarPos
                             className="bg-gray-100 dark:bg-gray-800/60 p-4 my-3 rounded-2xl border-l-4 border-blue-500"
                         >
                             <Text className="text-base italic leading-6 text-gray-700 dark:text-gray-300">
-                                {p.content}
+                                {part.content}
                             </Text>
                         </View>
                     );
@@ -390,10 +443,25 @@ export default function PostCard({ post, setPosts, isFeed, hideMedia, similarPos
 
     const renderMediaContent = () => {
         if (!post?.mediaUrl) return null;
+        
         const lowerUrl = post.mediaUrl.toLowerCase();
         const isYouTube = lowerUrl.includes("youtube.com") || lowerUrl.includes("youtu.be");
         const isTikTok = lowerUrl.includes("tiktok.com");
         const isDirectVideo = post.mediaType?.startsWith("video") || lowerUrl.match(/\.(mp4|mov|m4v)$/i);
+        const mediaTypeLabel = (isYouTube || isTikTok || isDirectVideo) ? "video" : "image";
+
+        // DATA SAVER CHECK: Show placeholder if media not requested yet
+        if (!loadMedia) {
+            return (
+                <View className="my-2">
+                    <MediaPlaceholder 
+                        height={similarPosts ? 160 : 250} 
+                        type={mediaTypeLabel}
+                        onPress={() => setLoadMedia(true)}
+                    />
+                </View>
+            );
+        }
 
         const glassStyle = {
             borderWidth: 1, borderColor: 'rgba(96, 165, 250, 0.2)', shadowColor: "#60a5fa",
@@ -475,9 +543,10 @@ export default function PostCard({ post, setPosts, isFeed, hideMedia, similarPos
         <View className={`mb-8 overflow-hidden rounded-[32px] border ${isDark ? "bg-[#0d1117] border-gray-800" : "bg-white border-gray-100 shadow-sm"}`}>
             <View className="h-[2px] w-full bg-blue-600 opacity-20" />
             <View className="p-4 px-2">
-                <View className="flex-row justify-between items-center mb-5">
-                    <Pressable onPress={() => router.push(`/author/${post.authorId || post.authorUserId}`)} className="flex-row items-center gap-3">
-                        <View className="relative">
+                {/* 🔹 Layout Fix: Author name wraps, Views count stays fixed */}
+                <View className="flex-row justify-between items-start mb-5">
+                    <Pressable onPress={() => router.push(`/author/${post.authorId || post.authorUserId}`)} className="flex-row items-center gap-3 flex-1 pr-2">
+                        <View className="relative shrink-0">
                             {author.image ? (
                                 <View className="border-2 border-blue-500/30 p-[2px] rounded-full">
                                     <Image source={{ uri: author.image }} className="w-10 h-10 rounded-full bg-gray-200" resizeMode="cover" />
@@ -489,14 +558,18 @@ export default function PostCard({ post, setPosts, isFeed, hideMedia, similarPos
                             )}
                             <View className="absolute bottom-0 right-0 w-3 h-3 bg-blue-600 border-2 border-white dark:border-[#0d1117] rounded-full" />
                         </View>
-                        <View>
-                            <Text className="font-[900] uppercase tracking-widest text-blue-600 dark:text-blue-400 text-[14px]">
-                                {author.name || "Unknown Entity"} - <Ionicons name="flame" size={12} color={author.streak < 0 ? "#ef4444" : "#f97316"} />{author.streak > 0 ? `${author.streak}` : "0"}
+                        <View className="flex-1">
+                            <Text className="font-[900] uppercase tracking-widest text-blue-600 dark:text-blue-400 text-[14px] flex-wrap">
+                                {author.name || "Unknown Entity"} 
+                                <Text className="text-gray-500 font-normal normal-case tracking-normal"> • </Text>
+                                <Ionicons name="flame" size={12} color={author.streak < 0 ? "#ef4444" : "#f97316"} />
+                                {author.streak > 0 ? `${author.streak}` : "0"}
                             </Text>
                             <Text className="text-[11px] mt-1 text-gray-900 dark:text-white font-bold uppercase tracking-tighter">{userRank.rankName || "Verified Author"}</Text>
                         </View>
                     </Pressable>
-                    <View className="flex-row items-center gap-2 bg-gray-50 dark:bg-gray-800/50 px-3 py-1.5 rounded-full border border-gray-100 dark:border-gray-700">
+                    
+                    <View className="shrink-0 flex-row items-center gap-2 bg-gray-50 dark:bg-gray-800/50 px-3 py-1.5 rounded-full border border-gray-100 dark:border-gray-700">
                         <View className="w-1.5 h-1.5 bg-green-500 rounded-full" />
                         <Text className="text-[10px] font-black text-gray-900 dark:text-white uppercase tracking-widest">{formatViews(totalViews)}</Text>
                     </View>
@@ -577,4 +650,4 @@ export default function PostCard({ post, setPosts, isFeed, hideMedia, similarPos
             </Modal>
         </View>
     );
-}
+										  }
