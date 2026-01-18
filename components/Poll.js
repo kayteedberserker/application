@@ -1,7 +1,7 @@
 import { useEffect, useState } from "react";
 import { Pressable, View } from "react-native";
 import Toast from "react-native-toast-message";
-import useSWR from "swr";
+import useSWR from "use-swr";
 import { useUser } from "../context/UserContext";
 import { Text } from "./Text";
 
@@ -130,7 +130,8 @@ export default function Poll({ poll, postId, readOnly = false }) {
                 </Text>
             </View>
 
-            <View className="flex-row flex-wrap justify-between">
+            {/* Layout changed to full width to prevent text cutting */}
+            <View className="flex-col">
                 {livePoll.options.map((opt, i) => {
                     const percentage = totalVotes ? ((opt.votes / totalVotes) * 100).toFixed(1) : 0;
                     const isSelected = selectedOptions.includes(i);
@@ -139,32 +140,37 @@ export default function Poll({ poll, postId, readOnly = false }) {
                         <Pressable
                             key={i}
                             onPress={() => !readOnly && !submitted && handleOptionChange(i)}
-                            className={`mb-3 w-[48%] p-3 rounded-2xl border ${isSelected
+                            className={`mb-3 w-full p-4 rounded-2xl border ${isSelected
                                     ? "border-blue-600 bg-blue-600/5 dark:bg-blue-600/10"
                                     : "border-gray-100 dark:border-gray-800 bg-gray-50 dark:bg-gray-900/50"
                                 }`}
                         >
-                            <View className="flex-row items-center justify-between mb-2">
+                            <View className="flex-row items-start justify-between mb-3">
+                                {/* Removed numberOfLines={1} to allow text wrapping */}
                                 <Text
-                                    className={`text-[10px] font-bold uppercase flex-1 ${isSelected ? 'text-blue-600' : 'text-gray-600 dark:text-gray-400'}`}
-                                    numberOfLines={1}
+                                    className={`text-[11px] font-bold uppercase flex-1 mr-4 leading-4 ${isSelected ? 'text-blue-600' : 'text-gray-700 dark:text-gray-300'}`}
                                 >
                                     {opt.text}
                                 </Text>
-                                <Text className="text-[9px] font-mono font-bold text-blue-500">{percentage}%</Text>
+                                <Text className="text-[10px] font-mono font-bold text-blue-500">{percentage}%</Text>
                             </View>
 
                             {/* Progress Bar */}
-                            <View className="w-full bg-gray-200 dark:bg-gray-800 h-1.5 rounded-full overflow-hidden">
+                            <View className="w-full bg-gray-200 dark:bg-gray-800 h-2 rounded-full overflow-hidden">
                                 <View
                                     className="bg-blue-600 h-full"
                                     style={{ width: `${percentage}%` }}
                                 />
                             </View>
 
-                            <View className="flex-row justify-between mt-2">
-                                <Text className="text-[8px] font-mono text-gray-400">Votes: {opt.votes}</Text>
-                                {isSelected && <Text className="text-[8px] font-black text-blue-600">SELECTED</Text>}
+                            <View className="flex-row justify-between mt-2.5">
+                                <Text className="text-[8px] font-mono text-gray-400">Data_Points: {opt.votes}</Text>
+                                {isSelected && (
+                                    <View className="flex-row items-center gap-1">
+                                         <View className="w-1 h-1 bg-blue-600 rounded-full" />
+                                         <Text className="text-[8px] font-black text-blue-600 tracking-tighter">ACTIVE_SELECTION</Text>
+                                    </View>
+                                )}
                             </View>
                         </Pressable>
                     );
