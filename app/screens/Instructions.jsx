@@ -51,20 +51,20 @@ export default function Instructions() {
         <Text style={{ color: THEME.textSecondary || '#475569' }} className="font-black uppercase text-[9px] tracking-[0.2em] mb-6 ml-1">Transmission Basics</Text>
         
         <InstructionStep 
-          icon="document-text-outline"
-          title="Drafting Content"
-          desc="Initialize with a high-impact title. Use the terminal formatting buttons [h] or [section] to ensure data readability."
+          icon="text-outline"
+          title="Smart Formatting"
+          desc="The new engine supports shorthand tags like h() for headers. Simply highlight any text to reveal the quick-format toolbar for instant tagging."
           color="#3b82f6"
         />
 
         <InstructionStep 
           icon="scan-outline"
           title="Pre-Flight Check"
-          desc="Always tap 'Show Preview'. This verifies the visual output. If syntax tags are corrupted, fix them before final submission."
+          desc="Always tap 'Show Preview'. This verifies the visual output. The system now automatically cleans trailing spaces inside your tags."
           color="#8b5cf6"
         />
 
-        {/* --- 2. Media & TikTok --- */}
+        {/* --- 2. Media & Social --- */}
         <View style={{ backgroundColor: THEME.border, height: 1 }} className="my-6 opacity-30" />
         <Text style={{ color: THEME.textSecondary || '#475569' }} className="font-black uppercase text-[9px] tracking-[0.2em] mb-6 ml-1">Media Integration</Text>
         
@@ -72,16 +72,20 @@ export default function Instructions() {
           style={{ backgroundColor: THEME.card, borderColor: THEME.border }}
           className="p-6 rounded-[32px] border-2 mb-8"
         >
-          <View className="flex-row items-center mb-3">
-            <Ionicons name="logo-tiktok" size={20} color={THEME.accent} />
-            <Text style={{ color: THEME.text }} className="ml-3 font-black italic uppercase">TikTok Embeds</Text>
+          <View className="flex-row items-center mb-4">
+            <View className="flex-row">
+              <Ionicons name="logo-tiktok" size={18} color={THEME.accent} />
+              <View className="mx-2" />
+              <Ionicons name="logo-youtube" size={18} color="#ef4444" />
+            </View>
+            <Text style={{ color: THEME.text }} className="ml-3 font-black italic uppercase">Video Embeds</Text>
           </View>
           <Text style={{ color: THEME.textSecondary || '#94a3b8' }} className="text-sm leading-6 font-medium">
-            Copy links directly from source. Use full URLs (tiktok.com/video/...) for optimal decoding. Avoid shortened 'vm' links to reduce latency.
+            Paste full URLs from TikTok or YouTube. Shortened 'vm' or 'youtu.be' links are supported, but full desktop URLs provide the fastest loading sequence for readers.
           </Text>
         </View>
 
-        {/* --- 3. Polls & Categories --- */}
+        {/* --- 3. Interaction --- */}
         <Text style={{ color: THEME.textSecondary || '#475569' }} className="font-black uppercase text-[9px] tracking-[0.2em] mb-6 ml-1">User Engagement</Text>
         
         <InstructionStep 
@@ -91,13 +95,6 @@ export default function Instructions() {
           color="#10b981"
         />
 
-        <InstructionStep 
-          icon="layers-outline"
-          title="Sector Accuracy"
-          desc="Posting 'News' in the 'Memes' sector will result in automated rejection. Ensure metadata matches content."
-          color="#f59e0b"
-        />
-
         {/* --- 4. Formatting Guide Table --- */}
         <View 
           style={{ backgroundColor: THEME.card, borderColor: THEME.border }}
@@ -105,7 +102,7 @@ export default function Instructions() {
         >
           <View className="flex-row items-center mb-6">
              <Ionicons name="code-slash" size={18} color={THEME.accent} />
-             <Text style={{ color: THEME.text }} className="ml-3 font-black italic uppercase">Syntax Reference</Text>
+             <Text style={{ color: THEME.text }} className="ml-3 font-black italic uppercase">v3.0 Syntax Reference</Text>
           </View>
           
           <View className="space-y-4">
@@ -113,7 +110,7 @@ export default function Instructions() {
                style={{ borderBottomColor: THEME.border }}
                className="flex-row justify-between border-b pb-3 mb-3"
             >
-              <Text style={{ color: THEME.accent }} className="font-mono text-[11px] font-bold">[h]TITLE[/h]</Text>
+              <Text style={{ color: THEME.accent }} className="font-mono text-[11px] font-bold">h(TITLE)</Text>
               <Text style={{ color: THEME.textSecondary || '#475569' }} className="font-black uppercase text-[9px]">Bold Header</Text>
             </View>
 
@@ -121,32 +118,38 @@ export default function Instructions() {
                style={{ borderBottomColor: THEME.border }}
                className="flex-row justify-between border-b pb-3 mb-3"
             >
-              <Text style={{ color: THEME.accent }} className="font-mono text-[11px] font-bold">[section]DATA[/section]</Text>
-              <Text style={{ color: THEME.textSecondary || '#475569' }} className="font-black uppercase text-[9px]">Box Container</Text>
+              <Text style={{ color: THEME.accent }} className="font-mono text-[11px] font-bold">s(CONTENT)</Text>
+              <Text style={{ color: THEME.textSecondary || '#475569' }} className="font-black uppercase text-[9px]">Styled Section</Text>
             </View>
 
             <View 
                style={{ borderBottomColor: THEME.border }}
                className="flex-row justify-between border-b pb-3 mb-3"
             >
-              <Text style={{ color: THEME.accent }} className="font-mono text-[11px] font-bold">[li]ITEM[/li]</Text>
+              <Text style={{ color: THEME.accent }} className="font-mono text-[11px] font-bold">l(ITEM)</Text>
               <Text style={{ color: THEME.textSecondary || '#475569' }} className="font-black uppercase text-[9px]">Bullet Node</Text>
             </View>
+
             <View 
                style={{ borderBottomColor: THEME.border }}
-               className="flex-row justify-between pb-3 mb-3"
+               className="flex-row justify-between border-b pb-3 mb-3"
             >
-              <Text style={{ color: THEME.accent }} className="font-mono text-[11px] font-bold">[source="link" text:Text]</Text>
+              <Text style={{ color: THEME.accent }} className="font-mono text-[11px] font-bold">br()</Text>
+              <Text style={{ color: THEME.textSecondary || '#475569' }} className="font-black uppercase text-[9px]">Line Break</Text>
+            </View>
+
+            <View className="flex-row justify-between pb-1">
+              <Text style={{ color: THEME.accent }} className="font-mono text-[10px] font-bold">link(URL)-text(LABEL)</Text>
               <Text style={{ color: THEME.textSecondary || '#475569' }} className="font-black uppercase text-[9px]">Source Link</Text>
             </View>
           </View>
         </View>
 
         <View className="items-center mt-12 mb-8">
-            <Text style={{ color: THEME.textSecondary || '#334155' }} className="font-black text-[8px] uppercase tracking-[0.4em]">Formatting Engine v2.0</Text>
+            <Text style={{ color: THEME.textSecondary || '#334155' }} className="font-black text-[8px] uppercase tracking-[0.4em]">Formatting Engine v3.0 (Hybrid Support)</Text>
         </View>
 
       </ScrollView>
     </SafeAreaView>
   );
-}
+        }
