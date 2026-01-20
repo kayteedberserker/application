@@ -42,8 +42,7 @@ const AppBanner = ({ size = BannerAdSize.MEDIUM_RECTANGLE }) => {
   return (
     
     <View 
-      style={{ 
-        minHeight: getMinHeight(), 
+      style={{  
         width: '100%', 
         alignItems: 'center', 
         justifyContent: 'center',
