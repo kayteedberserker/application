@@ -337,32 +337,77 @@ export default function AuthorDiaryDashboard() {
 
     useEffect(() => { if (isClosed) { load(); } }, [isClosed, load]);
 
+        /* 🔹 UPDATED TIMER LOGIC 
+       Scans ALL today's posts to find the one that expires SOONEST.
+    */
     useEffect(() => {
         let interval;
-        if (todayPost && (todayPost.status === 'rejected' || todayPost.status === 'approved')) {
-            const referenceTime = new Date(todayPost.statusChangedAt || todayPost.updatedAt).getTime();
-            const TWELVE_HOURS = 12 * 60 * 60 * 1000;
-            const TWENTY_FOUR_HOURS = 24 * 60 * 60 * 1000;
-            const cooldownMs = todayPost.status === 'approved' ? TWENTY_FOUR_HOURS : TWELVE_HOURS;
-            const endTime = referenceTime + cooldownMs;
 
-            const scheduleDoneNotification = async (targetTime) => {
-                const triggerInSeconds = Math.floor((targetTime - new Date().getTime()) / 1000);
-                if (triggerInSeconds > 0 && !rewardToken) {
-                    await Notifications.cancelAllScheduledNotificationsAsync();
-                    await Notifications.setNotificationChannelAsync('default', { name: 'Default', importance: Notifications.AndroidImportance.DEFAULT });
-                    await Notifications.scheduleNotificationAsync({
-                        content: { title: "Cooldown Finished! 🎉", body: "Your diary cooldown is over. You can post your next entry now!", sound: true, data: { type: "open_diary" } },
-                        trigger: { type: Notifications.SchedulableTriggerInputTypes.DATE, date: new Date(targetTime), channelId: 'default' },
-                    });
+        // Helper: Find the soonest time a slot opens up
+        const getNextUnlockTime = () => {
+            if (!todayPosts || todayPosts.length === 0) return null;
+            
+            const now = new Date().getTime();
+            let minEndTime = Infinity;
+            let hasBlockingPost = false;
+
+            todayPosts.forEach(post => {
+                // Calculate when THIS specific post's cooldown ends
+                // Use statusChangedAt first, fallback to updatedAt or createdAt
+                const referenceTime = new Date(post.statusChangedAt || post.updatedAt || post.createdAt).getTime();
+                
+                let cooldownMs = 0;
+                if (post.status === 'approved') {
+                    cooldownMs = 24 * 60 * 60 * 1000; // 24 Hours
+                } else if (post.status === 'rejected') {
+                    cooldownMs = 12 * 60 * 60 * 1000; // 12 Hours
+                } else {
+                    // Pending posts don't have a cooldown timer yet, they just block.
+                    return; 
+                }
+
+                const endTime = referenceTime + cooldownMs;
+
+                // We only care about cooldowns that are in the future
+                if (endTime > now) {
+                    hasBlockingPost = true;
+                    if (endTime < minEndTime) {
+                        minEndTime = endTime;
+                    }
+                }
+            });
+
+            // If minEndTime is still Infinity, it means no posts are currently triggering a cooldown
+            // (or all cooldowns have already passed).
+            return minEndTime === Infinity ? null : minEndTime;
+        };
+
+        const targetTime = getNextUnlockTime();
+
+        // Only run timer if we are actually blocked AND have a target time
+        if ((postsLast24h >= maxPostsToday) && targetTime) {
+            
+            // Notification scheduler (only if not already rewarded)
+            const scheduleDoneNotification = async () => {
+                if (!rewardToken) {
+                     // logic to schedule notification (kept simple here)
+                     const triggerInSeconds = Math.floor((targetTime - new Date().getTime()) / 1000);
+                     if (triggerInSeconds > 0) {
+                        await Notifications.cancelAllScheduledNotificationsAsync();
+                        await Notifications.scheduleNotificationAsync({
+                            content: { title: "Cooldown Finished! 🎉", body: "New slot available. Post now!", sound: true, data: { type: "open_diary" } },
+                            trigger: { type: Notifications.SchedulableTriggerInputTypes.DATE, date: new Date(targetTime), channelId: 'default' },
+                        });
+                     }
                 }
             }
-            scheduleDoneNotification(endTime);
+            scheduleDoneNotification();
 
             const calculateTime = () => {
-                interval = setInterval(async () => {
+                interval = setInterval(() => {
                     const now = new Date().getTime();
-                    const distance = endTime - now;
+                    const distance = targetTime - now;
+
                     if (distance <= 0) {
                         clearInterval(interval);
                         setTimeLeft("00:00:00");
@@ -372,14 +417,21 @@ export default function AuthorDiaryDashboard() {
                         const m = Math.floor((distance % (1000 * 60 * 60)) / (1000 * 60));
                         const s = Math.floor((distance % (1000 * 60)) / 1000);
                         setTimeLeft(`${h}h ${m}m ${s}s`);
+                        
                         if (!rewardToken) setCanPostAgain(false);
                     }
                 }, 1000);
             };
             calculateTime();
+        } else {
+            // No timer needed (either limit not reached, or no active cooldowns)
+            setCanPostAgain(true);
+            setTimeLeft("");
         }
+
         return () => { if (interval) clearInterval(interval); };
-    }, [todayPost, rewardToken]);
+    }, [todayPosts, postsLast24h, maxPostsToday, rewardToken]);
+
 
 
     // =================================================================
@@ -691,7 +743,7 @@ export default function AuthorDiaryDashboard() {
                             </View>
                             
                             {/* Show Rejection Reason */}
-                            {post.status === 'rejected' && post.rejectionReason && (
+                            {( post.status === 'rejected' && post.rejectionReason ) || ( post.status === 'pending' && post.rejectionReason ) && (
                                 <View className="mt-2 bg-red-500/5 p-2 rounded-lg border border-red-500/10">
                                     <Text className="text-[10px] text-red-400 font-medium italic">
                                         REASON: {post.rejectionReason}
