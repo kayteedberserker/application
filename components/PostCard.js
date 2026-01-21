@@ -549,11 +549,33 @@ export default function PostCard({ post, setPosts, isFeed, hideMedia, similarPos
 
                 <View className="mb-4 rounded-2xl overflow-hidden border border-gray-100 dark:border-gray-800">{renderMediaContent()}</View>
 
-                {post.poll && (
-                    <View className="mb-6 p-4 bg-gray-50 dark:bg-gray-900/50 rounded-2xl border border-gray-100 dark:border-gray-800">
-                        <Poll poll={post.poll} postId={post?._id} deviceId={user?.deviceId} />
-                    </View>
-                )}
+                {/* POLL SECTION */}
+{post.poll && (
+    <>
+        {!similarPosts ? (
+            /* FULL POLL VIEW */
+            <View className="mb-6 p-4 bg-gray-50 dark:bg-gray-900/50 rounded-2xl border border-gray-100 dark:border-gray-800">
+                <Poll poll={post.poll} postId={post?._id} deviceId={user?.deviceId} />
+            </View>
+        ) : (
+            /* POLL SUMMARY VIEW (Shown when similar posts are present) */
+            <View className="mt-2 pt-3 border-t border-gray-200 dark:border-gray-800">
+                <View className="flex-row items-center gap-2">
+                    {/* Updated to a poll-specific icon */}
+                    <MaterialCommunityIcons 
+                        name="chart-poll" 
+                        size={20} 
+                        color={isDark ? "#60a5fa" : "#3b82f6"} 
+                    />
+                    <Text className="text-sm font-black text-gray-500 uppercase tracking-widest">
+                        This post includes a poll
+                    </Text>
+                </View>
+            </View>
+        )}
+    </>
+)}
+
 
                 {similarPosts ? null : (
                     <View className="flex-row items-center justify-between border-t border-gray-100 dark:border-gray-800 pt-4 mt-2">
