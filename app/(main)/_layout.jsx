@@ -21,7 +21,6 @@ import CategoryNav from "./../../components/CategoryNav";
 import TopBar from "./../../components/Topbar";
 
 export default function MainLayout() {
-	;
 	const { colorScheme, setColorScheme } = useNativeWind();
 	const systemScheme = useSystemScheme(); // ✅ system theme
 
@@ -130,6 +129,7 @@ export default function MainLayout() {
 			<UpdateHandler />
 			{/* TABS */}
             <Tabs
+                backBehavior="history" // ✅ KEY FIX: Ensures back button goes to previous screen, not always Home
                 screenOptions={{
                     headerShown: false,
                     tabBarActiveTintColor: "#60a5fa",
@@ -203,7 +203,7 @@ export default function MainLayout() {
                     }}
                 />
 
-                {/* Hidden Routes */}
+                {/* Hidden Routes - Logic Changed: Removed 'display: none' so Tab Bar stays visible */}
                 <Tabs.Screen name="post/[id]" options={{ href: null }} />
                 <Tabs.Screen name="author/[id]" options={{ href: null }} />
                 <Tabs.Screen name="categories/[id]" options={{ href: null }} />
@@ -272,4 +272,4 @@ export default function MainLayout() {
 			</View>
 		</>
 	);
-}
+						}
