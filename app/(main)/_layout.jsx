@@ -1,5 +1,5 @@
 import { Ionicons } from "@expo/vector-icons";
-import { Redirect, Tabs } from "expo-router";
+import { Redirect, Stack, useRouter, usePathname } from "expo-router";
 import { useColorScheme as useNativeWind } from "nativewind";
 import { useEffect, useRef, useState } from "react";
 import {
@@ -10,7 +10,8 @@ import {
 	StatusBar,
 	TouchableOpacity,
 	useColorScheme as useSystemScheme,
-	View
+	View,
+	Text
 } from "react-native";
 import { SafeAreaView, useSafeAreaInsets } from "react-native-safe-area-context";
 import AnimeLoading from "../../components/AnimeLoading";
@@ -23,6 +24,8 @@ import TopBar from "./../../components/Topbar";
 export default function MainLayout() {
 	const { colorScheme, setColorScheme } = useNativeWind();
 	const systemScheme = useSystemScheme();
+	const router = useRouter();
+	const pathname = usePathname(); // To highlight the active "tab"
 
 	const [lastOffset, setLastOffset] = useState(0);
 	const [isNavVisible, setIsNavVisible] = useState(true);
@@ -95,8 +98,13 @@ export default function MainLayout() {
 	const isDark = colorScheme === "dark";
 	const handleBackToTop = () => DeviceEventEmitter.emit("doScrollToTop");
 
+	// Helper for the custom tab bar navigation
+	const navigateTo = (route) => {
+		router.push(route);
+	};
+
 	return (
-		<>
+		<View style={{ flex: 1, backgroundColor: isDark ? "#000" : "#fff" }}>
 			<StatusBar barStyle={isDark ? "light-content" : "dark-content"} />
 			
 			<SafeAreaView
@@ -114,103 +122,75 @@ export default function MainLayout() {
 					<CategoryNav isDark={isDark} />
 				</Animated.View>
 			</SafeAreaView>
+
 			<UpdateHandler />
 
-            <Tabs
-                // ✅ THE COMBO FIX
-                initialRouteName="index" // 1. Set the anchor point
-                backBehavior="history"   // 2. Allow B -> A -> Home history
-                screenOptions={{
-                    headerShown: false,
-                    tabBarActiveTintColor: "#60a5fa",
-                    tabBarInactiveTintColor: isDark ? "#94a3b8" : "#64748b",
-                    tabBarShowLabel: true, 
-                    tabBarLabelStyle: {
-                        fontSize: 9,
-                        fontWeight: '900',
-                        textTransform: 'uppercase',
-                        letterSpacing: 0.5,
-                        marginBottom: 8,
-                    },
-                    tabBarStyle: {
-                        position: "absolute",
-                        bottom: insets.bottom + 15,
-                        height: 60, 
-                        transform: [{ translateX: '15%' }],
-                        width: "70%",
-                        alignSelf: "center",
-                        borderRadius: 25,
-                        backgroundColor: isDark ? "#111111" : "#ffffff",
-                        borderTopWidth: 0,
-                        borderWidth: isDark ? 1 : 0,
-                        borderColor: "#1e293b",
-                        paddingTop: 2,
-                        elevation: 10,
-                        shadowColor: "#000",
-                        shadowOffset: { width: 0, height: 4 },
-                        shadowOpacity: 0.2,
-                        shadowRadius: 5,
-                    },
-                }}
-            >
-                <Tabs.Screen
-                    name="index"
-                    options={{
-                        title: "Home",
-                        tabBarIcon: ({ color, focused }) => (
-                            <Ionicons 
-                                name={focused ? "home" : "home-outline"} 
-                                size={22} 
-                                color={color} 
-                            />
-                        ),
-                    }}
-                />
-                <Tabs.Screen
-                    name="authordiary"
-                    options={{
-                        title: "Ore Diary",
-                        tabBarIcon: ({ color, focused }) => (
-                            <Ionicons 
-                                name={focused ? "add-circle" : "add-circle-outline"} 
-                                size={24} 
-                                color={color} 
-                            />
-                        ),
-                    }}
-                />
-                <Tabs.Screen
-                    name="profile"
-                    options={{
-                        title: "Profile",
-                        tabBarIcon: ({ color, focused }) => (
-                            <Ionicons 
-                                name={focused ? "person" : "person-outline"} 
-                                size={22} 
-                                color={color} 
-                            />
-                        ),
-                    }}
-                />
+			{/* ✅ REPLACED TABS WITH STACK FOR BULLETPROOF BACK-BUTTON LOGIC */}
+			<Stack screenOptions={{ headerShown: false }}>
+				<Stack.Screen name="index" />
+				<Stack.Screen name="authordiary" />
+				<Stack.Screen name="profile" />
+				<Stack.Screen name="post/[id]" />
+				<Stack.Screen name="author/[id]" />
+				<Stack.Screen name="categories/[id]" />
+			</Stack>
 
-                {/* ✅ STABLE STACKING ROUTES */}
-                <Tabs.Screen 
-                    name="post/[id]" 
-                    getId={({ params }) => params?.id} 
-                    options={{ href: null }} 
-                />
-                <Tabs.Screen 
-                    name="author/[id]" 
-                    getId={({ params }) => params?.id} 
-                    options={{ href: null }} 
-                />
-                <Tabs.Screen 
-                    name="categories/[id]" 
-                    getId={({ params }) => params?.id} 
-                    options={{ href: null }} 
-                />
-            </Tabs>
+			{/* ✅ CUSTOM FLOATING TAB BAR (UI PRESERVED) */}
+			<View
+				style={{
+					position: "absolute",
+					bottom: insets.bottom + 15,
+					height: 60,
+					width: "70%",
+					alignSelf: "center",
+					borderRadius: 25,
+					backgroundColor: isDark ? "#111111" : "#ffffff",
+					flexDirection: "row",
+					alignItems: "center",
+					justifyContent: "space-around",
+					elevation: 10,
+					shadowColor: "#000",
+					shadowOffset: { width: 0, height: 4 },
+					shadowOpacity: 0.2,
+					shadowRadius: 5,
+					borderWidth: isDark ? 1 : 0,
+					borderColor: "#1e293b",
+					transform: [{ translateX: 0 }], // Adjusted for the View container
+					zIndex: 999,
+				}}
+			>
+				{/* HOME TAB */}
+				<TouchableOpacity onPress={() => navigateTo("/")} className="items-center justify-center">
+					<Ionicons 
+						name={pathname === "/" ? "home" : "home-outline"} 
+						size={22} 
+						color={pathname === "/" ? "#60a5fa" : (isDark ? "#94a3b8" : "#64748b")} 
+					/>
+					<Text style={{ fontSize: 9, fontWeight: '900', color: pathname === "/" ? "#60a5fa" : (isDark ? "#94a3b8" : "#64748b"), marginTop: 2 }}>HOME</Text>
+				</TouchableOpacity>
 
+				{/* DIARY TAB */}
+				<TouchableOpacity onPress={() => navigateTo("/authordiary")} className="items-center justify-center">
+					<Ionicons 
+						name={pathname === "/authordiary" ? "add-circle" : "add-circle-outline"} 
+						size={24} 
+						color={pathname === "/authordiary" ? "#60a5fa" : (isDark ? "#94a3b8" : "#64748b")} 
+					/>
+					<Text style={{ fontSize: 9, fontWeight: '900', color: pathname === "/authordiary" ? "#60a5fa" : (isDark ? "#94a3b8" : "#64748b"), marginTop: 2 }}>ORE DIARY</Text>
+				</TouchableOpacity>
+
+				{/* PROFILE TAB */}
+				<TouchableOpacity onPress={() => navigateTo("/profile")} className="items-center justify-center">
+					<Ionicons 
+						name={pathname === "/profile" ? "person" : "person-outline"} 
+						size={22} 
+						color={pathname === "/profile" ? "#60a5fa" : (isDark ? "#94a3b8" : "#64748b")} 
+					/>
+					<Text style={{ fontSize: 9, fontWeight: '900', color: pathname === "/profile" ? "#60a5fa" : (isDark ? "#94a3b8" : "#64748b"), marginTop: 2 }}>PROFILE</Text>
+				</TouchableOpacity>
+			</View>
+
+			{/* FLOATING ACTION BUTTONS */}
 			<View
 				style={{
 					position: "absolute",
@@ -235,9 +215,6 @@ export default function MainLayout() {
 							borderWidth: 1.5,
 							borderColor: "#1e293b",
 							elevation: 5,
-							shadowColor: "#000",
-							shadowOffset: { width: 0, height: 2 },
-							shadowOpacity: 0.2,
 						}}
 					>
 						<Ionicons name="chevron-up" size={24} color="#3b82f6" />
@@ -261,6 +238,6 @@ export default function MainLayout() {
 					/>
 				</TouchableOpacity>
 			</View>
-		</>
+		</View>
 	);
 }
