@@ -1,3 +1,5 @@
+import { MaterialCommunityIcons } from "@expo/vector-icons";
+import { usePathname, useRouter } from "expo-router"; // Added useRouter for navigation
 import { useEffect, useState } from "react";
 import { Pressable, View } from "react-native";
 import Toast from "react-native-toast-message";
@@ -11,22 +13,34 @@ const fetcher = (url) => fetch(url).then(res => res.json());
 
 export default function Poll({ poll, postId, readOnly = false }) {
     const { user } = useUser();
+    const pathname = usePathname();
+    const router = useRouter();
     const [selectedOptions, setSelectedOptions] = useState([]);
     const [submitted, setSubmitted] = useState(false);
-    const [loading, setLoading] = useState(false); // Added missing loading state
+    const [loading, setLoading] = useState(false);
+
+    // ✅ Route Check: Determine if we show the full poll or the truncated feed version
+    const isPostPage = pathname.includes("post/");
 
     // --- SWR: live post (poll source of truth) ---
     const { data, mutate } = useSWR(
         postId ? `${API_URL}/api/posts/${postId}` : null,
         fetcher,
         {
-            refreshInterval: 5000,          // keep poll in sync across devices
+            refreshInterval: 5000,
             revalidateOnFocus: true,
-            dedupingInterval: 0,            // ⚠️ prevent stale cache rollback
+            dedupingInterval: 0,
         }
     );
 
     const livePoll = data?.poll || poll;
+
+    // Determine which options to show
+    const displayOptions = isPostPage 
+        ? livePoll.options 
+        : livePoll.options?.slice(0, 2);
+    
+    const hasMoreOptions = !isPostPage && livePoll.options?.length > 2;
 
     // --- Detect if this device already voted ---
     useEffect(() => {
@@ -57,7 +71,7 @@ export default function Poll({ poll, postId, readOnly = false }) {
             return;
         }
 
-        setLoading(true); // Start loading animation
+        setLoading(true);
 
         // --- Optimistic UI update ---
         const optimisticPoll = {
@@ -70,7 +84,6 @@ export default function Poll({ poll, postId, readOnly = false }) {
             voters: [...(livePoll.voters || []), user.deviceId],
         };
 
-        // Apply optimistic update instantly
         mutate(
             (current) => ({ ...current, poll: optimisticPoll }),
             false
@@ -101,14 +114,13 @@ export default function Poll({ poll, postId, readOnly = false }) {
                 Toast.show({ type: "success", text1: "Vote submitted!" });
             }
 
-            // Revalidate with backend truth
             mutate();
 
         } catch (err) {
             Toast.show({ type: "error", text1: "Vote failed, retrying…" });
-            mutate(); // rollback to backend state if needed
+            mutate();
         } finally {
-            setLoading(false); // Stop loading animation
+            setLoading(false);
         }
     };
 
@@ -130,9 +142,8 @@ export default function Poll({ poll, postId, readOnly = false }) {
                 </Text>
             </View>
 
-            {/* Layout changed to full width to prevent text cutting */}
             <View className="flex-col">
-                {livePoll.options.map((opt, i) => {
+                {displayOptions.map((opt, i) => {
                     const percentage = totalVotes ? ((opt.votes / totalVotes) * 100).toFixed(1) : 0;
                     const isSelected = selectedOptions.includes(i);
 
@@ -146,7 +157,6 @@ export default function Poll({ poll, postId, readOnly = false }) {
                                 }`}
                         >
                             <View className="flex-row items-start justify-between mb-3">
-                                {/* Removed numberOfLines={1} to allow text wrapping */}
                                 <Text
                                     className={`text-[11px] font-bold uppercase flex-1 mr-4 leading-4 ${isSelected ? 'text-blue-600' : 'text-gray-700 dark:text-gray-300'}`}
                                 >
@@ -176,6 +186,20 @@ export default function Poll({ poll, postId, readOnly = false }) {
                     );
                 })}
             </View>
+
+            {/* ✅ Check More Options Trigger (Only in Feed) */}
+            {hasMoreOptions && (
+                <Pressable 
+                    onPress={() => router.push(`/post/${postId}`)}
+                    className="mt-1 mb-4 pt-4 border-t border-gray-100 dark:border-gray-800 flex-row items-center justify-center gap-2"
+                >
+                    <MaterialCommunityIcons name="poll" size={14} color="#3b82f6" />
+                    <Text className="text-[10px] font-black text-blue-500 uppercase tracking-widest">
+                        Check {livePoll.options.length - 2} more options
+                    </Text>
+                    <MaterialCommunityIcons name="chevron-right" size={14} color="#3b82f6" />
+                </Pressable>
+            )}
 
             {!readOnly && !submitted && (
                 <View className="mt-2">
