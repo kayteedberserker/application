@@ -326,7 +326,7 @@ function RootLayoutContent() {
     useEffect(() => { if (appReady || fontError) SplashScreen.hideAsync(); }, [appReady, fontError]);
 
     if (!fontsLoaded || isSyncing || isUpdating) {
-        return <AnimeLoading message={isUpdating ? "CORE_SYNC" : "LOADING_PAGE"} subMessage={isUpdating ? "Optimizing system transmissions..." : "Syncing Account"} />;
+        return <AnimeLoading message={isUpdating ? "UPDATING_CORE" : "LOADING_PAGE"} subMessage={isUpdating ? "Updating system configurations..." : "Syncing Account"} />;
     }
 
     return (
