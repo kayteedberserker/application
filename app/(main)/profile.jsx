@@ -35,7 +35,7 @@ const LIMIT = 5;
 
 const fetcher = (url) => fetch(url).then((res) => res.json());
 
-// 🔹 AURA UI UTILITY
+// 🔹 AURA UI UTILITY (Updated for 1-10 Ranks)
 const getAuraVisuals = (rank) => {
     if (!rank || rank > 10 || rank <= 0) return null;
     switch (rank) {
@@ -202,8 +202,8 @@ export default function MobileProfilePage() {
     const progress = Math.min((count / nextMilestone) * 100, 100);
 
     // 🔹 Aura Logic
-    const aura = getAuraVisuals(user?.previousRank);
-    const isTop10 = user?.previousRank > 0 && user?.previousRank <= 10;
+    const aura = useMemo(() => getAuraVisuals(user?.previousRank), [user?.previousRank]);
+    const isTop10 = !!aura;
 
     const pickImage = async () => {
         const result = await ImagePicker.launchImageLibraryAsync({
@@ -329,17 +329,23 @@ export default function MobileProfilePage() {
     const listHeader = useMemo(() => (
         <View className="px-6">
             <View className="flex-row items-center gap-4 mb-10 border-b border-gray-100 dark:border-gray-800 pb-6">
-                <View className="w-2 h-8 bg-blue-600" />
+                <View className="w-2 h-8" style={{ backgroundColor: isTop10 ? aura.color : '#2563eb' }} />
                 <Text className="text-3xl font-black italic tracking-tighter uppercase dark:text-white">Player Profile</Text>
             </View>
 
             <View className="items-center mb-10">
                 <View className="relative">
                     <Animated.View
-                        style={{ transform: [{ rotate: spin }] }}
-                        className="absolute -inset-4 border border-dashed border-blue-600/30 rounded-full"
+                        style={{ 
+                            transform: [{ rotate: spin }],
+                            borderColor: isTop10 ? `${aura.color}40` : 'rgba(37, 99, 235, 0.3)' 
+                        }}
+                        className="absolute -inset-4 border border-dashed rounded-full"
                     />
-                    <View className="absolute -inset-1 border-2 border-blue-600 rounded-full opacity-50" />
+                    <View 
+                        style={{ borderColor: isTop10 ? aura.color : '#2563eb' }}
+                        className="absolute -inset-1 border-2 rounded-full opacity-50" 
+                    />
 
                     <TouchableOpacity onPress={pickImage} className="w-40 h-40 rounded-full overflow-hidden border-4 border-white dark:border-[#0a0a0a] bg-gray-900 shadow-2xl">
                         <Image
@@ -358,13 +364,13 @@ export default function MobileProfilePage() {
                         className="flex-row items-center gap-2"
                     >
                         <Text 
-                            style={{ color: isTop10 ? aura.color : (isDark ? "#60a5fa" : "#2563eb") }}
-                            className="text-xl font-black uppercase tracking-tighter"
+                            style={{ color: isTop10 ? aura.color : (isDark ? "#fff" : "#000") }}
+                            className="text-2xl font-black uppercase tracking-tighter"
                         >
                             {username || user?.username || "GUEST"}
                         </Text>
                         {isTop10 && (
-                            <View className="bg-white/10 px-1 rounded border" style={{ borderColor: aura.color + '40' }}>
+                            <View className="px-2 py-0.5 rounded-full border" style={{ borderColor: aura.color, backgroundColor: `${aura.color}10` }}>
                                 <Text style={{ color: aura.color, fontSize: 8, fontWeight: '900' }}>{aura.label}</Text>
                             </View>
                         )}
@@ -387,8 +393,8 @@ export default function MobileProfilePage() {
                     </Pressable>
                     <View className="h-1.5 w-full bg-gray-100 dark:bg-gray-800 rounded-full overflow-hidden border border-gray-200 dark:border-white/10">
                         <View
-                            style={{ width: `${progress}%` }}
-                            className="h-full bg-blue-600 shadow-lg"
+                            style={{ width: `${progress}%`, backgroundColor: isTop10 ? aura.color : '#2563eb' }}
+                            className="h-full shadow-lg"
                         />
                     </View>
                 </View>
@@ -466,7 +472,8 @@ export default function MobileProfilePage() {
                 <TouchableOpacity
                     onPress={handleUpdate}
                     disabled={isUpdating}
-                    className="relative w-full h-14 bg-blue-600 rounded-2xl overflow-hidden items-center justify-center mt-6"
+                    style={{ backgroundColor: isTop10 ? aura.color : '#2563eb' }}
+                    className="relative w-full h-14 rounded-2xl overflow-hidden items-center justify-center mt-6"
                 >
                     <Text className="relative z-10 text-white font-black uppercase italic tracking-widest text-xs">
                         {isUpdating ? "Syncing Changes..." : "Update Character Data"}
@@ -485,7 +492,6 @@ export default function MobileProfilePage() {
                 <View className="h-[1px] flex-1 bg-gray-100 dark:bg-gray-800" />
             </View>
         </View>
-        // 🔹 Fixed: Added showId and isDark to dependency array
     ), [user, preview, description, username, isUpdating, spin, translateX, totalPosts, copied, rankTitle, rankIcon, progress, nextMilestone, count, showId, isDark, aura, isTop10]); 
 
     if (contextLoading || isRestoringCache) {
@@ -588,4 +594,4 @@ export default function MobileProfilePage() {
             )}
         </View>
     );
-                }
+}
