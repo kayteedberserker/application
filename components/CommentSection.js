@@ -1,5 +1,5 @@
 import { Ionicons } from "@expo/vector-icons";
-import * as Haptics from "expo-haptics"; // Added Haptics
+import * as Haptics from "expo-haptics";
 import { useEffect, useState, useRef } from "react";
 import {
 	ActivityIndicator,
@@ -11,7 +11,6 @@ import {
 	TextInput,
 	View,
 	Modal,
-	KeyboardAvoidingView,
 	Platform,
 	PanResponder,
 	Keyboard,
@@ -96,6 +95,18 @@ const DiscussionDrawer = ({ visible, comment, onClose, onReply, isPosting }) => 
 	const messageRefs = useRef({});
 	const [shouldAutoScroll, setShouldAutoScroll] = useState(true);
 	const scrollOffset = useRef(0);
+	const [keyboardHeight, setKeyboardHeight] = useState(0);
+
+	// Manual Keyboard Tracking
+	useEffect(() => {
+		const showSub = Keyboard.addListener(Platform.OS === 'ios' ? 'keyboardWillShow' : 'keyboardDidShow', (e) => {
+			setKeyboardHeight(e.endCoordinates.height);
+		});
+		const hideSub = Keyboard.addListener(Platform.OS === 'ios' ? 'keyboardWillHide' : 'keyboardDidHide', () => {
+			setKeyboardHeight(0);
+		});
+		return () => { showSub.remove(); hideSub.remove(); };
+	}, []);
 
 	useEffect(() => {
 		if (visible) {
@@ -107,18 +118,23 @@ const DiscussionDrawer = ({ visible, comment, onClose, onReply, isPosting }) => 
 	}, [visible]);
 
 	useEffect(() => {
-		if (visible && comment?.replies?.length > 0 && !shouldAutoScroll) {
+		// Only show toast if new message arrived while the user was scrolled up
+		if (visible && comment?.replies?.length > 0 && !shouldAutoScroll && scrollOffset.current > 100) {
 			setShowNewMessageToast(true);
 		}
 	}, [comment?.replies?.length, visible]);
 
 	const panResponder = useRef(
 		PanResponder.create({
-			onStartShouldSetPanResponder: (e, gs) => Math.abs(gs.dy) > Math.abs(gs.dx) && gs.dy > 0 && scrollOffset.current <= 0,
+			onStartShouldSetPanResponder: () => false,
+			onMoveShouldSetPanResponder: (e, gs) => {
+				// Only allow drag-down-to-close if at top of scroll
+				return gs.dy > 10 && scrollOffset.current <= 0;
+			},
 			onPanResponderMove: (e, gs) => { if (gs.dy > 0) panY.setValue(gs.dy); },
 			onPanResponderRelease: (e, gs) => {
 				if (gs.dy > 150 || gs.vy > 0.5) {
-					RNAnimated.timing(panY, { toValue: SCREEN_HEIGHT, duration: 200, useNativeDriver: true }).start(onClose);
+					RNAnimated.timing(panY, { toValue: SCREEN_HEIGHT, duration: 250, useNativeDriver: true }).start(onClose);
 				} else {
 					RNAnimated.spring(panY, { toValue: 0, useNativeDriver: true }).start();
 				}
@@ -147,18 +163,19 @@ const DiscussionDrawer = ({ visible, comment, onClose, onReply, isPosting }) => 
 		<Modal visible={visible} animationType="slide" transparent={true} onRequestClose={onClose}>
 			<View className="flex-1 bg-black/60 justify-end">
 				<RNAnimated.View 
-					style={{ transform: [{ translateY: panY }], height: '92%' }} 
+					style={{ 
+						transform: [{ translateY: panY }], 
+						height: '92%', 
+						paddingBottom: Platform.OS === 'ios' ? keyboardHeight : 0 
+					}} 
 					className="bg-white dark:bg-[#0a0a0a] rounded-t-[40px] border-t-2 border-blue-600/40 overflow-hidden"
 				>
+					{/* Header / Draggable Area */}
 					<View {...panResponder.panHandlers} className="items-center py-5 bg-white dark:bg-[#0a0a0a]">
 						<View className="w-12 h-1.5 bg-gray-200 dark:bg-gray-800 rounded-full" />
 					</View>
 
-					<KeyboardAvoidingView 
-						behavior={Platform.OS === "ios" ? "padding" : "height"} 
-						className="flex-1"
-						keyboardVerticalOffset={Platform.OS === "ios" ? 0 : 0}
-					>
+					<View className="flex-1">
 						{showNewMessageToast && (
 							<Animated.View entering={FadeIn} exiting={FadeOut} className="absolute top-24 self-center z-50">
 								<Pressable onPress={jumpToBottom} className="flex-row items-center bg-blue-600 px-4 py-2 rounded-full shadow-xl border border-white/20">
@@ -242,7 +259,7 @@ const DiscussionDrawer = ({ visible, comment, onClose, onReply, isPosting }) => 
 									placeholder="WRITE RESPONSE..."
 									placeholderTextColor="#6b7280"
 									multiline
-									className="flex-1 bg-gray-50 dark:bg-gray-900 p-4 rounded-2xl text-[12px] font-black dark:text-white max-h-32 border border-gray-100 dark:border-gray-800"
+									className="flex-1 bg-gray-50 dark:bg-gray-950 p-4 rounded-2xl text-[12px] font-black dark:text-white max-h-32 border border-gray-100 dark:border-gray-800"
 									value={replyText}
 									onChangeText={setReplyText}
 								/>
@@ -264,7 +281,7 @@ const DiscussionDrawer = ({ visible, comment, onClose, onReply, isPosting }) => 
 								</Pressable>
 							</View>
 						</View>
-					</KeyboardAvoidingView>
+					</View>
 				</RNAnimated.View>
 			</View>
 		</Modal>
@@ -326,26 +343,26 @@ export default function CommentSection({ postId }) {
 
 			if (res.ok) {
 				Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
+				
+				// Use the actual comment returned by the server to update the local state
+				const serverComment = responseData.comment;
+
 				if (parentId) {
 					mutate({
 						comments: comments.map(c => {
 							if (c._id === parentId) {
-								const updated = [...(c.replies || []), {
-									_id: responseData.commentId,
-									name: user.username,
-									text: content,
-									replyTo: replyToMeta,
-									date: new Date().toISOString()
-								}];
-								if (activeDiscussion?._id === parentId) setActiveDiscussion(prev => ({ ...prev, replies: updated }));
-								return { ...c, replies: updated };
+								const updatedReplies = [...(c.replies || []), serverComment];
+								if (activeDiscussion?._id === parentId) {
+									setActiveDiscussion(prev => ({ ...prev, replies: updatedReplies }));
+								}
+								return { ...c, replies: updatedReplies };
 							}
 							return c;
 						})
 					}, false);
 				} else {
 					mutate({
-						comments: [...comments, { _id: responseData.commentId, name: user.username, text: content, date: new Date().toISOString(), replies: [] }]
+						comments: [serverComment, ...comments]
 					}, false);
 					setText("");
 				}
