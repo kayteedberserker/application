@@ -1,7 +1,7 @@
 import { Ionicons, Feather, MaterialCommunityIcons } from "@expo/vector-icons"; 
 import * as ImagePicker from "expo-image-picker";
 import { useRouter } from "expo-router";
-import { useColorScheme as useNativeWind } from "nativewind"; // 🔹 Added for isDark logic
+import { useColorScheme as useNativeWind } from "nativewind"; 
 import { useEffect, useMemo, useRef, useState } from "react";
 import {
     ActivityIndicator,
@@ -35,21 +35,25 @@ const LIMIT = 5;
 
 const fetcher = (url) => fetch(url).then((res) => res.json());
 
-// 🔹 AURA UI UTILITY (Updated for 1-10 Ranks)
-const getAuraVisuals = (rank) => {
-    if (!rank || rank > 10 || rank <= 0) return null;
-    switch (rank) {
-        case 1: return { color: '#fbbf24', label: 'SUPREME', icon: 'crown', description: 'Ultimate authority. Exclusive gold profile aesthetic and priority visibility.' };
-        case 2: return { color: '#60a5fa', label: 'ELITE', icon: 'flash', description: 'Top-tier contributor. Blue sapphire aura and enhanced engagement tools.' };
-        case 3: return { color: '#f97316', label: 'MASTER', icon: 'ribbon', description: 'Legendary status. Solar orange glow and specialized badge.' };
-        default: return { color: '#a78bfa', label: 'VANGUARD', icon: 'shield-check', description: 'Elite protector. Amethyst aura for consistent top 10 performance.' };
+// 🔹 UPDATED AURA UI UTILITY (Universal logic)
+const getAuraVisuals = (rank, points = 0) => {
+    // If user is in Top 10, use their specific rank visuals
+    if (rank && rank >= 1 && rank <= 10) {
+        switch (rank) {
+            case 1: return { color: '#fbbf24', label: 'SUPREME', icon: 'crown', description: 'Ultimate authority. Exclusive gold profile aesthetic and priority visibility.' };
+            case 2: return { color: '#60a5fa', label: 'ELITE', icon: 'flash', description: 'Top-tier contributor. Blue sapphire aura and enhanced engagement tools.' };
+            case 3: return { color: '#f97316', label: 'MASTER', icon: 'ribbon', description: 'Legendary status. Solar orange glow and specialized badge.' };
+            default: return { color: '#a78bfa', label: 'VANGUARD', icon: 'shield-check', description: 'Elite protector. Amethyst aura for consistent top 10 performance.' };
+        }
     }
+    // For everyone else, provide a standard "Awakened" aura based on points
+    return { color: '#3b82f6', label: 'AWAKENED', icon: 'auto-fix', description: 'Your aura is manifesting. Gain points through posts and engagement to climb the global ranks.' };
 };
 
 export default function MobileProfilePage() {
     const { user, setUser, contextLoading } = useUser();
-    const { colorScheme } = useNativeWind(); // 🔹 Hook to detect theme
-    const isDark = colorScheme === "dark"; // 🔹 Defined isDark for the UI
+    const { colorScheme } = useNativeWind(); 
+    const isDark = colorScheme === "dark"; 
     const router = useRouter();
     const insets = useSafeAreaInsets();
 
@@ -70,11 +74,23 @@ export default function MobileProfilePage() {
     // Animations
     const scanAnim = useRef(new Animated.Value(0)).current;
     const loadingAnim = useRef(new Animated.Value(0)).current;
-    const pulseAnim = useRef(new Animated.Value(1)).current; // 🔹 Added for Aura Glow
+    const pulseAnim = useRef(new Animated.Value(1)).current; 
     const [copied, setCopied] = useState(false);
 
     // Cache Keys
     const CACHE_KEY_USER_EXTRAS = `user_profile_cache_${user?.deviceId}`;
+
+    // 🔹 Logic for Aura Points & Power Meter
+    const currentAuraPoints = user?.auraPoints || (totalPosts * 2); // Fallback calculation if field missing
+    const aura = useMemo(() => getAuraVisuals(user?.previousRank, currentAuraPoints), [user?.previousRank, currentAuraPoints]);
+    const isTop10 = !!(user?.previousRank && user?.previousRank <= 10);
+
+    // Calculate filled boxes (1-10)
+    const filledBoxes = useMemo(() => {
+        if (isTop10) return 11 - user.previousRank; // Rank 1 = 10 boxes
+        // For others, fill boxes based on point milestones (e.g., 20 points per box, min 1)
+        return Math.min(Math.max(Math.floor(currentAuraPoints / 20), 1), 10);
+    }, [isTop10, user?.previousRank, currentAuraPoints]);
 
     const copyToClipboard = async () => {
         if (user?.deviceId) {
@@ -94,7 +110,6 @@ export default function MobileProfilePage() {
             })
         ).start();
 
-        // 🔹 Aura Pulse Animation
         Animated.loop(
             Animated.sequence([
                 Animated.timing(pulseAnim, { toValue: 1.15, duration: 2000, useNativeDriver: true }),
@@ -209,10 +224,6 @@ export default function MobileProfilePage() {
     const rankIcon = count > 200 ? "👑" : count > 150 ? "💎" : count > 100 ? "🔥" : count > 50 ? "⚔️" : count > 25 ? "📜" : "🛡️";
     const nextMilestone = count > 200 ? 500 : count > 150 ? 200 : count > 100 ? 150 : count > 50 ? 100 : count > 25 ? 50 : 25;
     const progress = Math.min((count / nextMilestone) * 100, 100);
-
-    // 🔹 Aura Logic
-    const aura = useMemo(() => getAuraVisuals(user?.previousRank), [user?.previousRank]);
-    const isTop10 = !!aura;
 
     const pickImage = async () => {
         const result = await ImagePicker.launchImageLibraryAsync({
@@ -338,34 +349,32 @@ export default function MobileProfilePage() {
     const listHeader = useMemo(() => (
         <View className="px-6">
             <View className="flex-row items-center gap-4 mb-10 border-b border-gray-100 dark:border-gray-800 pb-6">
-                <View className="w-2 h-8" style={{ backgroundColor: isTop10 ? aura.color : '#2563eb' }} />
+                <View className="w-2 h-8" style={{ backgroundColor: aura.color }} />
                 <Text className="text-3xl font-black italic tracking-tighter uppercase dark:text-white">Player Profile</Text>
             </View>
 
             <View className="items-center mb-10">
                 <View className="relative">
-                    {/* 🔹 Aura Pulse Glow */}
-                    {isTop10 && (
-                        <Animated.View 
-                            style={{ 
-                                position: 'absolute', 
-                                inset: -12, 
-                                borderRadius: 100, 
-                                backgroundColor: aura.color, 
-                                opacity: 0.15,
-                                transform: [{ scale: pulseAnim }]
-                            }} 
-                        />
-                    )}
+                    {/* 🔹 Aura Pulse Glow (Always visible) */}
+                    <Animated.View 
+                        style={{ 
+                            position: 'absolute', 
+                            inset: -12, 
+                            borderRadius: 100, 
+                            backgroundColor: aura.color, 
+                            opacity: 0.15,
+                            transform: [{ scale: pulseAnim }]
+                        }} 
+                    />
                     <Animated.View
                         style={{ 
                             transform: [{ rotate: spin }],
-                            borderColor: isTop10 ? `${aura.color}40` : 'rgba(37, 99, 235, 0.3)' 
+                            borderColor: `${aura.color}40` 
                         }}
                         className="absolute -inset-4 border border-dashed rounded-full"
                     />
                     <View 
-                        style={{ borderColor: isTop10 ? aura.color : '#2563eb' }}
+                        style={{ borderColor: aura.color }}
                         className="absolute -inset-1 border-2 rounded-full opacity-50" 
                     />
 
@@ -382,37 +391,39 @@ export default function MobileProfilePage() {
 
                 <View className="mt-6 items-center">
                     <Pressable 
-                        onPress={() => isTop10 && setAuraModalVisible(true)}
+                        onPress={() => setAuraModalVisible(true)}
                         className="flex-row items-center gap-2"
                     >
                         <Text 
-                            style={{ color: isTop10 ? aura.color : (isDark ? "#fff" : "#000") }}
+                            style={{ color: isDark ? "#fff" : "#000" }}
                             className="text-2xl font-black uppercase tracking-tighter"
                         >
                             {username || user?.username || "GUEST"}
                         </Text>
-                        {isTop10 && (
-                            <View className="px-2 py-0.5 rounded-full border" style={{ borderColor: aura.color, backgroundColor: `${aura.color}10` }}>
-                                <Text style={{ color: aura.color, fontSize: 8, fontWeight: '900' }}>{aura.label}</Text>
-                            </View>
-                        )}
+                        <View className="px-2 py-0.5 rounded-full border" style={{ borderColor: aura.color, backgroundColor: `${aura.color}10` }}>
+                            <Text style={{ color: aura.color, fontSize: 8, fontWeight: '900' }}>{aura.label}</Text>
+                        </View>
                     </Pressable>
 
-                    {/* 🔹 AURA POWER INDICATOR (The filling boxes) */}
-                    {isTop10 && (
-                        <View className="mt-3 items-center">
-                            <View className="flex-row gap-1 mb-1">
-                                {[...Array(10)].map((_, i) => (
-                                    <View 
-                                        key={i} 
-                                        className="h-1.5 w-4 rounded-sm" 
-                                        style={{ backgroundColor: i < (11 - user.previousRank) ? aura.color : (isDark ? '#1f2937' : '#e5e7eb') }}
-                                    />
-                                ))}
-                            </View>
-                            <Text style={{ color: aura.color }} className="text-[8px] font-black uppercase tracking-[0.2em]">Rank Power: {11 - user.previousRank}/10</Text>
+                    {/* 🔹 UNIVERSAL AURA POWER INDICATOR (Always visible/filled) */}
+                    <View className="mt-3 items-center">
+                        <View className="flex-row gap-1 mb-1">
+                            {[...Array(10)].map((_, i) => (
+                                <View 
+                                    key={i} 
+                                    className="h-1.5 w-4 rounded-sm" 
+                                    style={{ 
+                                        backgroundColor: i < filledBoxes ? aura.color : (isDark ? '#1f2937' : '#e5e7eb'),
+                                        opacity: i < filledBoxes ? 1 : 0.3 
+                                    }}
+                                />
+                            ))}
                         </View>
-                    )}
+                        <Text style={{ color: aura.color }} className="text-[8px] font-black uppercase tracking-[0.2em]">
+                            {isTop10 ? `Rank Power: ${filledBoxes}/10` : `Aura Power: ${filledBoxes}/10`}
+                        </Text>
+                    </View>
+                    
                     {!isTop10 && <Text className="text-[10px] font-bold text-gray-500 uppercase tracking-[0.3em] mt-1">Class: {rankTitle}</Text>}
                 </View>
 
@@ -431,7 +442,7 @@ export default function MobileProfilePage() {
                     </Pressable>
                     <View className="h-1.5 w-full bg-gray-100 dark:bg-gray-800 rounded-full overflow-hidden border border-gray-200 dark:border-white/10">
                         <View
-                            style={{ width: `${progress}%`, backgroundColor: isTop10 ? aura.color : '#2563eb' }}
+                            style={{ width: `${progress}%`, backgroundColor: aura.color }}
                             className="h-full shadow-lg"
                         />
                     </View>
@@ -510,7 +521,7 @@ export default function MobileProfilePage() {
                 <TouchableOpacity
                     onPress={handleUpdate}
                     disabled={isUpdating}
-                    style={{ backgroundColor: isTop10 ? aura.color : '#2563eb' }}
+                    style={{ backgroundColor: aura.color }}
                     className="relative w-full h-14 rounded-2xl overflow-hidden items-center justify-center mt-6"
                 >
                     <Text className="relative z-10 text-white font-black uppercase italic tracking-widest text-xs">
@@ -530,7 +541,7 @@ export default function MobileProfilePage() {
                 <View className="h-[1px] flex-1 bg-gray-100 dark:bg-gray-800" />
             </View>
         </View>
-    ), [user, preview, description, username, isUpdating, spin, translateX, totalPosts, copied, rankTitle, rankIcon, progress, nextMilestone, count, showId, isDark, aura, isTop10, pulseAnim]); 
+    ), [user, preview, description, username, isUpdating, spin, translateX, totalPosts, copied, rankTitle, rankIcon, progress, nextMilestone, count, showId, isDark, aura, isTop10, pulseAnim, filledBoxes]); 
 
     if (contextLoading || isRestoringCache) {
         return <AnimeLoading message="Syncing Profile" subMessage="Checking local cache..." />;
@@ -616,28 +627,28 @@ export default function MobileProfilePage() {
                 </View>
             </Modal>
 
-            {/* 🔹 AURA INFO MODAL */}
-            {isTop10 && (
-                <Modal visible={auraModalVisible} transparent animationType="fade">
-                    <View className="flex-1 bg-black/80 items-center justify-center p-6">
-                        <View className="bg-white dark:bg-[#0d1117] w-full p-8 rounded-[40px] border-2" style={{ borderColor: aura.color }}>
-                            <MaterialCommunityIcons name={aura.icon} size={60} color={aura.color} style={{ alignSelf: 'center', marginBottom: 20 }} />
-                            <Text style={{ color: aura.color }} className="text-3xl font-black text-center uppercase tracking-widest mb-2">{aura.label} AURA</Text>
-                            <Text className="text-gray-500 text-center font-bold text-[10px] uppercase tracking-[0.3em] mb-2">Global Rank: #{user?.previousRank}</Text>
-                            
-                            {/* Modal Power Meter */}
-                            <View className="flex-row justify-center gap-1 mb-6">
-                                {[...Array(10)].map((_, i) => (
-                                    <View key={i} className="h-2 w-4 rounded-sm" style={{ backgroundColor: i < (11 - user.previousRank) ? aura.color : '#374151' }} />
-                                ))}
-                            </View>
-
-                            <Text className="text-gray-600 dark:text-gray-400 text-center leading-7 mb-8 font-medium">{aura.description}</Text>
-                            <TouchableOpacity onPress={() => setAuraModalVisible(false)} style={{ backgroundColor: aura.color }} className="p-4 rounded-2xl items-center shadow-lg"><Text className="text-white font-black uppercase tracking-widest text-xs">Acknowledge</Text></TouchableOpacity>
+            {/* 🔹 AURA INFO MODAL (Available to everyone) */}
+            <Modal visible={auraModalVisible} transparent animationType="fade">
+                <View className="flex-1 bg-black/80 items-center justify-center p-6">
+                    <View className="bg-white dark:bg-[#0d1117] w-full p-8 rounded-[40px] border-2" style={{ borderColor: aura.color }}>
+                        <MaterialCommunityIcons name={aura.icon} size={60} color={aura.color} style={{ alignSelf: 'center', marginBottom: 20 }} />
+                        <Text style={{ color: aura.color }} className="text-3xl font-black text-center uppercase tracking-widest mb-2">{aura.label} AURA</Text>
+                        {isTop10 && <Text className="text-gray-500 text-center font-bold text-[10px] uppercase tracking-[0.3em] mb-2">Global Rank: #{user?.previousRank}</Text>}
+                        {!isTop10 && <Text className="text-gray-500 text-center font-bold text-[10px] uppercase tracking-[0.3em] mb-2">Points Accumulated: {currentAuraPoints}</Text>}
+                        
+                        {/* Modal Power Meter */}
+                        <View className="flex-row justify-center gap-1 mb-6">
+                            {[...Array(10)].map((_, i) => (
+                                <View key={i} className="h-2 w-4 rounded-sm" style={{ backgroundColor: i < filledBoxes ? aura.color : '#374151' }} />
+                            ))}
                         </View>
+
+                        <Text className="text-gray-600 dark:text-gray-400 text-center leading-7 mb-8 font-medium">{aura.description}</Text>
+                        <TouchableOpacity onPress={() => setAuraModalVisible(false)} style={{ backgroundColor: aura.color }} className="p-4 rounded-2xl items-center shadow-lg"><Text className="text-white font-black uppercase tracking-widest text-xs">Acknowledge</Text></TouchableOpacity>
                     </View>
-                </Modal>
-            )}
+                </View>
+            </Modal>
         </View>
     );
 }
+
