@@ -160,7 +160,7 @@ const DiscussionDrawer = ({ visible, comment, onClose, onReply, isPosting, slug 
 		try {
 			// Using slug instead of postId as requested
 			await Share.share({
-				message: `Join the discussion on OreBlogda: ${API_URL}/posts/${slug}?discussion=${comment._id}`,
+				message: `Join the discussion on OreBlogda: ${API_URL}/post/${slug}?discussion=${comment._id}`,
 			});
 		} catch (error) {
 			console.log(error.message);
