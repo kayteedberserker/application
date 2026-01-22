@@ -176,7 +176,7 @@ export default function FirstLaunchScreen() {
       {/* Form Section */}
       <View className="w-full">
         <Text style={{ color: THEME.textSecondary }} className="font-black uppercase text-[9px] tracking-[0.2em] mb-3 ml-1">
-            {isRecoveryMode ? "Enter Previous Device ID" : "Callsign Assignment"}
+            {isRecoveryMode ? "Enter Previous Device ID" : "Callsign Assignment - Enter Username"}
         </Text>
         
         {isRecoveryMode ? (
