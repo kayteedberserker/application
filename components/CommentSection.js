@@ -30,7 +30,7 @@ import Animated, {
 import useSWR from "swr";
 import { useUser } from "../context/UserContext";
 import { Text } from "./Text";
-
+import apiFetch from "../utils/apiFetch"
 const { width: SCREEN_WIDTH, height: SCREEN_HEIGHT } = Dimensions.get("window");
 const API_URL = "https://oreblogda.com";
 
@@ -315,7 +315,7 @@ export default function CommentSection({ postId, slug }) {
 		setIsLoadingMore(true);
 		try {
 			const nextPage = page + 1;
-			const res = await fetch(`${API_URL}/api/posts/${postId}/comment?page=${nextPage}&limit=40`);
+			const res = await apiFetch(`${API_URL}/api/posts/${postId}/comment?page=${nextPage}&limit=40`);
 			const result = await res.json();
 			setPagedComments(prev => [...prev, ...result.comments]);
 			setPage(nextPage);
@@ -351,7 +351,7 @@ export default function CommentSection({ postId, slug }) {
 		if (!content.trim() || !user?.deviceId) return;
 		setIsPosting(true);
 		try {
-			const res = await fetch(`${API_URL}/api/posts/${postId}/comment`, {
+			const res = await apiFetch(`${API_URL}/api/posts/${postId}/comment`, {
 				method: "POST",
 				headers: { "Content-Type": "application/json" },
 				body: JSON.stringify({
