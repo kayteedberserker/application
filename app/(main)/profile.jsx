@@ -79,7 +79,7 @@ export default function MobileProfilePage() {
     const CACHE_KEY_USER_EXTRAS = `user_profile_cache_${user?.deviceId}`;
 
     // 🔹 SIMPLE AURA LOGIC
-    const currentAuraPoints = user?.auraPoints || (totalPosts * 10); 
+    const currentAuraPoints = user?.weeklyAura || 0; 
     const aura = useMemo(() => getAuraVisuals(user?.previousRank), [user?.previousRank]);
     
     // 1 box filled for every 10 points, max 10 boxes.
