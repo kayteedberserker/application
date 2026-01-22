@@ -4,6 +4,7 @@ import useSWR from 'swr';
 
 const StreakContext = createContext();
 const STREAK_CACHE_KEY = "streak_local_cache";
+const APP_SECRET = "thisismyrandomsuperlongsecretkey"; // 🔹 Must match your Next.js .env
 
 // The fetcher handles getting the ID from storage then hitting the API
 const streakFetcher = async (url) => {
@@ -13,7 +14,15 @@ const streakFetcher = async (url) => {
   const { deviceId } = JSON.parse(userData);
   if (!deviceId) return null;
 
-  const res = await fetch(`${url}/${deviceId}`);
+  // 🔹 Updated with Security Header
+  const res = await fetch(`${url}/${deviceId}`, {
+    method: "GET",
+    headers: {
+      "Content-Type": "application/json",
+      "x-oreblogda-secret": APP_SECRET // 🛡️ Shielding from bots
+    }
+  });
+
   if (!res.ok) throw new Error("Failed to fetch streak");
   
   const data = await res.json();
@@ -55,20 +64,18 @@ export function StreakProvider({ children }) {
     isCacheReady ? "https://oreblogda.com/api/users/streak" : null, // Only fetch once cache is read
     streakFetcher,
     {
-      dedupingInterval: 1000 * 60 * 5, // Dedup for 5 mins (shorter for streaks)
+      dedupingInterval: 1000 * 60 * 5, 
       revalidateOnFocus: true,
-      fallbackData: initialCache, // Use the cached data as the starting point
+      fallbackData: initialCache, 
     }
   );
 
-  // loading is true only if cache isn't ready AND we have no SWR data
   const loading = !isCacheReady || (!data && !error);
 
-  // 🔹 3. Refresh now supports "Optimistic" updates if needed
   const refreshStreak = () => mutate();
 
   const value = useMemo(() => ({
-    streak: data || initialCache, // Fallback to initialCache if network is slow/offline
+    streak: data || initialCache, 
     loading,
     isValidating,
     refreshStreak
