@@ -204,7 +204,7 @@ export default function PostCard({ post, setPosts, isFeed, hideMedia, similarPos
     useEffect(() => {
         const fetchAuthor = async () => {
             try {
-                const res = await fetch(`https://oreblogda.com/api/users/${post.authorId || post.authorUserId}`);
+                const res = await fetch(`https://oreblogda.com/api/users/${post.authorUserId}`);
                 if (res.ok) {
                     const data = await res.json();
                     setAuthor({
@@ -505,7 +505,7 @@ export default function PostCard({ post, setPosts, isFeed, hideMedia, similarPos
             <View className="h-[2px] w-full bg-blue-600 opacity-20" />
             <View className="p-4 px-2">
                 <View className="flex-row justify-between items-start mb-5">
-                    <Pressable onPress={() => router.push(`/author/${post.authorId || post.authorUserId}`)} className="flex-row items-center gap-3 flex-1 pr-2">
+                    <Pressable onPress={() => router.push(`/author/${post.authorUserId}`)} className="flex-row items-center gap-3 flex-1 pr-2">
                         <View className="relative shrink-0">
                             {author.image ? (
                                 <View className="border-2 border-blue-500/30 p-[2px] rounded-full">
