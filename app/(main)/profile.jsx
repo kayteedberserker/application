@@ -43,7 +43,7 @@ export default function MobileProfilePage() {
     const [username, setUsername] = useState("");
     const [totalPosts, setTotalPosts] = useState(0); 
     const [isRestoringCache, setIsRestoringCache] = useState(true);
-
+    const [showId, setShowId] = useState(false);
     const [preview, setPreview] = useState(null);
     const [imageFile, setImageFile] = useState(null);
     const [isUpdating, setIsUpdating] = useState(false);
@@ -368,21 +368,51 @@ export default function MobileProfilePage() {
                 </View>
 
                 <View className="space-y-1 mt-4">
-                    <Text className="text-[9px] font-black uppercase tracking-widest text-gray-400 ml-1">
-                        Neural Uplink - <Text className="text-[9px] font-black tracking-widest text-gray-500">Used for account recovery</Text>
-                    </Text>
-                    
-                    <View className="bg-gray-50 dark:bg-[#0a0a0a] border border-gray-100 dark:border-gray-800 p-4 rounded-2xl flex-row justify-between items-center">
-                        <View className="flex-1 mr-4">
-                            <Text numberOfLines={1} ellipsizeMode="middle" className="text-xs font-bold text-gray-500 dark:text-gray-400 font-mono">
-                                {user?.deviceId || "SEARCHING..."}
-                            </Text>
-                        </View>
-                        <Pressable onPress={copyToClipboard} className={`p-2 rounded-xl ${copied ? 'bg-green-500/10' : 'bg-blue-500/10'}`}>
-                            <Feather name={copied ? "check" : "copy"} size={16} color={copied ? "#22c55e" : "#3b82f6"} />
-                        </Pressable>
-                    </View>
-                </View>
+        <Text className="text-[9px] font-black uppercase tracking-widest text-gray-400 ml-1">
+            Neural Uplink - <Text className="text-[9px] font-black tracking-widest text-gray-500">Used for account recovery { Must not be disclosed to other Operatives }</Text>
+        </Text>
+        
+        <View className="bg-gray-50 dark:bg-[#0a0a0a] border border-gray-100 dark:border-gray-800 p-4 rounded-2xl flex-row justify-between items-center">
+            <View className="flex-1 mr-4">
+                {/* ✅ MASKING LOGIC: Shows dots if showId is false */}
+                <Text 
+                    numberOfLines={1} 
+                    ellipsizeMode="middle" 
+                    className={`text-xs font-bold font-mono ${showId ? 'text-gray-500 dark:text-gray-400' : 'text-blue-500/40'}`}
+                >
+                    {showId 
+                        ? (user?.deviceId || "SEARCHING...") 
+                        : "•••• •••• •••• ••••"} 
+                </Text>
+            </View>
+
+            <View className="flex-row items-center gap-2">
+                {/* ✅ VISIBILITY TOGGLE */}
+                <Pressable 
+                    onPress={() => setShowId(!showId)} 
+                    className="p-2 rounded-xl bg-gray-100 dark:bg-gray-800"
+                >
+                    <Feather 
+                        name={showId ? "eye-off" : "eye"} 
+                        size={16} 
+                        color={isDark ? "#94a3b8" : "#64748b"} 
+                    />
+                </Pressable>
+
+                {/* COPY BUTTON */}
+                <Pressable 
+                    onPress={copyToClipboard} 
+                    className={`p-2 rounded-xl ${copied ? 'bg-green-500/10' : 'bg-blue-500/10'}`}
+                >
+                    <Feather 
+                        name={copied ? "check" : "copy"} 
+                        size={16} 
+                        color={copied ? "#22c55e" : "#3b82f6"} 
+                    />
+                </Pressable>
+            </View>
+        </View>
+    </View>
 
                 <View className="space-y-1 mt-4">
                     <Text className="text-[9px] font-black uppercase tracking-widest text-gray-400 ml-1">Biography / Lore</Text>
