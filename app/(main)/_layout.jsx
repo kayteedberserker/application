@@ -20,6 +20,7 @@ import { useUser } from "../../context/UserContext";
 import "../globals.css";
 import CategoryNav from "./../../components/CategoryNav";
 import TopBar from "./../../components/Topbar";
+import apiFetch from "../../utils/apiFetch"
 
 export default function MainLayout() {
 	const { colorScheme, setColorScheme } = useNativeWind();
@@ -38,9 +39,8 @@ export default function MainLayout() {
 		if (user?.deviceId) {
 			const updateActivity = async () => {
 				try {
-					await fetch("https://oreblogda.com/api/mobile/app-open", {
+					await apiFetch("https://oreblogda.com/api/mobile/app-open", {
 						method: "POST",
-						headers: { "Content-Type": "application/json" },
 						body: JSON.stringify({ deviceId: user.deviceId }),
 					});
 				} catch (err) {}
