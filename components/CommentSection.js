@@ -21,6 +21,8 @@ import Animated, {
 	useSharedValue,
 	withRepeat,
 	withTiming,
+	FadeInUp,
+	FadeOutDown,
 } from "react-native-reanimated";
 import useSWR from "swr";
 import { useUser } from "../context/UserContext";
@@ -32,7 +34,6 @@ const API_URL = "https://oreblogda.com";
 // --- Skeleton Component ---
 const CommentSkeleton = () => {
 	const opacity = useRef(new RNAnimated.Value(0.3)).current;
-
 	useEffect(() => {
 		RNAnimated.loop(
 			RNAnimated.sequence([
@@ -46,7 +47,6 @@ const CommentSkeleton = () => {
 		<View className="mb-6 pl-4 border-l-2 border-gray-100 dark:border-gray-800">
 			<RNAnimated.View style={{ opacity }} className="h-5 w-32 bg-gray-200 dark:bg-gray-800 rounded-md mb-2" />
 			<RNAnimated.View style={{ opacity }} className="h-4 w-full bg-gray-100 dark:bg-gray-800 rounded-md mb-1" />
-			<RNAnimated.View style={{ opacity }} className="h-4 w-2/3 dark:bg-gray-800 rounded-md" />
 		</View>
 	);
 };
@@ -60,7 +60,6 @@ const SingleComment = ({ comment, onOpenDiscussion }) => {
 		<View className="mb-6 border-l-2 border-blue-600/20 pl-4">
 			<Text className="text-[11px] font-black text-blue-600 uppercase tracking-tighter">{comment.name}</Text>
 			<Text className="text-xs text-gray-600 dark:text-gray-300 font-bold leading-5 mt-1">{comment.text}</Text>
-
 			<View className="flex-row items-center mt-3 gap-4">
 				<Text className="text-gray-400 text-[8px] font-bold">{new Date(comment.date).toLocaleDateString()}</Text>
 				<Pressable 
@@ -73,7 +72,6 @@ const SingleComment = ({ comment, onOpenDiscussion }) => {
 					</Text>
 				</Pressable>
 			</View>
-
 			{hasReplies && (
 				<View className="mt-3 opacity-50 bg-gray-50 dark:bg-white/5 p-2 rounded-lg border-l border-gray-300 dark:border-gray-700">
 					<Text className="text-[9px] font-black text-gray-500 uppercase">{previewReplies[0].name}</Text>
@@ -87,21 +85,34 @@ const SingleComment = ({ comment, onOpenDiscussion }) => {
 // --- Discussion Drawer Component ---
 const DiscussionDrawer = ({ visible, comment, onClose, onReply, isPosting }) => {
 	const [replyText, setReplyText] = useState("");
-	const [replyingTo, setReplyingTo] = useState(null); // Track the specific message being replied to
+	const [replyingTo, setReplyingTo] = useState(null);
+	const [showNewMessageToast, setShowNewMessageToast] = useState(false);
 	const panY = useRef(new RNAnimated.Value(0)).current;
 	const scrollViewRef = useRef(null);
 	const messageRefs = useRef({});
+	const [shouldAutoScroll, setShouldAutoScroll] = useState(true);
+	const scrollOffset = useRef(0);
 
 	useEffect(() => {
 		if (visible) {
 			panY.setValue(0);
 			setReplyingTo(null);
+			setShouldAutoScroll(true);
+			setShowNewMessageToast(false);
 		}
 	}, [visible]);
 
+	// Detection for background updates
+	useEffect(() => {
+		if (visible && comment.replies?.length > 0 && !shouldAutoScroll) {
+			// If we aren't at the bottom and a new message arrives
+			setShowNewMessageToast(true);
+		}
+	}, [comment.replies?.length]);
+
 	const panResponder = useRef(
 		PanResponder.create({
-			onStartShouldSetPanResponder: (e, gs) => Math.abs(gs.dx) < 10,
+			onStartShouldSetPanResponder: (e, gs) => Math.abs(gs.dy) > Math.abs(gs.dx) && gs.dy > 0 && scrollOffset.current <= 0,
 			onPanResponderMove: (e, gs) => { if (gs.dy > 0) panY.setValue(gs.dy); },
 			onPanResponderRelease: (e, gs) => {
 				if (gs.dy > 150 || gs.vy > 0.5) {
@@ -122,85 +133,125 @@ const DiscussionDrawer = ({ visible, comment, onClose, onReply, isPosting }) => 
 		if (layout) scrollViewRef.current?.scrollTo({ y: layout.y, animated: true });
 	};
 
+	const jumpToBottom = () => {
+		scrollViewRef.current?.scrollToEnd({ animated: true });
+		setShowNewMessageToast(false);
+	};
+
 	if (!comment) return null;
 
 	return (
 		<Modal visible={visible} animationType="slide" transparent={true} onRequestClose={onClose}>
 			<View className="flex-1 bg-black/60 justify-end">
 				<RNAnimated.View 
-					style={{ transform: [{ translateY: panY }], height: '85%' }} 
-					className="bg-white dark:bg-[#0a0a0a] rounded-t-[40px] border-t-2 border-blue-600/40"
+					style={{ transform: [{ translateY: panY }], height: '92%' }} 
+					className="bg-white dark:bg-[#0a0a0a] rounded-t-[40px] border-t-2 border-blue-600/40 overflow-hidden"
 				>
-					<View {...panResponder.panHandlers} className="items-center py-5">
+					{/* Drag Handle Area */}
+					<View {...panResponder.panHandlers} className="items-center py-5 bg-white dark:bg-[#0a0a0a]">
 						<View className="w-12 h-1.5 bg-gray-200 dark:bg-gray-800 rounded-full" />
 					</View>
 
-					<KeyboardAvoidingView behavior={Platform.OS === "ios" ? "padding" : "height"} className="flex-1">
-						<ScrollView ref={scrollViewRef} className="flex-1 px-6" showsVerticalScrollIndicator={false}>
-							{/* Anchor Message */}
-							<Pressable 
-								onLongPress={() => setReplyingTo({ name: comment.name, text: comment.text, id: 'anchor' })}
-								className="pb-6 border-b border-gray-100 dark:border-gray-800"
+					<KeyboardAvoidingView 
+						behavior={Platform.OS === "ios" ? "padding" : "height"} 
+						className="flex-1"
+						keyboardVerticalOffset={Platform.OS === "ios" ? 0 : 0}
+					>
+						{/* Floating New Message Notification */}
+						{showNewMessageToast && (
+							<Animated.View 
+								entering={FadeInUp} 
+								exiting={FadeOutDown}
+								className="absolute top-24 self-center z-50"
 							>
-								<Text className="text-[10px] font-black text-blue-600 uppercase tracking-widest mb-2">Discussion Starter</Text>
-								<Text className="text-sm font-black dark:text-white">{comment.name}</Text>
-								<Text className="text-xs text-gray-600 dark:text-gray-400 font-bold mt-1.5 leading-5">{comment.text}</Text>
-							</Pressable>
-
-							<Text className="text-[9px] font-black text-gray-400 uppercase tracking-widest my-6">Signals Received</Text>
-							
-							{comment.replies && comment.replies.map((reply, idx) => (
-								<View 
-									key={reply._id || idx} 
-									onLayout={(event) => { messageRefs.current[reply._id] = event.nativeEvent.layout; }}
-									className="mb-6"
+								<Pressable 
+									onPress={jumpToBottom}
+									className="flex-row items-center bg-blue-600 px-4 py-2 rounded-full shadow-xl border border-white/20"
 								>
-									<Pressable 
-										onLongPress={() => setReplyingTo({ name: reply.name, text: reply.text, id: reply._id })}
-										className="border-l-2 border-gray-100 dark:border-gray-800 pl-4 py-1"
+									<Ionicons name="arrow-down" size={14} color="white" />
+									<Text className="text-white text-[10px] font-black uppercase ml-2">New Signals Detected</Text>
+								</Pressable>
+							</Animated.View>
+						)}
+
+						<ScrollView 
+							ref={scrollViewRef} 
+							className="flex-1" 
+							onScroll={(e) => {
+								scrollOffset.current = e.nativeEvent.contentOffset.y;
+							}}
+							scrollEventThrottle={16}
+							showsVerticalScrollIndicator={false}
+							stickyHeaderIndices={[0]}
+							onContentSizeChange={() => {
+								if (shouldAutoScroll) {
+									scrollViewRef.current?.scrollToEnd({ animated: true });
+									setShouldAutoScroll(false);
+								}
+							}}
+						>
+							{/* STICKY HEADER: Anchor Message */}
+							<View className="bg-white dark:bg-[#0a0a0a] px-6 pb-4 border-b border-gray-100 dark:border-gray-800 shadow-sm">
+								<Pressable onLongPress={() => setReplyingTo({ name: comment.name, text: comment.text, id: 'anchor' })}>
+									<Text className="text-[10px] font-black text-blue-600 uppercase tracking-widest mb-1">Anchor Signal</Text>
+									<Text className="text-sm font-black dark:text-white">{comment.name}</Text>
+									<Text className="text-xs text-gray-600 dark:text-gray-400 font-bold mt-1 leading-5">{comment.text}</Text>
+								</Pressable>
+							</View>
+
+							{/* Replies List */}
+							<View className="px-6 pt-6">
+								<Text className="text-[9px] font-black text-gray-400 uppercase tracking-widest mb-6">Response Feed</Text>
+								{comment.replies && comment.replies.map((reply, idx) => (
+									<View 
+										key={reply._id || idx} 
+										onLayout={(event) => { messageRefs.current[reply._id] = event.nativeEvent.layout; }}
+										className="mb-8"
 									>
-										{/* If this message is a reply to someone else, show the quote */}
-										{reply.replyTo && (
-											<Pressable 
-												onPress={() => scrollToMessage(reply.replyTo.id)}
-												className="bg-gray-100 dark:bg-white/5 p-2 rounded-lg border-l-4 border-blue-500 mb-2 opacity-70"
-											>
-												<Text className="text-[8px] font-black text-blue-500 uppercase">{reply.replyTo.name}</Text>
-												<Text className="text-[10px] text-gray-500 dark:text-gray-400 font-bold" numberOfLines={1}>{reply.replyTo.text}</Text>
-											</Pressable>
-										)}
-										<Text className="text-[10px] font-black text-blue-400 uppercase">{reply.name}</Text>
-										<Text className="text-xs text-gray-600 dark:text-gray-300 font-bold mt-1">{reply.text}</Text>
-										
-										<View className="flex-row items-center justify-between mt-2">
-											<Text className="text-[8px] font-bold text-gray-400 uppercase">{new Date(reply.date).toLocaleTimeString()}</Text>
-											<Pressable onPress={() => setReplyingTo({ name: reply.name, text: reply.text, id: reply._id })}>
-												<Text className="text-blue-500 text-[9px] font-black uppercase">Reply</Text>
-											</Pressable>
-										</View>
-									</Pressable>
-								</View>
-							))}
-							<View className="h-10" />
+										<Pressable 
+											onLongPress={() => setReplyingTo({ name: reply.name, text: reply.text, id: reply._id })}
+											className="border-l-2 border-gray-100 dark:border-gray-800 pl-4"
+										>
+											{reply.replyTo && (
+												<Pressable 
+													onPress={() => scrollToMessage(reply.replyTo.id)}
+													className="bg-gray-100 dark:bg-white/5 p-2 rounded-lg border-l-4 border-blue-500 mb-2 opacity-80"
+												>
+													<Text className="text-[8px] font-black text-blue-500 uppercase">{reply.replyTo.name}</Text>
+													<Text className="text-[10px] text-gray-500 dark:text-gray-400 font-bold" numberOfLines={1}>{reply.replyTo.text}</Text>
+												</Pressable>
+											)}
+											<Text className="text-[10px] font-black text-blue-400 uppercase tracking-tighter">{reply.name}</Text>
+											<Text className="text-xs text-gray-600 dark:text-gray-300 font-bold mt-1 leading-5">{reply.text}</Text>
+											<View className="flex-row items-center justify-between mt-3">
+												<Text className="text-[8px] font-bold text-gray-400 uppercase">{new Date(reply.date).toLocaleTimeString()}</Text>
+												<Pressable onPress={() => setReplyingTo({ name: reply.name, text: reply.text, id: reply._id })}>
+													<Text className="text-blue-500 text-[9px] font-black uppercase tracking-widest">Reply</Text>
+												</Pressable>
+											</View>
+										</Pressable>
+									</View>
+								))}
+								<View className="h-20" />
+							</View>
 						</ScrollView>
 
-						{/* WhatsApp style Reply UI */}
-						<View className="p-5 pb-8 bg-white dark:bg-[#0a0a0a] border-t border-gray-100 dark:border-gray-800">
+						{/* INPUT SECTION */}
+						<View className="p-5 pb-10 bg-white dark:bg-[#0a0a0a] border-t border-gray-100 dark:border-gray-800">
 							{replyingTo && (
-								<View className="flex-row items-center bg-gray-50 dark:bg-white/5 p-3 rounded-t-2xl border-l-4 border-blue-600 mb-[-10px] pb-5">
+								<View className="flex-row items-center bg-blue-50 dark:bg-blue-900/10 p-3 rounded-t-2xl border-l-4 border-blue-600 mb-[-5px] pb-4">
 									<View className="flex-1">
 										<Text className="text-[9px] font-black text-blue-600 uppercase">Replying to {replyingTo.name}</Text>
 										<Text className="text-[11px] text-gray-500 dark:text-gray-400 font-bold" numberOfLines={1}>{replyingTo.text}</Text>
 									</View>
-									<Pressable onPress={() => setReplyingTo(null)}>
-										<Ionicons name="close-circle" size={20} color="#6b7280" />
+									<Pressable onPress={() => setReplyingTo(null)} className="ml-2">
+										<Ionicons name="close-circle" size={20} color="#2563eb" />
 									</Pressable>
 								</View>
 							)}
-							
 							<View className="flex-row gap-3 items-end">
 								<TextInput
-									placeholder="TRANSMIT RESPONSE..."
+									placeholder="WRITE RESPONSE..."
 									placeholderTextColor="#6b7280"
 									multiline
 									className="flex-1 bg-gray-50 dark:bg-gray-900 p-4 rounded-2xl text-[12px] font-black dark:text-white max-h-32 border border-gray-100 dark:border-gray-800"
@@ -213,11 +264,12 @@ const DiscussionDrawer = ({ visible, comment, onClose, onReply, isPosting }) => 
 											onReply(comment._id, replyText, replyingTo);
 											setReplyText("");
 											setReplyingTo(null);
+											setShouldAutoScroll(true);
 											Keyboard.dismiss();
 										}
 									}}
 									disabled={isPosting}
-									className="bg-blue-600 w-14 h-14 rounded-2xl items-center justify-center"
+									className="bg-blue-600 w-14 h-14 rounded-2xl items-center justify-center shadow-lg"
 								>
 									{isPosting ? <ActivityIndicator size="small" color="white" /> : <Ionicons name="send" size={20} color="white" />}
 								</Pressable>
@@ -256,7 +308,9 @@ export default function CommentSection({ postId }) {
 	useEffect(() => {
 		if (activeDiscussion) {
 			const updated = comments.find(c => c._id === activeDiscussion._id);
-			if (updated && updated.replies?.length !== activeDiscussion.replies?.length) setActiveDiscussion(updated);
+			if (updated && JSON.stringify(updated.replies) !== JSON.stringify(activeDiscussion.replies)) {
+				setActiveDiscussion(updated);
+			}
 		}
 	}, [comments]);
 
@@ -273,7 +327,7 @@ export default function CommentSection({ postId }) {
 					name: user?.username || "Anonymous",
 					text: content,
 					parentCommentId: parentId,
-					replyTo: replyToMeta, // Pass the ID, Name, and Text of the message being quoted
+					replyTo: replyToMeta, 
 					fingerprint: user.deviceId,
 					userId: user._id || null
 				}),
@@ -336,7 +390,7 @@ export default function CommentSection({ postId }) {
 				<Pressable
 					onPress={() => handlePostComment()}
 					disabled={isPosting}
-					className="relative bg-blue-600 h-14 rounded-xl overflow-hidden justify-center items-center"
+					className="relative bg-blue-600 h-14 rounded-xl overflow-hidden justify-center items-center shadow-lg"
 				>
 					<View className="flex-row items-center gap-2">
 						{isPosting ? <ActivityIndicator size="small" color="white" /> : <Text className="text-[13px] font-black text-white uppercase tracking-widest">Transmit Signal</Text>}
@@ -370,4 +424,4 @@ export default function CommentSection({ postId }) {
 			/>
 		</View>
 	);
-									}
+		}
