@@ -369,7 +369,7 @@ export default function MobileProfilePage() {
 
                 <View className="space-y-1 mt-4">
         <Text className="text-[9px] font-black uppercase tracking-widest text-gray-400 ml-1">
-            Neural Uplink - <Text className="text-[9px] font-black tracking-widest text-gray-500">Used for account recovery { Must not be disclosed to other Operatives }</Text>
+            Neural Uplink - <Text className="text-[9px] font-black tracking-widest text-gray-500">Used for account recovery (Must not be disclosed to other Operatives)</Text>
         </Text>
         
         <View className="bg-gray-50 dark:bg-[#0a0a0a] border border-gray-100 dark:border-gray-800 p-4 rounded-2xl flex-row justify-between items-center">
