@@ -116,7 +116,6 @@ const DiscussionDrawer = ({ visible, comment, onClose, onReply, isPosting }) => 
 		PanResponder.create({
 			onStartShouldSetPanResponder: () => false,
 			onMoveShouldSetPanResponder: (e, gs) => {
-				// We allow swipe only if the keyboard is closed and we are at the top of the scroll
 				return gs.dy > 10 && scrollOffset.current <= 5 && !Keyboard.isVisible();
 			},
 			onPanResponderMove: (e, gs) => { if (gs.dy > 0) panY.setValue(gs.dy); },
@@ -131,7 +130,7 @@ const DiscussionDrawer = ({ visible, comment, onClose, onReply, isPosting }) => 
 	).current;
 
 	const scrollToMessage = (id) => {
-		if (id === 'anchor') {
+		if (id === 'anchor' || id === comment._id) {
 			scrollViewRef.current?.scrollTo({ y: 0, animated: true });
 			return;
 		}
@@ -150,29 +149,21 @@ const DiscussionDrawer = ({ visible, comment, onClose, onReply, isPosting }) => 
 	return (
 		<Modal visible={visible} animationType="slide" transparent={true} onRequestClose={onClose}>
 			<View className="flex-1 bg-black/60">
-				{/* Back button/Area to close if clicked outside */}
 				<Pressable className="flex-1" onPress={() => { Keyboard.dismiss(); onClose(); }} />
 				
-				<KeyboardAvoidingView 
-					behavior={Platform.OS === "ios" ? "padding" : "height"}
-					keyboardVerticalOffset={Platform.OS === "ios" ? 0 : 20}
-				>
+				<KeyboardAvoidingView behavior={Platform.OS === "ios" ? "padding" : "height"}>
 					<RNAnimated.View 
-						style={{ 
-							transform: [{ translateY: panY }], 
-							height: SCREEN_HEIGHT * 0.85, 
-						}} 
+						style={{ transform: [{ translateY: panY }], height: SCREEN_HEIGHT * 0.85 }} 
 						className="bg-white dark:bg-[#0a0a0a] rounded-t-[40px] border-t-2 border-blue-600/40 overflow-hidden"
 					>
-						{/* Header / Draggable Area */}
-						<View {...panResponder.panHandlers} className="items-center py-5 bg-white dark:bg-[#0a0a0a]">
+						<View {...panResponder.panHandlers} className="items-center py-5">
 							<View className="w-12 h-1.5 bg-gray-200 dark:bg-gray-800 rounded-full" />
 						</View>
 
 						<View className="flex-1">
 							{showNewMessageToast && (
 								<Animated.View entering={FadeIn} exiting={FadeOut} className="absolute top-4 self-center z-50">
-									<Pressable onPress={jumpToBottom} className="flex-row items-center bg-blue-600 px-4 py-2 rounded-full shadow-xl border border-white/20">
+									<Pressable onPress={jumpToBottom} className="flex-row items-center bg-blue-600 px-4 py-2 rounded-full shadow-xl">
 										<Ionicons name="arrow-down" size={14} color="white" />
 										<Text className="text-white text-[10px] font-black uppercase ml-2">New Signals Detected</Text>
 									</Pressable>
@@ -186,16 +177,12 @@ const DiscussionDrawer = ({ visible, comment, onClose, onReply, isPosting }) => 
 								scrollEventThrottle={16}
 								showsVerticalScrollIndicator={false}
 								stickyHeaderIndices={[0]}
-								onContentSizeChange={() => {
-									if (shouldAutoScroll) {
-										scrollViewRef.current?.scrollToEnd({ animated: true });
-									}
-								}}
+								onContentSizeChange={() => { if (shouldAutoScroll) scrollViewRef.current?.scrollToEnd({ animated: true }); }}
 							>
-								<View className="bg-white dark:bg-[#0a0a0a] px-6 pb-4 border-b border-gray-100 dark:border-gray-800 shadow-sm">
+								<View className="bg-white dark:bg-[#0a0a0a] px-6 pb-4 border-b border-gray-100 dark:border-gray-800">
 									<Pressable onLongPress={() => {
 										Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
-										setReplyingTo({ name: comment.name, text: comment.text, id: 'anchor' });
+										setReplyingTo({ name: comment.name, text: comment.text, id: comment._id });
 									}}>
 										<Text className="text-[10px] font-black text-blue-600 uppercase tracking-widest mb-1">Anchor Signal</Text>
 										<Text className="text-sm font-black dark:text-white">{comment.name}</Text>
@@ -260,6 +247,7 @@ const DiscussionDrawer = ({ visible, comment, onClose, onReply, isPosting }) => 
 										onPress={() => {
 											if (replyText.trim() && !isPosting) {
 												Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
+												// We always send the anchor ID as the parentId so it stays in one discussion list
 												onReply(comment._id, replyText, replyingTo);
 												setReplyText("");
 												setReplyingTo(null);
@@ -308,9 +296,7 @@ export default function CommentSection({ postId }) {
 	useEffect(() => {
 		if (activeDiscussion) {
 			const updated = comments.find(c => c._id === activeDiscussion._id);
-			if (updated && JSON.stringify(updated.replies) !== JSON.stringify(activeDiscussion.replies)) {
-				setActiveDiscussion(updated);
-			}
+			if (updated) setActiveDiscussion(updated);
 		}
 	}, [comments]);
 
@@ -343,19 +329,13 @@ export default function CommentSection({ postId }) {
 					mutate({
 						comments: comments.map(c => {
 							if (c._id === parentId) {
-								const updatedReplies = [...(c.replies || []), serverComment];
-								if (activeDiscussion?._id === parentId) {
-									setActiveDiscussion(prev => ({ ...prev, replies: updatedReplies }));
-								}
-								return { ...c, replies: updatedReplies };
+								return { ...c, replies: [...(c.replies || []), serverComment] };
 							}
 							return c;
 						})
 					}, false);
 				} else {
-					mutate({
-						comments: [serverComment, ...comments]
-					}, false);
+					mutate({ comments: [serverComment, ...comments] }, false);
 					setText("");
 				}
 			}
@@ -416,10 +396,8 @@ export default function CommentSection({ postId }) {
 						))
 					) : (
 						<View className="items-center justify-center py-10 opacity-40">
-							<View className="w-8 h-8 border border-dashed border-gray-500 rounded-full items-center justify-center mb-3">
-								<ActivityIndicator size="small" color="#6b7280" />
-							</View>
-							<Text className="text-[15px] font-bold text-gray-500 uppercase tracking-widest text-center">
+							<ActivityIndicator size="small" color="#6b7280" />
+							<Text className="text-[15px] font-bold text-gray-500 uppercase tracking-widest text-center mt-3">
 								Awaiting First Signal...
 							</Text>
 						</View>
