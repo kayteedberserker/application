@@ -15,6 +15,7 @@ import {
 } from 'react-native';
 import { Text } from '../../components/Text';
 import THEME from '../../components/useAppTheme';
+import apiFetch from "../../utils/apiFetch"
 
 const { width } = Dimensions.get('window');
 
@@ -36,9 +37,8 @@ export default function Contact() {
     setStatus({ loading: true, success: "", error: "" });
 
     try {
-      const res = await fetch("https://oreblogda.com/api/contact", {
+      const res = await apiFetch("https://oreblogda.com/api/contact", {
         method: "POST",
-        headers: { "Content-Type": "application/json" },
         body: JSON.stringify(form),
       });
 
