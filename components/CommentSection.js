@@ -1,6 +1,6 @@
 import { Ionicons } from "@expo/vector-icons";
 import * as Haptics from "expo-haptics";
-import { useEffect, useState, useRef, useMemo } from "react";
+import { useEffect, useState, useRef, useMemo, useCallback } from "react";
 import {
 	ActivityIndicator,
 	Alert,
@@ -24,15 +24,13 @@ import Animated, {
 	useSharedValue,
 	withRepeat,
 	withTiming,
-	FadeIn,
-	FadeOut,
 } from "react-native-reanimated";
-import useSWR from "swr";
 import { useUser } from "../context/UserContext";
 import { Text } from "./Text";
 
 const { width: SCREEN_WIDTH, height: SCREEN_HEIGHT } = Dimensions.get("window");
 const API_URL = "https://oreblogda.com";
+const COMMENTS_PER_PAGE = 40;
 
 // --- Helper: Flatten the Deep Tree for Display ---
 const flattenReplies = (nodes) => {
@@ -116,14 +114,11 @@ const SingleComment = ({ comment, onOpenDiscussion }) => {
 };
 
 // --- Discussion Drawer Component ---
-const DiscussionDrawer = ({ visible, comment, onClose, onReply, isPosting, slug }) => {
+const DiscussionDrawer = ({ visible, comment, onClose, onReply, isPosting, postId }) => {
 	const [replyText, setReplyText] = useState("");
-	const [showJumpToBottom, setShowJumpToBottom] = useState(false);
 	const panY = useRef(new RNAnimated.Value(0)).current;
 	const scrollViewRef = useRef(null);
 	const scrollOffset = useRef(0);
-	const contentHeight = useRef(0);
-	const scrollViewHeight = useRef(0);
 
 	const displayComments = useMemo(() => {
 		if (!comment) return [];
@@ -133,10 +128,6 @@ const DiscussionDrawer = ({ visible, comment, onClose, onReply, isPosting, slug 
 	useEffect(() => {
 		if (visible) {
 			panY.setValue(0);
-			// Small timeout to allow content to render before scrolling
-			setTimeout(() => {
-				scrollViewRef.current?.scrollToEnd({ animated: true });
-			}, 300);
 		}
 	}, [visible]);
 
@@ -158,21 +149,12 @@ const DiscussionDrawer = ({ visible, comment, onClose, onReply, isPosting, slug 
 	const handleShare = async () => {
 		if (!comment) return;
 		try {
-			// Using slug instead of postId as requested
 			await Share.share({
 				message: `Join the discussion on OreBlogda: ${API_URL}/post/${slug}?discussion=${comment._id}`,
 			});
 		} catch (error) {
 			console.log(error.message);
 		}
-	};
-
-	const handleScroll = (event) => {
-		const offset = event.nativeEvent.contentOffset.y;
-		scrollOffset.current = offset;
-		const totalScrollable = contentHeight.current - scrollViewHeight.current;
-		// Show button if we are scrolled up more than 100 units from the bottom
-		setShowJumpToBottom(totalScrollable - offset > 100);
 	};
 
 	if (!comment) return null;
@@ -187,8 +169,7 @@ const DiscussionDrawer = ({ visible, comment, onClose, onReply, isPosting, slug 
 						style={{ transform: [{ translateY: panY }], height: SCREEN_HEIGHT * 0.9 }} 
 						className="bg-white dark:bg-[#0a0a0a] rounded-t-[40px] border-t-2 border-blue-600/40 overflow-hidden"
 					>
-						{/* HEADER WITH INPUT */}
-						<View className="bg-white dark:bg-[#0a0a0a] border-b border-gray-100 dark:border-gray-800 z-50">
+						<View className="bg-white dark:bg-[#0a0a0a] border-b border-gray-100 dark:border-gray-800">
 							<View {...panResponder.panHandlers} className="items-center py-4">
 								<View className="w-12 h-1.5 bg-gray-200 dark:bg-gray-800 rounded-full" />
 							</View>
@@ -219,8 +200,6 @@ const DiscussionDrawer = ({ visible, comment, onClose, onReply, isPosting, slug 
 											onReply(comment._id, replyText);
 											setReplyText("");
 											Keyboard.dismiss();
-											// Scroll to bottom after posting
-											setTimeout(() => scrollViewRef.current?.scrollToEnd({ animated: true }), 500);
 										}
 									}}
 									disabled={isPosting}
@@ -231,59 +210,31 @@ const DiscussionDrawer = ({ visible, comment, onClose, onReply, isPosting, slug 
 							</View>
 						</View>
 
-						{/* MESSAGE LIST */}
-						<View className="flex-1 relative">
-							{showJumpToBottom && (
-								<Animated.View entering={FadeIn} exiting={FadeOut} className="absolute bottom-10 self-center z-50">
-									<Pressable 
-										onPress={() => {
-											Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
-											scrollViewRef.current?.scrollToEnd({ animated: true });
-										}} 
-										className="flex-row items-center bg-blue-600 px-4 py-2 rounded-full shadow-2xl"
-									>
-										<Ionicons name="arrow-down" size={14} color="white" />
-										<Text className="text-white text-[10px] font-black uppercase ml-2">Jump to Bottom</Text>
-									</Pressable>
-								</Animated.View>
-							)}
+						<ScrollView 
+							ref={scrollViewRef} 
+							className="flex-1" 
+							onScroll={(e) => { scrollOffset.current = e.nativeEvent.contentOffset.y; }}
+							scrollEventThrottle={16}
+							showsVerticalScrollIndicator={false}
+						>
+							<View className="bg-blue-50/30 dark:bg-blue-900/5 px-6 py-6 border-b border-gray-100 dark:border-gray-800">
+								<Text className="text-[10px] font-black text-blue-600 uppercase tracking-widest mb-1">Anchor Signal</Text>
+								<Text className="text-sm font-black dark:text-white">{comment.name}</Text>
+								<Text className="text-xs text-gray-600 dark:text-gray-400 font-bold mt-1 leading-5">{comment.text}</Text>
+							</View>
 
-							<ScrollView 
-								ref={scrollViewRef} 
-								className="flex-1" 
-								onScroll={handleScroll}
-								scrollEventThrottle={16}
-								onLayout={(e) => scrollViewHeight.current = e.nativeEvent.layout.height}
-								onContentSizeChange={(w, h) => {
-									contentHeight.current = h;
-									// Auto-scroll on initial load or when new messages arrive
-									if (!showJumpToBottom) {
-										scrollViewRef.current?.scrollToEnd({ animated: true });
-									}
-								}}
-								showsVerticalScrollIndicator={false}
-							>
-								{/* Anchor */}
-								<View className="bg-blue-50/30 dark:bg-blue-900/5 px-6 py-6 border-b border-gray-100 dark:border-gray-800">
-									<Text className="text-[10px] font-black text-blue-600 uppercase tracking-widest mb-1">Anchor Signal</Text>
-									<Text className="text-sm font-black dark:text-white">{comment.name}</Text>
-									<Text className="text-xs text-gray-600 dark:text-gray-400 font-bold mt-1 leading-5">{comment.text}</Text>
-								</View>
-
-								<View className="px-6 pt-6">
-									<Text className="text-[9px] font-black text-gray-400 uppercase tracking-widest mb-6">Live Feed</Text>
-									
-									{displayComments.map((reply, idx) => (
-										<View key={reply._id || idx} className="mb-6 border-l-2 border-gray-100 dark:border-gray-800 pl-4">
-											<Text className="text-[10px] font-black text-blue-400 uppercase tracking-tighter">{reply.name}</Text>
-											<Text className="text-xs text-gray-600 dark:text-gray-300 font-bold mt-1 leading-5">{reply.text}</Text>
-											<Text className="text-[8px] font-bold text-gray-400 uppercase mt-2">{new Date(reply.date).toLocaleTimeString()}</Text>
-										</View>
-									))}
-									<View className="h-20" />
-								</View>
-							</ScrollView>
-						</View>
+							<View className="px-6 pt-6">
+								<Text className="text-[9px] font-black text-gray-400 uppercase tracking-widest mb-6">Live Feed</Text>
+								{displayComments.map((reply, idx) => (
+									<View key={reply._id || idx} className="mb-6 border-l-2 border-gray-100 dark:border-gray-800 pl-4">
+										<Text className="text-[10px] font-black text-blue-400 uppercase tracking-tighter">{reply.name}</Text>
+										<Text className="text-xs text-gray-600 dark:text-gray-300 font-bold mt-1 leading-5">{reply.text}</Text>
+										<Text className="text-[8px] font-bold text-gray-400 uppercase mt-2">{new Date(reply.date).toLocaleTimeString()}</Text>
+									</View>
+								))}
+								<View className="h-40" />
+							</View>
+						</ScrollView>
 					</RNAnimated.View>
 				</KeyboardAvoidingView>
 			</View>
@@ -292,59 +243,84 @@ const DiscussionDrawer = ({ visible, comment, onClose, onReply, isPosting, slug 
 };
 
 // --- Main Comment Section ---
-export default function CommentSection({ postId, slug }) {
+export default function CommentSection({ postId, slug}) {
 	const { user } = useUser();
-	const [text, setText] = useState("");
+	const [comments, setComments] = useState([]);
+	const [page, setPage] = useState(1);
+	const [hasMore, setHasMore] = useState(true);
+	const [totalCount, setTotalCount] = useState(0);
+	const [isLoading, setIsLoading] = useState(true);
+	const [isMoreLoading, setIsMoreLoading] = useState(false);
 	const [isPosting, setIsPosting] = useState(false);
 	const [activeDiscussion, setActiveDiscussion] = useState(null);
+	const [text, setText] = useState("");
 
 	const loaderX = useSharedValue(-200);
 	useEffect(() => {
-		if (isPosting) loaderX.value = withRepeat(withTiming(200, { duration: 1500, easing: Easing.linear }), -1, false);
-		else loaderX.value = -200;
-	}, [isPosting]);
+		if (isPosting || isLoading || isMoreLoading) {
+			loaderX.value = withRepeat(withTiming(200, { duration: 1500, easing: Easing.linear }), -1, false);
+		} else {
+			loaderX.value = -200;
+		}
+	}, [isPosting, isLoading, isMoreLoading]);
 
 	const loaderStyle = useAnimatedStyle(() => ({ transform: [{ translateX: loaderX.value }] }));
 
-	const { data, mutate, isLoading } = useSWR(
-		user?.deviceId ? `${API_URL}/api/posts/${postId}/comment` : null,
-		(url) => fetch(url).then(res => res.json()),
-		{ refreshInterval: 5000 }
-	);
+	// --- FETCH LOGIC ---
+	const fetchComments = useCallback(async (pageNum, isInitial = false) => {
+		if (!user?.deviceId) return;
+		if (isInitial) setIsLoading(true);
+		else setIsMoreLoading(true);
 
-	const comments = data?.comments || [];
-
-	// --- ENHANCED WARM START LINKING ---
-	useEffect(() => {
-		const parseAndOpen = (url) => {
-			if (!url) return;
-			const match = url.match(/discussion=([^&]+)/);
-			if (match && match[1]) {
-				const discussionId = match[1];
-				const target = comments.find(c => c._id === discussionId);
-				if (target) {
-					setActiveDiscussion(target);
-				}
+		try {
+			const res = await fetch(`${API_URL}/api/posts/${postId}/comment?page=${pageNum}&limit=${COMMENTS_PER_PAGE}`);
+			const data = await res.json();
+			
+			if (pageNum === 1) {
+				setComments(data.comments || []);
+			} else {
+				setComments(prev => [...prev, ...(data.comments || [])]);
 			}
-		};
+			setTotalCount(data.total || 0);
+			setHasMore(data.hasMore);
+		} catch (error) {
+			console.error("Fetch failure", error);
+		} finally {
+			setIsLoading(false);
+			setIsMoreLoading(false);
+		}
+	}, [postId, user?.deviceId]);
 
-		// Check cold start
-		Linking.getInitialURL().then(parseAndOpen);
+	// Initial Load
+	useEffect(() => {
+		fetchComments(1, true);
+	}, [fetchComments]);
 
-		// Check warm start (Listen while app is open)
-		const subscription = Linking.addEventListener('url', (event) => {
-			parseAndOpen(event.url);
-		});
-		
-		return () => subscription.remove();
-	}, [comments]); // Re-run if comments update to ensure we find the target
+	// Polling for first page every 10s (reduced frequency since we have pagination)
+	useEffect(() => {
+		const interval = setInterval(() => {
+			if (!isPosting && page === 1) {
+				fetchComments(1, false);
+			}
+		}, 10000);
+		return () => clearInterval(interval);
+	}, [fetchComments, isPosting, page]);
 
+	// Sync Discussion Modal
 	useEffect(() => {
 		if (activeDiscussion) {
 			const updated = comments.find(c => c._id === activeDiscussion._id);
 			if (updated) setActiveDiscussion(updated);
 		}
 	}, [comments]);
+
+	const handleLoadMore = () => {
+		if (hasMore && !isMoreLoading) {
+			const nextPage = page + 1;
+			setPage(nextPage);
+			fetchComments(nextPage, false);
+		}
+	};
 
 	const handlePostComment = async (parentId = null, replyContent = null) => {
 		const content = replyContent || text;
@@ -367,12 +343,17 @@ export default function CommentSection({ postId, slug }) {
 			if (res.ok) {
 				const responseData = await res.json();
 				Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
-				if (parentId) {
-					mutate(); 
-				} else {
-					mutate({ comments: [responseData.comment, ...comments] }, false);
+				
+				if (!parentId) {
+					// Add to top of local list
+					setComments(prev => [responseData.comment, ...prev]);
+					setTotalCount(prev => prev + 1);
 					setText("");
 					Keyboard.dismiss();
+				} else {
+					// If it's a reply, just refresh the whole list to maintain order/pagination
+					fetchComments(1, false);
+					setPage(1);
 				}
 			}
 		} catch (err) {
@@ -389,7 +370,7 @@ export default function CommentSection({ postId, slug }) {
 					<View className="w-2 h-2 bg-blue-600 rounded-full" />
 					<Text className="text-sm font-[900] uppercase tracking-[0.3em] text-gray-900 dark:text-white">Comms_Feed</Text>
 				</View>
-				<Text className="text-[9px] font-bold text-gray-400 uppercase tracking-widest">{comments.length} Signals</Text>
+				<Text className="text-[9px] font-bold text-gray-400 uppercase tracking-widest">{totalCount} Signals</Text>
 			</View>
 
 			<View className="gap-3 mb-8">
@@ -410,10 +391,8 @@ export default function CommentSection({ postId, slug }) {
 					disabled={isPosting}
 					className="relative bg-blue-600 h-14 rounded-xl overflow-hidden justify-center items-center shadow-lg"
 				>
-					<View className="flex-row items-center gap-2">
-						{isPosting ? <ActivityIndicator size="small" color="white" /> : <Text className="text-[13px] font-black text-white uppercase tracking-widest">Transmit Signal</Text>}
-					</View>
-					{isPosting && (
+					{isPosting ? <ActivityIndicator size="small" color="white" /> : <Text className="text-[13px] font-black text-white uppercase tracking-widest">Transmit Signal</Text>}
+					{(isPosting || isLoading) && (
 						<View className="absolute bottom-0 left-0 w-full h-1 bg-white/20">
 							<Animated.View className="h-full w-1/2 bg-white/60" style={loaderStyle} />
 						</View>
@@ -421,14 +400,30 @@ export default function CommentSection({ postId, slug }) {
 				</Pressable>
 			</View>
 
-			<View style={{ maxHeight: 500 }}>
+			<View style={{ maxHeight: 600 }}>
 				<ScrollView nestedScrollEnabled showsVerticalScrollIndicator={false}>
 					{isLoading ? (
 						<View><CommentSkeleton /><CommentSkeleton /></View>
 					) : comments.length > 0 ? (
-						comments.map((c, i) => (
-							<SingleComment key={c._id || i} comment={c} onOpenDiscussion={(comm) => setActiveDiscussion(comm)} />
-						))
+						<>
+							{comments.map((c, i) => (
+								<SingleComment key={c._id || i} comment={c} onOpenDiscussion={(comm) => setActiveDiscussion(comm)} />
+							))}
+							
+							{hasMore && (
+								<Pressable 
+									onPress={handleLoadMore} 
+									disabled={isMoreLoading}
+									className="items-center py-6 border-t border-gray-100 dark:border-gray-800"
+								>
+									{isMoreLoading ? (
+										<ActivityIndicator size="small" color="#2563eb" />
+									) : (
+										<Text className="text-[10px] font-black text-blue-600 uppercase tracking-[0.2em]">Load 40 More Signals</Text>
+									)}
+								</Pressable>
+							)}
+						</>
 					) : (
 						<View className="items-center justify-center py-10 opacity-40">
 							<ActivityIndicator size="small" color="#6b7280" />
@@ -446,6 +441,7 @@ export default function CommentSection({ postId, slug }) {
 				onClose={() => setActiveDiscussion(null)}
 				onReply={handlePostComment}
 				isPosting={isPosting}
+				postId={postId}
 				slug={slug}
 			/>
 		</View>
