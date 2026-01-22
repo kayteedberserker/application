@@ -28,12 +28,13 @@ import AppOnboarding from "../../components/AppOnboarding";
 import { SyncLoading } from "../../components/SyncLoading";
 import { Text } from "../../components/Text";
 import { useUser } from "../../context/UserContext";
+import apiFetch from "../../utils/apiFetch"
 
 const { width } = Dimensions.get("window");
 const API_BASE = "https://oreblogda.com/api";
 const LIMIT = 5;
 
-const fetcher = (url) => fetch(url).then((res) => res.json());
+const fetcher = (url) => apiFetch(url).then((res) => res.json());
 
 // 🔹 AURA UI UTILITY (Using the Purple Leaderboard Theme)
 const AURA_PURPLE = "#a78bfa";
@@ -163,7 +164,7 @@ export default function MobileProfilePage() {
         const syncUserWithDB = async () => {
             if (!user?.deviceId) return;
             try {
-                const res = await fetch(`${API_BASE}/users/me?fingerprint=${user.deviceId}`);
+                const res = await apiFetch(`${API_BASE}/users/me?fingerprint=${user.deviceId}`);
                 const dbUser = await res.json();
                 if (res.ok) {
                     setUser(dbUser);
@@ -260,7 +261,7 @@ export default function MobileProfilePage() {
                 }
             }
 
-            const res = await fetch(`${API_BASE}/users/upload`, {
+            const res = await apiFetch(`${API_BASE}/users/upload`, {
                 method: "PUT",
                 body: formData,
             });
@@ -303,9 +304,8 @@ export default function MobileProfilePage() {
                     });
 
                     try {
-                        const response = await fetch(`${API_BASE}/posts/delete`, {
+                        const response = await apiFetch(`${API_BASE}/posts/delete`, {
                             method: "DELETE",
-                            headers: { "Content-Type": "application/json" },
                             body: JSON.stringify({ postId, fingerprint: user?.deviceId }),
                         });
 
