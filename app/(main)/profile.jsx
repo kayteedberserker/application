@@ -70,6 +70,7 @@ export default function MobileProfilePage() {
     // Animations
     const scanAnim = useRef(new Animated.Value(0)).current;
     const loadingAnim = useRef(new Animated.Value(0)).current;
+    const pulseAnim = useRef(new Animated.Value(1)).current; // 🔹 Added for Aura Glow
     const [copied, setCopied] = useState(false);
 
     // Cache Keys
@@ -91,6 +92,14 @@ export default function MobileProfilePage() {
                 easing: Easing.linear,
                 useNativeDriver: true,
             })
+        ).start();
+
+        // 🔹 Aura Pulse Animation
+        Animated.loop(
+            Animated.sequence([
+                Animated.timing(pulseAnim, { toValue: 1.15, duration: 2000, useNativeDriver: true }),
+                Animated.timing(pulseAnim, { toValue: 1, duration: 2000, useNativeDriver: true }),
+            ])
         ).start();
     }, []);
 
@@ -335,6 +344,19 @@ export default function MobileProfilePage() {
 
             <View className="items-center mb-10">
                 <View className="relative">
+                    {/* 🔹 Aura Pulse Glow */}
+                    {isTop10 && (
+                        <Animated.View 
+                            style={{ 
+                                position: 'absolute', 
+                                inset: -12, 
+                                borderRadius: 100, 
+                                backgroundColor: aura.color, 
+                                opacity: 0.15,
+                                transform: [{ scale: pulseAnim }]
+                            }} 
+                        />
+                    )}
                     <Animated.View
                         style={{ 
                             transform: [{ rotate: spin }],
@@ -375,7 +397,23 @@ export default function MobileProfilePage() {
                             </View>
                         )}
                     </Pressable>
-                    <Text className="text-[10px] font-bold text-gray-500 uppercase tracking-[0.3em] mt-1">Class: {rankTitle}</Text>
+
+                    {/* 🔹 AURA POWER INDICATOR (The filling boxes) */}
+                    {isTop10 && (
+                        <View className="mt-3 items-center">
+                            <View className="flex-row gap-1 mb-1">
+                                {[...Array(10)].map((_, i) => (
+                                    <View 
+                                        key={i} 
+                                        className="h-1.5 w-4 rounded-sm" 
+                                        style={{ backgroundColor: i < (11 - user.previousRank) ? aura.color : (isDark ? '#1f2937' : '#e5e7eb') }}
+                                    />
+                                ))}
+                            </View>
+                            <Text style={{ color: aura.color }} className="text-[8px] font-black uppercase tracking-[0.2em]">Rank Power: {11 - user.previousRank}/10</Text>
+                        </View>
+                    )}
+                    {!isTop10 && <Text className="text-[10px] font-bold text-gray-500 uppercase tracking-[0.3em] mt-1">Class: {rankTitle}</Text>}
                 </View>
 
                 <View className="mt-8 w-full px-4">
@@ -492,7 +530,7 @@ export default function MobileProfilePage() {
                 <View className="h-[1px] flex-1 bg-gray-100 dark:bg-gray-800" />
             </View>
         </View>
-    ), [user, preview, description, username, isUpdating, spin, translateX, totalPosts, copied, rankTitle, rankIcon, progress, nextMilestone, count, showId, isDark, aura, isTop10]); 
+    ), [user, preview, description, username, isUpdating, spin, translateX, totalPosts, copied, rankTitle, rankIcon, progress, nextMilestone, count, showId, isDark, aura, isTop10, pulseAnim]); 
 
     if (contextLoading || isRestoringCache) {
         return <AnimeLoading message="Syncing Profile" subMessage="Checking local cache..." />;
@@ -585,7 +623,15 @@ export default function MobileProfilePage() {
                         <View className="bg-white dark:bg-[#0d1117] w-full p-8 rounded-[40px] border-2" style={{ borderColor: aura.color }}>
                             <MaterialCommunityIcons name={aura.icon} size={60} color={aura.color} style={{ alignSelf: 'center', marginBottom: 20 }} />
                             <Text style={{ color: aura.color }} className="text-3xl font-black text-center uppercase tracking-widest mb-2">{aura.label} AURA</Text>
-                            <Text className="text-gray-500 text-center font-bold text-[10px] uppercase tracking-[0.3em] mb-6">Global Rank: #{user?.previousRank}</Text>
+                            <Text className="text-gray-500 text-center font-bold text-[10px] uppercase tracking-[0.3em] mb-2">Global Rank: #{user?.previousRank}</Text>
+                            
+                            {/* Modal Power Meter */}
+                            <View className="flex-row justify-center gap-1 mb-6">
+                                {[...Array(10)].map((_, i) => (
+                                    <View key={i} className="h-2 w-4 rounded-sm" style={{ backgroundColor: i < (11 - user.previousRank) ? aura.color : '#374151' }} />
+                                ))}
+                            </View>
+
                             <Text className="text-gray-600 dark:text-gray-400 text-center leading-7 mb-8 font-medium">{aura.description}</Text>
                             <TouchableOpacity onPress={() => setAuraModalVisible(false)} style={{ backgroundColor: aura.color }} className="p-4 rounded-2xl items-center shadow-lg"><Text className="text-white font-black uppercase tracking-widest text-xs">Acknowledge</Text></TouchableOpacity>
                         </View>
