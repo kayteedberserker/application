@@ -16,8 +16,9 @@ import CommentSection from "../../../components/CommentSection";
 import PostCard from "../../../components/PostCard";
 import SimilarPosts from "../../../components/SimilarPosts";
 import { Text } from '../../../components/Text';
+import apiFetch from "../../../utils/apiFetch"
 
-const fetcher = (url) => fetch(url).then((res) => res.json());
+const fetcher = (url) => apiFetch(url).then((res) => res.json());
 const { width } = Dimensions.get('window');
 const API_URL = "https://oreblogda.com";
 
@@ -65,7 +66,7 @@ export default function PostDetailScreen() {
   useEffect(() => {
     if (!post?._id) return;
 
-    fetch(`${API_URL}/api/posts?category=${post.category}&limit=6`)
+    apiFetch(`${API_URL}/api/posts?category=${post.category}&limit=6`)
       .then(res => res.json())
       .then(data => {
         const filtered = (data.posts || []).filter((p) => p._id !== id);
@@ -78,9 +79,8 @@ export default function PostDetailScreen() {
 
   const handleViewIncrement = async (postId) => {
     try {
-      await fetch(`${API_URL}/api/posts/${postId}`, {
+      await apiFetch(`${API_URL}/api/posts/${postId}`, {
         method: "PATCH",
-        headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ action: "view" }),
       });
       if (post) {
