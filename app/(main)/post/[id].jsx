@@ -173,7 +173,7 @@ export default function PostDetailScreen() {
           </View>
           
           <View className="bg-gray-50/50 dark:bg-gray-900/30 rounded-[32px] border border-gray-100 dark:border-blue-900/20 p-1">
-            <CommentSection postId={post?._id} mutatePost={mutate} />
+            <CommentSection slug={post?.slug} postId={post?._id} mutatePost={mutate} />
           </View>
         </View>
 
