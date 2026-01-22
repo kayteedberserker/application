@@ -25,7 +25,7 @@ import THEME from "../../components/useAppTheme";
 import { useStreak } from "../../context/StreakContext";
 import { useUser } from "../../context/UserContext";
 import { AdConfig } from "../../utils/AdConfig";
-
+import apiFetch from "../../utils/apiFetch"
 // 🔹 Notification Handler Configuration
 Notifications.setNotificationHandler({
     handleNotification: async () => ({
@@ -36,7 +36,7 @@ Notifications.setNotificationHandler({
 });
 
 const API_BASE = "https://oreblogda.com/api";
-const fetcher = (url) => fetch(url).then((res) => res.json());
+const fetcher = (url) => apiFetch(url).then((res) => res.json());
 
 // Helper to fetch total posts (logic kept separate, but result will be cached in component)
 async function getUserTotalPosts(deviceId) {
@@ -543,7 +543,7 @@ export default function AuthorDiaryDashboard() {
     const updateStreak = async (deviceId) => {
         if (!deviceId) throw new Error("Device ID is required");
         try {
-            const res = await fetch(`${API_BASE}/users/streak`, { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ deviceId }), })
+            const res = await apiFetch(`${API_BASE}/users/streak`, { method: "POST", body: JSON.stringify({ deviceId }), })
             if (!res.ok) { const error = await res.json(); throw new Error(error.message || "Failed to update streak"); }
             const data = await res.json();
             return data;
@@ -558,9 +558,8 @@ export default function AuthorDiaryDashboard() {
         
         setSubmitting(true);
         try {
-            const response = await fetch(`${API_BASE}/posts`, {
+            const response = await apiFetch(`${API_BASE}/posts`, {
                 method: "POST",
-                headers: { "Content-Type": "application/json" },
                 body: JSON.stringify({
                     title, message, category, mediaUrl: mediaUrl || mediaUrlLink || null,
                     mediaType: mediaUrl ? mediaType : (mediaUrlLink?.includes("video") ? "video" : "image"),
