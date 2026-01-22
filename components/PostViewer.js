@@ -18,6 +18,8 @@ import AppBanner from './AppBanner';
 import PostCard from "./PostCard";
 import { SyncLoading } from "./SyncLoading";
 import { Text } from "./Text";
+import apiFetch from "../utils/apiFetch"
+const fetcher = (url) => apiFetch(url).then(res => res.json());
 
 const { width, height } = Dimensions.get('window');
 const LIMIT = 5;
@@ -25,8 +27,6 @@ const API_URL = "https://oreblogda.com/api/posts";
 const CACHE_KEY = "POSTS_CACHE_V1"; // 👈 Unique key for storage
 
 // Standard fetcher
-const fetcher = (url) => fetch(url).then(res => res.json());
-
 export default function PostsViewer() {
     const scrollRef = useRef(null);
     const insets = useSafeAreaInsets();
