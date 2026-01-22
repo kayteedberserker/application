@@ -15,7 +15,8 @@ import {
 	PanResponder,
 	Keyboard,
 	KeyboardAvoidingView,
-	Share
+	Share,
+	Linking // Imported for Deep Linking
 } from "react-native";
 import Animated, {
 	Easing,
@@ -169,9 +170,9 @@ const DiscussionDrawer = ({ visible, comment, onClose, onReply, isPosting, postI
 	const handleShare = async () => {
 		if (!comment) return;
 		try {
-			// Example Deep Link structure
+			// This link now includes the query parameter that the Parent component looks for
 			await Share.share({
-				message: `Check out this discussion on OreBlogda: ${API_URL}/posts/${postId}?discussion=${comment._id}`,
+				message: `Join the discussion on OreBlogda: ${API_URL}/posts/${postId}?discussion=${comment._id}`,
 			});
 		} catch (error) {
 			console.log(error.message);
@@ -251,10 +252,11 @@ const DiscussionDrawer = ({ visible, comment, onClose, onReply, isPosting, postI
 									
 									{/* Render Flattened List */}
 									{displayComments.map((reply, idx) => (
-										<View key={reply._id || idx} onLayout={(event) => { messageRefs.current[reply._id] = event.nativeEvent.layout; }} className="mb-8">
+										<View key={reply._id || idx} onLayout={(event) => { messageRefs.current[reply._id] = event.nativeEvent.layout; }} className="mb-6">
+											{/* Long Press to Reply (Hidden Feature like WhatsApp) */}
 											<Pressable onLongPress={() => {
 												Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
-												// IMPORTANT: When replying here, we target THIS reply ID
+												// Target THIS specific reply
 												setReplyingTo({ name: reply.name, text: reply.text, id: reply._id });
 											}} className="border-l-2 border-gray-100 dark:border-gray-800 pl-4">
 												{reply.replyTo && (
@@ -265,14 +267,9 @@ const DiscussionDrawer = ({ visible, comment, onClose, onReply, isPosting, postI
 												)}
 												<Text className="text-[10px] font-black text-blue-400 uppercase tracking-tighter">{reply.name}</Text>
 												<Text className="text-xs text-gray-600 dark:text-gray-300 font-bold mt-1 leading-5">{reply.text}</Text>
-												<View className="flex-row items-center justify-between mt-3">
+												<View className="flex-row items-center justify-between mt-2">
 													<Text className="text-[8px] font-bold text-gray-400 uppercase">{new Date(reply.date).toLocaleTimeString()}</Text>
-													<Pressable onPress={() => {
-														Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
-														setReplyingTo({ name: reply.name, text: reply.text, id: reply._id });
-													}}>
-														<Text className="text-blue-500 text-[9px] font-black uppercase tracking-widest">Reply</Text>
-													</Pressable>
+													{/* REMOVED EXPLICIT REPLY BUTTON AS REQUESTED */}
 												</View>
 											</Pressable>
 										</View>
@@ -353,6 +350,34 @@ export default function CommentSection({ postId }) {
 	);
 
 	const comments = data?.comments || [];
+
+	// --- 1. HANDLE DEEP LINKING ---
+	// Checks if the app was opened with ?discussion=ID and opens that modal
+	useEffect(() => {
+		if (comments.length === 0) return;
+
+		const handleDeepLink = async () => {
+			try {
+				const initialUrl = await Linking.getInitialURL();
+				if (initialUrl && initialUrl.includes("discussion=")) {
+					// Simple parsing to find ID
+					const discussionId = initialUrl.split("discussion=")[1].split("&")[0];
+					const targetDiscussion = comments.find(c => c._id === discussionId);
+					
+					if (targetDiscussion) {
+						// Small delay to ensure UI is ready
+						setTimeout(() => {
+							setActiveDiscussion(targetDiscussion);
+						}, 500);
+					}
+				}
+			} catch (err) {
+				console.log("Deep link error:", err);
+			}
+		};
+
+		handleDeepLink();
+	}, [comments]); // Runs once comments are loaded
 
 	useEffect(() => {
 		if (activeDiscussion) {
