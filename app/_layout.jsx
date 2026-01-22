@@ -15,6 +15,7 @@ import { InterstitialAd, AdEventType, TestIds, MobileAds } from 'react-native-go
 import { Audio } from 'expo-av'; // 🔹 Added for sound
 
 import AnimeLoading from "../components/AnimeLoading";
+import apiFetch from "../utils/apiFetch"
 import { loadAppOpenAd, showAppOpenAd } from "../components/appOpenAd";
 import { StreakProvider, useStreak } from "../context/StreakContext";
 import { UserProvider, useUser } from "../context/UserContext";
@@ -279,7 +280,7 @@ function RootLayoutContent() {
             const token = await registerForPushNotificationsAsync();
             if (token && user?.deviceId) {
                 try {
-                    await fetch("https://oreblogda.com/api/users/update-push-token", {
+                    await apiFetch("https://oreblogda.com/api/users/update-push-token", {
                         method: 'POST',
                         headers: { 'Content-Type': 'application/json' },
                         body: JSON.stringify({ deviceId: user.deviceId, pushToken: token })
