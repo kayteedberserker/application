@@ -1,6 +1,8 @@
 import { Feather, Ionicons } from "@expo/vector-icons";
 import Constants from 'expo-constants';
 import { useEffect, useState, useRef } from 'react';
+import apiFetch from "../utils/apiFetch"
+
 import { Linking, Modal, Pressable, Text as RNText, useColorScheme, View, Animated, Easing } from 'react-native';
 
 const VERSION_CHECK_URL = 'https://oreblogda.com/api/version'; 
@@ -73,7 +75,7 @@ export default function UpdateHandler() {
 
   const fetchLatestVersion = async () => {
     try {
-      const response = await fetch(VERSION_CHECK_URL);
+      const response = await apiFetch(VERSION_CHECK_URL);
       const data = await response.json();
       if (data.version) {
         setLatestVersion(data.version);
