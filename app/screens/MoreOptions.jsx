@@ -143,7 +143,7 @@ export default function MoreOptions() {
           Author Progression
         </Text>
         <MenuRow 
-            title="Rank & Streak System" 
+            title="Rank, Streak & AURA System" 
             icon="flash-outline" 
             route="/screens/RankSystemScreen" 
             color="#f97316" 
