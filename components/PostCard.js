@@ -2,9 +2,10 @@ import { Feather, Ionicons, MaterialCommunityIcons } from "@expo/vector-icons";
 import AsyncStorage from "@react-native-async-storage/async-storage";
 import { Video } from "expo-av";
 import { useRouter } from "expo-router";
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useState, useRef } from "react";
 import {
     Alert,
+    BackHandler, // 🔹 Added for hardware back button
     Dimensions,
     Image,
     Linking,
@@ -14,12 +15,14 @@ import {
     useColorScheme,
     View
 } from "react-native";
-// 🔹 New Imports for Zooming
+// 🔹 Imports for Zooming & Gestures
 import { Gesture, GestureDetector, GestureHandlerRootView } from 'react-native-gesture-handler';
 import Animated, {
     useAnimatedStyle,
     useSharedValue,
     withTiming,
+    withSpring, // 🔹 Added for smooth snap-back
+    runOnJS // 🔹 Added to run close function from UI thread
 } from 'react-native-reanimated';
 import { WebView } from "react-native-webview";
 import YoutubePlayer from "react-native-youtube-iframe";
@@ -144,7 +147,6 @@ export default function PostCard({ post, setPosts, isFeed, hideMedia, similarPos
     const [tikTokReady, setTikTokReady] = useState(false);
     const [imageReady, setImageReady] = useState(false);
     
-
     // 🔹 Reanimated Shared Values
     const scale = useSharedValue(1);
     const savedScale = useSharedValue(1);
@@ -153,18 +155,50 @@ export default function PostCard({ post, setPosts, isFeed, hideMedia, similarPos
     const savedTranslateX = useSharedValue(0);
     const savedTranslateY = useSharedValue(0);
 
+    // 🔹 Helper to reset zoom
+    const resetZoom = () => {
+        'worklet';
+        scale.value = withTiming(1);
+        translateX.value = withTiming(0);
+        translateY.value = withTiming(0);
+        savedScale.value = 1;
+        savedTranslateX.value = 0;
+        savedTranslateY.value = 0;
+    };
+
+    const closeLightbox = () => {
+        setLightbox((prev) => ({ ...prev, open: false }));
+        // Reset values after closing
+        setTimeout(() => {
+            scale.value = 1;
+            translateX.value = 0;
+            translateY.value = 0;
+            savedScale.value = 1;
+        }, 300);
+        return true; // Return true for BackHandler
+    };
+
+    // 🔹 HARDWARE BACK BUTTON LOGIC
+    useEffect(() => {
+        const backAction = () => {
+            if (lightbox.open) {
+                closeLightbox();
+                return true;
+            }
+            return false;
+        };
+        const backHandler = BackHandler.addEventListener("hardwareBackPress", backAction);
+        return () => backHandler.remove();
+    }, [lightbox.open]);
+
+    // 🔹 IMPROVED GESTURES
     const pinchGesture = Gesture.Pinch()
         .onUpdate((event) => {
             scale.value = savedScale.value * event.scale;
         })
         .onEnd(() => {
             if (scale.value < 1) {
-                scale.value = withTiming(1);
-                translateX.value = withTiming(0);
-                translateY.value = withTiming(0);
-                savedScale.value = 1;
-                savedTranslateX.value = 0;
-                savedTranslateY.value = 0;
+                resetZoom();
             } else {
                 savedScale.value = scale.value;
             }
@@ -173,31 +207,37 @@ export default function PostCard({ post, setPosts, isFeed, hideMedia, similarPos
     const panGesture = Gesture.Pan()
         .onUpdate((event) => {
             if (scale.value > 1) {
+                // Pan normally if zoomed in
                 translateX.value = savedTranslateX.value + event.translationX;
                 translateY.value = savedTranslateY.value + event.translationY;
+            } else {
+                // Only allow vertical movement for swipe-to-close if not zoomed
+                translateY.value = event.translationY;
             }
         })
-        .onEnd(() => {
+        .onEnd((event) => {
             if (scale.value > 1) {
                 savedTranslateX.value = translateX.value;
                 savedTranslateY.value = translateY.value;
             } else {
-                translateX.value = withTiming(0);
-                translateY.value = withTiming(0);
-                savedTranslateX.value = 0;
-                savedTranslateY.value = 0;
+                // Swipe down to close logic
+                if (Math.abs(event.translationY) > 100) {
+                    runOnJS(closeLightbox)();
+                } else {
+                    translateY.value = withSpring(0); // Snap back if drag wasn't enough
+                }
             }
         });
 
     const doubleTapGesture = Gesture.Tap()
         .numberOfTaps(2)
         .onEnd(() => {
-            scale.value = withTiming(1);
-            translateX.value = withTiming(0);
-            translateY.value = withTiming(0);
-            savedScale.value = 1;
-            savedTranslateX.value = 0;
-            savedTranslateY.value = 0;
+            if (scale.value > 1.5) {
+                resetZoom();
+            } else {
+                scale.value = withTiming(2);
+                savedScale.value = 2;
+            }
         });
 
     const composed = Gesture.Exclusive(doubleTapGesture, Gesture.Simultaneous(pinchGesture, panGesture));
@@ -211,16 +251,6 @@ export default function PostCard({ post, setPosts, isFeed, hideMedia, similarPos
             ],
         };
     });
-
-    const closeLightbox = () => {
-        scale.value = withTiming(1);
-        translateX.value = withTiming(0);
-        translateY.value = withTiming(0);
-        savedScale.value = 1;
-        savedTranslateX.value = 0;
-        savedTranslateY.value = 0;
-        setLightbox({ ...lightbox, open: false });
-    };
 
     const { data: postData, mutate } = useSWR(
         post?._id ? `https://oreblogda.com/api/posts/${post._id}` : null,
@@ -417,7 +447,36 @@ export default function PostCard({ post, setPosts, isFeed, hideMedia, similarPos
             return <View className="w-full rounded-2xl overflow-hidden my-2 bg-black" style={[{ height: similarPosts ? 200 : 600 }, glassStyle]}>{!tikTokReady && <MediaSkeleton height={similarPosts ? 200 : 600} />}<WebView source={{ uri: getTikTokEmbedUrl(post.mediaUrl) }} userAgent="Mozilla/5.0 (iPhone; CPU iPhone OS 15_0 like Mac OS X)" onLoadEnd={() => setTikTokReady(true)} scrollEnabled={false} allowsFullscreenVideo javaScriptEnabled domStorageEnabled allowsInlineMediaPlayback={true} style={{ flex: 1, opacity: tikTokReady ? 1 : 0 }}/></View>;
         }
 
-        return <Pressable onPress={() => !isDirectVideo && setLightbox({ open: true, src: post.mediaUrl, type: "image" })} className="my-2 rounded-2xl overflow-hidden shadow-sm" style={[similarPosts ? { height: 200 } : null, glassStyle]}>{!imageReady && !isDirectVideo && <MediaSkeleton height={300} />}{!videoReady && isDirectVideo && <MediaSkeleton height={250} />}{isDirectVideo ? <Video source={{ uri: post.mediaUrl }} style={{ width: "100%", height: videoReady ? 250 : 0 }} useNativeControls resizeMode="cover" onLoad={() => setVideoReady(true)}/> : <Image source={{ uri: post.mediaUrl }} style={{ width: "100%", height: imageReady ? 300 : 0 }} resizeMode="cover" onLoad={() => setImageReady(true)}/>}</Pressable>;
+        return (
+            <View className="my-2 rounded-2xl overflow-hidden shadow-sm" style={[similarPosts ? { height: 200 } : null, glassStyle]}>
+                {!imageReady && !isDirectVideo && <MediaSkeleton height={300} />}
+                {!videoReady && isDirectVideo && <MediaSkeleton height={250} />}
+                
+                {isDirectVideo ? (
+                    <Video 
+                        source={{ uri: post.mediaUrl }} 
+                        style={{ width: "100%", height: videoReady ? 250 : 0 }} 
+                        useNativeControls 
+                        resizeMode="cover" 
+                        isMuted={true}
+                        onLoad={() => setVideoReady(true)}
+                        // 🔹 This allows the native player to handle Fullscreen/Rotation
+                        onFullscreenUpdate={(event) => {
+                            console.log("Fullscreen state:", event.fullscreenUpdate);
+                        }}
+                    />
+                ) : (
+                    <Pressable onPress={() => setLightbox({ open: true, src: post.mediaUrl, type: "image" })}>
+                        <Image 
+                            source={{ uri: post.mediaUrl }} 
+                            style={{ width: "100%", height: imageReady ? 300 : 0 }} 
+                            resizeMode="cover" 
+                            onLoad={() => setImageReady(true)}
+                        />
+                    </Pressable>
+                )}
+            </View>
+        );
     };
 
 
@@ -556,29 +615,28 @@ export default function PostCard({ post, setPosts, isFeed, hideMedia, similarPos
                 )}
             </View>
 
-            <Modal visible={lightbox.open} transparent animationType="fade">
+            {/* 🔹 LIGHTBOX MODAL (IMAGES ONLY) */}
+            <Modal 
+                visible={lightbox.open} 
+                transparent 
+                animationType="fade"
+                onRequestClose={closeLightbox} // 🔹 Handle Android Back Button
+            >
                 <GestureHandlerRootView style={{ flex: 1, backgroundColor: 'rgba(0,0,0,0.95)' }}>
                     <Pressable onPress={closeLightbox} className="absolute top-14 right-6 p-3 bg-white/10 rounded-full z-[100]">
                         <Feather name="x" size={24} color="white" />
                     </Pressable>
                     <View className="flex-1 justify-center items-center">
-                        {lightbox.type === "image" ? (
-                            <GestureDetector gesture={composed}>
-                                <Animated.Image
-                                    source={{ uri: lightbox.src }}
-                                    style={[{ width: SCREEN_WIDTH, height: SCREEN_HEIGHT * 0.8 }, animatedStyle]}
-                                    resizeMode="contain"
-                                />
-                            </GestureDetector>
-                        ) : (
-                            <Video
+                        <GestureDetector gesture={composed}>
+                            <Animated.Image
                                 source={{ uri: lightbox.src }}
-                                className="w-full h-[80%]"
-                                useNativeControls
+                                style={[{ width: SCREEN_WIDTH, height: SCREEN_HEIGHT * 0.8 }, animatedStyle]}
                                 resizeMode="contain"
-                                shouldPlay
                             />
-                        )}
+                        </GestureDetector>
+                        <Text className="text-white/50 text-xs absolute bottom-10">
+                            Swipe down to close • Double tap to zoom
+                        </Text>
                     </View>
                 </GestureHandlerRootView>
             </Modal>
