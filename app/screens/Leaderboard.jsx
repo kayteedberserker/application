@@ -31,14 +31,32 @@ const fetcher = (url) => apiFetch(url).then((res) => res.json());
 // ✨ AURA UTILITY HELPER
 // ----------------------
 const getAuraTier = (rank) => {
-    if (!rank || rank > 10) return null;
+    // Return null if no rank or if they haven't cracked the Top 10 Elite
+    if (!rank || rank > 10 || rank <= 0) return null;
+
     switch (rank) {
-        case 1: return { color: '#fbbf24', label: 'PROTAGONIST' };
-        case 2: return { color: '#60a5fa', label: 'RIVAL' };
-        case 3: return { color: '#cd7f32', label: 'SENSEI' };
-        case 4: return { color: '#a78bfa', label: 'ELITE' };
-        case 5: return { color: '#f87171', label: 'SPECIAL' };
-        default: return { color: '#34d399', label: 'VANGUARD' };
+        case 1: 
+            return { color: '#fbbf24', label: 'MONARCH' }; // Gold
+        case 2: 
+            return { color: '#ef4444', label: 'YONKO' };   // Crimson Red
+        case 3: 
+            return { color: '#a855f7', label: 'KAGE' };    // Shadow Purple
+        case 4: 
+            return { color: '#3b82f6', label: 'SHOGUN' };  // Steel Blue
+        case 5: 
+            return { color: '#ffffff', label: 'ESPADA 0' }; // Hollow White
+        case 6: 
+            return { color: '#e5e7eb', label: 'ESPADA 1' };
+        case 7: 
+            return { color: '#e5e7eb', label: 'ESPADA 2' };
+        case 8: 
+            return { color: '#e5e7eb', label: 'ESPADA 3' };
+        case 9: 
+            return { color: '#e5e7eb', label: 'ESPADA 4' };
+        case 10: 
+            return { color: '#e5e7eb', label: 'ESPADA 5' };
+        default: 
+            return { color: '#94a3b8', label: 'OPERATIVE' };
     }
 };
 
