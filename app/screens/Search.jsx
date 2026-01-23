@@ -7,89 +7,98 @@ import {
     Image,
     ActivityIndicator,
     SafeAreaView,
-    Keyboard
+    Keyboard,
+    Platform,
+    StatusBar,
+    ScrollView
 } from "react-native";
 import { Ionicons } from "@expo/vector-icons";
 import { useRouter } from "expo-router";
 import apiFetch from "../../utils/apiFetch";
 import { Text } from "../../components/Text"; 
-import Animated, { FadeInDown, FadeIn } from "react-native-reanimated";
+import Animated, { FadeInDown, FadeIn, Layout } from "react-native-reanimated";
+import AsyncStorage from '@react-native-async-storage/async-storage';
 
 // --- AUTHOR CARD COMPONENT ---
 const AuthorCard = ({ author, isDark }) => {
     const router = useRouter();
     
-    // Logic for Ranks & Aura Colors
     const getAuraTier = (rank) => {
-        if (!rank || rank > 10 || rank <= 0) return { color: '#3b82f6', label: 'OPERATIVE' };
+    // Return null if no rank or if they haven't cracked the Top 10 Elite
+    if (!rank || rank > 10 || rank <= 0) return null;
 
-        switch (rank) {
-            case 1: return { color: '#fbbf24', label: 'MONARCH' }; 
-            case 2: return { color: '#ef4444', label: 'YONKO' };   
-            case 3: return { color: '#a855f7', label: 'KAGE' };    
-            case 4: return { color: '#3b82f6', label: 'SHOGUN' };  
-            case 5: return { color: '#ffffff', label: 'ESPADA 0' }; 
-            case 6: 
-            case 7: 
-            case 8: 
-            case 9: 
-            case 10: return { color: '#e5e7eb', label: `ESPADA ${rank - 5}` };
-            default: return { color: '#94a3b8', label: 'OPERATIVE' };
-        }
-    };
+    switch (rank) {
+        case 1: 
+            return { color: '#fbbf24', label: 'MONARCH' }; // Gold
+        case 2: 
+            return { color: '#ef4444', label: 'YONKO' };   // Crimson Red
+        case 3: 
+            return { color: '#a855f7', label: 'KAGE' };    // Shadow Purple
+        case 4: 
+            return { color: '#3b82f6', label: 'SHOGUN' };  // Steel Blue
+        case 5: 
+            return { color: '#ffffff', label: 'ESPADA 0' }; // Hollow White
+        case 6: 
+            return { color: '#e5e7eb', label: 'ESPADA 1' };
+        case 7: 
+            return { color: '#e5e7eb', label: 'ESPADA 2' };
+        case 8: 
+            return { color: '#e5e7eb', label: 'ESPADA 3' };
+        case 9: 
+            return { color: '#e5e7eb', label: 'ESPADA 4' };
+        case 10: 
+            return { color: '#e5e7eb', label: 'ESPADA 5' };
+        default: 
+            return { color: '#94a3b8', label: 'OPERATIVE' };
+    }
+};
 
     const tier = getAuraTier(author.previousRank);
 
     return (
-        <Animated.View entering={FadeInDown.duration(400)}>
+        <Animated.View entering={FadeInDown.duration(400)} layout={Layout.springify()}>
             <TouchableOpacity
                 onPress={() => router.push(`/author/${author._id}`)}
-                className={`mb-3 p-3 rounded-2xl border ${
+                className={`mb-3 p-4 rounded-3xl border ${
                     isDark ? "bg-[#0a0a0a] border-zinc-800" : "bg-white border-zinc-100 shadow-sm"
                 }`}
             >
                 <View className="flex-row items-center">
-                    {/* Profile Pic with Tier Ring */}
-                    <View 
-                        style={{ borderColor: tier.color }}
-                        className="w-14 h-14 rounded-full border-2 p-0.5 shadow-lg"
-                    >
+                    <View style={{ borderColor: tier.color }} className="w-16 h-16 rounded-full border-2 p-0.5 shadow-sm">
                         <Image
                             source={{ uri: author.profilePic?.url || "https://oreblogda.com/default-avatar.png" }}
                             className="w-full h-full rounded-full bg-zinc-800"
                         />
                     </View>
 
-                    <View className="flex-1 ml-3">
-                        <View className="flex-row items-center justify-between">
-                            <Text className={`font-black italic uppercase tracking-tighter text-base ${isDark ? 'text-white' : 'text-black'}`}>
+                    <View className="flex-1 ml-4 justify-center">
+                        <View className="flex-row items-center justify-between mb-1">
+                            <Text numberOfLines={1} className={`font-black italic uppercase tracking-tighter text-lg flex-1 mr-2 ${isDark ? 'text-white' : 'text-black'}`}>
                                 {author.username}
                             </Text>
-                            {/* Rank Badge */}
-                            <View style={{ backgroundColor: `${tier.color}20` }} className="px-2 py-0.5 rounded-md border" style={{ borderColor: `${tier.color}40`, backgroundColor: `${tier.color}10` }}>
-                                <Text style={{ color: tier.color }} className="text-[8px] font-black uppercase tracking-widest">
-                                    {tier.label}
-                                </Text>
+                            <View style={{ backgroundColor: `${tier.color}15`, borderColor: `${tier.color}40` }} className="px-2 py-0.5 rounded-md border">
+                                <Text style={{ color: tier.color }} className="text-[8px] font-black uppercase tracking-widest">{tier.label}</Text>
                             </View>
                         </View>
 
-                        {/* Stats Row - Compact & Otaku Style */}
-                        <View className="flex-row items-center mt-2 justify-between pr-2">
+                        {/* Flexible Description Space */}
+                        <Text numberOfLines={1} className="text-zinc-500 text-[11px] font-medium italic mb-2">
+                            {author.description || "No bio decrypted yet..."}
+                        </Text>
+
+                        <View className="flex-row items-center justify-between">
                             <View className="flex-row items-center gap-3">
                                 <View className="flex-row items-center">
                                     <Ionicons name="flame" size={12} color="#f97316" />
-                                    <Text className="text-[10px] font-bold ml-1 text-zinc-400">{author.streak || 0}</Text>
+                                    <Text className="text-[10px] font-bold ml-1 text-zinc-400">{author.consecutiveStreak || 0}</Text>
                                 </View>
                                 <View className="flex-row items-center">
-                                    <Ionicons name="document-text-outline" size={12} color="#3b82f6" />
+                                    <Ionicons name="document-text" size={12} color="#3b82f6" />
                                     <Text className="text-[10px] font-bold ml-1 text-zinc-400">{author.postsCount || 0}</Text>
                                 </View>
                             </View>
-                            
-                            <View className="flex-row items-center bg-zinc-800/50 px-2 py-0.5 rounded-full">
-                                <Text className="text-[9px] font-black text-zinc-500 uppercase tracking-tighter">
-                                    Aura: <Text className="text-blue-400">{author.aura || 0}</Text>
-                                </Text>
+                            <View className="bg-zinc-800/50 px-2 py-0.5 rounded-full border border-zinc-700/50">
+                                <Text className="text-[9px] font-black text-blue-400 uppercase">AURA: {author.weeklyAura || 0}</Text>
                             </View>
                         </View>
                     </View>
@@ -99,145 +108,251 @@ const AuthorCard = ({ author, isDark }) => {
     );
 };
 
-// --- MAIN SEARCH SCREEN ---
+// --- POST SEARCH CARD (Bigger, Image-focused) ---
+const PostSearchCard = ({ item, isDark }) => {
+    const router = useRouter();
+    return (
+        <Animated.View entering={FadeIn.duration(500)} layout={Layout.springify()}>
+            <TouchableOpacity 
+                onPress={() => router.push(`/post/${item._id}`)}
+                className={`mb-5 rounded-[2.5rem] border overflow-hidden ${isDark ? "bg-zinc-900/30 border-zinc-800" : "bg-gray-50 border-gray-100"}`}
+            >
+                {item.mediaUrl ? (
+                    <Image source={{ uri: item.mediaUrl }} className="w-full h-48 bg-zinc-800" resizeMode="cover" />
+                ) : (
+                    <View className="w-full h-2 bg-blue-600" /> 
+                )}
+                
+                <View className="p-5">
+                    <View className="flex-row justify-between items-center mb-3">
+                        <View className="bg-blue-600/20 border border-blue-500/30 px-3 py-1 rounded-full">
+                            <Text className="text-blue-400 text-[8px] font-black uppercase tracking-widest">{item.category}</Text>
+                        </View>
+                        <Text className="text-zinc-500 text-[10px] font-bold uppercase tracking-tighter">
+                            <Text className="text-zinc-600 font-normal">OP:</Text> {item.authorName}
+                        </Text>
+                    </View>
+                    
+                    <Text className={`font-black text-xl mb-2 leading-tight tracking-tight ${isDark ? 'text-white' : 'text-black'}`}>{item.title}</Text>
+                    <Text className="text-zinc-400 text-xs mb-5 italic" numberOfLines={2}>{item.message}</Text>
+                    
+                    {/* Analytics Row */}
+                    <View className="flex-row items-center justify-between pt-4 border-t border-zinc-800/50">
+                        <View className="flex-row items-center gap-5">
+                            <View className="flex-row items-center">
+                                <Ionicons name="heart-sharp" size={14} color="#ef4444" />
+                                <Text className="text-[11px] font-black text-zinc-400 ml-1.5">{item.likesCount || 0}</Text>
+                            </View>
+                            <View className="flex-row items-center">
+                                <Ionicons name="chatbubble-ellipses" size={14} color="#3b82f6" />
+                                <Text className="text-[11px] font-black text-zinc-400 ml-1.5">{item.commentsCount || 0}</Text>
+                            </View>
+                            <View className="flex-row items-center">
+                                <Ionicons name="eye" size={14} color="#10b981" />
+                                <Text className="text-[11px] font-black text-zinc-400 ml-1.5">{item.viewsCount || 0}</Text>
+                            </View>
+                        </View>
+                        <TouchableOpacity className="bg-zinc-800 p-2 rounded-full">
+                            <Ionicons name="share-social" size={14} color="white" />
+                        </TouchableOpacity>
+                    </View>
+                </View>
+            </TouchableOpacity>
+        </Animated.View>
+    );
+};
+
 const SearchScreen = () => {
     const router = useRouter();
     const isDark = true; 
     const [query, setQuery] = useState("");
     const [loading, setLoading] = useState(false);
+    const [loadingMore, setLoadingMore] = useState(false);
     const [results, setResults] = useState({ authors: [], posts: [] });
     const [activeTab, setActiveTab] = useState("all");
+    const [recentSearches, setRecentSearches] = useState([]);
+    const [trending] = useState(["Solo Leveling", "Genshin Build", "Aura Guide", "Top Operatives", "Winter 2026 Anime"]);
+    
+    const [page, setPage] = useState(1);
+    const [hasMore, setHasMore] = useState(true);
 
-    const performSearch = useCallback(async (text) => {
+    useEffect(() => {
+        loadRecentSearches();
+    }, []);
+
+    const loadRecentSearches = async () => {
+        const saved = await AsyncStorage.getItem('recent_searches');
+        if (saved) setRecentSearches(JSON.parse(saved));
+    };
+
+    const saveSearch = async (text) => {
+        if (!text || text.length < 2) return;
+        const updated = [text, ...recentSearches.filter(s => s !== text)].slice(0, 5);
+        setRecentSearches(updated);
+        await AsyncStorage.setItem('recent_searches', JSON.stringify(updated));
+    };
+
+    const performSearch = useCallback(async (text, pageNum = 1, shouldAppend = false) => {
         if (text.length < 2) {
             setResults({ authors: [], posts: [] });
             return;
         }
 
-        setLoading(true);
+        if (pageNum === 1) setLoading(true);
+        else setLoadingMore(true);
+
         try {
-            const response = await apiFetch(`https://oreblogda.com/api/search?q=${encodeURIComponent(text)}`);
+            const response = await apiFetch(`https://oreblogda.com/api/search?q=${encodeURIComponent(text)}&page=${pageNum}&limit=10`);
             const data = await response.json();
             
             if (response.ok) {
-                setResults({
-                    authors: data.users || [],
-                    posts: data.posts || []
-                });
+                setResults(prev => ({
+                    authors: shouldAppend ? prev.authors : (data.users || []),
+                    posts: shouldAppend ? [...prev.posts, ...data.posts] : (data.posts || [])
+                }));
+                setHasMore(data.pagination?.hasNextPage);
+                if (pageNum === 1) saveSearch(text);
             }
         } catch (error) {
             console.error("Search Error:", error);
         } finally {
             setLoading(false);
+            setLoadingMore(false);
         }
-    }, []);
+    }, [recentSearches]);
 
     useEffect(() => {
         const delayDebounceFn = setTimeout(() => {
-            performSearch(query);
+            setPage(1);
+            performSearch(query, 1, false);
         }, 400);
         return () => clearTimeout(delayDebounceFn);
-    }, [query, performSearch]);
+    }, [query]);
+
+    const handleLoadMore = () => {
+        if (!loadingMore && hasMore && query.length > 1) {
+            const nextPage = page + 1;
+            setPage(nextPage);
+            performSearch(query, nextPage, true);
+        }
+    };
 
     const renderItem = ({ item }) => {
-        if (item.username) {
-            return <AuthorCard author={item} isDark={isDark} />;
-        }
-        return (
-            <Animated.View entering={FadeIn.duration(400)}>
-                <TouchableOpacity 
-                    onPress={() => router.push(`/post/${item._id}`)}
-                    className={`mb-3 p-4 rounded-2xl border ${isDark ? "bg-zinc-900/40 border-zinc-800" : "bg-gray-50 border-gray-100"}`}
-                >
-                    <View className="flex-row justify-between items-start mb-1">
-                        <Text className="text-blue-500 text-[9px] font-black uppercase tracking-[0.2em]">{item.category}</Text>
-                        <Text className="text-zinc-600 text-[8px] font-mono">ID_{item._id.slice(-5).toUpperCase()}</Text>
-                    </View>
-                    <Text className={`font-bold text-base mb-1 ${isDark ? 'text-white' : 'text-black'}`}>{item.title}</Text>
-                    <Text className="text-zinc-500 text-xs italic" numberOfLines={2}>{item.message}</Text>
-                </TouchableOpacity>
-            </Animated.View>
-        );
+        if (item.username) return <AuthorCard author={item} isDark={isDark} />;
+        return <PostSearchCard item={item} isDark={isDark} />;
     };
 
     return (
         <SafeAreaView className={`flex-1 ${isDark ? "bg-[#050505]" : "bg-white"}`}>
-            {/* Header / Search Input */}
+            <StatusBar barStyle={isDark ? "light-content" : "dark-content"} />
+            
+            {/* Header Padding for Android */}
+            <View style={{ height: Platform.OS === 'android' ? StatusBar.currentHeight : 0 }} />
+
+            {/* Search Bar Container */}
             <View className="px-4 py-3 flex-row items-center">
                 <TouchableOpacity onPress={() => router.back()} className="pr-3">
-                    <Ionicons name="chevron-back" size={28} color={isDark ? "white" : "black"} />
+                    <Ionicons name="chevron-back" size={32} color={isDark ? "white" : "black"} />
                 </TouchableOpacity>
-                
-                <View className={`flex-1 flex-row items-center px-4 h-12 rounded-2xl border ${isDark ? 'bg-zinc-900 border-blue-900/30' : 'bg-gray-100 border-gray-200'}`}>
-                    <Ionicons name="search" size={20} color={isDark ? "#3b82f6" : "#71717a"} />
+                <View className={`flex-1 flex-row items-center px-4 h-14 rounded-2xl border ${isDark ? 'bg-zinc-900 border-blue-900/30' : 'bg-gray-50 border-gray-200'}`}>
+                    <Ionicons name="search" size={22} color="#3b82f6" />
                     <TextInput
-                        placeholder="SCAN_NEURAL_ARCHIVES..."
-                        placeholderTextColor={isDark ? "#3f3f46" : "#a1a1aa"}
+                        placeholder="SCAN_DATA_STREAM..."
+                        placeholderTextColor="#3f3f46"
                         className={`flex-1 ml-3 font-bold text-sm tracking-widest ${isDark ? 'text-white' : 'text-black'}`}
                         value={query}
                         onChangeText={setQuery}
                         autoFocus
-                        returnKeyType="search"
                     />
                     {query.length > 0 && (
                         <TouchableOpacity onPress={() => setQuery("")}>
-                            <Ionicons name="close-circle" size={20} color="#71717a" />
+                            <Ionicons name="close-circle" size={20} color="#52525b" />
                         </TouchableOpacity>
                     )}
                 </View>
             </View>
 
-            {/* Filter Tabs */}
-            <View className="flex-row px-4 py-2 gap-2">
-                {['all', 'authors', 'posts'].map((tab) => (
-                    <TouchableOpacity
-                        key={tab}
-                        onPress={() => setActiveTab(tab)}
-                        className={`px-5 py-1.5 rounded-xl border ${
-                            activeTab === tab 
-                            ? "bg-blue-600 border-blue-600 shadow-[0_0_15px_rgba(37,99,235,0.4)]" 
-                            : isDark ? "bg-transparent border-zinc-800" : "bg-transparent border-gray-200"
-                        }`}
-                    >
-                        <Text className={`text-[10px] font-black uppercase tracking-[0.2em] ${
-                            activeTab === tab ? "text-white" : "text-zinc-600"
-                        }`}>
-                            {tab}
-                        </Text>
-                    </TouchableOpacity>
-                ))}
-            </View>
-
-            {/* Results List */}
-            <View className="flex-1 px-4 mt-2">
-                {loading ? (
-                    <View className="flex-1 justify-center items-center">
-                        <ActivityIndicator color="#2563eb" size="large" />
-                        <Text className="text-blue-500 text-[10px] font-black mt-6 tracking-[0.4em] uppercase">
-                            Establishing_Neural_Link...
-                        </Text>
-                    </View>
-                ) : (
-                    <FlatList
-                        data={[
-                            ...(activeTab === 'all' || activeTab === 'authors' ? results.authors : []),
-                            ...(activeTab === 'all' || activeTab === 'posts' ? results.posts : [])
-                        ]}
-                        keyExtractor={(item) => item._id}
-                        renderItem={renderItem}
-                        ListEmptyComponent={() => (
-                            <View className="mt-20 items-center opacity-40">
-                                <Ionicons name="barcode-outline" size={60} color={isDark ? "#3f3f46" : "#e5e7eb"} />
-                                <Text className="text-zinc-500 font-black mt-4 text-center tracking-widest uppercase text-xs px-10">
-                                    {query.length < 2 ? "Awaiting input for data retrieval..." : "No matches found in the current sector."}
-                                </Text>
-                            </View>
+            {/* Empty State / Dashboard */}
+            {query.length < 2 ? (
+                <ScrollView className="flex-1 px-6">
+                    <View className="mt-8">
+                        <Text className="text-blue-500 font-black text-[10px] uppercase tracking-[0.4em] mb-6">Recent_Inquiries</Text>
+                        {recentSearches.length > 0 ? (
+                            recentSearches.map((s, i) => (
+                                <TouchableOpacity key={i} onPress={() => setQuery(s)} className="flex-row items-center mb-6">
+                                    <Ionicons name="refresh-circle-outline" size={20} color="#3f3f46" />
+                                    <Text className="text-zinc-400 ml-4 font-bold text-lg italic">{s}</Text>
+                                    <Ionicons name="arrow-forward" size={14} color="#18181b" className="ml-auto" />
+                                </TouchableOpacity>
+                            ))
+                        ) : (
+                            <Text className="text-zinc-700 italic text-sm mb-6">Clear history found.</Text>
                         )}
-                        showsVerticalScrollIndicator={false}
-                        contentContainerStyle={{ paddingBottom: 40 }}
-                    />
-                )}
-            </View>
+
+                        <Text className="text-purple-500 font-black text-[10px] uppercase tracking-[0.4em] mb-6 mt-4">Trending_Sectors</Text>
+                        <View className="flex-row flex-wrap gap-2">
+                            {trending.map((item, i) => (
+                                <TouchableOpacity 
+                                    key={i} 
+                                    onPress={() => setQuery(item)}
+                                    className="bg-zinc-900/50 border border-zinc-800 px-4 py-2 rounded-full"
+                                >
+                                    <Text className="text-zinc-400 font-bold text-xs uppercase italic"># {item}</Text>
+                                </TouchableOpacity>
+                            ))}
+                        </View>
+                    </View>
+                </ScrollView>
+            ) : (
+                <>
+                    {/* Filter Tabs */}
+                    <View className="flex-row px-4 py-3 gap-2">
+                        {['all', 'authors', 'posts'].map((tab) => (
+                            <TouchableOpacity
+                                key={tab}
+                                onPress={() => setActiveTab(tab)}
+                                className={`px-6 py-2 rounded-xl border ${activeTab === tab ? "bg-blue-600 border-blue-600 shadow-[0_0_15px_rgba(37,99,235,0.3)]" : "bg-transparent border-zinc-800"}`}
+                            >
+                                <Text className={`text-[10px] font-black uppercase tracking-widest ${activeTab === tab ? "text-white" : "text-zinc-600"}`}>{tab}</Text>
+                            </TouchableOpacity>
+                        ))}
+                    </View>
+
+                    {/* Results Feed */}
+                    <View className="flex-1 px-4 mt-2">
+                        {loading && page === 1 ? (
+                            <View className="flex-1 justify-center items-center">
+                                <ActivityIndicator color="#2563eb" size="large" />
+                                <Text className="text-blue-500 text-[10px] font-black mt-6 tracking-[0.5em] uppercase animate-pulse">Establishing_Link...</Text>
+                            </View>
+                        ) : (
+                            <FlatList
+                                data={[
+                                    ...(activeTab === 'all' || activeTab === 'authors' ? results.authors : []),
+                                    ...(activeTab === 'all' || activeTab === 'posts' ? results.posts : [])
+                                ]}
+                                keyExtractor={(item) => item._id}
+                                renderItem={renderItem}
+                                onEndReached={handleLoadMore}
+                                onEndReachedThreshold={0.5}
+                                ListFooterComponent={() => loadingMore ? (
+                                    <View className="py-6">
+                                        <ActivityIndicator color="#2563eb" />
+                                    </View>
+                                ) : null}
+                                ListEmptyComponent={() => (
+                                    <View className="mt-20 items-center opacity-40">
+                                        <Ionicons name="scan-outline" size={80} color="#3f3f46" />
+                                        <Text className="text-zinc-500 font-black mt-4 text-center tracking-widest uppercase text-xs">No matching frequencies detected.</Text>
+                                    </View>
+                                )}
+                                showsVerticalScrollIndicator={false}
+                                contentContainerStyle={{ paddingBottom: 60 }}
+                            />
+                        )}
+                    </View>
+                </>
+            )}
         </SafeAreaView>
     );
 };
