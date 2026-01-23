@@ -9,17 +9,29 @@ import { SyncLoading } from "../../../components/SyncLoading";
 import { Text } from "../../../components/Text";
 import apiFetch from "../../../utils/apiFetch"
 
-
 const API_BASE = "https://oreblogda.com/api"
 
-// 🔹 AURA TIER LOGIC (Synced with Profile)
+// 🔹 AURA TIER LOGIC (Fully Synced)
 const getAuraTier = (rank) => {
-    if (!rank || rank > 10) return { color: '#3b82f6', label: 'ACTIVE' };
+    const AURA_PURPLE = '#a78bfa'; 
+    const MONARCH_GOLD = '#fbbf24'; 
+    const YONKO_BLUE = '#60a5fa';   
+
+    if (!rank || rank > 10 || rank <= 0) {
+        return { color: '#3b82f6', label: 'ACTIVE', icon: 'radar' };
+    }
+
     switch (rank) {
-        case 1: return { color: '#fbbf24', label: 'PROTAGONIST', icon: 'crown' };
-        case 2: return { color: '#60a5fa', label: 'RIVAL', icon: 'lightning-bolt' };
-        case 3: return { color: '#cd7f32', label: 'SENSEI', icon: 'auto-fix' };
-        case 4: return { color: '#a78bfa', label: 'ELITE', icon: 'shield-star' };
+        case 1: return { color: MONARCH_GOLD, label: 'MONARCH', icon: 'crown' };
+        case 2: return { color: YONKO_BLUE, label: 'YONKO', icon: 'flare' };
+        case 3: return { color: AURA_PURPLE, label: 'KAGE', icon: 'moon' };
+        case 4: return { color: AURA_PURPLE, label: 'SHOGUN', icon: 'shield-star' };
+        case 5: return { color: '#ffffff', label: 'ESPADA 0', icon: 'skull' };
+        case 6: return { color: '#e5e7eb', label: 'ESPADA 1', icon: 'sword-cross' };
+        case 7: return { color: '#e5e7eb', label: 'ESPADA 2', icon: 'sword-cross' };
+        case 8: return { color: '#e5e7eb', label: 'ESPADA 3', icon: 'sword-cross' };
+        case 9: return { color: '#e5e7eb', label: 'ESPADA 4', icon: 'sword-cross' };
+        case 10: return { color: '#e5e7eb', label: 'ESPADA 5', icon: 'sword-cross' };
         default: return { color: '#34d399', label: 'VANGUARD', icon: 'shield-check' };
     }
 };
@@ -36,16 +48,30 @@ export default function AuthorPage() {
 
   const scrollRef = useRef(null);
   const pulseAnim = useRef(new Animated.Value(1)).current;
+  const rotationAnim = useRef(new Animated.Value(0)).current;
 
-  // 🔹 Pulse Animation for Top Ranks
   useEffect(() => {
     Animated.loop(
       Animated.sequence([
-        Animated.timing(pulseAnim, { toValue: 1.1, duration: 2000, useNativeDriver: true }),
-        Animated.timing(pulseAnim, { toValue: 1, duration: 2000, useNativeDriver: true }),
+        Animated.timing(pulseAnim, { toValue: 1.15, duration: 2500, useNativeDriver: true }),
+        Animated.timing(pulseAnim, { toValue: 1, duration: 2500, useNativeDriver: true }),
       ])
     ).start();
+
+    Animated.loop(
+      Animated.timing(rotationAnim, {
+        toValue: 1,
+        duration: 15000,
+        easing: Easing.linear,
+        useNativeDriver: true
+      })
+    ).start();
   }, []);
+
+  const spin = rotationAnim.interpolate({
+    inputRange: [0, 1],
+    outputRange: ['0deg', '360deg']
+  });
 
   useEffect(() => {
     const sub = DeviceEventEmitter.addListener("doScrollToTop", () => {
@@ -109,16 +135,14 @@ export default function AuthorPage() {
     const nextMilestone = count > 200 ? 500 : count > 150 ? 200 : count > 100 ? 150 : count > 50 ? 100 : count > 25 ? 50 : 25;
     const progress = Math.min((count / nextMilestone) * 100, 100);
 
-    // 🔹 Aura Rank Data
     const auraRank = author?.previousRank || 0;
     const aura = getAuraTier(auraRank);
 
-    // 🔹 Badge Shape Logic
     const getBadgeStyle = () => {
-        if (auraRank === 1) return { borderRadius: 45, transform: [{ rotate: '45deg' }] }; // Diamond
-        if (auraRank === 2) return { borderRadius: 60 }; // Octagon-ish
-        if (auraRank === 3) return { borderRadius: 35 }; // Squircle
-        return { borderRadius: 100 }; // Normal
+        if (auraRank === 1) return { borderRadius: 45, transform: [{ rotate: '45deg' }] };
+        if (auraRank === 2) return { borderRadius: 60 };
+        if (auraRank === 3) return { borderRadius: 35 };
+        return { borderRadius: 100 };
     };
 
     return (
@@ -128,14 +152,35 @@ export default function AuthorPage() {
             className="relative p-6 bg-white dark:bg-[#0a0a0a] border border-gray-100 dark:border-gray-800 overflow-hidden shadow-2xl"
             style={{ borderRadius: 40 }}
           >
-            {/* Background Decor */}
-            <View className="absolute -top-10 -right-10 w-40 h-40 bg-blue-500/5 rounded-full blur-3xl" />
+            {/* 🔹 Rank Glow Background */}
+            <View 
+                className="absolute -top-10 -right-10 w-60 h-60 opacity-10 rounded-full blur-3xl" 
+                style={{ backgroundColor: aura.color }}
+            />
             
             <View className="flex-col items-center gap-6">
               <View className="relative items-center justify-center">
                 
-                {/* 🔹 RANK 1-3 SPECIAL SHAPE BADGE FRAME */}
-                {auraRank > 0 && auraRank <= 3 && (
+                {/* 🔹 ROTATING OUTER FRAME (Monarch & Yonko only) */}
+                {auraRank > 0 && auraRank <= 2 && (
+                    <Animated.View 
+                        style={[
+                            getBadgeStyle(),
+                            { 
+                                position: 'absolute', 
+                                width: 170, 
+                                height: 170, 
+                                borderWidth: 1, 
+                                borderColor: aura.color,
+                                borderStyle: 'dashed',
+                                transform: [...getBadgeStyle().transform || [], { rotate: spin }]
+                            }
+                        ]}
+                    />
+                )}
+
+                {/* 🔹 PULSING GLOW FRAME */}
+                {auraRank > 0 && (
                     <Animated.View 
                         style={[
                             getBadgeStyle(),
@@ -145,15 +190,14 @@ export default function AuthorPage() {
                                 height: 155, 
                                 borderWidth: 3, 
                                 borderColor: aura.color,
-                                borderStyle: auraRank === 1 ? 'solid' : 'dashed',
-                                opacity: 0.6,
+                                borderStyle: auraRank <= 3 ? 'solid' : 'dashed',
+                                opacity: 0.4,
                                 transform: [...getBadgeStyle().transform || [], { scale: pulseAnim }]
                             }
                         ]}
                     />
                 )}
 
-                {/* Profile Image with Dynamic Border */}
                 <View 
                     style={[getBadgeStyle(), { overflow: 'hidden', borderWidth: 4, borderColor: auraRank > 0 ? aura.color : '#eee' }]}
                     className="w-32 h-32 bg-gray-900"
@@ -164,15 +208,19 @@ export default function AuthorPage() {
                     />
                 </View>
 
-                {/* Rank Tag Overlay */}
                 {auraRank > 0 && (
                     <View 
                         style={{ backgroundColor: aura.color }}
                         className="absolute -bottom-3 px-4 py-1 rounded-full border-2 border-white dark:border-black shadow-lg"
                     >
                         <View className="flex-row items-center gap-1">
-                            <MaterialCommunityIcons name={aura.icon} size={10} color="white" />
-                            <Text className="text-[9px] font-black uppercase text-white tracking-widest">{aura.label} #{auraRank}</Text>
+                            <MaterialCommunityIcons name={aura.icon} size={10} color={auraRank === 5 ? "black" : "white"} />
+                            <Text 
+                              style={{ color: auraRank === 5 ? "black" : "white" }} 
+                              className="text-[9px] font-black uppercase tracking-widest"
+                            >
+                                {aura.label} #{auraRank}
+                            </Text>
                         </View>
                     </View>
                 )}
@@ -180,7 +228,10 @@ export default function AuthorPage() {
 
               <View className="items-center w-full mt-2">
                 <View className="flex-row items-center gap-2 mb-2">
-                    <Text className="text-4xl font-black italic tracking-tighter uppercase text-gray-900 dark:text-white text-center">
+                    <Text 
+                      style={{ textShadowColor: aura.color, textShadowOffset: {width: 0, height: 0}, textShadowRadius: auraRank <= 2 ? 10 : 0 }}
+                      className="text-4xl font-black italic tracking-tighter uppercase text-gray-900 dark:text-white text-center"
+                    >
                         {author.username}
                     </Text>
                     <View className="flex-row items-center bg-orange-500/10 px-2 py-1 rounded-lg">
@@ -193,11 +244,10 @@ export default function AuthorPage() {
                   "{author.description || "This operator is a ghost in the machine..."}"
                 </Text>
 
-                {/* Stats Bar */}
                 <View className="flex-row gap-8 mt-6 border-y border-gray-100 dark:border-gray-800 w-full py-4 justify-center">
                     <View className="items-center">
                         <Text className="text-[10px] font-black text-gray-400 uppercase tracking-widest">Aura</Text>
-                        <Text className="text-lg font-black dark:text-white" style={{ color: aura.color }}>+{author.weeklyAura || 0}</Text>
+                        <Text className="text-lg font-black" style={{ color: aura.color }}>+{author.weeklyAura || 0}</Text>
                     </View>
                     <View className="items-center">
                         <Text className="text-[10px] font-black text-gray-400 uppercase tracking-widest">Logs</Text>
@@ -205,7 +255,7 @@ export default function AuthorPage() {
                     </View>
                     <View className="items-center">
                         <Text className="text-[10px] font-black text-gray-400 uppercase tracking-widest">Rank</Text>
-                        <Text className="text-lg font-black dark:text-white">#{auraRank || '??'}</Text>
+                        <Text className="text-lg font-black dark:text-white" style={{ color: auraRank > 0 ? aura.color : undefined }}>#{auraRank || '??'}</Text>
                     </View>
                 </View>
 
@@ -214,7 +264,7 @@ export default function AuthorPage() {
                     <View className="flex-row items-center gap-2">
                       <Text className="text-2xl">{rankIcon}</Text>
                       <View>
-                        <Text className="text-[8px] font-mono uppercase tracking-[0.2em] text-blue-500/60 leading-none mb-1">Writer_Class</Text>
+                        <Text style={{ color: aura.color }} className="text-[8px] font-mono uppercase tracking-[0.2em] leading-none mb-1">Writer_Class</Text>
                         <Text className="text-sm font-black uppercase tracking-tighter dark:text-white">
                           {rankTitle}
                         </Text>
@@ -227,8 +277,8 @@ export default function AuthorPage() {
 
                   <View className="h-1.5 w-full bg-gray-100 dark:bg-gray-800 rounded-full overflow-hidden">
                     <View 
-                      style={{ width: `${progress}%` }}
-                      className="h-full bg-blue-600 shadow-lg shadow-blue-500"
+                      style={{ width: `${progress}%`, backgroundColor: aura.color }}
+                      className="h-full shadow-lg shadow-blue-500"
                     />
                   </View>
                 </View>
@@ -239,7 +289,7 @@ export default function AuthorPage() {
 
         <View className="flex-row items-center gap-4 mt-10 mb-4 px-2">
           <Text className="text-xl font-black italic uppercase tracking-tighter text-gray-900 dark:text-white">
-            Mission <Text className="text-blue-600">History</Text>
+            Mission <Text style={{ color: aura.color }}>History</Text>
           </Text>
           <View className="h-[1px] flex-1 bg-gray-100 dark:bg-gray-800" />
         </View>
