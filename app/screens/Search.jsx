@@ -24,34 +24,37 @@ const AuthorCard = ({ author, isDark }) => {
     const router = useRouter();
     
     const getAuraTier = (rank) => {
-    // Return null if no rank or if they haven't cracked the Top 10 Elite
-    if (!rank || rank > 10 || rank <= 0) return null;
-
-    switch (rank) {
-        case 1: 
-            return { color: '#fbbf24', label: 'MONARCH' }; // Gold
-        case 2: 
-            return { color: '#ef4444', label: 'YONKO' };   // Crimson Red
-        case 3: 
-            return { color: '#a855f7', label: 'KAGE' };    // Shadow Purple
-        case 4: 
-            return { color: '#3b82f6', label: 'SHOGUN' };  // Steel Blue
-        case 5: 
-            return { color: '#ffffff', label: 'ESPADA 0' }; // Hollow White
-        case 6: 
-            return { color: '#e5e7eb', label: 'ESPADA 1' };
-        case 7: 
-            return { color: '#e5e7eb', label: 'ESPADA 2' };
-        case 8: 
-            return { color: '#e5e7eb', label: 'ESPADA 3' };
-        case 9: 
-            return { color: '#e5e7eb', label: 'ESPADA 4' };
-        case 10: 
-            return { color: '#e5e7eb', label: 'ESPADA 5' };
-        default: 
+        // FIXED: Instead of returning null, we return a default "OPERATIVE" state
+        // This prevents the app from crashing when trying to read tier.color
+        if (!rank || rank > 10 || rank <= 0) {
             return { color: '#94a3b8', label: 'OPERATIVE' };
-    }
-};
+        }
+
+        switch (rank) {
+            case 1: 
+                return { color: '#fbbf24', label: 'MONARCH' }; // Gold
+            case 2: 
+                return { color: '#ef4444', label: 'YONKO' };   // Crimson Red
+            case 3: 
+                return { color: '#a855f7', label: 'KAGE' };    // Shadow Purple
+            case 4: 
+                return { color: '#3b82f6', label: 'SHOGUN' };  // Steel Blue
+            case 5: 
+                return { color: '#ffffff', label: 'ESPADA 0' }; // Hollow White
+            case 6: 
+                return { color: '#e5e7eb', label: 'ESPADA 1' };
+            case 7: 
+                return { color: '#e5e7eb', label: 'ESPADA 2' };
+            case 8: 
+                return { color: '#e5e7eb', label: 'ESPADA 3' };
+            case 9: 
+                return { color: '#e5e7eb', label: 'ESPADA 4' };
+            case 10: 
+                return { color: '#e5e7eb', label: 'ESPADA 5' };
+            default: 
+                return { color: '#94a3b8', label: 'OPERATIVE' };
+        }
+    };
 
     const tier = getAuraTier(author.previousRank);
 
@@ -108,7 +111,7 @@ const AuthorCard = ({ author, isDark }) => {
     );
 };
 
-// --- POST SEARCH CARD (Bigger, Image-focused) ---
+// --- POST SEARCH CARD ---
 const PostSearchCard = ({ item, isDark }) => {
     const router = useRouter();
     return (
@@ -136,7 +139,6 @@ const PostSearchCard = ({ item, isDark }) => {
                     <Text className={`font-black text-xl mb-2 leading-tight tracking-tight ${isDark ? 'text-white' : 'text-black'}`}>{item.title}</Text>
                     <Text className="text-zinc-400 text-xs mb-5 italic" numberOfLines={2}>{item.message}</Text>
                     
-                    {/* Analytics Row */}
                     <View className="flex-row items-center justify-between pt-4 border-t border-zinc-800/50">
                         <View className="flex-row items-center gap-5">
                             <View className="flex-row items-center">
@@ -162,6 +164,7 @@ const PostSearchCard = ({ item, isDark }) => {
     );
 };
 
+// --- MAIN SEARCH SCREEN ---
 const SearchScreen = () => {
     const router = useRouter();
     const isDark = true; 
@@ -246,10 +249,8 @@ const SearchScreen = () => {
         <SafeAreaView className={`flex-1 ${isDark ? "bg-[#050505]" : "bg-white"}`}>
             <StatusBar barStyle={isDark ? "light-content" : "dark-content"} />
             
-            {/* Header Padding for Android */}
             <View style={{ height: Platform.OS === 'android' ? StatusBar.currentHeight : 0 }} />
 
-            {/* Search Bar Container */}
             <View className="px-4 py-3 flex-row items-center">
                 <TouchableOpacity onPress={() => router.back()} className="pr-3">
                     <Ionicons name="chevron-back" size={32} color={isDark ? "white" : "black"} />
@@ -272,7 +273,6 @@ const SearchScreen = () => {
                 </View>
             </View>
 
-            {/* Empty State / Dashboard */}
             {query.length < 2 ? (
                 <ScrollView className="flex-1 px-6">
                     <View className="mt-8">
@@ -305,7 +305,6 @@ const SearchScreen = () => {
                 </ScrollView>
             ) : (
                 <>
-                    {/* Filter Tabs */}
                     <View className="flex-row px-4 py-3 gap-2">
                         {['all', 'authors', 'posts'].map((tab) => (
                             <TouchableOpacity
@@ -318,7 +317,6 @@ const SearchScreen = () => {
                         ))}
                     </View>
 
-                    {/* Results Feed */}
                     <View className="flex-1 px-4 mt-2">
                         {loading && page === 1 ? (
                             <View className="flex-1 justify-center items-center">
