@@ -387,37 +387,108 @@ export default function PostCard({ post, setPosts, isFeed, hideMedia, similarPos
         });
     }, [post.message, isFeed, isDark, similarPosts]);
 
-    const renderMediaContent = () => {
-        if (!post?.mediaUrl) return null;
-        const lowerUrl = post.mediaUrl.toLowerCase();
-        const isYouTube = lowerUrl.includes("youtube.com") || lowerUrl.includes("youtu.be");
-        const isTikTok = lowerUrl.includes("tiktok.com");
-        const isDirectVideo = post.mediaType?.startsWith("video") || lowerUrl.match(/\.(mp4|mov|m4v)$/i);
-        const mediaTypeLabel = (isYouTube || isTikTok || isDirectVideo) ? "video" : "image";
+   const renderMediaContent = () => {
+    if (!post?.mediaUrl) return null;
+    const lowerUrl = post.mediaUrl.toLowerCase();
+    const isYouTube = lowerUrl.includes("youtube.com") || lowerUrl.includes("youtu.be");
+    const isTikTok = lowerUrl.includes("tiktok.com");
+    const isDirectVideo = post.mediaType?.startsWith("video") || lowerUrl.match(/\.(mp4|mov|m4v)$/i);
+    const mediaTypeLabel = (isYouTube || isTikTok || isDirectVideo) ? "video" : "image";
 
-        if (!loadMedia) return <View className="my-2"><MediaPlaceholder height={similarPosts ? 160 : 250} type={mediaTypeLabel} onPress={() => setLoadMedia(true)}/></View>;
+    // 🔄 LOADING ANIMATION (Requirement met)
+    if (!loadMedia) {
+        return (
+            <View className="my-2">
+                <MediaPlaceholder 
+                    height={similarPosts ? 160 : 250} 
+                    type={mediaTypeLabel} 
+                    onPress={() => setLoadMedia(true)}
+                />
+            </View>
+        );
+    }
 
-        const glassStyle = { borderWidth: 1, borderColor: 'rgba(96, 165, 250, 0.2)', shadowColor: "#60a5fa", shadowOffset: { width: 0, height: 0 }, shadowOpacity: 0.3, shadowRadius: 10 };
-
-        if (isYouTube) {
-            const getYouTubeID = (url) => {
-                const regex = /(?:youtube\.com\/(?:[^\/]+\/.+\/|(?:v|e(?:mbed)?|shorts)\/|.*[?&]v=)|youtu\.be\/)([^"&?\/\s]{11})/;
-                const match = url.match(regex);
-                return match ? match[1] : null;
-            };
-            return <View className="w-full rounded-2xl overflow-hidden my-2 bg-black" style={glassStyle}>{!videoReady && <MediaSkeleton height={similarPosts ? 160 : 210} />}<YoutubePlayer height={similarPosts ? 160 : videoReady ? 210 : 0} play={false} videoId={getYouTubeID(post.mediaUrl)} onReady={() => setVideoReady(true)} webViewProps={{ allowsInlineMediaPlayback: true, androidLayerType: "hardware" }}/></View>;
-        }
-
-        if (isTikTok) {
-            const getTikTokEmbedUrl = (url) => {
-                const match = url.match(/\/video\/(\d+)/);
-                return match?.[1] ? `https://www.tiktok.com/embed/${match[1]}` : url;
-            };
-            return <View className="w-full rounded-2xl overflow-hidden my-2 bg-black" style={[{ height: similarPosts ? 200 : 600 }, glassStyle]}>{!tikTokReady && <MediaSkeleton height={similarPosts ? 200 : 600} />}<WebView source={{ uri: getTikTokEmbedUrl(post.mediaUrl) }} userAgent="Mozilla/5.0 (iPhone; CPU iPhone OS 15_0 like Mac OS X)" onLoadEnd={() => setTikTokReady(true)} scrollEnabled={false} allowsFullscreenVideo javaScriptEnabled domStorageEnabled allowsInlineMediaPlayback={true} style={{ flex: 1, opacity: tikTokReady ? 1 : 0 }}/></View>;
-        }
-
-        return <Pressable onPress={() => !isDirectVideo && setLightbox({ open: true, src: post.mediaUrl, type: "image" })} className="my-2 rounded-2xl overflow-hidden shadow-sm" style={[similarPosts ? { height: 200 } : null, glassStyle]}>{!imageReady && !isDirectVideo && <MediaSkeleton height={300} />}{!videoReady && isDirectVideo && <MediaSkeleton height={250} />}{isDirectVideo ? <Video source={{ uri: post.mediaUrl }} style={{ width: "100%", height: videoReady ? 250 : 0 }} useNativeControls resizeMode="cover" onLoad={() => setVideoReady(true)}/> : <Image source={{ uri: post.mediaUrl }} style={{ width: "100%", height: imageReady ? 300 : 0 }} resizeMode="cover" onLoad={() => setImageReady(true)}/>}</Pressable>;
+    const glassStyle = { 
+        borderWidth: 1, 
+        borderColor: 'rgba(96, 165, 250, 0.2)', 
+        shadowColor: "#60a5fa", 
+        shadowOffset: { width: 0, height: 0 }, 
+        shadowOpacity: 0.3, 
+        shadowRadius: 10 
     };
+
+    if (isYouTube) {
+        const getYouTubeID = (url) => {
+            const regex = /(?:youtube\.com\/(?:[^\/]+\/.+\/|(?:v|e(?:mbed)?|shorts)\/|.*[?&]v=)|youtu\.be\/)([^"&?\/\s]{11})/;
+            const match = url.match(regex);
+            return match ? match[1] : null;
+        };
+        return (
+            <View className="w-full rounded-2xl overflow-hidden my-2 bg-black" style={glassStyle}>
+                {!videoReady && <MediaSkeleton height={similarPosts ? 160 : 210} />}
+                <YoutubePlayer 
+                    height={similarPosts ? 160 : videoReady ? 210 : 0} 
+                    play={false} 
+                    videoId={getYouTubeID(post.mediaUrl)} 
+                    onReady={() => setVideoReady(true)} 
+                    webViewProps={{ allowsInlineMediaPlayback: true, androidLayerType: "hardware" }}
+                />
+            </View>
+        );
+    }
+
+    if (isTikTok) {
+        const getTikTokEmbedUrl = (url) => {
+            const match = url.match(/\/video\/(\d+)/);
+            return match?.[1] ? `https://www.tiktok.com/embed/${match[1]}` : url;
+        };
+        return (
+            <View className="w-full rounded-2xl overflow-hidden my-2 bg-black" style={[{ height: similarPosts ? 200 : 600 }, glassStyle]}>
+                {!tikTokReady && <MediaSkeleton height={similarPosts ? 200 : 600} />}
+                <WebView 
+                    source={{ uri: getTikTokEmbedUrl(post.mediaUrl) }} 
+                    userAgent="Mozilla/5.0 (iPhone; CPU iPhone OS 15_0 like Mac OS X)" 
+                    onLoadEnd={() => setTikTokReady(true)} 
+                    scrollEnabled={false} 
+                    allowsFullscreenVideo 
+                    javaScriptEnabled 
+                    domStorageEnabled 
+                    allowsInlineMediaPlayback={true} 
+                    style={{ flex: 1, opacity: tikTokReady ? 1 : 0 }}
+                />
+            </View>
+        );
+    }
+
+    return (
+        <Pressable 
+            onPress={() => setLightbox({ open: true, src: post.mediaUrl, type: isDirectVideo ? "video" : "image" })} 
+            className="my-2 rounded-2xl overflow-hidden shadow-sm" 
+            style={[similarPosts ? { height: 200 } : null, glassStyle]}
+        >
+            {!imageReady && !isDirectVideo && <MediaSkeleton height={300} />}
+            {!videoReady && isDirectVideo && <MediaSkeleton height={250} />}
+            
+            {isDirectVideo ? (
+                <Video 
+                    source={{ uri: post.mediaUrl }} 
+                    style={{ width: "100%", height: videoReady ? 250 : 0 }} 
+                    useNativeControls 
+                    resizeMode="cover" 
+                    isMuted={true}
+                    onLoad={() => setVideoReady(true)}
+                />
+            ) : (
+                <Image 
+                    source={{ uri: post.mediaUrl }} 
+                    style={{ width: "100%", height: imageReady ? 300 : 0 }} 
+                    resizeMode="cover" 
+                    onLoad={() => setImageReady(true)}
+                />
+            )}
+        </Pressable>
+    );
+};
 
     // 🔹 SPECIAL UI LOGIC
     const aura = getAuraVisuals(author.rank);
@@ -554,32 +625,49 @@ export default function PostCard({ post, setPosts, isFeed, hideMedia, similarPos
                 )}
             </View>
 
-            <Modal visible={lightbox.open} transparent animationType="fade">
-                <GestureHandlerRootView style={{ flex: 1, backgroundColor: 'rgba(0,0,0,0.95)' }}>
-                    <Pressable onPress={closeLightbox} className="absolute top-14 right-6 p-3 bg-white/10 rounded-full z-[100]">
-                        <Feather name="x" size={24} color="white" />
-                    </Pressable>
-                    <View className="flex-1 justify-center items-center">
-                        {lightbox.type === "image" ? (
-                            <GestureDetector gesture={composed}>
-                                <Animated.Image
-                                    source={{ uri: lightbox.src }}
-                                    style={[{ width: SCREEN_WIDTH, height: SCREEN_HEIGHT * 0.8 }, animatedStyle]}
-                                    resizeMode="contain"
-                                />
-                            </GestureDetector>
-                        ) : (
-                            <Video
-                                source={{ uri: lightbox.src }}
-                                className="w-full h-[80%]"
-                                useNativeControls
-                                resizeMode="contain"
-                                shouldPlay
-                            />
-                        )}
-                    </View>
-                </GestureHandlerRootView>
-            </Modal>
+            <Modal 
+    visible={lightbox.open} 
+    transparent 
+    animationType="fade"
+    supportedOrientations={['portrait', 'landscape']} // Allows the modal to rotate
+>
+    <GestureHandlerRootView style={{ flex: 1, backgroundColor: 'rgba(0,0,0,0.95)' }}>
+        {/* Close Button - Hidden during landscape for better immersion */}
+        <Pressable 
+            onPress={closeLightbox} 
+            className="absolute top-14 right-6 p-3 bg-white/10 rounded-full z-[100]"
+        >
+            <Feather name="x" size={24} color="white" />
+        </Pressable>
+
+        <View className="flex-1 justify-center items-center">
+            {lightbox.type === "image" ? (
+                <GestureDetector gesture={composed}>
+                    <Animated.Image
+                        source={{ uri: lightbox.src }}
+                        style={[{ width: SCREEN_WIDTH, height: SCREEN_HEIGHT * 0.8 }, animatedStyle]}
+                        resizeMode="contain"
+                    />
+                </GestureDetector>
+            ) : (
+                <Video
+                    source={{ uri: lightbox.src }}
+                    className="w-full h-full" // Use full height to allow rotation scaling
+                    useNativeControls
+                    resizeMode="contain"
+                    shouldPlay
+                    allowsExternalPlayback
+                    // This is key for the 2026 expo-av/native video experience
+                    onFullscreenUpdate={({fullscreenUpdate}) => {
+                        if (fullscreenUpdate === Video.FULLSCREEN_UPDATE_PLAYER_DID_DISMISS) {
+                            closeLightbox();
+                        }
+                    }}
+                />
+            )}
+        </View>
+    </GestureHandlerRootView>
+</Modal>
         </View>
     );
 }
