@@ -742,13 +742,15 @@ export default function AuthorDiaryDashboard() {
                             </View>
                             
                             {/* Show Rejection Reason */}
-                            { post.rejectionReason && (
-                                <View className="mt-2 bg-red-500/5 p-2 rounded-lg border border-red-500/10">
-                                    <Text className="text-[10px] text-red-400 font-medium italic">
-                                        REASON: {post.rejectionReason}
-                                    </Text>
-                                </View>
-                            )}
+{post.rejectionReason && (
+    <View className={`mt-2 p-2 rounded-lg border ${post.status === 'approved' ? 'bg-green-500/5 border-green-500/10' : 'bg-red-500/5 border-red-500/10'}`}>
+        <Text className={`text-[10px] font-medium italic ${post.status === 'approved' ? 'text-green-400' : 'text-red-400'}`}>
+            REASON: {post.rejectionReason}
+        </Text>
+    </View>
+)}
+
+
                         </View>
                         
                         <View className="items-end">
