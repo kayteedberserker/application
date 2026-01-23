@@ -118,33 +118,45 @@ const TopBar = ({ isDark }) => {
             style={{ zIndex: 100 }}
         >
             <View
-                className={`flex-row items-center justify-between px-4 h-16 ${isDark
+                className={`flex-row items-center justify-between px-3 h-16 ${isDark
                     ? "bg-[#050505] border-b border-blue-900/30"
                     : "bg-white border-b border-gray-200"
                     }`}
             >
-                {/* LOGO */}
+                {/* LOGO - Adjusted width slightly to make space */}
                 <Image
                     source={logoSrc}
-                    style={{ width: 120, height: 35, resizeMode: "contain" }}
+                    style={{ width: 110, height: 32, resizeMode: "contain" }}
                 />
 
-                {/* RIGHT SIDE TOOLS */}
-                <View className="flex-row items-center gap-3">
+                {/* RIGHT SIDE TOOLS - Reduced gap to fit search */}
+                <View className="flex-row items-center gap-2">
                     
                     {/* 🏆 LEADERBOARD */}
                     <TouchableOpacity
                         onPress={() => router.push("/screens/Leaderboard")}
-                        className={`p-2 rounded-xl ${isDark ? "bg-blue-500/10 border border-blue-500/20" : "bg-gray-100"}`}
+                        className={`p-1.5 rounded-xl ${isDark ? "bg-blue-500/10 border border-blue-500/20" : "bg-gray-100"}`}
                     >
                         <Ionicons
                             name="trophy-outline"
-                            size={20}
+                            size={18}
                             color={isDark ? "#60a5fa" : "#111827"}
                         />
                     </TouchableOpacity>
 
-                    {/* 🔥 STREAK / 🏥 RESTORE HUD (Always visible now) */}
+                    {/* 🔍 SEARCH - NEW ICON */}
+                    <TouchableOpacity
+                        onPress={() => router.push("/screens/Search")}
+                        className={`p-1.5 rounded-xl ${isDark ? "bg-blue-500/10 border border-blue-500/20" : "bg-gray-100"}`}
+                    >
+                        <Ionicons
+                            name="search-outline"
+                            size={18}
+                            color={isDark ? "#60a5fa" : "#111827"}
+                        />
+                    </TouchableOpacity>
+
+                    {/* 🔥 STREAK / 🏥 RESTORE HUD */}
                     {!loading && (
                         <Animated.View entering={FadeInRight}>
                             <TouchableOpacity
@@ -154,7 +166,7 @@ const TopBar = ({ isDark }) => {
                             >
                                 <Animated.View 
                                     style={urgentButtonStyle}
-                                    className={`px-3 py-1.5 rounded-full flex-row items-center gap-2 border ${
+                                    className={`px-2 py-1.5 rounded-full flex-row items-center gap-1.5 border ${
                                         showRestoreUI 
                                         ? "bg-red-950/40 border-red-500/50" 
                                         : isZeroStreak
@@ -169,7 +181,7 @@ const TopBar = ({ isDark }) => {
                                             <Animated.View style={healthyFlameStyle}>
                                                 <Ionicons
                                                     name="flame"
-                                                    size={16}
+                                                    size={14}
                                                     color={
                                                         showRestoreUI ? "#ef4444" : 
                                                         isZeroStreak ? "#9ca3af" : "#f97316"
@@ -178,15 +190,15 @@ const TopBar = ({ isDark }) => {
                                                 />
                                             </Animated.View>
                                             {showRestoreUI && (
-                                                <View style={{ marginLeft: -6, marginTop: -8 }}>
-                                                    <Ionicons name="add-circle" size={12} color="#ef4444" />
+                                                <View style={{ marginLeft: -5, marginTop: -6 }}>
+                                                    <Ionicons name="add-circle" size={10} color="#ef4444" />
                                                 </View>
                                             )}
                                         </View>
                                     )}
                                     
                                     <View className="flex-col leading-none">
-                                        <Text className={`text-[12px] font-black leading-tight ${
+                                        <Text className={`text-[11px] font-black leading-tight ${
                                             showRestoreUI ? 'text-red-500' : 
                                             isZeroStreak ? 'text-gray-400' :
                                             isDark ? 'text-white' : 'text-black'
@@ -194,12 +206,12 @@ const TopBar = ({ isDark }) => {
                                             {showRestoreUI ? streak.recoverableStreak : (streak?.streak || 0)}
                                         </Text>
                                         {showRestoreUI && !isRestoring && (
-                                            <Text className="text-[7px] font-bold text-red-400 tracking-tighter -mt-1 uppercase">
+                                            <Text className="text-[6px] font-bold text-red-400 tracking-tighter -mt-1 uppercase">
                                                 RESTORE
                                             </Text>
                                         )}
                                         {isZeroStreak && (
-                                            <Text className="text-[7px] font-bold text-gray-500 tracking-tighter -mt-1 uppercase">
+                                            <Text className="text-[6px] font-bold text-gray-500 tracking-tighter -mt-1 uppercase">
                                                 STREAK
                                             </Text>
                                         )}
@@ -212,11 +224,11 @@ const TopBar = ({ isDark }) => {
                     {/* MENU */}
                     <TouchableOpacity
                         onPress={() => router.push("/screens/MoreOptions")}
-                        className={`p-2 rounded-xl ${isDark ? "bg-blue-500/10 border border-blue-500/20" : "bg-gray-100"}`}
+                        className={`p-1.5 rounded-xl ${isDark ? "bg-blue-500/10 border border-blue-500/20" : "bg-gray-100"}`}
                     >
                         <Ionicons
                             name="grid-outline"
-                            size={20}
+                            size={18}
                             color={isDark ? "#60a5fa" : "#111827"}
                         />
                     </TouchableOpacity>
