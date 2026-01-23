@@ -2,8 +2,8 @@
   "expo": {
     "name": "Oreblogda",
     "slug": "oreblogda",
-    "version": "1.7.1",
-    "orientation": "portrait",
+    "version": "1.8.0",
+    "orientation": "default",
     "icon": "./assets/images/myicon.png",
     "scheme": "oreblogda",
     "userInterfaceStyle": "automatic",
