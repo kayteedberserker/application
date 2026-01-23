@@ -143,6 +143,7 @@ export default function PostCard({ post, setPosts, isFeed, hideMedia, similarPos
     const [videoReady, setVideoReady] = useState(false);
     const [tikTokReady, setTikTokReady] = useState(false);
     const [imageReady, setImageReady] = useState(false);
+    const [videoHeight, setVideoHeight] = useState(250);
 
     // 🔹 Reanimated Shared Values
     const scale = useSharedValue(1);
@@ -500,18 +501,23 @@ export default function PostCard({ post, setPosts, isFeed, hideMedia, similarPos
           resizeMode="contain"
           style={{ width: "100%", height: videoHeight }}
           onLoad={({ naturalSize }) => {
-            const { width, height, orientation } = naturalSize;
+  if (!naturalSize || !naturalSize.width || !naturalSize.height) {
+    setVideoHeight(250);
+    setVideoReady(true);
+    return;
+  }
 
-            // Android sometimes swaps values
-            const videoW = orientation === "portrait" ? height : width;
-            const videoH = orientation === "portrait" ? width : height;
+  const { width, height, orientation } = naturalSize;
 
-            const screenWidth = Dimensions.get("window").width;
-            const ratio = videoH / videoW;
+  const videoW = orientation === "portrait" ? height : width;
+  const videoH = orientation === "portrait" ? width : height;
 
-            setVideoHeight(screenWidth * ratio);
-            setVideoReady(true);
-          }}
+  const screenWidth = Dimensions.get("window").width;
+  const ratio = videoH / videoW;
+
+  setVideoHeight(screenWidth * ratio);
+  setVideoReady(true);
+}}
         />
       ) : (
         <Image
