@@ -10,7 +10,8 @@ import {
     Keyboard,
     Platform,
     StatusBar,
-    ScrollView
+    ScrollView,
+    useColorScheme // Added for dynamic theme support
 } from "react-native";
 import { Ionicons } from "@expo/vector-icons";
 import { useRouter } from "expo-router";
@@ -34,24 +35,17 @@ const resolveUserRank = (totalPosts) => {
 const AuthorCard = ({ author, isDark }) => {
     const router = useRouter();
     
-    // Aura Logic (Top 10 Leaderboard)
     const getAuraTier = (rank) => {
         if (!rank || rank > 10 || rank <= 0) {
-            return { color: '#94a3b8', label: 'OPERATIVE' };
+            return { color: isDark ? '#94a3b8' : '#64748b', label: 'OPERATIVE' };
         }
-
         switch (rank) {
             case 1: return { color: '#fbbf24', label: 'MONARCH' }; 
             case 2: return { color: '#ef4444', label: 'YONKO' };   
             case 3: return { color: '#a855f7', label: 'KAGE' };    
             case 4: return { color: '#3b82f6', label: 'SHOGUN' };  
-            case 5: return { color: '#ffffff', label: 'ESPADA 0' }; 
-            case 6: return { color: '#e5e7eb', label: 'ESPADA 1' };
-            case 7: return { color: '#e5e7eb', label: 'ESPADA 2' };
-            case 8: return { color: '#e5e7eb', label: 'ESPADA 3' };
-            case 9: return { color: '#e5e7eb', label: 'ESPADA 4' };
-            case 10: return { color: '#e5e7eb', label: 'ESPADA 5' };
-            default: return { color: '#94a3b8', label: 'OPERATIVE' };
+            case 5: return { color: isDark ? '#ffffff' : '#000000', label: 'ESPADA 0' }; 
+            default: return { color: isDark ? '#e5e7eb' : '#4b5563', label: `ESPADA ${rank - 4}` };
         }
     };
 
@@ -63,15 +57,14 @@ const AuthorCard = ({ author, isDark }) => {
             <TouchableOpacity
                 onPress={() => router.push(`/author/${author._id}`)}
                 className={`mb-3 p-4 rounded-3xl border ${
-                    isDark ? "bg-[#0a0a0a] border-zinc-800" : "bg-white border-zinc-100 shadow-sm"
+                    isDark ? "bg-[#0f0f0f] border-zinc-800" : "bg-white border-zinc-100 shadow-sm"
                 }`}
             >
                 <View className="flex-row items-center">
-                    {/* Profile Pic with Tier Border */}
-                    <View style={{ borderColor: tier.color }} className="w-16 h-16 rounded-full border-2 p-0.5 shadow-sm">
+                    <View style={{ borderColor: tier.color }} className="w-16 h-16 rounded-full border-2 p-0.5">
                         <Image
                             source={{ uri: author.profilePic?.url || "https://oreblogda.com/default-avatar.png" }}
-                            className="w-full h-full rounded-full bg-zinc-800"
+                            className="w-full h-full rounded-full bg-zinc-200 dark:bg-zinc-800"
                         />
                     </View>
 
@@ -80,21 +73,18 @@ const AuthorCard = ({ author, isDark }) => {
                             <Text numberOfLines={1} className={`font-black italic uppercase tracking-tighter text-lg flex-1 mr-2 ${isDark ? 'text-white' : 'text-black'}`}>
                                 {author.username}
                             </Text>
-                            {/* Aura Tier Badge */}
-                            <View style={{ backgroundColor: `${tier.color}15`, borderColor: `${tier.color}40` }} className="px-2 py-0.5 rounded-md border">
+                            <View style={{ backgroundColor: `${tier.color}20`, borderColor: `${tier.color}40` }} className="px-2 py-0.5 rounded-md border">
                                 <Text style={{ color: tier.color }} className="text-[8px] font-black uppercase tracking-widest">{tier.label}</Text>
                             </View>
                         </View>
 
-                        {/* Writer Rank Label */}
-                        <View className="flex-row items-center mb-2">
+                        <View className="flex-row items-center mb-1">
                             <Text className="text-[10px] font-black italic" style={{ color: writerRank.color }}>
                                 {writerRank.icon} {writerRank.title}
                             </Text>
                         </View>
 
-                        {/* Bio / Description */}
-                        <Text numberOfLines={1} className="text-zinc-500 text-[11px] font-medium italic mb-2">
+                        <Text numberOfLines={1} className={`text-[11px] font-medium italic mb-2 ${isDark ? 'text-zinc-500' : 'text-zinc-400'}`}>
                             {author.description || "No bio decrypted yet..."}
                         </Text>
 
@@ -102,15 +92,15 @@ const AuthorCard = ({ author, isDark }) => {
                             <View className="flex-row items-center gap-3">
                                 <View className="flex-row items-center">
                                     <Ionicons name="flame" size={12} color="#f97316" />
-                                    <Text className="text-[10px] font-bold ml-1 text-zinc-400">{author.lastStreak || 0}</Text>
+                                    <Text className="text-[10px] font-bold ml-1 text-zinc-500">{author.lastStreak || 0}</Text>
                                 </View>
                                 <View className="flex-row items-center">
                                     <Ionicons name="document-text" size={12} color="#3b82f6" />
-                                    <Text className="text-[10px] font-bold ml-1 text-zinc-400">{author.postsCount || 0}</Text>
+                                    <Text className="text-[10px] font-bold ml-1 text-zinc-500">{author.postsCount || 0}</Text>
                                 </View>
                             </View>
-                            <View className="bg-zinc-800/50 px-2 py-0.5 rounded-full border border-zinc-700/50">
-                                <Text className="text-[9px] font-black text-blue-400 uppercase">AURA: {author.weeklyAura || 0}</Text>
+                            <View className={`${isDark ? 'bg-zinc-800' : 'bg-zinc-100'} px-2 py-0.5 rounded-full border ${isDark ? 'border-zinc-700' : 'border-zinc-200'}`}>
+                                <Text className="text-[9px] font-black text-blue-500 uppercase">AURA: {author.weeklyAura || 0}</Text>
                             </View>
                         </View>
                     </View>
@@ -127,7 +117,7 @@ const PostSearchCard = ({ item, isDark }) => {
         <Animated.View entering={FadeIn.duration(500)} layout={Layout.springify()}>
             <TouchableOpacity 
                 onPress={() => router.push(`/post/${item._id}`)}
-                className={`mb-5 rounded-[2.5rem] border overflow-hidden ${isDark ? "bg-zinc-900/30 border-zinc-800" : "bg-gray-50 border-gray-100"}`}
+                className={`mb-5 rounded-[2.5rem] border overflow-hidden ${isDark ? "bg-zinc-900/40 border-zinc-800" : "bg-white border-zinc-100 shadow-sm"}`}
             >
                 {item.mediaUrl ? (
                     <Image source={{ uri: item.mediaUrl }} className="w-full h-48 bg-zinc-800" resizeMode="cover" />
@@ -137,34 +127,30 @@ const PostSearchCard = ({ item, isDark }) => {
                 
                 <View className="p-5">
                     <View className="flex-row justify-between items-center mb-3">
-                        <View className="bg-blue-600/20 border border-blue-500/30 px-3 py-1 rounded-full">
-                            <Text className="text-blue-400 text-[8px] font-black uppercase tracking-widest">{item.category}</Text>
+                        <View className="bg-blue-600/10 border border-blue-500/20 px-3 py-1 rounded-full">
+                            <Text className="text-blue-500 text-[8px] font-black uppercase tracking-widest">{item.category}</Text>
                         </View>
                         <Text className="text-zinc-500 text-[10px] font-bold uppercase tracking-tighter">
-                            <Text className="text-zinc-600 font-normal">OP:</Text> {item.authorName}
+                            <Text className={`${isDark ? 'text-zinc-600' : 'text-zinc-400'} font-normal`}>OP:</Text> {item.authorName}
                         </Text>
                     </View>
                     
                     <Text className={`font-black text-xl mb-2 leading-tight tracking-tight ${isDark ? 'text-white' : 'text-black'}`}>{item.title}</Text>
-                    <Text className="text-zinc-400 text-xs mb-5 italic" numberOfLines={2}>{item.message}</Text>
+                    <Text className={`${isDark ? 'text-zinc-400' : 'text-zinc-500'} text-xs mb-5 italic`} numberOfLines={2}>{item.message}</Text>
                     
-                    <View className="flex-row items-center justify-between pt-4 border-t border-zinc-800/50">
+                    <View className={`flex-row items-center justify-between pt-4 border-t ${isDark ? 'border-zinc-800' : 'border-zinc-100'}`}>
                         <View className="flex-row items-center gap-5">
                             <View className="flex-row items-center">
                                 <Ionicons name="heart-sharp" size={14} color="#ef4444" />
-                                <Text className="text-[11px] font-black text-zinc-400 ml-1.5">{item.likesCount || 0}</Text>
+                                <Text className="text-[11px] font-black text-zinc-500 ml-1.5">{item.likesCount || 0}</Text>
                             </View>
                             <View className="flex-row items-center">
                                 <Ionicons name="chatbubble-ellipses" size={14} color="#3b82f6" />
-                                <Text className="text-[11px] font-black text-zinc-400 ml-1.5">{item.commentsCount || 0}</Text>
-                            </View>
-                            <View className="flex-row items-center">
-                                <Ionicons name="eye" size={14} color="#10b981" />
-                                <Text className="text-[11px] font-black text-zinc-400 ml-1.5">{item.viewsCount || 0}</Text>
+                                <Text className="text-[11px] font-black text-zinc-500 ml-1.5">{item.commentsCount || 0}</Text>
                             </View>
                         </View>
-                        <TouchableOpacity className="bg-zinc-800 p-2 rounded-full">
-                            <Ionicons name="share-social" size={14} color="white" />
+                        <TouchableOpacity className={`${isDark ? 'bg-zinc-800' : 'bg-zinc-100'} p-2 rounded-full`}>
+                            <Ionicons name="share-social" size={14} color={isDark ? "white" : "black"} />
                         </TouchableOpacity>
                     </View>
                 </View>
@@ -176,7 +162,9 @@ const PostSearchCard = ({ item, isDark }) => {
 // --- MAIN SEARCH SCREEN ---
 const SearchScreen = () => {
     const router = useRouter();
-    const isDark = true; 
+    const systemTheme = useColorScheme(); // Hook into system theme
+    const isDark = systemTheme === 'dark';
+    
     const [query, setQuery] = useState("");
     const [loading, setLoading] = useState(false);
     const [loadingMore, setLoadingMore] = useState(false);
@@ -265,11 +253,11 @@ const SearchScreen = () => {
                 <TouchableOpacity onPress={() => router.back()} className="pr-3">
                     <Ionicons name="chevron-back" size={32} color={isDark ? "white" : "black"} />
                 </TouchableOpacity>
-                <View className={`flex-1 flex-row items-center px-4 h-14 rounded-2xl border ${isDark ? 'bg-zinc-900 border-blue-900/30' : 'bg-gray-50 border-gray-200'}`}>
+                <View className={`flex-1 flex-row items-center px-4 h-14 rounded-2xl border ${isDark ? 'bg-zinc-900 border-blue-900/30' : 'bg-gray-100 border-gray-200'}`}>
                     <Ionicons name="search" size={22} color="#3b82f6" />
                     <TextInput
                         placeholder="SCAN_DATA_STREAM..."
-                        placeholderTextColor="#3f3f46"
+                        placeholderTextColor={isDark ? "#3f3f46" : "#a1a1aa"}
                         className={`flex-1 ml-3 font-bold text-sm tracking-widest ${isDark ? 'text-white' : 'text-black'}`}
                         value={query}
                         onChangeText={setQuery}
@@ -277,13 +265,13 @@ const SearchScreen = () => {
                     />
                     {query.length > 0 && (
                         <TouchableOpacity onPress={() => setQuery("")}>
-                            <Ionicons name="close-circle" size={20} color="#52525b" />
+                            <Ionicons name="close-circle" size={20} color={isDark ? "#52525b" : "#d1d5db"} />
                         </TouchableOpacity>
                     )}
                 </View>
             </View>
 
-            {/* Content Logic */}
+            {/* Main Content Area */}
             {query.length < 2 ? (
                 <ScrollView className="flex-1 px-6">
                     <View className="mt-8">
@@ -291,13 +279,13 @@ const SearchScreen = () => {
                         {recentSearches.length > 0 ? (
                             recentSearches.map((s, i) => (
                                 <TouchableOpacity key={i} onPress={() => setQuery(s)} className="flex-row items-center mb-6">
-                                    <Ionicons name="refresh-circle-outline" size={20} color="#3f3f46" />
-                                    <Text className="text-zinc-400 ml-4 font-bold text-lg italic">{s}</Text>
-                                    <Ionicons name="arrow-forward" size={14} color="#18181b" className="ml-auto" />
+                                    <Ionicons name="refresh-circle-outline" size={20} color={isDark ? "#3f3f46" : "#d1d5db"} />
+                                    <Text className={`${isDark ? 'text-zinc-400' : 'text-zinc-600'} ml-4 font-bold text-lg italic`}>{s}</Text>
+                                    <Ionicons name="arrow-forward" size={14} color={isDark ? "#18181b" : "#f4f4f5"} className="ml-auto" />
                                 </TouchableOpacity>
                             ))
                         ) : (
-                            <Text className="text-zinc-700 italic text-sm mb-6">Clear history found.</Text>
+                            <Text className="text-zinc-400 italic text-sm mb-6">Clear history found.</Text>
                         )}
 
                         <Text className="text-purple-500 font-black text-[10px] uppercase tracking-[0.4em] mb-6 mt-4">Trending_Sectors</Text>
@@ -306,9 +294,9 @@ const SearchScreen = () => {
                                 <TouchableOpacity 
                                     key={i} 
                                     onPress={() => setQuery(item)}
-                                    className="bg-zinc-900/50 border border-zinc-800 px-4 py-2 rounded-full"
+                                    className={`${isDark ? 'bg-zinc-900/50 border-zinc-800' : 'bg-gray-100 border-gray-200'} border px-4 py-2 rounded-full`}
                                 >
-                                    <Text className="text-zinc-400 font-bold text-xs uppercase italic"># {item}</Text>
+                                    <Text className={`${isDark ? 'text-zinc-400' : 'text-zinc-600'} font-bold text-xs uppercase italic`}># {item}</Text>
                                 </TouchableOpacity>
                             ))}
                         </View>
@@ -316,18 +304,20 @@ const SearchScreen = () => {
                 </ScrollView>
             ) : (
                 <>
+                    {/* Tabs Section */}
                     <View className="flex-row px-4 py-3 gap-2">
                         {['all', 'authors', 'posts'].map((tab) => (
                             <TouchableOpacity
                                 key={tab}
                                 onPress={() => setActiveTab(tab)}
-                                className={`px-6 py-2 rounded-xl border ${activeTab === tab ? "bg-blue-600 border-blue-600 shadow-[0_0_15px_rgba(37,99,235,0.3)]" : "bg-transparent border-zinc-800"}`}
+                                className={`px-6 py-2 rounded-xl border ${activeTab === tab ? "bg-blue-600 border-blue-600 shadow-sm" : isDark ? "bg-transparent border-zinc-800" : "bg-gray-50 border-gray-200"}`}
                             >
-                                <Text className={`text-[10px] font-black uppercase tracking-widest ${activeTab === tab ? "text-white" : "text-zinc-600"}`}>{tab}</Text>
+                                <Text className={`text-[10px] font-black uppercase tracking-widest ${activeTab === tab ? "text-white" : "text-zinc-500"}`}>{tab}</Text>
                             </TouchableOpacity>
                         ))}
                     </View>
 
+                    {/* Search Results List */}
                     <View className="flex-1 px-4 mt-2">
                         {loading && page === 1 ? (
                             <View className="flex-1 justify-center items-center">
@@ -351,7 +341,7 @@ const SearchScreen = () => {
                                 ) : null}
                                 ListEmptyComponent={() => (
                                     <View className="mt-20 items-center opacity-40">
-                                        <Ionicons name="scan-outline" size={80} color="#3f3f46" />
+                                        <Ionicons name="scan-outline" size={80} color={isDark ? "#3f3f46" : "#d1d5db"} />
                                         <Text className="text-zinc-500 font-black mt-4 text-center tracking-widest uppercase text-xs">No matching frequencies detected.</Text>
                                     </View>
                                 )}
