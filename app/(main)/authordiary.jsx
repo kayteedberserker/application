@@ -516,7 +516,7 @@ export default function AuthorDiaryDashboard() {
             }
             setUploading(true);
             try {
-                const signRes = await fetch(`${API_BASE}/upload/sign`, { method: "POST", headers: { "Content-Type": "application/json" } });
+                const signRes = await apiFetch(`${API_BASE}/upload/sign`, { method: "POST" });
                 const signData = await signRes.json();
                 if (!signRes.ok) throw new Error("Signature fetch failed");
                 const formData = new FormData();
