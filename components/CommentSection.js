@@ -281,6 +281,7 @@ export default function CommentSection({ postId, slug }) {
 	const [text, setText] = useState("");
 	const [isPosting, setIsPosting] = useState(false);
 	const [activeDiscussion, setActiveDiscussion] = useState(null);
+	const [pendingDiscussionId, setPendingDiscussionId] = useState(null); // FIX: Added pending state
 	const [pagedComments, setPagedComments] = useState([]);
 	const [page, setPage] = useState(1);
 	const [isLoadingMore, setIsLoadingMore] = useState(false);
@@ -303,7 +304,6 @@ export default function CommentSection({ postId, slug }) {
 	// Sync data with local paged array
 	useEffect(() => {
 		if (data?.comments) {
-			// If we are on page 1, reset. If we loaded more, append.
 			if (page === 1) {
 				setPagedComments(data.comments);
 			}
@@ -324,20 +324,30 @@ export default function CommentSection({ postId, slug }) {
 		}
 	};
 
+	// FIX: Deep link handling split into "Extraction" and "Detection"
 	useEffect(() => {
-		const parseAndOpen = (url) => {
+		const parseUrl = (url) => {
 			if (!url) return;
 			const match = url.match(/discussion=([^&]+)/);
 			if (match && match[1]) {
-				const discussionId = match[1];
-				const target = pagedComments.find(c => c._id === discussionId);
-				if (target) setActiveDiscussion(target);
+				setPendingDiscussionId(match[1]); // Store the ID to look for
 			}
 		};
-		Linking.getInitialURL().then(parseAndOpen);
-		const sub = Linking.addEventListener('url', (e) => parseAndOpen(e.url));
+		Linking.getInitialURL().then(parseUrl);
+		const sub = Linking.addEventListener('url', (e) => parseUrl(e.url));
 		return () => sub.remove();
-	}, [pagedComments]);
+	}, []);
+
+	// FIX: Watcher to open the discussion once the comments are loaded
+	useEffect(() => {
+		if (pendingDiscussionId && pagedComments.length > 0) {
+			const target = pagedComments.find(c => c._id === pendingDiscussionId);
+			if (target) {
+				setActiveDiscussion(target);
+				setPendingDiscussionId(null); // Clear it so it doesn't keep popping up
+			}
+		}
+	}, [pagedComments, pendingDiscussionId]);
 
 	useEffect(() => {
 		if (activeDiscussion) {
