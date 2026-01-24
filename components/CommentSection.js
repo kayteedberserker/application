@@ -282,9 +282,11 @@ export default function CommentSection({ postId, slug }) {
 	const [isPosting, setIsPosting] = useState(false);
 	const [activeDiscussion, setActiveDiscussion] = useState(null);
 	const [pagedComments, setPagedComments] = useState([]);
-	const [pendingDiscussionId, setPendingDiscussionId] = useState(null); 
 	const [page, setPage] = useState(1);
 	const [isLoadingMore, setIsLoadingMore] = useState(false);
+	
+	// 🔹 CRITICAL: Using a REF for the ID so it survives re-renders and data fetching
+	const pendingIdRef = useRef(null);
 
 	const loaderX = useSharedValue(-200);
 	useEffect(() => {
@@ -302,44 +304,50 @@ export default function CommentSection({ postId, slug }) {
 	);
 
 	useEffect(() => {
-		if (data?.comments) {
-			if (page === 1) {
-				setPagedComments(data.comments);
-			}
+		if (data?.comments && page === 1) {
+			setPagedComments(data.comments);
 		}
 	}, [data, page]);
+
+	// --- 1. Catch the URL and store it in the REF ---
+	useEffect(() => {
+		const parseUrl = (url) => {
+			if (!url) return;
+			const match = url.match(/discussion=([^&]+)/);
+			if (match && match[1]) {
+				pendingIdRef.current = match[1];
+				// Trigger a check immediately in case data is already here
+				checkAndOpen();
+			}
+		};
+
+		Linking.getInitialURL().then(parseUrl);
+		const sub = Linking.addEventListener('url', (e) => parseUrl(e.url));
+		return () => sub.remove();
+	}, [postId]);
+
+	// --- 2. The Opener Function ---
+	const checkAndOpen = () => {
+		if (pendingIdRef.current && pagedComments.length > 0) {
+			const found = pagedComments.find(c => c._id === pendingIdRef.current);
+			if (found) {
+				setActiveDiscussion(found);
+				pendingIdRef.current = null; // Mark as handled
+			}
+		}
+	};
+
+	// --- 3. Watch for comment updates ---
+	useEffect(() => {
+		checkAndOpen();
+	}, [pagedComments]);
 
 	useEffect(() => {
 		setPagedComments([]);
 		setPage(1);
 		setActiveDiscussion(null);
+		pendingIdRef.current = null;
 	}, [postId]);
-
-	// --- Link Detection (One-time and Real-time) ---
-	useEffect(() => {
-		const handleUrl = (url) => {
-			if (!url) return;
-			const match = url.match(/discussion=([^&]+)/);
-			if (match && match[1]) {
-				setPendingDiscussionId(match[1]);
-			}
-		};
-
-		Linking.getInitialURL().then(handleUrl);
-		const subscription = Linking.addEventListener('url', (event) => handleUrl(event.url));
-		return () => subscription.remove();
-	}, []);
-
-	// --- Data Watcher (Wait for comments to load, then open) ---
-	useEffect(() => {
-		if (pendingDiscussionId && pagedComments.length > 0) {
-			const found = pagedComments.find(c => c._id === pendingDiscussionId);
-			if (found) {
-				setActiveDiscussion(found);
-				setPendingDiscussionId(null);
-			}
-		}
-	}, [pagedComments, pendingDiscussionId]);
 
 	const handleLoadMore = async () => {
 		if (isLoadingMore || !data?.hasMore) return;
