@@ -12,7 +12,7 @@ import { AppState, BackHandler, DeviceEventEmitter, Platform, StatusBar, View } 
 import { SafeAreaProvider } from "react-native-safe-area-context";
 import Toast from 'react-native-toast-message';
 import { InterstitialAd, AdEventType, TestIds, MobileAds } from 'react-native-google-mobile-ads';
-import { Audio } from 'expo-av'; // 🔹 Added for sound
+import { Audio } from 'expo-av'; 
 
 import AnimeLoading from "../components/AnimeLoading";
 import apiFetch from "../utils/apiFetch"
@@ -28,7 +28,7 @@ SplashScreen.preventAutoHideAsync();
 const FIRST_AD_DELAY_MS = 30000; 
 const COOLDOWN_MS = 180000;      
 const ADMIN_DEVICE_ID = "4bfe2b53-75917"; 
-const ADMIN_SOUND_URL = 'https://assets.mixkit.co/active_storage/sfx/2358/2358-preview.mp3'; // Futuristic Ping
+const ADMIN_SOUND_URL = 'https://assets.mixkit.co/active_storage/sfx/2358/2358-preview.mp3'; 
 
 const INTERSTITIAL_ID = __DEV__ ? TestIds.INTERSTITIAL : AdConfig.interstitial;
 
@@ -44,7 +44,6 @@ Notifications.setNotificationHandler({
     }),
 });
 
-// 🔹 HELPER: Load Interstitial
 const loadInterstitial = () => {
     if (interstitial) return; 
 
@@ -60,7 +59,6 @@ const loadInterstitial = () => {
         interstitialLoaded = false;
         interstitial = null;
         lastShownTime = Date.now(); 
-        // 🔹 Notify the app that the cooldown timer has started
         DeviceEventEmitter.emit("adClosedTimerStart");
         loadInterstitial(); 
     });
@@ -109,23 +107,19 @@ function RootLayoutContent() {
     
     const [isSyncing, setIsSyncing] = useState(true);
     const [isUpdating, setIsUpdating] = useState(false); 
-    const [appReady, setAppReady] = useState(false); // 🔹 Defined missing appReady state
+    const [appReady, setAppReady] = useState(false); 
     
     const appState = useRef(AppState.currentState);
     const lastProcessedNotificationId = useRef(null);
-    const hasHandledRedirect = useRef(false);
     const soundTimer = useRef(null);
-    const hasShownWelcomeAd = useRef(false); // 🔹 Track if we've shown the initial ad
+    const hasShownWelcomeAd = useRef(false);
 
-    // 🔹 Derived Admin Status
     const isAdmin = user?.deviceId === ADMIN_DEVICE_ID;
 
-    // 🔹 Admin Sound Player
     const playAdminSound = async () => {
         try {
             const { sound } = await Audio.Sound.createAsync({ uri: ADMIN_SOUND_URL });
             await sound.playAsync();
-            // Automatically unload sound from memory when finished
             sound.setOnPlaybackStatusUpdate((status) => {
                 if (status.didJustFinish) sound.unloadAsync();
             });
@@ -148,7 +142,6 @@ function RootLayoutContent() {
             appState.current = nextState;
         });
 
-        // 🔹 Toast Trigger on Navigation/Back
         const interstitialListener = DeviceEventEmitter.addListener("tryShowInterstitial", () => {
             const now = Date.now();
             const timeSinceLast = now - lastShownTime;
@@ -173,20 +166,15 @@ function RootLayoutContent() {
             }
         });
 
-        // 🔹 Sound Trigger Logic: Set a timer when an ad closes
         const timerListener = DeviceEventEmitter.addListener("adClosedTimerStart", () => {
             if (!isAdmin) return;
-            
             if (soundTimer.current) clearTimeout(soundTimer.current);
-            
-            // Set timer to play sound exactly when cooldown ends
             soundTimer.current = setTimeout(() => {
                 playAdminSound();
                 Toast.show({ type: 'success', text1: 'Ad System Ready', text2: 'Interstitial is now available.' });
             }, COOLDOWN_MS);
         });
 
-        // Handle initial load delay sound
         if (isAdmin) {
             const initialRemaining = COOLDOWN_MS - (Date.now() - lastShownTime);
             if (initialRemaining > 0) {
@@ -214,41 +202,46 @@ function RootLayoutContent() {
 
     // --- 2. ONE-TIME WELCOME AD LOGIC ---
     useEffect(() => {
-        // We wait for appReady (which means fonts and sync are done)
         if (appReady && !hasShownWelcomeAd.current) {
-            
-            // Try to show the ad
             const adShown = showAppOpenAd();
-
             if (adShown) {
-                hasShownWelcomeAd.current = true; // Mark as shown so it never fires again
-                if (__DEV__) console.log("Welcome Ad Displayed");
+                hasShownWelcomeAd.current = true;
             } else {
-                // If ad wasn't loaded yet, we can try again in 2 seconds 
                 const retryTimeout = setTimeout(() => {
                     const retryShown = showAppOpenAd();
-                    if (retryShown) {
-                        hasShownWelcomeAd.current = true;
-                    }
+                    if (retryShown) hasShownWelcomeAd.current = true;
                 }, 2000);
-
                 return () => clearTimeout(retryTimeout);
             }
         }
     }, [appReady]); 
 
-    // --- 3. DEEP LINKING ---
-    const url = Linking.useURL(); 
+    // --- 3. THE RE-OPEN FIX (Continuous Linking) ---
+    // We removed 'hasHandledRedirect' from here because it prevents links from working twice.
     useEffect(() => {
-        if (url && !isSyncing && !isUpdating && !hasHandledRedirect.current) {
-            const { path } = Linking.parse(url);
+        const handleDeepLink = (url) => {
+            if (!url || isSyncing || isUpdating) return;
+            
+            const parsed = Linking.parse(url);
+            const path = parsed.path;
+
             if (path && path !== "/") {
                 const targetPath = path.startsWith('/') ? path : `/${path}`;
-                hasHandledRedirect.current = true;
-                setTimeout(() => router.replace(targetPath), 500);
+                // Using push instead of replace allows the user to go back
+                router.push(targetPath);
             }
-        }
-    }, [url, isSyncing, isUpdating]);
+        };
+
+        // Listen for links while app is in background/foreground
+        const sub = Linking.addEventListener('url', (event) => {
+            handleDeepLink(event.url);
+        });
+
+        // Check for link that opened the app initially
+        Linking.getInitialURL().then(handleDeepLink);
+
+        return () => sub.remove();
+    }, [isSyncing, isUpdating]); // Re-run only when system status changes
 
     // --- 4. EAS UPDATES ---
     useEffect(() => {
@@ -287,7 +280,6 @@ function RootLayoutContent() {
                     });
                 } catch (err) { }
             }
-            // 🔹 Triggers appReady to true after sync is complete
             setAppReady(true);
             setTimeout(() => setIsSyncing(false), 1500);
         }
@@ -309,21 +301,18 @@ function RootLayoutContent() {
             const targetId = data?.postId || data?.body?.postId || data?.id;
             const type = data?.type || data?.body?.type;
             if (targetId) {
-                hasHandledRedirect.current = true;
                 setTimeout(() => { router.push(`/post/${targetId}`); }, 800);
             } else if (type === "open_diary" || type === "diary") {
-                hasHandledRedirect.current = true;
                 setTimeout(() => router.push("/authordiary"), 800);
             }
         };
         Notifications.getLastNotificationResponseAsync().then(response => {
-            if (response && !hasHandledRedirect.current) handleNotificationResponse(response);
+            if (response) handleNotificationResponse(response);
         });
         const responseSub = Notifications.addNotificationResponseReceivedListener(handleNotificationResponse);
         return () => responseSub.remove();
     }, [isSyncing, isUpdating]);
 
-    // 🔹 Uses appReady to hide the splash screen
     useEffect(() => { if (appReady || fontError) SplashScreen.hideAsync(); }, [appReady, fontError]);
 
     if (!fontsLoaded || isSyncing || isUpdating) {
