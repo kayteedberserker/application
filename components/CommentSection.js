@@ -90,7 +90,7 @@ const SingleComment = ({ comment, onOpenDiscussion }) => {
 		<View className="mb-6 border-l-2 border-blue-600/20 pl-4">
 			<Text className="text-[11px] font-black text-blue-600 uppercase tracking-tighter">{comment.name}</Text>
 			<Text className="text-xs text-gray-600 dark:text-gray-300 font-bold leading-5 mt-1">{comment.text}</Text>
-			<View className="flex-row items-center mt-3 gap-4">
+			<div className="flex-row items-center mt-3 gap-4">
 				<Text className="text-gray-400 text-[8px] font-bold">{new Date(comment.date).toLocaleDateString()}</Text>
 				<Pressable 
 					onPress={() => {
@@ -104,7 +104,7 @@ const SingleComment = ({ comment, onOpenDiscussion }) => {
 						{hasReplies ? `View Discussion (${totalReplies})` : "Start Discussion"}
 					</Text>
 				</Pressable>
-			</View>
+			</div>
 			{hasReplies && previewReply && (
 				<View className="mt-3 opacity-50 bg-gray-50 dark:bg-white/5 p-2 rounded-lg border-l border-gray-300 dark:border-gray-700">
 					<Text className="text-[9px] font-black text-gray-500 uppercase">{previewReply.name}</Text>
@@ -281,8 +281,8 @@ export default function CommentSection({ postId, slug }) {
 	const [text, setText] = useState("");
 	const [isPosting, setIsPosting] = useState(false);
 	const [activeDiscussion, setActiveDiscussion] = useState(null);
-	const [pendingDiscussionId, setPendingDiscussionId] = useState(null);
 	const [pagedComments, setPagedComments] = useState([]);
+	const [pendingDiscussionId, setPendingDiscussionId] = useState(null); // Wait for data to match ID
 	const [page, setPage] = useState(1);
 	const [isLoadingMore, setIsLoadingMore] = useState(false);
 
@@ -294,12 +294,14 @@ export default function CommentSection({ postId, slug }) {
 
 	const loaderStyle = useAnimatedStyle(() => ({ transform: [{ translateX: loaderX.value }] }));
 
+	// Fetch data
 	const { data, mutate, isLoading } = useSWR(
 		user?.deviceId ? `${API_URL}/api/posts/${postId}/comment?page=1&limit=40` : null,
 		(url) => apiFetch(url).then(res => res.json()),
 		{ refreshInterval: 5000 }
 	);
 
+	// Update local state when SWR data arrives
 	useEffect(() => {
 		if (data?.comments) {
 			if (page === 1) {
@@ -308,11 +310,50 @@ export default function CommentSection({ postId, slug }) {
 		}
 	}, [data, page]);
 
-	// Reset page if postId changes (user navigated to different post)
+	// Reset if user moves to a completely different post
 	useEffect(() => {
-		setPage(1);
 		setPagedComments([]);
+		setPage(1);
+		setActiveDiscussion(null);
 	}, [postId]);
+
+	// --- THE FIX: Robust Deep Link Handling ---
+	useEffect(() => {
+		const handleUrl = (url) => {
+			if (!url) return;
+			const match = url.match(/discussion=([^&]+)/);
+			if (match && match[1]) {
+				const discId = match[1];
+				// 1. Try to find it in already loaded comments
+				const found = pagedComments.find(c => c._id === discId);
+				if (found) {
+					setActiveDiscussion(found);
+				} else {
+					// 2. If not found (maybe data is still loading), mark it as pending
+					setPendingDiscussionId(discId);
+				}
+			}
+		};
+
+		// Case A: App opens from cold boot
+		Linking.getInitialURL().then(handleUrl);
+
+		// Case B: App is already open in background/foreground
+		const subscription = Linking.addEventListener('url', (event) => handleUrl(event.url));
+
+		return () => subscription.remove();
+	}, [pagedComments]); // Watch pagedComments so it can re-check when data updates
+
+	// Watcher for pending discussions
+	useEffect(() => {
+		if (pendingDiscussionId && pagedComments.length > 0) {
+			const target = pagedComments.find(c => c._id === pendingDiscussionId);
+			if (target) {
+				setActiveDiscussion(target);
+				setPendingDiscussionId(null); // Clear pending state
+			}
+		}
+	}, [pagedComments, pendingDiscussionId]);
 
 	const handleLoadMore = async () => {
 		if (isLoadingMore || !data?.hasMore) return;
@@ -328,43 +369,6 @@ export default function CommentSection({ postId, slug }) {
 		}
 	};
 
-	// 1. Listen for URL changes and extract ID
-	useEffect(() => {
-		const parseUrl = (url) => {
-			if (!url) return;
-			const match = url.match(/discussion=([^&]+)/);
-			if (match && match[1]) {
-				setPendingDiscussionId(match[1]);
-			}
-		};
-
-		// Check initial URL
-		Linking.getInitialURL().then(parseUrl);
-
-		// Listen for foreground events
-		const sub = Linking.addEventListener('url', (e) => parseUrl(e.url));
-		return () => sub.remove();
-	}, []);
-
-	// 2. Persistent Watcher: Try to find and open the discussion whenever pagedComments changes
-	useEffect(() => {
-		if (pendingDiscussionId && pagedComments.length > 0) {
-			const target = pagedComments.find(c => c._id === pendingDiscussionId);
-			if (target) {
-				setActiveDiscussion(target);
-				setPendingDiscussionId(null); // Success, clear the queue
-			}
-		}
-	}, [pagedComments, pendingDiscussionId, postId]);
-
-	// Update existing open drawer if data refreshes
-	useEffect(() => {
-		if (activeDiscussion) {
-			const updated = pagedComments.find(c => c._id === activeDiscussion._id);
-			if (updated) setActiveDiscussion(updated);
-		}
-	}, [pagedComments]);
-
 	const handlePostComment = async (parentId = null, replyContent = null) => {
 		const content = replyContent || text;
 		if (!content.trim() || !user?.deviceId) return;
@@ -372,7 +376,6 @@ export default function CommentSection({ postId, slug }) {
 		try {
 			const res = await apiFetch(`${API_URL}/api/posts/${postId}/comment`, {
 				method: "POST",
-				headers: { "Content-Type": "application/json" },
 				body: JSON.stringify({
 					name: user?.username || "Anonymous",
 					text: content,
