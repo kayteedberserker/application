@@ -714,7 +714,7 @@ export default function AuthorDiaryDashboard() {
                 <View className="flex-row items-center mb-4 ml-1">
                     <Ionicons name="list" size={16} color={THEME.accent} className="mr-2" />
                     <Text className="text-xs font-black uppercase text-gray-500 tracking-widest">
-                        Mission Log {isOfflineMode ? "(CACHED)" : "(Last 24h)"}
+                        Diary Archives{isOfflineMode ? "(CACHED)" : "(Last 24h)"}
                     </Text>
                 </View>
                 
