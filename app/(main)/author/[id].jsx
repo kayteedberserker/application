@@ -13,26 +13,43 @@ const API_BASE = "https://oreblogda.com/api"
 
 // 🔹 AURA TIER LOGIC (Fully Synced)
 const getAuraTier = (rank) => {
-    const AURA_PURPLE = '#a78bfa'; 
+    // New Color Palette
     const MONARCH_GOLD = '#fbbf24'; 
-    const YONKO_BLUE = '#60a5fa';   
+    const CRIMSON_RED = '#ef4444';   // Updated from Yonko Blue
+    const SHADOW_PURPLE = '#a855f7'; 
+    const STEEL_BLUE = '#3b82f6';
+    const REI_WHITE = '#e0f2fe';    // Espada 0
 
     if (!rank || rank > 10 || rank <= 0) {
         return { color: '#3b82f6', label: 'ACTIVE', icon: 'radar' };
     }
 
     switch (rank) {
-        case 1: return { color: MONARCH_GOLD, label: 'MONARCH', icon: 'crown' };
-        case 2: return { color: YONKO_BLUE, label: 'YONKO', icon: 'flare' };
-        case 3: return { color: AURA_PURPLE, label: 'KAGE', icon: 'moon' };
-        case 4: return { color: AURA_PURPLE, label: 'SHOGUN', icon: 'shield-star' };
-        case 5: return { color: '#ffffff', label: 'ESPADA 0', icon: 'skull' };
-        case 6: return { color: '#e5e7eb', label: 'ESPADA 1', icon: 'sword-cross' };
-        case 7: return { color: '#e5e7eb', label: 'ESPADA 2', icon: 'sword-cross' };
-        case 8: return { color: '#e5e7eb', label: 'ESPADA 3', icon: 'sword-cross' };
-        case 9: return { color: '#e5e7eb', label: 'ESPADA 4', icon: 'sword-cross' };
-        case 10: return { color: '#e5e7eb', label: 'ESPADA 5', icon: 'sword-cross' };
-        default: return { color: '#34d399', label: 'VANGUARD', icon: 'shield-check' };
+        case 1: 
+            return { color: MONARCH_GOLD, label: 'MONARCH', icon: 'crown' };
+        case 2: 
+            return { color: CRIMSON_RED, label: 'YONKO', icon: 'flare' };
+        case 3: 
+            return { color: SHADOW_PURPLE, label: 'KAGE', icon: 'moon-waxing-crescent' };
+        case 4: 
+            return { color: STEEL_BLUE, label: 'SHOGUN', icon: 'shield-star' };
+        case 5: 
+            return { color: REI_WHITE, label: 'ESPADA 0', icon: 'skull' };
+        
+        // Espada 1-5 Metallic Fading
+        case 6: 
+            return { color: '#cbd5e1', label: 'ESPADA 1', icon: 'sword-cross' };
+        case 7: 
+            return { color: '#94a3b8', label: 'ESPADA 2', icon: 'sword-cross' };
+        case 8: 
+            return { color: '#64748b', label: 'ESPADA 3', icon: 'sword-cross' };
+        case 9: 
+            return { color: '#475569', label: 'ESPADA 4', icon: 'sword-cross' };
+        case 10: 
+            return { color: '#334155', label: 'ESPADA 5', icon: 'sword-cross' };
+            
+        default: 
+            return { color: '#1e293b', label: 'VANGUARD', icon: 'shield-check' };
     }
 };
 
