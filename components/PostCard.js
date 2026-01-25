@@ -13,11 +13,12 @@ import {
   Pressable,
   Share,
   useColorScheme,
-  View
+  View,
+  Animated,
+  Easing
 } from "react-native";
 import { WebView } from "react-native-webview";
 import YoutubePlayer from "react-native-youtube-iframe";
-// 🔹 Dedicated Zoom Library
 import ImageZoom from 'react-native-image-pan-zoom'; 
 import { GestureHandlerRootView } from 'react-native-gesture-handler';
 import useSWR from "swr";
@@ -33,21 +34,21 @@ import apiFetch from "../utils/apiFetch";
 const { width: SCREEN_WIDTH, height: SCREEN_HEIGHT } = Dimensions.get('window');
 const fetcher = (url) => apiFetch(url).then((res) => res.json());
 
-// 🔹 AURA UI UTILITY
+// 🔹 AURA UI UTILITY (Fully Synced Colors & Icons)
 const getAuraVisuals = (rank) => {
   if (!rank || rank > 10 || rank <= 0) return null;
   switch (rank) {
     case 1: return { color: '#fbbf24', label: 'MONARCH', icon: 'crown' };
     case 2: return { color: '#ef4444', label: 'YONKO', icon: 'flare' };
-    case 3: return { color: '#a855f7', label: 'KAGE', icon: 'moon' };
+    case 3: return { color: '#a855f7', label: 'KAGE', icon: 'moon-waxing-crescent' };
     case 4: return { color: '#3b82f6', label: 'SHOGUN', icon: 'shield-star' };
-    case 5: return { color: '#ffffff', label: 'ESPADA 0', icon: 'skull' };
-    case 6: return { color: '#e5e7eb', label: 'ESPADA 1', icon: 'sword-cross' };
-    case 7: return { color: '#e5e7eb', label: 'ESPADA 2', icon: 'sword-cross' };
-    case 8: return { color: '#e5e7eb', label: 'ESPADA 3', icon: 'sword-cross' };
-    case 9: return { color: '#e5e7eb', label: 'ESPADA 4', icon: 'sword-cross' };
-    case 10: return { color: '#e5e7eb', label: 'ESPADA 5', icon: 'sword-cross' };
-    default: return { color: '#94a3b8', label: 'OPERATIVE', icon: 'target' };
+    case 5: return { color: '#e0f2fe', label: 'ESPADA 0', icon: 'skull' }; // Reiatsu White
+    case 6: return { color: '#cbd5e1', label: 'ESPADA 1', icon: 'sword-cross' };
+    case 7: return { color: '#94a3b8', label: 'ESPADA 2', icon: 'sword-cross' };
+    case 8: return { color: '#64748b', label: 'ESPADA 3', icon: 'sword-cross' };
+    case 9: return { color: '#475569', label: 'ESPADA 4', icon: 'sword-cross' };
+    case 10: return { color: '#334155', label: 'ESPADA 5', icon: 'sword-cross' };
+    default: return { color: '#1e293b', label: 'OPERATIVE', icon: 'target' };
   }
 };
 
@@ -90,7 +91,6 @@ const MediaSkeleton = ({ height = 250 }) => (
   </View>
 );
 
-// --- DATA SAVER COMPONENT ---
 const MediaPlaceholder = ({ height = 250, onPress, type }) => (
   <Pressable
     onPress={onPress}
@@ -117,14 +117,39 @@ export default function PostCard({ post, setPosts, isFeed, hideMedia, similarPos
   const [liked, setLiked] = useState(false);
   const [author, setAuthor] = useState({ name: post.authorName, image: null, streak: null, rank: null });
 
-  // Media Loading States
+  // Media States
   const [loadMedia, setLoadMedia] = useState(false); 
   const [videoReady, setVideoReady] = useState(false);
   const [tikTokReady, setTikTokReady] = useState(false);
   const [imageReady, setImageReady] = useState(false);
-  
-  // 🔹 Video Dynamic Sizing
   const [videoAspectRatio, setVideoAspectRatio] = useState(16 / 9);
+
+  // 🔹 ANIMATION REFS
+  const pulseAnim = useRef(new Animated.Value(1)).current;
+  const rotationAnim = useRef(new Animated.Value(0)).current;
+
+  useEffect(() => {
+    Animated.loop(
+      Animated.sequence([
+        Animated.timing(pulseAnim, { toValue: 1.1, duration: 2500, useNativeDriver: true }),
+        Animated.timing(pulseAnim, { toValue: 1, duration: 2500, useNativeDriver: true }),
+      ])
+    ).start();
+
+    Animated.loop(
+      Animated.timing(rotationAnim, {
+        toValue: 1,
+        duration: 10000,
+        easing: Easing.linear,
+        useNativeDriver: true
+      })
+    ).start();
+  }, []);
+
+  const spin = rotationAnim.interpolate({
+    inputRange: [0, 1],
+    outputRange: ['0deg', '360deg']
+  });
 
   const closeLightbox = () => {
     setLightbox((prev) => ({ ...prev, open: false }));
@@ -173,8 +198,9 @@ export default function PostCard({ post, setPosts, isFeed, hideMedia, similarPos
       }
     };
     if (post.authorId || post.authorUserId) fetchAuthor();
-  }, [post.authorId, post.authorUserId, post.authorName]);
+  }, [post.authorId, post.authorUserId]);
 
+  // View Tracking & Like logic (Existing implementation maintained)
   useEffect(() => {
     if (!post?._id || !user?.deviceId) return;
     const handleView = async () => {
@@ -192,9 +218,7 @@ export default function PostCard({ post, setPosts, isFeed, hideMedia, similarPos
           await AsyncStorage.setItem(viewedKey, JSON.stringify(newViewed));
           if (typeof mutate === 'function') mutate();
         }
-      } catch (err) {
-        console.error("View track err:", err);
-      }
+      } catch (err) { console.error("View track err:", err); }
     };
     handleView();
   }, [post?._id, user?.deviceId]);
@@ -204,24 +228,18 @@ export default function PostCard({ post, setPosts, isFeed, hideMedia, similarPos
       try {
         const savedLikes = await AsyncStorage.getItem('user_likes');
         const likedList = savedLikes ? JSON.parse(savedLikes) : [];
-        if (likedList.includes(post?._id)) {
-          setLiked(true);
-        } else if (user?.deviceId && post.likes?.some(l => l.fingerprint === user.deviceId)) {
-          setLiked(true);
-          const updatedList = [...likedList, post?._id];
-          await AsyncStorage.setItem('user_likes', JSON.stringify(updatedList));
-        }
-      } catch (e) {
-        console.error("Local storage error", e);
-      }
+        if (likedList.includes(post?._id)) setLiked(true);
+      } catch (e) { console.error("Local storage error", e); }
     };
     checkLocalLikes();
-  }, [post?._id, user?.deviceId]);
+  }, [post?._id]);
 
   const handleLike = async () => {
     if (liked || !user) {
-      if (!user) Alert.alert("Hold on", "Please register to interact with posts.");
-      router.replace("screens/FirstLaunchScreen");
+      if (!user) {
+        Alert.alert("Hold on", "Please register to interact with posts.");
+        router.replace("screens/FirstLaunchScreen");
+      }
       return;
     }
     const fingerprint = user?.deviceId;
@@ -231,34 +249,23 @@ export default function PostCard({ post, setPosts, isFeed, hideMedia, similarPos
       apiFetch(`https://oreblogda.com/api/posts/${post?._id}`, {
         method: "PATCH",
         body: JSON.stringify({ action: "like", fingerprint }),
-      }).catch(err => console.error("Sync error", err));
-
+      });
       const savedLikes = await AsyncStorage.getItem('user_likes');
       const likedList = savedLikes ? JSON.parse(savedLikes) : [];
       if (!likedList.includes(post?._id)) {
         likedList.push(post?._id);
         await AsyncStorage.setItem('user_likes', JSON.stringify(likedList));
       }
-    } catch (err) {
-      console.error("Local like logic failed", err);
-    }
+    } catch (err) { console.error("Local like logic failed", err); }
   };
 
   const handleNativeShare = async () => {
     try {
       const url = `https://oreblogda.com/post/${post?.slug || post?._id}`;
-      await Share.share({
-        message: `Check out this post on Oreblogda: ${post?.title}\n${url}`,
-        url,
-      });
-      await apiFetch(`https://oreblogda.com/api/posts/${post?._id}`, {
-        method: "PATCH",
-        body: JSON.stringify({ action: "share", fingerprint: user.deviceId }),
-      });
+      await Share.share({ message: `Check out this post on Oreblogda: ${post?.title}\n${url}` });
+      apiFetch(`https://oreblogda.com/api/posts/${post?._id}`, { method: "PATCH", body: JSON.stringify({ action: "share", fingerprint: user.deviceId }) });
       mutate();
-    } catch (error) {
-      console.error("Share error", error);
-    }
+    } catch (error) { console.error("Share error", error); }
   };
 
   const parseCustomSyntax = (text) => {
@@ -268,9 +275,7 @@ export default function PostCard({ post, setPosts, isFeed, hideMedia, similarPos
     let lastIndex = 0;
     let match;
     while ((match = regex.exec(text)) !== null) {
-      if (match.index > lastIndex) {
-        parts.push({ type: 'text', content: text.slice(lastIndex, match.index) });
-      }
+      if (match.index > lastIndex) parts.push({ type: 'text', content: text.slice(lastIndex, match.index) });
       if (match[1] || match[2]) parts.push({ type: 'section', content: match[1] || match[2] });
       else if (match[3] || match[4]) parts.push({ type: 'heading', content: match[3] || match[4] });
       else if (match[5] || match[6]) parts.push({ type: 'listItem', content: match[5] || match[6] });
@@ -287,7 +292,7 @@ export default function PostCard({ post, setPosts, isFeed, hideMedia, similarPos
     const maxLength = similarPosts ? 200 : 150;
     if (isFeed) {
       const plainText = post.message
-        .replace(/s\((.*?)\)|\[section\](.*?)\[\/section\]|h\((.*?)\)|\[h\](.*?)\[\/h\]|l\((.*?)\)|\[li\](.*?)\[\/li\]|link\((.*?)\)-text\((.*?)\)|\[source="(.*?)" text:(.*?)\]|br\(\)|\[br\]/gs, (match, p1, p2, p3, p4, p5, p6, p7, p8, p9, p10) => p1 || p2 || p3 || p4 || p5 || p6 || p8 || p10 || '')
+        .replace(/s\((.*?)\)|\[section\](.*?)\[\/section\]|h\((.*?)\)|\[h\](.*?)\[\/h\]|l\((.*?)\)|\[li\](.*?)\[\/li\]|link\((.*?)\)-text\((.*?)\)|\[source="(.*?)" text:(.*?)\]|br\(\)|\[br\]/gs, (match, p1, p2, p3, p4, p5, p6, p8, p10) => p1 || p2 || p3 || p4 || p5 || p6 || p8 || p10 || '')
         .trim();
       const truncated = plainText.length > maxLength ? plainText.slice(0, maxLength) + "..." : plainText;
       return <Text style={{ color: isDark ? "#9ca3af" : "#4b5563" }} className="text-base leading-6">{truncated}</Text>;
@@ -345,7 +350,6 @@ export default function PostCard({ post, setPosts, isFeed, hideMedia, similarPos
       <View className="my-2 rounded-2xl overflow-hidden shadow-sm" style={[{ width: '100%', backgroundColor: 'black' }, glassStyle]}>
         {!imageReady && !isDirectVideo && <MediaSkeleton height={300} />}
         {!videoReady && isDirectVideo && <MediaSkeleton height={similarPosts ? 200 : 250} />}
-
         {isDirectVideo ? (
           <Video 
             source={{ uri: post.mediaUrl }} 
@@ -354,20 +358,13 @@ export default function PostCard({ post, setPosts, isFeed, hideMedia, similarPos
             resizeMode={ResizeMode.CONTAIN} 
             isMuted={false}
             onLoad={(data) => {
-              if (data.naturalSize) {
-                setVideoAspectRatio(data.naturalSize.width / data.naturalSize.height);
-              }
+              if (data.naturalSize) setVideoAspectRatio(data.naturalSize.width / data.naturalSize.height);
               setVideoReady(true);
             }}
           />
         ) : (
           <Pressable onPress={() => setLightbox({ open: true, src: post.mediaUrl, type: "image" })}>
-            <Image 
-              source={{ uri: post.mediaUrl }} 
-              style={{ width: "100%", height: imageReady ? 300 : 0 }} 
-              resizeMode="cover" 
-              onLoad={() => setImageReady(true)} 
-            />
+            <Image source={{ uri: post.mediaUrl }} style={{ width: "100%", height: imageReady ? 300 : 0 }} resizeMode="cover" onLoad={() => setImageReady(true)} />
           </Pressable>
         )}
       </View>
@@ -378,17 +375,16 @@ export default function PostCard({ post, setPosts, isFeed, hideMedia, similarPos
   const isTop3 = author.rank > 0 && author.rank <= 3;
   const isTop10 = author.rank > 0 && author.rank <= 10;
 
-  const getRankedFrame = () => {
-    if (!isFeed || !isTop3) return { borderRadius: 100 };
-    if (author.rank === 1) return { borderRadius: 12, transform: [{ rotate: '45deg' }], borderWidth: 2.5 };
-    if (author.rank === 2) return { borderRadius: 20, borderWidth: 2 };
-    if (author.rank === 3) return { borderRadius: 6, borderWidth: 1.5 };
-    return { borderRadius: 100 };
+  const getRankedFrameStyle = () => {
+    if (author.rank === 1) return { borderRadius: 14, transform: [{ rotate: '45deg' }], borderWidth: 2 };
+    if (author.rank === 2) return { borderRadius: 25, borderWidth: 2 };
+    if (author.rank === 3) return { borderRadius: 8, borderWidth: 1.5 };
+    return { borderRadius: 100, borderWidth: 1 };
   };
 
   return (
     <View className={`mb-8 overflow-hidden rounded-[32px] border ${isDark ? "bg-[#0d1117] border-gray-800" : "bg-white border-gray-100 shadow-sm"}`}>
-      {isFeed && isTop3 && (
+      {isTop3 && (
         <View className="absolute inset-0 opacity-[0.04]" style={{ backgroundColor: aura.color }} />
       )}
 
@@ -396,28 +392,71 @@ export default function PostCard({ post, setPosts, isFeed, hideMedia, similarPos
       <View className="p-4 px-2">
         <View className="flex-row justify-between items-start mb-5">
           <Pressable onPress={() => router.push(`/author/${post.authorUserId}`)} className="flex-row items-center gap-3 flex-1 pr-2">
-            <View className="relative shrink-0 w-12 h-12 items-center justify-center">
-              <View style={[getRankedFrame(), { width: 42, height: 42, borderColor: isTop3 ? aura.color : isTop10 ? aura.color + '80' : 'rgba(96, 165, 250, 0.3)', overflow: 'hidden', backgroundColor: isDark ? '#1a1d23' : '#f3f4f6' }]}>
+            
+            {/* 🔹 ANIMATED PROFILE PIC SECTION */}
+            <View className="relative shrink-0 w-14 h-14 items-center justify-center">
+              
+              {/* Rotating Outer Frame (Top 2 only) */}
+              {isTop10 && author.rank <= 2 && (
+                <Animated.View 
+                  style={[
+                    getRankedFrameStyle(),
+                    { 
+                      position: 'absolute', width: 56, height: 56, borderColor: aura.color, 
+                      borderStyle: 'dashed', opacity: 0.6,
+                      transform: [...getRankedFrameStyle().transform || [], { rotate: spin }]
+                    }
+                  ]}
+                />
+              )}
+
+              {/* Pulsing Glow Frame (All Top 10) */}
+              {isTop10 && (
+                <Animated.View 
+                  style={[
+                    getRankedFrameStyle(),
+                    { 
+                      position: 'absolute', width: 50, height: 50, borderColor: aura.color, 
+                      opacity: 0.3, transform: [...getRankedFrameStyle().transform || [], { scale: pulseAnim }]
+                    }
+                  ]}
+                />
+              )}
+
+              {/* Main Avatar Container */}
+              <View style={[getRankedFrameStyle(), { width: 44, height: 44, borderColor: isTop10 ? aura.color : 'rgba(96, 165, 250, 0.3)', overflow: 'hidden', backgroundColor: isDark ? '#1a1d23' : '#f3f4f6' }]}>
                 {author.image ? (
-                  <Image source={{ uri: author.image }} className="w-full h-full bg-gray-200" resizeMode="cover" style={isFeed && author.rank === 1 ? { transform: [{ rotate: '-45deg' }], scale: 1.4 } : {}} />
+                  <Image 
+                    source={{ uri: author.image }} 
+                    className="w-full h-full bg-gray-200" 
+                    resizeMode="cover" 
+                    style={author.rank === 1 ? { transform: [{ rotate: '-45deg' }], scale: 1.4 } : {}} 
+                  />
                 ) : (
                   <View className="flex-1 items-center justify-center" style={{ backgroundColor: isTop10 ? aura.color : '#2563eb' }}>
                     <Text className="text-white font-black">{author.name?.charAt(0).toUpperCase() || "?"}</Text>
                   </View>
                 )}
               </View>
-              <View style={{ backgroundColor: isTop10 ? aura.color : '#2563eb' }} className="absolute bottom-1 right-1 w-3 h-3 border-2 border-white dark:border-[#0d1117] rounded-full" />
+
+              {/* Status Dot */}
+              <View style={{ backgroundColor: isTop10 ? aura.color : '#2563eb' }} className="absolute bottom-1 right-1 w-3.5 h-3.5 border-2 border-white dark:border-[#0d1117] rounded-full shadow-sm" />
             </View>
+
             <View className="flex-1">
               <View className="flex-row items-center gap-1 flex-wrap">
                 <Text style={{ color: isTop10 ? aura.color : (isDark ? "#60a5fa" : "#2563eb") }} className="font-[900] uppercase tracking-widest text-[14px]">
                   {author.name || "Unknown Entity"} 
                 </Text>
+                
+                {/* 🛡️ RANK BADGE (Now visible on all pages) */}
                 {isTop10 && (
-                  <View className="bg-white/10 px-1 rounded border" style={{ borderColor: aura.color + '40' }}>
+                  <View className="bg-white/10 px-1.5 py-0.5 rounded border flex-row items-center gap-1" style={{ borderColor: aura.color + '40' }}>
+                    <MaterialCommunityIcons name={aura.icon} size={8} color={aura.color} />
                     <Text style={{ color: aura.color, fontSize: 7, fontWeight: '900' }}>{aura.label}</Text>
                   </View>
                 )}
+
                 <Text className="text-gray-500 font-normal normal-case tracking-normal"> • </Text>
                 <Ionicons name="flame" size={12} color={author.streak < 0 ? "#ef4444" : "#f97316"} />
                 <Text className="text-gray-500 text-[11px] font-bold">{author.streak || "0"}</Text>
@@ -425,6 +464,7 @@ export default function PostCard({ post, setPosts, isFeed, hideMedia, similarPos
               <Text className="text-[11px] mt-1 text-gray-900 dark:text-white font-bold uppercase tracking-tighter">{userRank.rankName || "Verified Author"}</Text>
             </View>
           </Pressable>
+
           <View className="shrink-0 flex-row items-center gap-2 bg-gray-50 dark:bg-gray-800/50 px-3 py-1.5 rounded-full border border-gray-100 dark:border-gray-700">
             <View className="w-1.5 h-1.5 bg-green-500 rounded-full" />
             <Text className="text-[10px] font-black text-gray-900 dark:text-white uppercase tracking-widest">{formatViews(totalViews)}</Text>
@@ -447,20 +487,16 @@ export default function PostCard({ post, setPosts, isFeed, hideMedia, similarPos
         <View className="mb-4 rounded-2xl overflow-hidden border border-gray-100 dark:border-gray-800">{renderMediaContent()}</View>
 
         {post.poll && (
-          <>
-            {!similarPosts ? (
-              <View className="mb-6 p-4 bg-gray-50 dark:bg-gray-900/50 rounded-2xl border border-gray-100 dark:border-gray-800">
-                <Poll poll={post.poll} postId={post?._id} deviceId={user?.deviceId} />
-              </View>
+          <View className={similarPosts ? "mt-2 pt-3 border-t border-gray-200 dark:border-gray-800" : "mb-6 p-4 bg-gray-50 dark:bg-gray-900/50 rounded-2xl border border-gray-100 dark:border-gray-800"}>
+            {similarPosts ? (
+               <View className="flex-row px-3 items-center gap-2">
+                 <MaterialCommunityIcons name="poll" size={20} color={isDark ? "#60a5fa" : "#3b82f6"} />
+                 <Text className="text-sm font-black text-gray-500 uppercase tracking-widest">Includes a poll</Text>
+               </View>
             ) : (
-              <View className="mt-2 pt-3 border-t border-gray-200 dark:border-gray-800">
-                <View className="flex-row px-3 items-center gap-2">
-                  <MaterialCommunityIcons name="poll" size={20} color={isDark ? "#60a5fa" : "#3b82f6"} />
-                  <Text className="text-sm font-black text-gray-500 uppercase tracking-widest">This post includes a poll</Text>
-                </View>
-              </View>
+              <Poll poll={post.poll} postId={post?._id} deviceId={user?.deviceId} />
             )}
-          </>
+          </View>
         )}
 
         {similarPosts ? null : (
@@ -482,27 +518,13 @@ export default function PostCard({ post, setPosts, isFeed, hideMedia, similarPos
         )}
       </View>
 
-      {/* 🔹 LIGHTBOX MODAL */}
+      {/* LIGHTBOX MODAL (Existing implementation) */}
       <Modal visible={lightbox.open} transparent animationType="fade" onRequestClose={closeLightbox}>
         <GestureHandlerRootView style={{ flex: 1, backgroundColor: 'black' }}>
-          <ImageZoom 
-            cropWidth={SCREEN_WIDTH}
-            cropHeight={SCREEN_HEIGHT}
-            imageWidth={SCREEN_WIDTH}
-            imageHeight={SCREEN_HEIGHT}
-            onSwipeDown={closeLightbox}
-            enableSwipeDown={true}
-            style={{ backgroundColor: 'black' }}
-          >
-            <Image 
-              style={{ width: SCREEN_WIDTH, height: SCREEN_HEIGHT }} 
-              source={{ uri: lightbox.src }} 
-              resizeMode="contain" 
-            />
+          <ImageZoom cropWidth={SCREEN_WIDTH} cropHeight={SCREEN_HEIGHT} imageWidth={SCREEN_WIDTH} imageHeight={SCREEN_HEIGHT} onSwipeDown={closeLightbox} enableSwipeDown={true}>
+            <Image style={{ width: SCREEN_WIDTH, height: SCREEN_HEIGHT }} source={{ uri: lightbox.src }} resizeMode="contain" />
           </ImageZoom>
-          <Pressable onPress={closeLightbox} className="absolute top-14 right-6 p-3 bg-black/40 rounded-full">
-            <Feather name="x" size={24} color="white" />
-          </Pressable>
+          <Pressable onPress={closeLightbox} className="absolute top-14 right-6 p-3 bg-black/40 rounded-full"><Feather name="x" size={24} color="white" /></Pressable>
         </GestureHandlerRootView>
       </Modal>
     </View>
