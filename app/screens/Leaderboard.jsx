@@ -35,29 +35,36 @@ const getAuraTier = (rank) => {
     if (!rank || rank > 10 || rank <= 0) return null;
 
     switch (rank) {
-        case 1: 
-            return { color: '#fbbf24', label: 'MONARCH' }; // Gold
-        case 2: 
-            return { color: '#ef4444', label: 'YONKO' };   // Crimson Red
-        case 3: 
-            return { color: '#a855f7', label: 'KAGE' };    // Shadow Purple
-        case 4: 
-            return { color: '#3b82f6', label: 'SHOGUN' };  // Steel Blue
-        case 5: 
-            return { color: '#ffffff', label: 'ESPADA 0' }; // Hollow White
-        case 6: 
-            return { color: '#e5e7eb', label: 'ESPADA 1' };
-        case 7: 
-            return { color: '#e5e7eb', label: 'ESPADA 2' };
-        case 8: 
-            return { color: '#e5e7eb', label: 'ESPADA 3' };
-        case 9: 
-            return { color: '#e5e7eb', label: 'ESPADA 4' };
-        case 10: 
-            return { color: '#e5e7eb', label: 'ESPADA 5' };
-        default: 
-            return { color: '#94a3b8', label: 'OPERATIVE' };
-    }
+    case 1: 
+        return { color: '#fbbf24', label: 'MONARCH' }; // Gold
+    case 2: 
+        return { color: '#ef4444', label: 'YONKO' };   // Crimson Red
+    case 3: 
+        return { color: '#a855f7', label: 'KAGE' };    // Shadow Purple
+    case 4: 
+        return { color: '#3b82f6', label: 'SHOGUN' };  // Steel Blue
+    
+    // 💀 ESPADA 0: "Reiatsu White"
+    // This is a "Cold White" with a cyan undertone to match a Cero's energy
+    case 5: 
+        return { color: '#e0f2fe', label: 'ESPADA 0' }; 
+
+    // Lower Espada: Using "Bone Grey" and "Hollow Slate"
+    case 6: 
+        return { color: '#cbd5e1', label: 'ESPADA 1' };
+    case 7: 
+        return { color: '#94a3b8', label: 'ESPADA 2' };
+    case 8: 
+        return { color: '#64748b', label: 'ESPADA 3' };
+    case 9: 
+        return { color: '#475569', label: 'ESPADA 4' };
+    case 10: 
+        return { color: '#334155', label: 'ESPADA 5' };
+        
+    default: 
+        return { color: '#1e293b', label: 'OPERATIVE' };
+}
+
 };
 
 export default function Leaderboard() {
