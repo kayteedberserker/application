@@ -118,7 +118,7 @@ export default function AuthorDiaryDashboard() {
     const [timeLeft, setTimeLeft] = useState("");
     
     // Rank & Post Limit State
-    const [userRank, setUserRank] = useState({ rankTitle: "Novice_Researcher", rankIcon: "🛡️", postLimit: 1 });
+    const [userRank, setUserRank] = useState({ rankTitle: "Novice_Researcher", rankIcon: "🛡️", postLimit: 3 });
     const [canPostAgain, setCanPostAgain] = useState(false);
     
     const [rewardToken, setRewardToken] = useState(null);
