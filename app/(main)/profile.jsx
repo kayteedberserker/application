@@ -53,33 +53,51 @@ const getAuraVisuals = (rank) => {
 
     if (!rank || rank <= 0) return visualConfig;
 
-    if (rank === 1) {
-        visualConfig.color = MONARCH_GOLD;
+        if (rank === 1) {
+        visualConfig.color = '#fbbf24'; // MONARCH_GOLD
         visualConfig.label = 'MONARCH';
         visualConfig.icon = 'crown';
         visualConfig.description = 'The absolute peak of the hierarchy. You command the shadows of the network.';
     } else if (rank === 2) {
-        visualConfig.color = YONKO_BLUE;
+        visualConfig.color = '#ef4444'; // CRIMSON_RED (Yonko)
         visualConfig.label = 'YONKO';
         visualConfig.icon = 'flare';
         visualConfig.description = 'An Emperor of the New World. Your influence is felt across all sectors.';
     } else if (rank === 3) {
+        visualConfig.color = '#a855f7'; // SHADOW_PURPLE
         visualConfig.label = 'KAGE';
         visualConfig.icon = 'moon';
         visualConfig.description = 'The Shadow Leader. Tactical mastery has earned you this seat.';
     } else if (rank === 4) {
+        visualConfig.color = '#3b82f6'; // STEEL_BLUE
         visualConfig.label = 'SHOGUN';
         visualConfig.icon = 'shield-star';
         visualConfig.description = 'Supreme Commander. You lead the elite guard with iron resolve.';
     } else if (rank === 5) {
+        visualConfig.color = '#e0f2fe'; // REIATSU_WHITE
         visualConfig.label = 'ESPADA 0';
         visualConfig.icon = 'skull';
         visualConfig.description = 'The Secret Elite. You have surpassed the limits of the numbered guard.';
     } else if (rank >= 6 && rank <= 10) {
+        // Map rank to the metallic fading colors
+        const espadaColors = {
+            6: '#cbd5e1', // Espada 1 (Bone Grey)
+            7: '#94a3b8', // Espada 2
+            8: '#64748b', // Espada 3
+            9: '#475569', // Espada 4
+            10: '#334155' // Espada 5 (Hollow Slate)
+        };
+        visualConfig.color = espadaColors[rank];
         visualConfig.label = `ESPADA ${rank - 4}`;
         visualConfig.icon = 'sword-cross';
         visualConfig.description = 'One of the ten elite warriors. Continue your ascent to reach the Top 5.';
+    } else {
+        visualConfig.color = '#1e293b'; // OPERATIVE
+        visualConfig.label = 'OPERATIVE';
+        visualConfig.icon = 'user'; // Or your default icon
+        visualConfig.description = 'A standard operative in the field. Increase your Aura to rise.';
     }
+
 
     return visualConfig;
 };
