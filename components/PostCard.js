@@ -337,7 +337,7 @@ export default function PostCard({ post, setPosts, isFeed, hideMedia, similarPos
       const getTikTokEmbedUrl = (url) => {
         const match = url.match(/\/video\/(\d+)/);
         return match?.[1] ? `https://www.tiktok.com/embed/${match[1]}` : url;
-      };
+      }
       return <View className="w-full rounded-2xl overflow-hidden my-2 bg-black" style={[{ height: similarPosts ? 200 : 600 }, glassStyle]}>{!tikTokReady && <MediaSkeleton height={similarPosts ? 200 : 600} />}<WebView source={{ uri: getTikTokEmbedUrl(post.mediaUrl) }} userAgent="Mozilla/5.0 (iPhone; CPU iPhone OS 15_0 like Mac OS X)" onLoadEnd={() => setTikTokReady(true)} scrollEnabled={false} allowsFullscreenVideo javaScriptEnabled domStorageEnabled allowsInlineMediaPlayback={true} style={{ flex: 1, opacity: tikTokReady ? 1 : 0 }}/></View>;
     }
 
