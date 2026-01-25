@@ -42,7 +42,7 @@ const fetcher = (url) => apiFetch(url).then((res) => res.json());
 async function getUserTotalPosts(deviceId) {
     if (!deviceId) return 0;
     try {
-        const res = await fetch(`${API_BASE}/posts?author=${deviceId}`);
+        const res = await apiFetch(`${API_BASE}/posts?author=${deviceId}`);
         if (!res.ok) throw new Error("Failed to fetch posts");
         const data = await res.json();
         return data.posts?.length || 0;
