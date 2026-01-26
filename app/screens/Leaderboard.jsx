@@ -196,7 +196,7 @@ export default function Leaderboard() {
                             
                         </View>
                         {aura && (
-                                <View className=" w-fit" style={{ marginLeft: 6, backgroundColor: aura.color, paddingHorizontal: 4, borderRadius: 4 }}>
+                                <View className=" w-fit" style={{ marginLeft: 6, backgroundColor: aura.color, paddingHorizontal: 4, borderRadius: 4, alignSelf: 'flex-start' }}>
                                     <Text style={{ fontSize: 7, fontWeight: 'bold', color: '#000' }}>{aura.label}</Text>
                                 </View>
                             )}
