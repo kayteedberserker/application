@@ -396,8 +396,8 @@ export default function PostCard({ post, setPosts, isFeed, hideMedia, similarPos
             {/* 🔹 ANIMATED PROFILE PIC SECTION */}
             <View className="relative shrink-0 w-14 h-14 items-center justify-center">
               
-              {/* Rotating Outer Frame (Top 2 only) */}
-              {isTop10 && author.rank <= 2 && (
+              {/* Rotating Outer Frame (Top 3 only) */}
+              {isTop10 && author.rank <= 3 && (
                 <Animated.View 
                   style={[
                     getRankedFrameStyle(),
@@ -457,7 +457,7 @@ export default function PostCard({ post, setPosts, isFeed, hideMedia, similarPos
                 <Text className="text-gray-500 text-[11px] font-bold">{author.streak || "0"}</Text>
               </View>
                   {isTop10 && (
-                  <View className="bg-white/10 px-1.5 py-0.5 rounded border flex-row items-center gap-1" style={{ borderColor: aura.color + '40' }}>
+                  <View className="bg-white/10 px-1.5 py-0.5 w-fit rounded border flex-row items-center gap-1" style={{ borderColor: aura.color + '40' }}>
                     <MaterialCommunityIcons name={aura.icon} size={8} color={aura.color} />
                     <Text style={{ color: aura.color, fontSize: 7, fontWeight: '900' }}>{aura.label}</Text>
                   </View>
