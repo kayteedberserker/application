@@ -22,7 +22,7 @@ import apiFetch from "../utils/apiFetch"
 const fetcher = (url) => apiFetch(url).then(res => res.json());
 
 const { width, height } = Dimensions.get('window');
-const LIMIT = 5;
+const LIMIT = 15;
 const API_URL = "https://oreblogda.com/api/posts";
 const CACHE_KEY = "POSTS_CACHE_V1"; // 👈 Unique key for storage
 
