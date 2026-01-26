@@ -11,7 +11,8 @@ import {
     Platform,
     StatusBar,
     ScrollView,
-    useColorScheme 
+    useColorScheme,
+    StyleSheet
 } from "react-native";
 import { Ionicons, MaterialCommunityIcons } from "@expo/vector-icons"; 
 import { useRouter } from "expo-router";
@@ -19,9 +20,118 @@ import apiFetch from "../../utils/apiFetch";
 import { Text } from "../../components/Text"; 
 import Animated, { FadeInDown, FadeIn, Layout } from "react-native-reanimated";
 import AsyncStorage from '@react-native-async-storage/async-storage';
+import NativeAdView, { 
+  CallToActionView, 
+  HeadlineView, 
+  TaglineView, 
+  IconView, 
+  ImageView 
+} from "react-native-google-mobile-ads";
 
-// 🔹 IMPORT YOUR AD COMPONENTS
-import { NativeAdAuthorStyle, NativeAdPostStyle } from "../../components/NativeAd"; 
+// --- NATIVE AD: AUTHOR STYLE ---
+export const NativeAdAuthorStyle = ({ isDark }) => {
+  return (
+    <Animated.View entering={FadeInDown.duration(400)} className="mb-3">
+        <NativeAdView
+            style={{ width: '100%' }}
+            adUnitID={Platform.OS === 'ios' ? 'ca-app-pub-3940256099942544/3986624511' : 'ca-app-pub-8021671365048667/1282169688'}
+        >
+            <View className={`p-4 rounded-3xl border ${isDark ? "bg-[#0f0f0f] border-zinc-800" : "bg-white border-zinc-100 shadow-sm"} flex-row items-center`}>
+                <View className="w-16 h-16 rounded-full border-2 border-blue-500 p-0.5 overflow-hidden">
+                    <IconView style={{ width: '100%', height: '100%', borderRadius: 99, backgroundColor: '#27272a' }} />
+                </View>
+
+                <View className="flex-1 ml-4 justify-center">
+                    <View className="flex-row items-center justify-between mb-1">
+                        <HeadlineView 
+                            numberOfLines={1} 
+                            style={{ 
+                                fontWeight: '900', 
+                                fontStyle: 'italic', 
+                                textTransform: 'uppercase', 
+                                letterSpacing: -1, 
+                                fontSize: 18, 
+                                flex: 1, 
+                                marginRight: 8,
+                                color: isDark ? 'white' : 'black' 
+                            }} 
+                        />
+                        <View className="bg-amber-500/20 border border-amber-500/40 px-2 py-0.5 rounded-md">
+                            <Text className="text-amber-500 text-[8px] font-black uppercase tracking-widest">SPONSORED</Text>
+                        </View>
+                    </View>
+
+                    <View className="flex-row items-center mb-1">
+                        <Text className="text-[10px] font-black italic text-blue-500">🛡️ PROMOTED_OPERATIVE</Text>
+                    </View>
+
+                    <TaglineView 
+                        numberOfLines={1} 
+                        style={{ fontSize: 11, fontWeight: '500', fontStyle: 'italic', marginBottom: 8, color: isDark ? '#71717a' : '#a1a1aa' }} 
+                    />
+
+                    <View className="flex-row items-center justify-between">
+                        <View className="flex-row items-center gap-3">
+                            <View className="flex-row items-center">
+                                <Ionicons name="star" size={12} color="#fbbf24" />
+                                <Text className="text-[10px] font-bold ml-1 text-zinc-500">Official</Text>
+                            </View>
+                        </View>
+                        <CallToActionView 
+                            className="bg-blue-600 px-3 py-1 rounded-full"
+                            style={{ minWidth: 60, alignItems: 'center' }}
+                            textStyle={{ color: 'white', fontSize: 9, fontWeight: '900', textTransform: 'uppercase' }}
+                        />
+                    </View>
+                </View>
+            </View>
+        </NativeAdView>
+    </Animated.View>
+  );
+};
+
+// --- NATIVE AD: POST STYLE ---
+export const NativeAdPostStyle = ({ isDark }) => {
+  return (
+    <Animated.View entering={FadeIn.duration(500)} className="mb-5">
+        <NativeAdView
+            style={{ width: '100%' }}
+            adUnitID={Platform.OS === 'ios' ? 'ca-app-pub-3940256099942544/3986624511' : 'ca-app-pub-8021671365048667/1282169688'}
+        >
+            <View className={`rounded-[2.5rem] border overflow-hidden ${isDark ? "bg-zinc-900/40 border-zinc-800" : "bg-white border-zinc-100 shadow-sm"}`}>
+                <ImageView style={{ width: '100%', height: 192, backgroundColor: '#27272a' }} resizeMode="cover" />
+                
+                <View className="p-5">
+                    <View className="flex-row justify-between items-center mb-3">
+                        <View className="bg-blue-600/10 border border-blue-500/20 px-3 py-1 rounded-full">
+                            <Text className="text-blue-500 text-[8px] font-black uppercase tracking-widest">ADVERTISEMENT</Text>
+                        </View>
+                        <View className="flex-row items-center">
+                            <IconView style={{ width: 16, height: 16, borderRadius: 8, marginRight: 8 }} />
+                            <HeadlineView style={{ color: '#71717a', fontSize: 10, fontWeight: 'bold', textTransform: 'uppercase' }} />
+                        </View>
+                    </View>
+                    
+                    <HeadlineView style={{ fontWeight: '900', fontSize: 20, marginBottom: 8, color: isDark ? 'white' : 'black', letterSpacing: -0.5 }} />
+                    <TaglineView style={{ color: isDark ? '#a1a1aa' : '#71717a', fontSize: 12, marginBottom: 20, fontStyle: 'italic' }} numberOfLines={2} />
+                    
+                    <View className={`flex-row items-center justify-between pt-4 border-t ${isDark ? 'border-zinc-800' : 'border-zinc-100'}`}>
+                        <View className="flex-row items-center">
+                            <Ionicons name="megaphone-outline" size={14} color="#3b82f6" />
+                            <Text className="text-[11px] font-black text-zinc-500 ml-1.5 uppercase">Direct Transmission</Text>
+                        </View>
+                        <CallToActionView 
+                            className="bg-blue-600 px-6 py-2 rounded-full"
+                            style={{ minWidth: 100, alignItems: 'center' }}
+                            textStyle={{ color: 'white', fontSize: 10, fontWeight: '900', textTransform: 'uppercase', letterSpacing: 1 }}
+                        />
+                    </View>
+                </View>
+            </View>
+        </NativeAdView>
+    </Animated.View>
+  );
+};
 
 // --- HELPER: RESOLVE WRITER RANK ---
 const resolveUserRank = (totalPosts) => {
@@ -38,7 +148,6 @@ const resolveUserRank = (totalPosts) => {
 const AuthorCard = ({ author, isDark }) => {
     const router = useRouter();
     
-    // 🔹 UPDATED AURA VISUALS LOGIC
     const getAuraVisuals = (rank) => {
         if (!rank || rank > 10 || rank <= 0) return { color: isDark ? '#1e293b' : '#cbd5e1', label: 'OPERATIVE', icon: 'target' };
         switch (rank) {
@@ -46,7 +155,7 @@ const AuthorCard = ({ author, isDark }) => {
             case 2: return { color: '#ef4444', label: 'YONKO', icon: 'flare' };
             case 3: return { color: '#a855f7', label: 'KAGE', icon: 'moon-waxing-crescent' };
             case 4: return { color: '#3b82f6', label: 'SHOGUN', icon: 'shield-star' };
-            case 5: return { color: '#e0f2fe', label: 'ESPADA 0', icon: 'skull' }; // Reiatsu White
+            case 5: return { color: '#e0f2fe', label: 'ESPADA 0', icon: 'skull' };
             case 6: return { color: '#cbd5e1', label: 'ESPADA 1', icon: 'sword-cross' };
             case 7: return { color: '#94a3b8', label: 'ESPADA 2', icon: 'sword-cross' };
             case 8: return { color: '#64748b', label: 'ESPADA 3', icon: 'sword-cross' };
@@ -249,7 +358,6 @@ const SearchScreen = () => {
         }
     };
 
-    // 🔹 UI DATA LOGIC: INJECT ADS EVERY 3 CARDS
     const listData = useMemo(() => {
         const rawResults = [
             ...(activeTab === 'all' || activeTab === 'authors' ? results.authors : []),
@@ -259,12 +367,11 @@ const SearchScreen = () => {
         const processed = [];
         rawResults.forEach((item, index) => {
             processed.push(item);
-            // After every 3rd item, push an Ad placeholder
-            if ((index + 1) % 3 === 0) {
+            if ((index + 1) % 4 === 0) { // Injected every 4 items
                 processed.push({ 
                     _id: `ad-${index}`, 
                     isAd: true, 
-                    adType: index % 2 === 0 ? 'author' : 'post' // Alternates ad style
+                    adType: index % 2 === 0 ? 'author' : 'post' 
                 });
             }
         });
@@ -272,14 +379,11 @@ const SearchScreen = () => {
     }, [results, activeTab]);
 
     const renderItem = ({ item }) => {
-        // Handle Ads
         if (item.isAd) {
             return item.adType === 'author' 
                 ? <NativeAdAuthorStyle isDark={isDark} /> 
                 : <NativeAdPostStyle isDark={isDark} />;
         }
-        
-        // Handle Organic Content
         if (item.username) return <AuthorCard author={item} isDark={isDark} />;
         return <PostSearchCard item={item} isDark={isDark} />;
     };
@@ -290,7 +394,6 @@ const SearchScreen = () => {
             
             <View style={{ height: Platform.OS === 'android' ? StatusBar.currentHeight : 0 }} />
 
-            {/* Header / Search Bar */}
             <View className="px-4 py-3 flex-row items-center">
                 <TouchableOpacity onPress={() => router.back()} className="pr-3">
                     <Ionicons name="chevron-back" size={32} color={isDark ? "white" : "black"} />
@@ -316,7 +419,6 @@ const SearchScreen = () => {
                 </View>
             </View>
 
-            {/* Main Content Area */}
             {query.length < 2 ? (
                 <ScrollView className="flex-1 px-6">
                     <View className="mt-8">
@@ -349,7 +451,6 @@ const SearchScreen = () => {
                 </ScrollView>
             ) : (
                 <>
-                    {/* Tabs Section */}
                     {!isOffline && (
                         <View className="flex-row px-4 py-3 gap-2">
                             {['all', 'authors', 'posts'].map((tab) => (
@@ -364,7 +465,6 @@ const SearchScreen = () => {
                         </View>
                     )}
 
-                    {/* Search Results List */}
                     <View className="flex-1 px-4 mt-2">
                         {loading && page === 1 ? (
                             <View className="flex-1 justify-center items-center">
