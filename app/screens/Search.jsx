@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useCallback } from "react";
+import React, { useState, useEffect, useCallback, useMemo } from "react";
 import {
     View,
     TextInput,
@@ -13,12 +13,15 @@ import {
     ScrollView,
     useColorScheme 
 } from "react-native";
-import { Ionicons, MaterialCommunityIcons } from "@expo/vector-icons"; // Added MaterialCommunityIcons for aura icons
+import { Ionicons, MaterialCommunityIcons } from "@expo/vector-icons"; 
 import { useRouter } from "expo-router";
 import apiFetch from "../../utils/apiFetch";
 import { Text } from "../../components/Text"; 
 import Animated, { FadeInDown, FadeIn, Layout } from "react-native-reanimated";
 import AsyncStorage from '@react-native-async-storage/async-storage';
+
+// 🔹 IMPORT YOUR AD COMPONENTS
+import { NativeAdAuthorStyle, NativeAdPostStyle } from "../../components/NativeAd"; 
 
 // --- HELPER: RESOLVE WRITER RANK ---
 const resolveUserRank = (totalPosts) => {
@@ -176,7 +179,7 @@ const SearchScreen = () => {
     const [activeTab, setActiveTab] = useState("all");
     const [recentSearches, setRecentSearches] = useState([]);
     const [trending] = useState(["Solo Leveling", "Genshin Build", "Aura Guide", "Top Operatives", "Winter 2026 Anime"]);
-    const [isOffline, setIsOffline] = useState(false); // 🔹 Track offline status
+    const [isOffline, setIsOffline] = useState(false); 
     
     const [page, setPage] = useState(1);
     const [hasMore, setHasMore] = useState(true);
@@ -219,7 +222,6 @@ const SearchScreen = () => {
                 setHasMore(data.pagination?.hasNextPage);
                 if (pageNum === 1) saveSearch(text);
             } else {
-                // Handle non-ok response as potential offline/network error
                 setIsOffline(true);
             }
         } catch (error) {
@@ -247,7 +249,37 @@ const SearchScreen = () => {
         }
     };
 
+    // 🔹 UI DATA LOGIC: INJECT ADS EVERY 3 CARDS
+    const listData = useMemo(() => {
+        const rawResults = [
+            ...(activeTab === 'all' || activeTab === 'authors' ? results.authors : []),
+            ...(activeTab === 'all' || activeTab === 'posts' ? results.posts : [])
+        ];
+
+        const processed = [];
+        rawResults.forEach((item, index) => {
+            processed.push(item);
+            // After every 3rd item, push an Ad placeholder
+            if ((index + 1) % 3 === 0) {
+                processed.push({ 
+                    _id: `ad-${index}`, 
+                    isAd: true, 
+                    adType: index % 2 === 0 ? 'author' : 'post' // Alternates ad style
+                });
+            }
+        });
+        return processed;
+    }, [results, activeTab]);
+
     const renderItem = ({ item }) => {
+        // Handle Ads
+        if (item.isAd) {
+            return item.adType === 'author' 
+                ? <NativeAdAuthorStyle isDark={isDark} /> 
+                : <NativeAdPostStyle isDark={isDark} />;
+        }
+        
+        // Handle Organic Content
         if (item.username) return <AuthorCard author={item} isDark={isDark} />;
         return <PostSearchCard item={item} isDark={isDark} />;
     };
@@ -340,7 +372,6 @@ const SearchScreen = () => {
                                 <Text className="text-blue-500 text-[10px] font-black mt-6 tracking-[0.5em] uppercase animate-pulse">Establishing_Link...</Text>
                             </View>
                         ) : isOffline ? (
-                            // 🔹 OFFLINE UI VERSION
                             <Animated.View entering={FadeIn.duration(400)} className="flex-1 items-center justify-center px-10">
                                 <MaterialCommunityIcons name="wifi-strength-1-alert" size={80} color="#ef4444" className="opacity-50" />
                                 <Text className="text-red-500 font-black text-xl italic uppercase tracking-tighter mt-4 text-center">Signal Interrupted</Text>
@@ -357,10 +388,7 @@ const SearchScreen = () => {
                             </Animated.View>
                         ) : (
                             <FlatList
-                                data={[
-                                    ...(activeTab === 'all' || activeTab === 'authors' ? results.authors : []),
-                                    ...(activeTab === 'all' || activeTab === 'posts' ? results.posts : [])
-                                ]}
+                                data={listData}
                                 keyExtractor={(item) => item._id}
                                 renderItem={renderItem}
                                 onEndReached={handleLoadMore}
