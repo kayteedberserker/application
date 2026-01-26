@@ -1,7 +1,17 @@
 import { Ionicons, MaterialCommunityIcons } from "@expo/vector-icons";
-import { useLocalSearchParams } from "expo-router";
-import { useEffect, useRef, useState, useMemo } from "react";
-import { DeviceEventEmitter, FlatList, Image, View, Animated, Easing } from "react-native";
+import { useLocalSearchParams, useRouter } from "expo-router"; // Added useRouter
+import { useEffect, useRef, useState } from "react";
+import { 
+    DeviceEventEmitter, 
+    FlatList, 
+    Image, 
+    View, 
+    Animated, 
+    Easing, 
+    TouchableOpacity,
+    Dimensions 
+} from "react-native";
+import AsyncStorage from "@react-native-async-storage/async-storage"; // 🔹 Added for caching
 import AnimeLoading from "../../../components/AnimeLoading";
 import AppBanner from "../../../components/AppBanner";
 import PostCard from "../../../components/PostCard";
@@ -10,51 +20,38 @@ import { Text } from "../../../components/Text";
 import apiFetch from "../../../utils/apiFetch"
 
 const API_BASE = "https://oreblogda.com/api"
+const { width } = Dimensions.get('window');
 
 // 🔹 AURA TIER LOGIC (Fully Synced)
 const getAuraTier = (rank) => {
-    // New Color Palette
     const MONARCH_GOLD = '#fbbf24'; 
-    const CRIMSON_RED = '#ef4444';   // Updated from Yonko Blue
+    const CRIMSON_RED = '#ef4444';   
     const SHADOW_PURPLE = '#a855f7'; 
     const STEEL_BLUE = '#3b82f6';
-    const REI_WHITE = '#e0f2fe';    // Espada 0
+    const REI_WHITE = '#e0f2fe';    
 
     if (!rank || rank > 10 || rank <= 0) {
         return { color: '#3b82f6', label: 'ACTIVE', icon: 'radar' };
     }
 
     switch (rank) {
-        case 1: 
-            return { color: MONARCH_GOLD, label: 'MONARCH', icon: 'crown' };
-        case 2: 
-            return { color: CRIMSON_RED, label: 'YONKO', icon: 'flare' };
-        case 3: 
-            return { color: SHADOW_PURPLE, label: 'KAGE', icon: 'moon-waxing-crescent' };
-        case 4: 
-            return { color: STEEL_BLUE, label: 'SHOGUN', icon: 'shield-star' };
-        case 5: 
-            return { color: REI_WHITE, label: 'ESPADA 0', icon: 'skull' };
-        
-        // Espada 1-5 Metallic Fading
-        case 6: 
-            return { color: '#cbd5e1', label: 'ESPADA 1', icon: 'sword-cross' };
-        case 7: 
-            return { color: '#94a3b8', label: 'ESPADA 2', icon: 'sword-cross' };
-        case 8: 
-            return { color: '#64748b', label: 'ESPADA 3', icon: 'sword-cross' };
-        case 9: 
-            return { color: '#475569', label: 'ESPADA 4', icon: 'sword-cross' };
-        case 10: 
-            return { color: '#334155', label: 'ESPADA 5', icon: 'sword-cross' };
-            
-        default: 
-            return { color: '#1e293b', label: 'VANGUARD', icon: 'shield-check' };
+        case 1: return { color: MONARCH_GOLD, label: 'MONARCH', icon: 'crown' };
+        case 2: return { color: CRIMSON_RED, label: 'YONKO', icon: 'flare' };
+        case 3: return { color: SHADOW_PURPLE, label: 'KAGE', icon: 'moon-waxing-crescent' };
+        case 4: return { color: STEEL_BLUE, label: 'SHOGUN', icon: 'shield-star' };
+        case 5: return { color: REI_WHITE, label: 'ESPADA 0', icon: 'skull' };
+        case 6: return { color: '#cbd5e1', label: 'ESPADA 1', icon: 'sword-cross' };
+        case 7: return { color: '#94a3b8', label: 'ESPADA 2', icon: 'sword-cross' };
+        case 8: return { color: '#64748b', label: 'ESPADA 3', icon: 'sword-cross' };
+        case 9: return { color: '#475569', label: 'ESPADA 4', icon: 'sword-cross' };
+        case 10: return { color: '#334155', label: 'ESPADA 5', icon: 'sword-cross' };
+        default: return { color: '#1e293b', label: 'VANGUARD', icon: 'shield-check' };
     }
 };
 
 export default function AuthorPage() {
   const { id } = useLocalSearchParams()
+  const router = useRouter();
   const [author, setAuthor] = useState(null)
   const [posts, setPosts] = useState([]);
   const [totalPosts, setTotalPosts] = useState(0); 
@@ -62,12 +59,18 @@ export default function AuthorPage() {
   const [hasMore, setHasMore] = useState(true);
   const [loading, setLoading] = useState(false);
   const [refreshing, setRefreshing] = useState(false);
+  const [isOffline, setIsOffline] = useState(false); // 🔹 Track offline status
 
   const scrollRef = useRef(null);
   const pulseAnim = useRef(new Animated.Value(1)).current;
   const rotationAnim = useRef(new Animated.Value(0)).current;
+  const skeletonFade = useRef(new Animated.Value(0.3)).current;
+
+  const CACHE_KEY_AUTHOR = `author_data_${id}`;
+  const CACHE_KEY_POSTS = `author_posts_${id}`;
 
   useEffect(() => {
+    // Pulse and Rotation existing logic
     Animated.loop(
       Animated.sequence([
         Animated.timing(pulseAnim, { toValue: 1.15, duration: 2500, useNativeDriver: true }),
@@ -83,6 +86,14 @@ export default function AuthorPage() {
         useNativeDriver: true
       })
     ).start();
+
+    // Skeleton Shimmer effect
+    Animated.loop(
+        Animated.sequence([
+          Animated.timing(skeletonFade, { toValue: 0.7, duration: 800, useNativeDriver: true }),
+          Animated.timing(skeletonFade, { toValue: 0.3, duration: 800, useNativeDriver: true }),
+        ])
+    ).start();
   }, []);
 
   const spin = rotationAnim.interpolate({
@@ -97,30 +108,50 @@ export default function AuthorPage() {
     return () => sub.remove();
   }, []);
 
+  // 🔹 Caching Helpers
+  const loadCache = async () => {
+    try {
+        const [cAuth, cPosts] = await Promise.all([
+            AsyncStorage.getItem(CACHE_KEY_AUTHOR),
+            AsyncStorage.getItem(CACHE_KEY_POSTS)
+        ]);
+        if (cAuth) setAuthor(JSON.parse(cAuth));
+        if (cPosts) setPosts(JSON.parse(cPosts));
+    } catch (e) { console.log("Cache load error", e); }
+  };
+
   const fetchInitialData = async () => {
     setLoading(true);
+    setIsOffline(false);
     try {
       const [userRes, postRes] = await Promise.all([
         apiFetch(`${API_BASE}/users/${id}`),
         apiFetch(`${API_BASE}/posts?author=${id}&page=1&limit=10`),
       ]);
+      
       const userData = await userRes.json();
       const postData = await postRes.json();
-      if (userRes.ok) setAuthor(userData.user);
+
+      if (userRes.ok) {
+        setAuthor(userData.user);
+        AsyncStorage.setItem(CACHE_KEY_AUTHOR, JSON.stringify(userData.user));
+      }
       if (postRes.ok) {
         setPosts(postData.posts);
         setTotalPosts(postData.total || postData.posts.length);
-        setHasMore(postData.posts.length === 6);
+        setHasMore(postData.posts.length >= 6);
+        AsyncStorage.setItem(CACHE_KEY_POSTS, JSON.stringify(postData.posts));
       }
     } catch (error) {
       console.error("Fetch error:", error);
+      setIsOffline(true);
     } finally {
       setLoading(false);
     }
   };
 
   const fetchMorePosts = async () => {
-    if (!hasMore || loading || posts.length === 0) return;
+    if (!hasMore || loading || posts.length === 0 || isOffline) return;
     const nextPage = page + 1;
     setLoading(true);
     try {
@@ -130,7 +161,7 @@ export default function AuthorPage() {
         setPosts((prev) => [...prev, ...data.posts]);
         setTotalPosts(data.total);
         setPage(nextPage);
-        setHasMore(data.posts.length === 6);
+        setHasMore(data.posts.length >= 6);
       } else {
         setHasMore(false);
       }
@@ -142,10 +173,28 @@ export default function AuthorPage() {
   };
 
   useEffect(() => {
-    fetchInitialData();
+    loadCache().then(() => fetchInitialData());
   }, [id]);
 
+  // 🔹 Skeleton Component
+  const AuthorSkeleton = () => (
+    <View className="px-4 pt-20 pb-6 opacity-40">
+        <View className="p-6 bg-gray-100 dark:bg-[#111] border border-gray-200 dark:border-gray-800 rounded-[40px] items-center">
+            <Animated.View style={{ opacity: skeletonFade }} className="w-32 h-32 bg-gray-300 dark:bg-gray-800 rounded-full mb-6" />
+            <Animated.View style={{ opacity: skeletonFade }} className="w-48 h-8 bg-gray-300 dark:bg-gray-800 rounded-lg mb-4" />
+            <Animated.View style={{ opacity: skeletonFade }} className="w-full h-4 bg-gray-300 dark:bg-gray-800 rounded-lg mb-2" />
+            <Animated.View style={{ opacity: skeletonFade }} className="w-2/3 h-4 bg-gray-300 dark:bg-gray-800 rounded-lg" />
+            <View className="flex-row gap-8 mt-10 w-full py-4 justify-center border-y border-gray-200 dark:border-gray-800">
+                {[1, 2, 3].map(i => <View key={i} className="w-12 h-10 bg-gray-300 dark:bg-gray-800 rounded" />)}
+            </View>
+        </View>
+    </View>
+  );
+
   const ListHeader = () => {
+    if (!author && isOffline) return <AuthorSkeleton />;
+    if (!author) return null;
+
     const count = totalPosts;
     const rankTitle = count > 200 ? "Master_Writer" : count > 150 ? "Elite_Writer" : count > 100 ? "Senior_Writer" : count > 50 ? "Novice_Writer" : count > 25 ? "Senior_Researcher" : "Novice_Researcher";
     const rankIcon = count > 200 ? "👑" : count > 150 ? "💎" : count > 100 ? "🔥" : count > 50 ? "⚔️" : count > 25 ? "📜" : "🛡️";
@@ -169,7 +218,6 @@ export default function AuthorPage() {
             className="relative p-6 bg-white dark:bg-[#0a0a0a] border border-gray-100 dark:border-gray-800 overflow-hidden shadow-2xl"
             style={{ borderRadius: 40 }}
           >
-            {/* 🔹 Rank Glow Background */}
             <View 
                 className="absolute -top-10 -right-10 w-60 h-60 opacity-10 rounded-full blur-3xl" 
                 style={{ backgroundColor: aura.color }}
@@ -178,7 +226,6 @@ export default function AuthorPage() {
             <View className="flex-col items-center gap-6">
               <View className="relative items-center justify-center">
                 
-                {/* 🔹 ROTATING OUTER FRAME (Monarch & Yonko only) */}
                 {auraRank > 0 && auraRank <= 5 && (
                     <Animated.View 
                         style={[
@@ -196,7 +243,6 @@ export default function AuthorPage() {
                     />
                 )}
 
-                {/* 🔹 PULSING GLOW FRAME */}
                 {auraRank > 0 && (
                     <Animated.View 
                         style={[
@@ -306,7 +352,7 @@ export default function AuthorPage() {
 
         <View className="flex-row items-center gap-4 mt-10 mb-4 px-2">
           <Text className="text-xl font-black italic uppercase tracking-tighter text-gray-900 dark:text-white">
-            Mission <Text style={{ color: aura.color }}>History</Text>
+            Mission <Text style={{ color: aura ? aura.color : '#3b82f6' }}>History</Text>
           </Text>
           <View className="h-[1px] flex-1 bg-gray-100 dark:bg-gray-800" />
         </View>
@@ -331,7 +377,33 @@ export default function AuthorPage() {
     );
   };
 
-  if (loading && posts.length === 0) {
+  // 🔹 Offline / No Author UI Overlay
+  if (!author && isOffline) {
+    return (
+        <View className="flex-1 bg-white dark:bg-[#0a0a0a]">
+            <AuthorSkeleton />
+            <View className="flex-1 items-center justify-center px-10 -mt-20">
+                <MaterialCommunityIcons name="wifi-strength-1-alert" size={48} color="#ef4444" />
+                <Text className="text-2xl font-black uppercase italic text-red-600 mt-4">Signal Interrupted</Text>
+                <Text className="text-center text-gray-500 dark:text-gray-400 mt-2 mb-8 font-medium">
+                    Neural link to the central database has been severed. Showing cached records.
+                </Text>
+                <TouchableOpacity 
+                    onPress={fetchInitialData}
+                    className="bg-red-600 px-8 py-3 rounded-full flex-row items-center gap-2"
+                >
+                    <Ionicons name="refresh" size={18} color="white" />
+                    <Text className="text-white font-black uppercase tracking-widest text-xs">Reconnect</Text>
+                </TouchableOpacity>
+                <TouchableOpacity onPress={() => router.back()} className="mt-6">
+                    <Text className="text-gray-400 font-bold uppercase tracking-widest text-[10px]">Return to Base</Text>
+                </TouchableOpacity>
+            </View>
+        </View>
+    );
+  }
+
+  if (loading && posts.length === 0 && !author) {
     return <AnimeLoading message="Loading Author" subMessage="Decoding biological data..." />;
   }
 
