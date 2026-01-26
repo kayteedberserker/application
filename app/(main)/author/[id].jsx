@@ -102,7 +102,7 @@ export default function AuthorPage() {
     try {
       const [userRes, postRes] = await Promise.all([
         apiFetch(`${API_BASE}/users/${id}`),
-        apiFetch(`${API_BASE}/posts?author=${id}&page=1&limit=6`),
+        apiFetch(`${API_BASE}/posts?author=${id}&page=1&limit=10`),
       ]);
       const userData = await userRes.json();
       const postData = await postRes.json();
@@ -124,7 +124,7 @@ export default function AuthorPage() {
     const nextPage = page + 1;
     setLoading(true);
     try {
-      const res = await apiFetch(`${API_BASE}/posts?author=${id}&page=${nextPage}&limit=6`);
+      const res = await apiFetch(`${API_BASE}/posts?author=${id}&page=${nextPage}&limit=10`);
       const data = await res.json();
       if (res.ok && data.posts.length > 0) {
         setPosts((prev) => [...prev, ...data.posts]);
