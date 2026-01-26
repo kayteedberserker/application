@@ -20,7 +20,7 @@ import apiFetch from "../../../utils/apiFetch"
 
 
 const API_BASE = "https://oreblogda.com/api";
-const LIMIT = 5;
+const LIMIT = 10;
 
 export default function CategoryPage() {
     const { id } = useLocalSearchParams();
