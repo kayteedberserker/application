@@ -19,7 +19,7 @@ export const NativeAdAuthorStyle = ({ isDark }) => {
     <NativeAdView
       style={{ width: '100%' }}
       // Replace with your actual Ad Unit ID
-      adUnitID={Platform.OS === 'ios' ? 'ca-app-pub-3940256099942544/3986624511' : 'ca-app-pub-3940256099942544/2247696110'}
+      adUnitID={Platform.OS === 'ios' ? 'ca-app-pub-3940256099942544/3986624511' : 'ca-app-pub-8021671365048667/1282169688'}
     >
       <Animated.View 
         entering={FadeInDown.duration(400)}
@@ -83,7 +83,7 @@ export const NativeAdPostStyle = ({ isDark }) => {
   return (
     <NativeAdView
       style={{ width: '100%' }}
-      adUnitID={Platform.OS === 'ios' ? 'ca-app-pub-3940256099942544/3986624511' : 'ca-app-pub-3940256099942544/2247696110'}
+      adUnitID={Platform.OS === 'ios' ? 'ca-app-pub-3940256099942544/3986624511' : 'ca-app-pub-8021671365048667/1282169688'}
     >
       <Animated.View 
         entering={FadeIn.duration(500)}
