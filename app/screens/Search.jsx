@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useCallback, useMemo } from "react";
+import React, { useState, useEffect, useCallback, useMemo, useRef } from "react";
 import {
     View,
     TextInput,
@@ -179,6 +179,9 @@ const SearchScreen = () => {
     const [page, setPage] = useState(1);
     const [hasMore, setHasMore] = useState(true);
 
+    // Ref to track latest query to prevent race conditions
+    const latestQuery = useRef(query);
+
     useEffect(() => {
         loadRecentSearches();
     }, []);
@@ -189,29 +192,35 @@ const SearchScreen = () => {
     };
 
     const saveSearch = async (text) => {
-        if (!text || text.length < 2) return;
+        if (!text || text.trim().length < 2) return;
         const updated = [text, ...recentSearches.filter(s => s !== text)].slice(0, 5);
         setRecentSearches(updated);
         await AsyncStorage.setItem('recent_searches', JSON.stringify(updated));
     };
 
     const performSearch = useCallback(async (text, pageNum = 1, shouldAppend = false) => {
-        if (!text || text.trim().length < 2) {
+        const trimmedText = text.trim();
+        if (trimmedText.length < 2) {
             setResults({ authors: [], posts: [] });
             setLoading(false);
             return;
         }
 
+        // 🔹 Only show full loading screen for page 1 new searches
         if (pageNum === 1) setLoading(true);
         else setLoadingMore(true);
+        
         setIsOffline(false);
+        latestQuery.current = trimmedText;
 
         try {
-            const response = await apiFetch(`https://oreblogda.com/api/search?q=${encodeURIComponent(text)}&page=${pageNum}&limit=10`);
+            const response = await apiFetch(`https://oreblogda.com/api/search?q=${encodeURIComponent(trimmedText)}&page=${pageNum}&limit=10`);
             const data = await response.json();
             
+            // Check if this is still the query the user wants
+            if (latestQuery.current !== trimmedText) return;
+
             if (response.ok) {
-                // 🔹 Ensure we fall back to empty arrays if data keys are missing
                 const newAuthors = data.users || data.authors || [];
                 const newPosts = data.posts || [];
 
@@ -221,7 +230,7 @@ const SearchScreen = () => {
                 }));
                 
                 setHasMore(data.pagination?.hasNextPage || false);
-                if (pageNum === 1) saveSearch(text);
+                if (pageNum === 1) saveSearch(trimmedText);
             } else {
                 setIsOffline(true);
             }
@@ -229,6 +238,7 @@ const SearchScreen = () => {
             console.error("Search Error:", error);
             setIsOffline(true);
         } finally {
+            // 🔹 Reset loading states
             setLoading(false);
             setLoadingMore(false);
         }
@@ -243,9 +253,9 @@ const SearchScreen = () => {
                 setResults({ authors: [], posts: [] });
                 setLoading(false);
             }
-        }, 400);
+        }, 500); // Slightly longer debounce to prevent flicker
         return () => clearTimeout(delayDebounceFn);
-    }, [query, performSearch]);
+    }, [query]); // Removed performSearch from deps to prevent re-triggering loop
 
     const handleLoadMore = () => {
         if (!loadingMore && hasMore && query.length > 1 && !isOffline && !loading) {
@@ -255,7 +265,6 @@ const SearchScreen = () => {
         }
     };
 
-    // 🔹 useMemo ensures the list only recalculates when dependencies change
     const filteredData = useMemo(() => {
         const authors = (activeTab === 'all' || activeTab === 'authors') ? results.authors : [];
         const posts = (activeTab === 'all' || activeTab === 'posts') ? results.posts : [];
@@ -263,7 +272,6 @@ const SearchScreen = () => {
     }, [results, activeTab]);
 
     const renderItem = ({ item }) => {
-        // Distinguish between user objects (username) and post objects (title)
         if (item.username) return <AuthorCard author={item} isDark={isDark} />;
         return <PostSearchCard item={item} isDark={isDark} />;
     };
@@ -292,7 +300,10 @@ const SearchScreen = () => {
                         autoFocus
                     />
                     {query.length > 0 && (
-                        <TouchableOpacity onPress={() => setQuery("")}>
+                        <TouchableOpacity onPress={() => {
+                            setQuery("");
+                            setResults({ authors: [], posts: [] });
+                        }}>
                             <Ionicons name="close-circle" size={20} color={isDark ? "#52525b" : "#d1d5db"} />
                         </TouchableOpacity>
                     )}
@@ -346,7 +357,8 @@ const SearchScreen = () => {
                     )}
 
                     <View className="flex-1 px-4 mt-2">
-                        {loading && page === 1 ? (
+                        {/* 🔹 Only show this if there are NO results yet. If results exist, don't flicker. */}
+                        {loading && filteredData.length === 0 ? (
                             <View className="flex-1 justify-center items-center">
                                 <ActivityIndicator color="#2563eb" size="large" />
                                 <Text className="text-blue-500 text-[10px] font-black mt-6 tracking-[0.5em] uppercase animate-pulse">Establishing_Link...</Text>
@@ -369,7 +381,7 @@ const SearchScreen = () => {
                         ) : (
                             <FlatList
                                 data={filteredData}
-                                keyExtractor={(item) => item._id}
+                                keyExtractor={(item, index) => item._id || index.toString()}
                                 renderItem={renderItem}
                                 onEndReached={handleLoadMore}
                                 onEndReachedThreshold={0.5}
@@ -378,7 +390,7 @@ const SearchScreen = () => {
                                         <ActivityIndicator color="#2563eb" />
                                     </View>
                                 ) : null}
-                                ListEmptyComponent={() => (
+                                ListEmptyComponent={() => !loading && (
                                     <View className="mt-20 items-center opacity-40">
                                         <Ionicons name="scan-outline" size={80} color={isDark ? "#3f3f46" : "#d1d5db"} />
                                         <Text className="text-zinc-500 font-black mt-4 text-center tracking-widest uppercase text-xs">No matching frequencies detected.</Text>
@@ -386,6 +398,7 @@ const SearchScreen = () => {
                                 )}
                                 showsVerticalScrollIndicator={false}
                                 contentContainerStyle={{ paddingBottom: 60 }}
+                                removeClippedSubviews={Platform.OS === 'android'}
                             />
                         )}
                     </View>
