@@ -88,7 +88,7 @@ const getAuraVisuals = (rank) => {
             10: '#334155' // Espada 5 (Hollow Slate)
         };
         visualConfig.color = espadaColors[rank];
-        visualConfig.label = `ESPADA ${rank - 4}`;
+        visualConfig.label = `ESPADA ${rank - 5}`;
         visualConfig.icon = 'sword-cross';
         visualConfig.description = 'One of the ten elite warriors. Continue your ascent to reach the Top 5.';
     } else {
