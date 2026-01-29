@@ -135,30 +135,22 @@ export default function PostsViewer() {
     }
 
     const renderItem = ({ item, index }) => {
-    // This will show an ad after every 4 posts
-    const showAd = (index + 1) % 4 === 0;
+        const showAd = (index + 1) % 4 === 0;
 
-    return (
-        <View>
-            {/* Your main post component */}
-            <PostCard 
-                post={item} 
-                isFeed 
-                posts={posts} 
-                setPosts={mutate} 
-            />
-
-            {/* The Ad Injection */}
-            {showAd && ready && (
-                <View className="mb-8 mt-2 items-center bg-gray-50 dark:bg-gray-800/30 py-4 rounded-2xl border border-gray-100 dark:border-gray-800">
-                        <RNText className="text-[10px] text-gray-400 mb-2 uppercase tracking-widest">Sponsored Transmission</RNText>
+        return (
+            <View>
+                <PostCard post={item} isFeed posts={posts} setPosts={mutate} />
+                {showAd && ready && (
+                    <View className="mb-8 mt-3 w-full p-6 border border-dashed border-gray-300 dark:border-gray-800 rounded-[32px] bg-gray-50/50 dark:bg-white/5 items-center justify-center">
+                        <Text className="text-[10px] font-bold text-gray-400 uppercase tracking-[0.2em] italic text-center">
+                            Sponsored Transmission
+                        </Text>
                         <AppBanner size="MEDIUM_RECTANGLE" />
                     </View>
-            )}
-        </View>
-    );
-};
-
+                )}
+            </View>
+        );
+    };
 
     
 
@@ -263,4 +255,4 @@ export default function PostsViewer() {
             </View>
         </View>
     );
-        }
+    }
