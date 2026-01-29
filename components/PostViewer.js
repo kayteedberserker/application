@@ -10,7 +10,6 @@ import {
     InteractionManager,
     View
 } from "react-native";
-import { NativeAdAuthorStyle, NativeAdPostStyle } from "./NativeAd";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import useSWRInfinite from "swr/infinite";
 import AsyncStorage from "@react-native-async-storage/async-storage"; // 👈 Added for caching
