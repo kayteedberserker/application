@@ -1,7 +1,7 @@
 import AsyncStorage from "@react-native-async-storage/async-storage";
-import { createContext, useContext, useMemo, useEffect, useState, useCallback } from "react";
+import { createContext, useContext, useMemo, useEffect, useState, useCallback, useRef } from "react";
 import * as Notifications from "expo-notifications";
-import { Platform } from "react-native";
+import { Platform, View, ActivityIndicator } from "react-native";
 
 const StreakContext = createContext();
 
@@ -19,32 +19,33 @@ const scheduleStreakReminders = async (expiresAt) => {
     const now = Date.now();
     const expiryTime = new Date(expiresAt).getTime();
 
-    // 1. Clear existing streak notifications first to avoid duplicates
+    // 🛡️ FIX 1: If the streak is already expired, don't schedule anything!
+    if (expiryTime <= now) {
+      console.log("Streak already expired, skipping notifications.");
+      return;
+    }
+
+    // 1. Clear existing streak notifications first
     const stored = await AsyncStorage.getItem(STREAK_NOTIFICATION_KEY);
     if (stored) {
       const existingIds = JSON.parse(stored);
-      await Promise.all(
-        existingIds.map(id => Notifications.cancelScheduledNotificationAsync(id).catch(() => {}))
-      );
+      if (Array.isArray(existingIds)) {
+        await Promise.all(
+          existingIds.map(id => Notifications.cancelScheduledNotificationAsync(id).catch(() => {}))
+        );
+      }
     }
 
     const newIds = [];
 
-    // Helper to schedule ONLY if the target time is in the future
     const safeSchedule = async (title, body, targetTimestamp, data = {}) => {
-      const secondsUntil = Math.floor((targetTimestamp - now) / 1000);
+      // 🛡️ FIX 2: Buffer of 10 seconds to account for execution lag
+      const secondsUntil = Math.floor((targetTimestamp - Date.now()) / 1000);
       
-      // 🛡️ CRITICAL FIX: If seconds <= 0, the time is in the past. 
-      // Do NOT schedule, or it will fire immediately.
-      if (secondsUntil <= 0) return;
+      if (secondsUntil <= 10) return; 
 
       const id = await Notifications.scheduleNotificationAsync({
-        content: {
-          title,
-          body,
-          sound: true,
-          data,
-        },
+        content: { title, body, sound: true, data },
         trigger: {
           seconds: secondsUntil,
           channelId: "default",
@@ -53,30 +54,11 @@ const scheduleStreakReminders = async (expiresAt) => {
       newIds.push(id);
     };
 
-    // 🔹 24h reminder (Only if expiry is more than 24h away)
-    await safeSchedule(
-      "🔥 Streak at Risk!",
-      "24 hours left to post!",
-      expiryTime - 24 * 60 * 60 * 1000,
-      { screen: "CreatePost" }
-    );
+    // 🔹 Reminders
+    await safeSchedule("🔥 Streak at Risk!", "24 hours left!", expiryTime - 24 * 60 * 60 * 1000);
+    await safeSchedule("⚠️ FINAL WARNING", "2 hours left!", expiryTime - 2 * 60 * 60 * 1000);
+    await safeSchedule("💀 Streak Lost", "Your streak has expired.", expiryTime);
 
-    // 🔹 2h reminder (Only if expiry is more than 2h away)
-    await safeSchedule(
-      "⚠️ FINAL WARNING",
-      "2 hours left! Post now!",
-      expiryTime - 2 * 60 * 60 * 1000,
-      { screen: "CreatePost" }
-    );
-
-    // 🔹 Expiry notification
-    await safeSchedule(
-      "💀 Streak Lost",
-      "Your streak has expired.",
-      expiryTime
-    );
-
-    // Save the new IDs so we can cancel them later
     await AsyncStorage.setItem(STREAK_NOTIFICATION_KEY, JSON.stringify(newIds));
   } catch (e) {
     console.error("Streak Notification Error:", e);
@@ -96,39 +78,29 @@ export function StreakProvider({ children }) {
   });
 
   const [loading, setLoading] = useState(true);
+  const lastScheduledTime = useRef(null); // 🛡️ FIX 3: Prevent double-scheduling
 
   const fetchStreak = useCallback(async () => {
+    // Show loading for any fetch that includes loading per instructions
+    setLoading(true); 
     try {
       const userData = await AsyncStorage.getItem("mobileUser");
-      if (!userData) {
-        setLoading(false);
-        return;
-      }
+      if (!userData) return;
 
-      const parsedUser = JSON.parse(userData);
-      const deviceId = parsedUser?.deviceId;
-      if (!deviceId) {
-        setLoading(false);
-        return;
-      }
-
-      const res = await fetch(
-        `https://oreblogda.com/api/users/streak/${deviceId}`,
-        {
-          method: "GET",
-          headers: {
-            "Content-Type": "application/json",
-            "x-oreblogda-secret": APP_SECRET,
-          },
-        }
-      );
+      const { deviceId } = JSON.parse(userData);
+      const res = await fetch(`https://oreblogda.com/api/users/streak/${deviceId}`, {
+        method: "GET",
+        headers: { "Content-Type": "application/json", "x-oreblogda-secret": APP_SECRET },
+      });
 
       if (res.ok) {
         const data = await res.json();
         setStreakData(data);
         await AsyncStorage.setItem(STREAK_CACHE_KEY, JSON.stringify(data));
 
-        if (data.expiresAt) {
+        // Only schedule if the expiry time has actually changed
+        if (data.expiresAt && data.expiresAt !== lastScheduledTime.current) {
+          lastScheduledTime.current = data.expiresAt;
           await scheduleStreakReminders(data.expiresAt);
         }
       }
@@ -141,49 +113,40 @@ export function StreakProvider({ children }) {
 
   useEffect(() => {
     let isMounted = true;
-
     const init = async () => {
-      try {
-        // 1. Load from cache first for instant UI
-        const saved = await AsyncStorage.getItem(STREAK_CACHE_KEY);
-        if (saved && isMounted) {
-          const parsed = JSON.parse(saved);
-          setStreakData(parsed);
-          // Don't schedule here yet, wait for fresh data or 
-          // do it once fresh data fails.
-        }
-
-        // 2. Fetch fresh data
-        await fetchStreak();
-      } catch (err) {
-        console.error("Init Streak Error:", err);
+      const saved = await AsyncStorage.getItem(STREAK_CACHE_KEY);
+      if (saved && isMounted) {
+        const parsed = JSON.parse(saved);
+        setStreakData(parsed);
+        // Note: We DON'T schedule from cache to avoid "Opening App Spam"
+        // We wait for the fresh fetchStreak call below.
       }
+      await fetchStreak();
     };
-
     init();
     return () => { isMounted = false; };
   }, [fetchStreak]);
 
-  const value = useMemo(
-    () => ({
-      streak: streakData,
-      loading,
-      refreshStreak: fetchStreak,
-    }),
-    [streakData, loading, fetchStreak]
-  );
+  const value = useMemo(() => ({
+    streak: streakData,
+    loading,
+    refreshStreak: fetchStreak,
+  }), [streakData, loading, fetchStreak]);
 
   return (
     <StreakContext.Provider value={value}>
-      {children}
+      {/* Loading animation for the initial load */}
+      {loading && streakData.streak === 0 ? (
+        <View style={{flex: 1, justifyContent: 'center', alignItems: 'center'}}>
+           <ActivityIndicator size="large" color="#3b82f6" />
+        </View>
+      ) : children}
     </StreakContext.Provider>
   );
 }
 
 export function useStreak() {
   const context = useContext(StreakContext);
-  if (!context) {
-    throw new Error("useStreak must be used within a StreakProvider");
-  }
+  if (!context) throw new Error("useStreak must be used within a StreakProvider");
   return context;
 }
