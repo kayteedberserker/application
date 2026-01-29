@@ -76,12 +76,12 @@ const resolveUserRank = (totalPosts) => {
                             "🛡️";
 
     const postLimit =
-        rankTitle === "Master_Writer" ? 10 :
-            rankTitle === "Elite_Writer" ? 7 :
-                rankTitle === "Senior_Writer" ? 7 :
-                    rankTitle === "Novice_Writer" ? 5 :
-                        rankTitle === "Senior_Researcher" ? 5 :
-                            3;
+        rankTitle === "Master_Writer" ? 5 :
+            rankTitle === "Elite_Writer" ? 4 :
+                rankTitle === "Senior_Writer" ? 4 :
+                    rankTitle === "Novice_Writer" ? 3 :
+                        rankTitle === "Senior_Researcher" ? 3 :
+                            2;
 
     return { rankTitle, rankIcon, postLimit };
 };
@@ -120,7 +120,7 @@ export default function AuthorDiaryDashboard() {
     const [timeLeft, setTimeLeft] = useState("");
     
     // Rank & Post Limit State
-    const [userRank, setUserRank] = useState({ rankTitle: "Novice_Researcher", rankIcon: "🛡️", postLimit: 3 });
+    const [userRank, setUserRank] = useState({ rankTitle: "Novice_Researcher", rankIcon: "🛡️", postLimit: 2 });
     const [canPostAgain, setCanPostAgain] = useState(false);
     
     const [rewardToken, setRewardToken] = useState(null);
