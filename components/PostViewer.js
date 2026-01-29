@@ -10,6 +10,7 @@ import {
     InteractionManager,
     View
 } from "react-native";
+import { NativeAdAuthorStyle, NativeAdPostStyle } from "./NativeAd";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import useSWRInfinite from "swr/infinite";
 import AsyncStorage from "@react-native-async-storage/async-storage"; // 👈 Added for caching
@@ -135,22 +136,29 @@ export default function PostsViewer() {
     }
 
     const renderItem = ({ item, index }) => {
-        const showAd = (index + 1) % 4 === 0;
+    // This will show an ad after every 4 posts
+    const showAd = (index + 1) % 4 === 0;
 
-        return (
-            <View>
-                <PostCard post={item} isFeed posts={posts} setPosts={mutate} />
-                {showAd && ready && (
-                    <View className="mb-8 mt-3 w-full p-6 border border-dashed border-gray-300 dark:border-gray-800 rounded-[32px] bg-gray-50/50 dark:bg-white/5 items-center justify-center">
-                        <Text className="text-[10px] font-bold text-gray-400 uppercase tracking-[0.2em] italic text-center">
-                            Sponsored Transmission
-                        </Text>
-                        <AppBanner size="MEDIUM_RECTANGLE" />
-                    </View>
-                )}
-            </View>
-        );
-    };
+    return (
+        <View>
+            {/* Your main post component */}
+            <PostCard 
+                post={item} 
+                isFeed 
+                posts={posts} 
+                setPosts={mutate} 
+            />
+
+            {/* The Ad Injection */}
+            {showAd && ready && (
+                <View style={{ marginTop: 12 }}> 
+                    <NativeAdPostStyle isDark={isDark} />
+                </View>
+            )}
+        </View>
+    );
+};
+
 
     
 
