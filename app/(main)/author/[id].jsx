@@ -20,7 +20,7 @@ import PostCard from "../../../components/PostCard";
 import { SyncLoading } from "../../../components/SyncLoading";
 import { Text } from "../../../components/Text";
 import apiFetch from "../../../utils/apiFetch"
-
+import { NativeAdAuthorStyle, NativeAdPostStyle } from "../../../components/NativeAd";
 const API_BASE = "https://oreblogda.com/api"
 const { width } = Dimensions.get('window');
 
@@ -368,11 +368,8 @@ export default function AuthorPage() {
         <View>
             <PostCard post={item} isFeed/>
             {showAd && (
-                <View className="mb-8 mt-3 mx-4 p-6 border border-dashed border-gray-300 dark:border-gray-800 rounded-[32px] bg-gray-50/50 dark:bg-white/5 items-center justify-center">
-                    <Text className="text-[10px] font-bold text-gray-400 uppercase tracking-[0.2em] italic text-center mb-4">
-                        Sponsored Transmission
-                    </Text>
-                    <AppBanner size="MEDIUM_RECTANGLE" />
+                <View style={{ marginTop: 12 }}> 
+                    <NativeAdPostStyle />
                 </View>
             )}
         </View>
