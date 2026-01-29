@@ -53,7 +53,7 @@ const AppBanner = ({ size = BannerAdSize.MEDIUM_RECTANGLE }) => {
       }}
     >
       {/* 🔹 LOADING ANIMATION: Shows while ad is fetching */}
-{/* {!loaded && !failed && (
+ {!loaded && !failed && (
        <View style={{ position: 'absolute' }}>
           <ActivityIndicator size="small" color="#3b82f6" />
         </View>
@@ -75,7 +75,7 @@ const AppBanner = ({ size = BannerAdSize.MEDIUM_RECTANGLE }) => {
         onAdFailedToLoad={(error) => {
           handleAdFailed(error);
        }}
-      />*/}
+      />
     </View>
   );
 };
