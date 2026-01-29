@@ -369,7 +369,7 @@ export default function AuthorPage() {
             <PostCard post={item} isFeed/>
             {showAd && (
                 <View style={{ marginTop: 12 }}> 
-                    <NativeAdPostStyle />
+                    <AppBanner />
                 </View>
             )}
         </View>
