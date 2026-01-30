@@ -34,8 +34,6 @@ Notifications.setNotificationHandler({
         shouldSetBadge: false,
     }),
 });
-const COOLDOWN_NOTIFICATION_KEY = "cooldown_notification_id";
-
 
 const API_BASE = "https://oreblogda.com/api";
 const fetcher = (url) => apiFetch(url).then((res) => res.json());
@@ -44,7 +42,7 @@ const fetcher = (url) => apiFetch(url).then((res) => res.json());
 async function getUserTotalPosts(deviceId) {
     if (!deviceId) return 0;
     try {
-        const res = await apiFetch(`${API_BASE}/posts?author=${deviceId}`);
+        const res = await fetch(`${API_BASE}/posts?author=${deviceId}`);
         if (!res.ok) throw new Error("Failed to fetch posts");
         const data = await res.json();
         return data.posts?.length || 0;
@@ -76,12 +74,12 @@ const resolveUserRank = (totalPosts) => {
                             "🛡️";
 
     const postLimit =
-        rankTitle === "Master_Writer" ? 5 :
-            rankTitle === "Elite_Writer" ? 4 :
-                rankTitle === "Senior_Writer" ? 4 :
-                    rankTitle === "Novice_Writer" ? 3 :
-                        rankTitle === "Senior_Researcher" ? 3 :
-                            2;
+        rankTitle === "Master_Writer" ? 10 :
+            rankTitle === "Elite_Writer" ? 7 :
+                rankTitle === "Senior_Writer" ? 7 :
+                    rankTitle === "Novice_Writer" ? 5 :
+                        rankTitle === "Senior_Researcher" ? 5 :
+                            3;
 
     return { rankTitle, rankIcon, postLimit };
 };
@@ -120,7 +118,7 @@ export default function AuthorDiaryDashboard() {
     const [timeLeft, setTimeLeft] = useState("");
     
     // Rank & Post Limit State
-    const [userRank, setUserRank] = useState({ rankTitle: "Novice_Researcher", rankIcon: "🛡️", postLimit: 2 });
+    const [userRank, setUserRank] = useState({ rankTitle: "Novice_Researcher", rankIcon: "🛡️", postLimit: 3 });
     const [canPostAgain, setCanPostAgain] = useState(false);
     
     const [rewardToken, setRewardToken] = useState(null);
@@ -388,48 +386,21 @@ export default function AuthorDiaryDashboard() {
 
         // Only run timer if we are actually blocked AND have a target time
         if ((postsLast24h >= maxPostsToday) && targetTime) {
-      
-const scheduleDoneNotification = async () => {
-  if (rewardToken) return;
-
-  await ensurePermissions();
-
-  const now = Date.now();
-  const triggerInSeconds = Math.floor((targetTime - now) / 1000);
-
-  if (triggerInSeconds <= 0) {
-    console.log("Target time already passed");
-    return;
-  }
-
-  // 🔹 Check if we already scheduled one
-  const existingId = await AsyncStorage.getItem(COOLDOWN_NOTIFICATION_KEY);
-
-  if (existingId) {
-    // 🔹 Cancel only this cooldown notification
-    await Notifications.cancelScheduledNotificationAsync(existingId);
-  }
-
-  // 🔹 Schedule fresh notification
-  const notificationId = await Notifications.scheduleNotificationAsync({
-    content: {
-      title: "Cooldown Finished! 🎉",
-      body: "New slot available. Post now!",
-      sound: true,
-      data: { type: "open_diary" },
-    },
-    trigger: {
-      seconds: triggerInSeconds,
-      channelId: "default",
-    },
-  });
-
-  // 🔹 Store the new ID
-  await AsyncStorage.setItem(
-    COOLDOWN_NOTIFICATION_KEY,
-    notificationId
-  );
-};
+            
+            // Notification scheduler (only if not already rewarded)
+            const scheduleDoneNotification = async () => {
+                if (!rewardToken) {
+                     // logic to schedule notification (kept simple here)
+                     const triggerInSeconds = Math.floor((targetTime - new Date().getTime()) / 1000);
+                     if (triggerInSeconds > 0) {
+                        await Notifications.cancelAllScheduledNotificationsAsync();
+                        await Notifications.scheduleNotificationAsync({
+                            content: { title: "Cooldown Finished! 🎉", body: "New slot available. Post now!", sound: true, data: { type: "open_diary" } },
+                            trigger: { type: Notifications.SchedulableTriggerInputTypes.DATE, date: new Date(targetTime), channelId: 'default' },
+                        });
+                     }
+                }
+            }
             scheduleDoneNotification();
 
             const calculateTime = () => {
@@ -1102,4 +1073,4 @@ const scheduleDoneNotification = async () => {
             </ScrollView>
         </View>
     );
-}
+        }
