@@ -99,11 +99,11 @@ export default function RankSystemScreen() {
             </View>
             
             <View style={{ backgroundColor: THEME.card, borderColor: THEME.border }} className="p-6 rounded-[35px] border-2">
-                <RankRow icon="👑" title="Master_Writer" count={200} limit={10} />
-                <RankRow icon="💎" title="Elite_Writer" count={151} limit={7} />
-                <RankRow icon="🔥" title="Senior_Writer" count={101} limit={7} />
-                <RankRow icon="⚔️" title="Novice_Writer" count={51} limit={5} />
-                <RankRow icon="📜" title="Senior_Researcher" count={26} limit={5} />
+                <RankRow icon="👑" title="Master_Writer" count={200} limit={5} />
+                <RankRow icon="💎" title="Elite_Writer" count={151} limit={5} />
+                <RankRow icon="🔥" title="Senior_Writer" count={101} limit={4} />
+                <RankRow icon="⚔️" title="Novice_Writer" count={51} limit={4} />
+                <RankRow icon="📜" title="Senior_Researcher" count={26} limit={3} />
                 <RankRow icon="🛡️" title="Novice_Researcher" count={0} limit={3} isLast />
             </View>
             <Text style={{ color: THEME.textSecondary || '#475569' }} className="text-[10px] mt-4 font-medium leading-4 px-2 italic">
