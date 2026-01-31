@@ -838,7 +838,7 @@ export default function AuthorDiaryDashboard() {
                                 <Ionicons name={todayPost?.status === 'rejected' ? "close-outline" : "time-outline"} size={40} color={todayPost?.status === 'rejected' ? THEME.red : THEME.accent} />
                             </View>
 
-                            <Text className="text-2xl font-black uppercase italic text-white text-center">
+                            <Text className="text-2xl font-black uppercase italic text-center">
                                 Entry: {todayPost?.status?.toUpperCase() || "LOCKED"}
                             </Text>
 
