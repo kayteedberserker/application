@@ -1,4 +1,5 @@
 import { MaterialCommunityIcons } from '@expo/vector-icons';
+import AsyncStorage from "@react-native-async-storage/async-storage"; // 👈 Added for caching
 import { useColorScheme } from "nativewind";
 import { useEffect, useMemo, useRef, useState } from "react";
 import {
@@ -12,13 +13,12 @@ import {
 } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import useSWRInfinite from "swr/infinite";
-import AsyncStorage from "@react-native-async-storage/async-storage"; // 👈 Added for caching
+import apiFetch from "../utils/apiFetch";
 import AnimeLoading from "./AnimeLoading";
-import AppBanner from './AppBanner';
+import { NativeAdPostStyle } from "./NativeAd";
 import PostCard from "./PostCard";
 import { SyncLoading } from "./SyncLoading";
 import { Text } from "./Text";
-import apiFetch from "../utils/apiFetch"
 const fetcher = (url) => apiFetch(url).then(res => res.json());
 
 const { width, height } = Dimensions.get('window');
@@ -32,7 +32,7 @@ export default function PostsViewer() {
     const insets = useSafeAreaInsets();
     const { colorScheme } = useColorScheme();
     const isDark = colorScheme === "dark";
-    
+
     const [ready, setReady] = useState(false);
     const [cachedData, setCachedData] = useState(null); // 👈 State for old data
     const [isOfflineMode, setIsOfflineMode] = useState(false); // 👈 State for UI toggle
@@ -51,7 +51,7 @@ export default function PostsViewer() {
             } catch (e) {
                 console.error("Cache load error", e);
             }
-            
+
             InteractionManager.runAfterInteractions(() => {
                 setReady(true);
             });
@@ -107,7 +107,7 @@ export default function PostsViewer() {
     const posts = useMemo(() => {
         const sourceData = data || cachedData;
         if (!sourceData) return [];
-        
+
         const postMap = new Map();
         sourceData.forEach(page => {
             if (page?.posts) {
@@ -130,7 +130,7 @@ export default function PostsViewer() {
         if (!hasMore || isValidating || !ready || isLoading || isOfflineMode) return;
         setSize(size + 1);
     };
-    if(!ready) {
+    if (!ready) {
         return <AnimeLoading message="Loading posts" subMessage="Prepping Otaku content" />
     }
 
@@ -141,18 +141,13 @@ export default function PostsViewer() {
             <View>
                 <PostCard post={item} isFeed posts={posts} setPosts={mutate} />
                 {showAd && ready && (
-                    <View className="mb-8 mt-3 w-full p-6 border border-dashed border-gray-300 dark:border-gray-800 rounded-[32px] bg-gray-50/50 dark:bg-white/5 items-center justify-center">
-                        <Text className="text-[10px] font-bold text-gray-400 uppercase tracking-[0.2em] italic text-center">
-                            Sponsored Transmission
-                        </Text>
-                        <AppBanner size="MEDIUM_RECTANGLE" />
-                    </View>
+                    <NativeAdPostStyle isDark={isDark} />
                 )}
             </View>
         );
     };
 
-    
+
 
     const ListHeader = () => (
         <View className="mb-10 pb-2">
@@ -199,8 +194,8 @@ export default function PostsViewer() {
                 renderItem={renderItem}
                 onEndReached={loadMore}
                 onEndReachedThreshold={0.5}
-                
-                removeClippedSubviews={true} 
+
+                removeClippedSubviews={true}
                 initialNumToRender={5}
                 maxToRenderPerBatch={5}
                 windowSize={5}
@@ -241,12 +236,12 @@ export default function PostsViewer() {
                 style={{ bottom: insets.bottom + 20, opacity: 0.4 }}
                 pointerEvents="none"
             >
-                <MaterialCommunityIcons 
-                    name={isOfflineMode ? "cloud-off-outline" : "pulse"} 
-                    size={14} 
-                    color={isOfflineMode ? "#f97316" : "#2563eb"} 
+                <MaterialCommunityIcons
+                    name={isOfflineMode ? "cloud-off-outline" : "pulse"}
+                    size={14}
+                    color={isOfflineMode ? "#f97316" : "#2563eb"}
                 />
-                <Animated.Text 
+                <Animated.Text
                     style={{ opacity: pulseAnim }}
                     className={`text-[8px] font-[900] uppercase tracking-[0.4em] ${isOfflineMode ? 'text-orange-500' : 'text-blue-600'}`}
                 >
@@ -255,4 +250,4 @@ export default function PostsViewer() {
             </View>
         </View>
     );
-    }
+}
