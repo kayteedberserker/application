@@ -1,17 +1,18 @@
+import { useColorScheme } from "nativewind";
 import React, { useEffect, useState } from "react";
 import { ScrollView, View } from "react-native";
-import { BannerAdSize } from "react-native-google-mobile-ads";
 import useSWR from "swr";
-import AppBanner from "./AppBanner";
+import apiFetch from "../utils/apiFetch";
+import { NativeAdPostStyle } from "./NativeAd";
 import PostCard from "./PostCard";
-import { Text } from "./Text";
-import apiFetch from "../utils/apiFetch"
 
 const API_URL = "https://oreblogda.com";
 const fetcher = (url) => apiFetch(url).then((res) => res.json());
 
 export default function SimilarPosts({ category, currentPostId }) {
   const [shuffledPosts, setShuffledPosts] = useState([]);
+    const { colorScheme } = useColorScheme();
+    const isDark = colorScheme === "dark";
 
   const { data, error, isLoading } = useSWR(
     category ? `${API_URL}/api/posts?category=${category}` : null,
@@ -57,19 +58,7 @@ export default function SimilarPosts({ category, currentPostId }) {
 
               {/* Ad placement every 2 posts */}
               {(index + 1) % 3 === 0 && (
-                <View 
-                  className="mr-4 w-[300px] h-[400px] bg-gray-50 dark:bg-gray-800/40 rounded-2xl border border-gray-100 dark:border-gray-800 items-center justify-center"
-                >
-                  <Text className="text-[10px] text-gray-400 mb-4 uppercase tracking-widest">
-                    Sponsored
-                  </Text>
-
-                  <AppBanner size={BannerAdSize.MEDIUM_RECTANGLE} />
-                  
-                  <Text className="text-[10px] text-gray-400 mt-4 text-center px-4">
-                    Relevant content for you
-                  </Text>
-                </View>
+                <NativeAdPostStyle isDark={isDark} />
               )}
             </React.Fragment>
           );
