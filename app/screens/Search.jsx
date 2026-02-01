@@ -1,23 +1,26 @@
-import React, { useState, useEffect, useCallback, useMemo, useRef } from "react";
+import { Ionicons, MaterialCommunityIcons } from "@expo/vector-icons";
+import AsyncStorage from '@react-native-async-storage/async-storage';
+import { useRouter } from "expo-router";
+import { useCallback, useEffect, useMemo, useState } from "react";
 import {
-    View,
-    TextInput,
-    TouchableOpacity,
+    ActivityIndicator,
     FlatList,
     Image,
-    ActivityIndicator,
-    SafeAreaView,
     Platform,
-    StatusBar,
+    SafeAreaView,
     ScrollView,
-    useColorScheme 
+    StatusBar,
+    TextInput,
+    TouchableOpacity,
+    useColorScheme,
+    View
 } from "react-native";
-import { Ionicons, MaterialCommunityIcons } from "@expo/vector-icons"; 
-import { useRouter } from "expo-router";
+import Animated, { FadeIn, FadeInDown, Layout } from "react-native-reanimated";
+import { Text } from "../../components/Text";
 import apiFetch from "../../utils/apiFetch";
-import { Text } from "../../components/Text"; 
-import Animated, { FadeInDown, FadeIn, Layout } from "react-native-reanimated";
-import AsyncStorage from '@react-native-async-storage/async-storage';
+
+// 🔹 IMPORT YOUR AD COMPONENTS
+import { NativeAdAuthorStyle, NativeAdPostStyle } from "../../components/NativeAd";
 
 // --- HELPER: RESOLVE WRITER RANK ---
 const resolveUserRank = (totalPosts) => {
@@ -34,6 +37,7 @@ const resolveUserRank = (totalPosts) => {
 const AuthorCard = ({ author, isDark }) => {
     const router = useRouter();
     
+    // 🔹 UPDATED AURA VISUALS LOGIC
     const getAuraVisuals = (rank) => {
         if (!rank || rank > 10 || rank <= 0) return { color: isDark ? '#1e293b' : '#cbd5e1', label: 'OPERATIVE', icon: 'target' };
         switch (rank) {
@@ -41,7 +45,7 @@ const AuthorCard = ({ author, isDark }) => {
             case 2: return { color: '#ef4444', label: 'YONKO', icon: 'flare' };
             case 3: return { color: '#a855f7', label: 'KAGE', icon: 'moon-waxing-crescent' };
             case 4: return { color: '#3b82f6', label: 'SHOGUN', icon: 'shield-star' };
-            case 5: return { color: '#e0f2fe', label: 'ESPADA 0', icon: 'skull' };
+            case 5: return { color: '#e0f2fe', label: 'ESPADA 0', icon: 'skull' }; // Reiatsu White
             case 6: return { color: '#cbd5e1', label: 'ESPADA 1', icon: 'sword-cross' };
             case 7: return { color: '#94a3b8', label: 'ESPADA 2', icon: 'sword-cross' };
             case 8: return { color: '#64748b', label: 'ESPADA 3', icon: 'sword-cross' };
@@ -179,9 +183,6 @@ const SearchScreen = () => {
     const [page, setPage] = useState(1);
     const [hasMore, setHasMore] = useState(true);
 
-    // Ref to track latest query to prevent race conditions
-    const latestQuery = useRef(query);
-
     useEffect(() => {
         loadRecentSearches();
     }, []);
@@ -192,45 +193,33 @@ const SearchScreen = () => {
     };
 
     const saveSearch = async (text) => {
-        if (!text || text.trim().length < 2) return;
+        if (!text || text.length < 2) return;
         const updated = [text, ...recentSearches.filter(s => s !== text)].slice(0, 5);
         setRecentSearches(updated);
         await AsyncStorage.setItem('recent_searches', JSON.stringify(updated));
     };
 
     const performSearch = useCallback(async (text, pageNum = 1, shouldAppend = false) => {
-        const trimmedText = text.trim();
-        if (trimmedText.length < 2) {
+        if (text.length < 2) {
             setResults({ authors: [], posts: [] });
-            setLoading(false);
             return;
         }
 
-        // 🔹 Only show full loading screen for page 1 new searches
         if (pageNum === 1) setLoading(true);
         else setLoadingMore(true);
-        
         setIsOffline(false);
-        latestQuery.current = trimmedText;
 
         try {
-            const response = await apiFetch(`https://oreblogda.com/api/search?q=${encodeURIComponent(trimmedText)}&page=${pageNum}&limit=10`);
+            const response = await apiFetch(`https://oreblogda.com/api/search?q=${encodeURIComponent(text)}&page=${pageNum}&limit=10`);
             const data = await response.json();
             
-            // Check if this is still the query the user wants
-            if (latestQuery.current !== trimmedText) return;
-
             if (response.ok) {
-                const newAuthors = data.users || data.authors || [];
-                const newPosts = data.posts || [];
-
                 setResults(prev => ({
-                    authors: shouldAppend ? [...prev.authors, ...newAuthors] : newAuthors,
-                    posts: shouldAppend ? [...prev.posts, ...newPosts] : newPosts
+                    authors: shouldAppend ? prev.authors : (data.users || []),
+                    posts: shouldAppend ? [...prev.posts, ...data.posts] : (data.posts || [])
                 }));
-                
-                setHasMore(data.pagination?.hasNextPage || false);
-                if (pageNum === 1) saveSearch(trimmedText);
+                setHasMore(data.pagination?.hasNextPage);
+                if (pageNum === 1) saveSearch(text);
             } else {
                 setIsOffline(true);
             }
@@ -238,7 +227,6 @@ const SearchScreen = () => {
             console.error("Search Error:", error);
             setIsOffline(true);
         } finally {
-            // 🔹 Reset loading states
             setLoading(false);
             setLoadingMore(false);
         }
@@ -246,32 +234,51 @@ const SearchScreen = () => {
 
     useEffect(() => {
         const delayDebounceFn = setTimeout(() => {
-            if (query.trim().length >= 2) {
-                setPage(1);
-                performSearch(query, 1, false);
-            } else {
-                setResults({ authors: [], posts: [] });
-                setLoading(false);
-            }
-        }, 500); // Slightly longer debounce to prevent flicker
+            setPage(1);
+            performSearch(query, 1, false);
+        }, 400);
         return () => clearTimeout(delayDebounceFn);
-    }, [query]); // Removed performSearch from deps to prevent re-triggering loop
+    }, [query]);
 
     const handleLoadMore = () => {
-        if (!loadingMore && hasMore && query.length > 1 && !isOffline && !loading) {
+        if (!loadingMore && hasMore && query.length > 1 && !isOffline) {
             const nextPage = page + 1;
             setPage(nextPage);
             performSearch(query, nextPage, true);
         }
     };
 
-    const filteredData = useMemo(() => {
-        const authors = (activeTab === 'all' || activeTab === 'authors') ? results.authors : [];
-        const posts = (activeTab === 'all' || activeTab === 'posts') ? results.posts : [];
-        return [...authors, ...posts];
+    // 🔹 UI DATA LOGIC: INJECT ADS EVERY 3 CARDS
+    const listData = useMemo(() => {
+        const rawResults = [
+            ...(activeTab === 'all' || activeTab === 'authors' ? results.authors : []),
+            ...(activeTab === 'all' || activeTab === 'posts' ? results.posts : [])
+        ];
+
+        const processed = [];
+        rawResults.forEach((item, index) => {
+            processed.push(item);
+            // After every 3rd item, push an Ad placeholder
+            if ((index + 1) % 3 === 0) {
+                processed.push({ 
+                    _id: `ad-${index}`, 
+                    isAd: true, 
+                    adType: index % 2 === 0 ? 'author' : 'post' // Alternates ad style
+                });
+            }
+        });
+        return processed;
     }, [results, activeTab]);
 
     const renderItem = ({ item }) => {
+        // Handle Ads
+        if (item.isAd) {
+            return item.adType === 'author' 
+                ? <NativeAdAuthorStyle isDark={isDark} /> 
+                : <NativeAdPostStyle isDark={isDark} />;
+        }
+        
+        // Handle Organic Content
         if (item.username) return <AuthorCard author={item} isDark={isDark} />;
         return <PostSearchCard item={item} isDark={isDark} />;
     };
@@ -282,6 +289,7 @@ const SearchScreen = () => {
             
             <View style={{ height: Platform.OS === 'android' ? StatusBar.currentHeight : 0 }} />
 
+            {/* Header / Search Bar */}
             <View className="px-4 py-3 flex-row items-center">
                 <TouchableOpacity onPress={() => router.back()} className="pr-3">
                     <Ionicons name="chevron-back" size={32} color={isDark ? "white" : "black"} />
@@ -300,18 +308,19 @@ const SearchScreen = () => {
                         autoFocus
                     />
                     {query.length > 0 && (
-                        <TouchableOpacity onPress={() => {
-                            setQuery("");
-                            setResults({ authors: [], posts: [] });
-                        }}>
+                        <TouchableOpacity onPress={() => setQuery("")}>
                             <Ionicons name="close-circle" size={20} color={isDark ? "#52525b" : "#d1d5db"} />
                         </TouchableOpacity>
                     )}
                 </View>
             </View>
 
+            {/* Main Content Area */}
             {query.length < 2 ? (
-                <ScrollView className="flex-1 px-6">
+                <ScrollView 
+                    className="flex-1 px-6"
+                    keyboardShouldPersistTaps="handled" // 🔹 FIX: Prevents keyboard from intercepting taps
+                >
                     <View className="mt-8">
                         <Text className="text-blue-500 font-black text-[10px] uppercase tracking-[0.4em] mb-6">Recent_Inquiries</Text>
                         {recentSearches.length > 0 ? (
@@ -342,6 +351,7 @@ const SearchScreen = () => {
                 </ScrollView>
             ) : (
                 <>
+                    {/* Tabs Section */}
                     {!isOffline && (
                         <View className="flex-row px-4 py-3 gap-2">
                             {['all', 'authors', 'posts'].map((tab) => (
@@ -356,9 +366,9 @@ const SearchScreen = () => {
                         </View>
                     )}
 
+                    {/* Search Results List */}
                     <View className="flex-1 px-4 mt-2">
-                        {/* 🔹 Only show this if there are NO results yet. If results exist, don't flicker. */}
-                        {loading && filteredData.length === 0 ? (
+                        {loading && page === 1 ? (
                             <View className="flex-1 justify-center items-center">
                                 <ActivityIndicator color="#2563eb" size="large" />
                                 <Text className="text-blue-500 text-[10px] font-black mt-6 tracking-[0.5em] uppercase animate-pulse">Establishing_Link...</Text>
@@ -380,9 +390,10 @@ const SearchScreen = () => {
                             </Animated.View>
                         ) : (
                             <FlatList
-                                data={filteredData}
-                                keyExtractor={(item, index) => item._id || index.toString()}
+                                data={listData}
+                                keyExtractor={(item) => item._id}
                                 renderItem={renderItem}
+                                keyboardShouldPersistTaps="handled" // 🔹 FIX: Prevents keyboard from intercepting taps
                                 onEndReached={handleLoadMore}
                                 onEndReachedThreshold={0.5}
                                 ListFooterComponent={() => loadingMore ? (
@@ -390,7 +401,7 @@ const SearchScreen = () => {
                                         <ActivityIndicator color="#2563eb" />
                                     </View>
                                 ) : null}
-                                ListEmptyComponent={() => !loading && (
+                                ListEmptyComponent={() => (
                                     <View className="mt-20 items-center opacity-40">
                                         <Ionicons name="scan-outline" size={80} color={isDark ? "#3f3f46" : "#d1d5db"} />
                                         <Text className="text-zinc-500 font-black mt-4 text-center tracking-widest uppercase text-xs">No matching frequencies detected.</Text>
@@ -398,7 +409,6 @@ const SearchScreen = () => {
                                 )}
                                 showsVerticalScrollIndicator={false}
                                 contentContainerStyle={{ paddingBottom: 60 }}
-                                removeClippedSubviews={Platform.OS === 'android'}
                             />
                         )}
                     </View>
