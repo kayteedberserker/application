@@ -23,8 +23,8 @@ import "./globals.css";
 SplashScreen.preventAutoHideAsync();
 
 // 🔹 AD CONFIGURATION
-const FIRST_AD_DELAY_MS = 180000; 
-const COOLDOWN_MS = 180000;      
+const FIRST_AD_DELAY_MS = 90000; 
+const COOLDOWN_MS = 120000;      
 
 const INTERSTITIAL_ID = __DEV__ ? TestIds.INTERSTITIAL : AdConfig.interstitial;
 
