@@ -212,7 +212,7 @@ export default function MainLayout() {
 				style={{
 					position: "absolute",
 					bottom: insets.bottom + 20,
-					right: 15,
+					right: 5,
 					gap: 12,
 					alignItems: "center",
 					zIndex: 1000,
@@ -242,10 +242,10 @@ export default function MainLayout() {
 				<TouchableOpacity
 					onPress={handleClanPress}
 					activeOpacity={0.8}
-					className="w-[52px] h-[52px] items-center justify-center rounded-[18px] border-2 border-[#111111] bg-[#111111]"
+					className="w-[48px] h-[48px] items-center justify-center rounded-[18px] border-2 border-[#111111] bg-[#111111]"
 					style={{ elevation: 8, shadowColor: '#60a5fa', shadowOpacity: 0.5, shadowRadius: 10 }}
 				>
-					<Ionicons name="shield-half" size={28} color="#60a5fa" />
+					<Ionicons name="shield-half" size={25} color="#60a5fa" />
 				</TouchableOpacity>
 			</View>
 
@@ -273,7 +273,7 @@ export default function MainLayout() {
 								</View>
 								<Text className="text-white text-xl font-black text-center mb-2">CLAN SYSTEM 2.0</Text>
 								<Text className="text-slate-400 text-center leading-5 font-medium mb-6">
-									The system is cooking something nice. I'm adding new features to the app to make your experience legendary. Anticipate!
+									THE SYSTEM is cooking something nice🔥🔥. New features are coming to the app to make your experience even more legendary. ANTICIPATE!
 								</Text>
 								<TouchableOpacity 
 									onPress={() => setClanModalVisible(false)}
