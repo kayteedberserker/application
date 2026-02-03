@@ -17,11 +17,11 @@ const AppBanner = ({ size = BannerAdSize.MEDIUM_RECTANGLE }) => {
       case BannerAdSize.MEDIUM_RECTANGLE:
         return { height: 250, width: 300 };
       case BannerAdSize.FULL_BANNER:
-        return { height: 60, width: '100%' };
+        return { height: 60, width: '130%' };
       case BannerAdSize.BANNER:
-        return { height: 50, width: '100%' };
+        return { height: 50, width: '130%' };
       default:
-        return { height: 50, width: '100%' };
+        return { height: 50, width: '130%' };
     }
   }, [size]);
 
@@ -45,7 +45,7 @@ const AppBanner = ({ size = BannerAdSize.MEDIUM_RECTANGLE }) => {
   return (
     <View 
       style={{  
-        width: '100%', 
+        width: '150%', 
         alignItems: 'center', 
         justifyContent: 'center',
         marginVertical: 10,
