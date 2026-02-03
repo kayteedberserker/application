@@ -11,7 +11,10 @@ import {
 	TouchableOpacity,
 	useColorScheme as useSystemScheme,
 	View,
-	Text
+	Text,
+	Modal,
+	ActivityIndicator,
+	Pressable
 } from "react-native";
 import { SafeAreaView, useSafeAreaInsets } from "react-native-safe-area-context";
 import AnimeLoading from "../../components/AnimeLoading";
@@ -31,6 +34,10 @@ export default function MainLayout() {
 	const [lastOffset, setLastOffset] = useState(0);
 	const [isNavVisible, setIsNavVisible] = useState(true);
 	const [showTop, setShowTop] = useState(false);
+
+	// New states for the Clan Modal
+	const [clanModalVisible, setClanModalVisible] = useState(false);
+	const [isCooking, setIsCooking] = useState(false);
 
 	const navY = useRef(new Animated.Value(0)).current;
 	const { user, contextLoading } = useUser();
@@ -103,6 +110,16 @@ export default function MainLayout() {
 		router.push(route);
 	};
 
+	// Logic for the Clan Modal
+	const handleClanPress = () => {
+		setIsCooking(true);
+		setClanModalVisible(true);
+		// Simulate cooking delay
+		setTimeout(() => {
+			setIsCooking(false);
+		}, 2000);
+	};
+
 	return (
 		<View style={{ flex: 1, backgroundColor: isDark ? "#000" : "#fff" }}>
 			<StatusBar barStyle={isDark ? "light-content" : "dark-content"} />
@@ -155,7 +172,7 @@ export default function MainLayout() {
 					shadowRadius: 5,
 					borderWidth: isDark ? 1 : 0,
 					borderColor: "#1e293b",
-					transform: [{ translateX: 0 }], // Adjusted for the View container
+					transform: [{ translateX: 0 }], 
 					zIndex: 999,
 				}}
 			>
@@ -195,7 +212,7 @@ export default function MainLayout() {
 				style={{
 					position: "absolute",
 					bottom: insets.bottom + 20,
-					right: 5,
+					right: 15,
 					gap: 12,
 					alignItems: "center",
 					zIndex: 1000,
@@ -221,23 +238,54 @@ export default function MainLayout() {
 					</TouchableOpacity>
 				)}
 
+				{/* UPDATED: CLAN BUTTON */}
 				<TouchableOpacity
-					onPress={() => Linking.openURL("https://whatsapp.com/channel/0029VbBkiupCRs1wXFWtDG3N")}
+					onPress={handleClanPress}
 					activeOpacity={0.8}
-					style={{ elevation: 8 }}
+					className="w-[52px] h-[52px] items-center justify-center rounded-[18px] border-2 border-[#111111] bg-[#111111]"
+					style={{ elevation: 8, shadowColor: '#60a5fa', shadowOpacity: 0.5, shadowRadius: 10 }}
 				>
-					<Image
-						source={require("../../assets/images/whatsapp.png")}
-						style={{
-							width: 50,
-							height: 50,
-							borderRadius: 18,
-							borderWidth: 2,
-							borderColor: "#111111"
-						}}
-					/>
+					<Ionicons name="shield-half" size={28} color="#60a5fa" />
 				</TouchableOpacity>
 			</View>
+
+			{/* COOKING MODAL */}
+			<Modal
+				animationType="fade"
+				transparent={true}
+				visible={clanModalVisible}
+				onRequestClose={() => setClanModalVisible(false)}
+			>
+				<Pressable 
+					className="flex-1 justify-center items-center bg-black/80 px-10"
+					onPress={() => !isCooking && setClanModalVisible(false)}
+				>
+					<View className="w-full bg-[#111] border border-slate-800 rounded-[30px] p-8 items-center shadow-2xl">
+						{isCooking ? (
+							<View className="items-center py-4">
+								<ActivityIndicator size="large" color="#60a5fa" />
+								<Text className="text-blue-400 mt-4 font-bold tracking-widest italic">THE SYSTEM IS COOKING...</Text>
+							</View>
+						) : (
+							<View className="items-center">
+								<View className="bg-blue-500/10 p-4 rounded-full mb-4">
+									<Ionicons name="flash" size={40} color="#60a5fa" />
+								</View>
+								<Text className="text-white text-xl font-black text-center mb-2">CLAN SYSTEM 2.0</Text>
+								<Text className="text-slate-400 text-center leading-5 font-medium mb-6">
+									The system is cooking something nice. I'm adding new features to the app to make your experience legendary. Anticipate!
+								</Text>
+								<TouchableOpacity 
+									onPress={() => setClanModalVisible(false)}
+									className="bg-blue-500 py-3 px-8 rounded-xl"
+								>
+									<Text className="text-black font-black text-sm">NOTED</Text>
+								</TouchableOpacity>
+							</View>
+						)}
+					</View>
+				</Pressable>
+			</Modal>
 		</View>
 	);
-}
+						}
