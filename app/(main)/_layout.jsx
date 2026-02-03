@@ -212,7 +212,7 @@ export default function MainLayout() {
 				style={{
 					position: "absolute",
 					bottom: insets.bottom + 20,
-					right: 15,
+					right: 2,
 					gap: 12,
 					alignItems: "center",
 					zIndex: 1000,
@@ -273,7 +273,7 @@ export default function MainLayout() {
 								<View className="bg-blue-500/10 p-4 rounded-full mb-4">
 									<Ionicons name="flash" size={40} color="#60a5fa" />
 								</View>
-								<Text className="text-slate-900 dark:text-white text-xl font-black text-center mb-2">CLAN SYSTEM 2.0</Text>
+								<Text className="text-slate-900 dark:text-white text-xl font-black text-center mb-2">SYSTEM UPDATE 2.0</Text>
 								<Text className="text-slate-600 dark:text-slate-400 text-center leading-5 font-medium mb-6">
 									THE SYSTEM is cooking something nice🔥🔥. New features are coming to the app to make your experience even more legendary. ANTICIPATE!
 								</Text>
