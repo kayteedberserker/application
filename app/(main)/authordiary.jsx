@@ -1,20 +1,17 @@
 import { Ionicons } from "@expo/vector-icons";
+import AsyncStorage from '@react-native-async-storage/async-storage';
 import * as ImagePicker from 'expo-image-picker';
 import * as Notifications from 'expo-notifications';
 import { Link, useRouter } from "expo-router";
-import AsyncStorage from '@react-native-async-storage/async-storage';
 
-import { useEffect, useRef, useState, useMemo } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import {
     ActivityIndicator, Alert,
     Linking,
     ScrollView,
     StatusBar,
     Switch, TextInput, TouchableOpacity,
-    View,
-    Animated,
-    Easing,
-    Keyboard
+    View
 } from "react-native";
 import { useRewardedAd } from 'react-native-google-mobile-ads';
 import Toast from "react-native-toast-message";
@@ -25,7 +22,7 @@ import THEME from "../../components/useAppTheme";
 import { useStreak } from "../../context/StreakContext";
 import { useUser } from "../../context/UserContext";
 import { AdConfig } from "../../utils/AdConfig";
-import apiFetch from "../../utils/apiFetch"
+import apiFetch from "../../utils/apiFetch";
 // 🔹 Notification Handler Configuration
 Notifications.setNotificationHandler({
     handleNotification: async () => ({
@@ -57,7 +54,7 @@ async function getUserTotalPosts(deviceId) {
 /* ===================== RANK SYSTEM HELPERS ===========*/
 const resolveUserRank = (totalPosts) => {
     // Fallback if totalPosts is null/undefined
-    const count = totalPosts || 0; 
+    const count = totalPosts || 0;
 
     const rankTitle =
         count >= 200 ? "Master_Writer" :
@@ -94,7 +91,7 @@ export default function AuthorDiaryDashboard() {
 
     // Use refs to store listeners so they can be cleaned up properly
     const notificationListener = useRef();
-    
+
     // 🔹 NEW: Ref for the message input to fix keyboard issue
     const messageInputRef = useRef(null);
 
@@ -118,11 +115,11 @@ export default function AuthorDiaryDashboard() {
     const [uploading, setUploading] = useState(false);
     const [submitting, setSubmitting] = useState(false);
     const [timeLeft, setTimeLeft] = useState("");
-    
+
     // Rank & Post Limit State
     const [userRank, setUserRank] = useState({ rankTitle: "Novice_Researcher", rankIcon: "🛡️", postLimit: 2 });
     const [canPostAgain, setCanPostAgain] = useState(false);
-    
+
     const [rewardToken, setRewardToken] = useState(null);
     const [isLoadingNotifications, setIsLoadingNotifications] = useState(true);
     const [pickedImage, setPickedImage] = useState(false);
@@ -132,7 +129,7 @@ export default function AuthorDiaryDashboard() {
     const [saveStatus, setSaveStatus] = useState("synced"); // 'synced' | 'saving'
     const [lastSavedTime, setLastSavedTime] = useState("");
     const [isOfflineMode, setIsOfflineMode] = useState(false);
-    
+
     // Data Caches
     const [cachedTodayPosts, setCachedTodayPosts] = useState(null);
     const [cachedRankData, setCachedRankData] = useState(null);
@@ -191,14 +188,14 @@ export default function AuthorDiaryDashboard() {
     // =================================================================
     // 2. DATA FETCHING (OPTIMIZED WITH SWR & CACHING)
     // =================================================================
-    
+
     // A. FETCH RANK (Manual Fetch + Cache)
     useEffect(() => {
         const fetchTotalPosts = async () => {
             if (!user?.deviceId) return;
-            
+
             const total = await getUserTotalPosts(user?.deviceId);
-            
+
             if (total !== null) {
                 // Online success
                 const rank = resolveUserRank(total);
@@ -216,7 +213,7 @@ export default function AuthorDiaryDashboard() {
     const { data: todayPostsData, mutate: mutateTodayPosts, error: swrError } = useSWR(
         user?.deviceId ? `${API_BASE}/posts?author=${user.deviceId}&last24Hours=true` : null,
         fetcher,
-        { 
+        {
             refreshInterval: isOfflineMode ? 0 : 5000, // Stop polling if offline
             fallbackData: cachedTodayPosts, // 👈 KEY: Use saved data first
             onSuccess: (data) => {
@@ -240,7 +237,6 @@ export default function AuthorDiaryDashboard() {
 
     // Rank Limits
     const maxPostsToday = userRank.postLimit;
-
 
     // =================================================================
     // 3. DRAFT AUTO-SAVE LOGIC
@@ -339,25 +335,27 @@ export default function AuthorDiaryDashboard() {
 
     useEffect(() => { if (isClosed) { load(); } }, [isClosed, load]);
 
-        /* 🔹 UPDATED TIMER LOGIC 
-       Scans ALL today's posts to find the one that expires SOONEST.
-    */
+    /* 🔹 UPDATED TIMER LOGIC 
+   Scans ALL today's posts to find the one that expires SOONEST.
+*/
+    /* 🔹 UPDATED TIMER LOGIC 
+   Scans ALL today's posts to find the one that expires SOONEST.
+*/
     useEffect(() => {
         let interval;
 
         // Helper: Find the soonest time a slot opens up
         const getNextUnlockTime = () => {
             if (!todayPosts || todayPosts.length === 0) return null;
-            
+
             const now = new Date().getTime();
             let minEndTime = Infinity;
             let hasBlockingPost = false;
 
             todayPosts.forEach(post => {
                 // Calculate when THIS specific post's cooldown ends
-                // Use statusChangedAt first, fallback to updatedAt or createdAt
                 const referenceTime = new Date(post.statusChangedAt || post.updatedAt || post.createdAt).getTime();
-                
+
                 let cooldownMs = 0;
                 if (post.status === 'approved') {
                     cooldownMs = 24 * 60 * 60 * 1000; // 24 Hours
@@ -365,7 +363,7 @@ export default function AuthorDiaryDashboard() {
                     cooldownMs = 12 * 60 * 60 * 1000; // 12 Hours
                 } else {
                     // Pending posts don't have a cooldown timer yet, they just block.
-                    return; 
+                    return;
                 }
 
                 const endTime = referenceTime + cooldownMs;
@@ -380,7 +378,6 @@ export default function AuthorDiaryDashboard() {
             });
 
             // If minEndTime is still Infinity, it means no posts are currently triggering a cooldown
-            // (or all cooldowns have already passed).
             return minEndTime === Infinity ? null : minEndTime;
         };
 
@@ -388,51 +385,67 @@ export default function AuthorDiaryDashboard() {
 
         // Only run timer if we are actually blocked AND have a target time
         if ((postsLast24h >= maxPostsToday) && targetTime) {
-      
-const scheduleDoneNotification = async () => {
-  if (rewardToken) return;
 
-  await ensurePermissions();
+            const scheduleDoneNotification = async () => {
+                if (rewardToken) return;
 
-  const now = Date.now();
-  const triggerInSeconds = Math.floor((targetTime - now) / 1000);
+                const now = Date.now();
+                // 🔹 Ensure trigger is a whole number
+                const triggerInSeconds = Math.floor((targetTime - now) / 1000);
 
-  if (triggerInSeconds <= 0) {
-    console.log("Target time already passed");
-    return;
-  }
+                // 🔹 Safety: Don't schedule if time is already here or negative
+                if (triggerInSeconds <= 0) {
+                    console.log("Target time already passed");
+                    return;
+                }
 
-  // 🔹 Check if we already scheduled one
-  const existingId = await AsyncStorage.getItem(COOLDOWN_NOTIFICATION_KEY);
+                // 🔹 Check if we already scheduled one
+                const existingId = await AsyncStorage.getItem(COOLDOWN_NOTIFICATION_KEY);
 
-  if (existingId) {
-    // 🔹 Cancel only this cooldown notification
-    await Notifications.cancelScheduledNotificationAsync(existingId);
-  }
+                if (existingId) {
+                    // 🔹 Cancel only this specific cooldown notification
+                    try {
+                        await Notifications.cancelScheduledNotificationAsync(existingId);
+                        console.log("Existing notification cancelled:", existingId);
+                    } catch (e) {
+                        console.log("Error cancelling notification:", e);
+                    }
+                }
 
-  // 🔹 Schedule fresh notification
-  const notificationId = await Notifications.scheduleNotificationAsync({
-    content: {
-      title: "Cooldown Finished! 🎉",
-      body: "New slot available. Post now!",
-      sound: true,
-      data: { type: "open_diary" },
-    },
-    trigger: {
-      seconds: triggerInSeconds,
-      channelId: "default",
-    },
-  });
+                // 🔹 Schedule fresh notification with FIXED trigger
+                try {
+                    const notificationId = await Notifications.scheduleNotificationAsync({
+                        content: {
+                            title: "Cooldown Finished! 🎉",
+                            body: "New slot available. Post now!",
+                            sound: true,
+                            data: { type: "open_diary" },
+                        },
+                        trigger: {
+                            // 🔹 This is the fix for the TypeError
+                            type: 'timeInterval',
+                            seconds: triggerInSeconds,
+                            repeats: false,
+                        },
+                    });
 
-  // 🔹 Store the new ID
-  await AsyncStorage.setItem(
-    COOLDOWN_NOTIFICATION_KEY,
-    notificationId
-  );
-};
+                    // 🔹 Store the new ID
+                    await AsyncStorage.setItem(
+                        COOLDOWN_NOTIFICATION_KEY,
+                        notificationId
+                    );
+                    console.log("Scheduled new notification ID:", notificationId, "in", triggerInSeconds, "s");
+                } catch (error) {
+                    console.error("Failed to schedule notification:", error);
+                }
+            };
+
             scheduleDoneNotification();
 
             const calculateTime = () => {
+                // Clear existing interval if it exists before starting new one
+                if (interval) clearInterval(interval);
+
                 interval = setInterval(() => {
                     const now = new Date().getTime();
                     const distance = targetTime - now;
@@ -446,7 +459,7 @@ const scheduleDoneNotification = async () => {
                         const m = Math.floor((distance % (1000 * 60 * 60)) / (1000 * 60));
                         const s = Math.floor((distance % (1000 * 60)) / 1000);
                         setTimeLeft(`${h}h ${m}m ${s}s`);
-                        
+
                         if (!rewardToken) setCanPostAgain(false);
                     }
                 }, 1000);
@@ -460,6 +473,7 @@ const scheduleDoneNotification = async () => {
 
         return () => { if (interval) clearInterval(interval); };
     }, [todayPosts, postsLast24h, maxPostsToday, rewardToken]);
+
 
 
 
@@ -478,7 +492,7 @@ const scheduleDoneNotification = async () => {
             /l\([\s\S]*?\)/g,           // List: l(...)
             /link\(.*?\)-text\(.*?\)/g  // Link: link(...)-text(...)
         ];
-        
+
         let cleaned = text;
         // Keep checking for broken patterns if necessary, or just return cleaned
         return cleaned;
@@ -487,42 +501,42 @@ const scheduleDoneNotification = async () => {
     // 🔹 UPDATED: insertTag for Smart Wrapping & Keyboard Fix
     const insertTag = (tagType) => {
         let tagOpen = "", tagClose = "";
-        
+
         // Define syntax
         switch (tagType) {
-            case 'section': 
-                tagOpen = "s("; 
-                tagClose = ")"; 
+            case 'section':
+                tagOpen = "s(";
+                tagClose = ")";
                 break;
-            case 'heading': 
-                tagOpen = "h("; 
-                tagClose = ")"; 
+            case 'heading':
+                tagOpen = "h(";
+                tagClose = ")";
                 break;
-            case 'link': 
-                tagOpen = "link(url)-text("; 
-                tagClose = ")"; 
+            case 'link':
+                tagOpen = "link(url)-text(";
+                tagClose = ")";
                 break;
-            case 'list': 
-                tagOpen = "l("; 
-                tagClose = ")"; 
+            case 'list':
+                tagOpen = "l(";
+                tagClose = ")";
                 break;
         }
 
         const before = message.substring(0, selection.start);
         const after = message.substring(selection.end);
         const middle = message.substring(selection.start, selection.end);
-        
+
         // Smart Wrapping: If text is selected (middle exists), wrap it. 
         // If empty, add placeholder.
         const content = middle.length > 0 ? middle : (tagType === 'link' ? "Link Text" : "Add text here");
-        
+
         const newText = `${before}${tagOpen}${content}${tagClose}${after}`;
-        
+
         // Calculate new cursor position
         const cursorPosition = before.length + tagOpen.length + content.length + tagClose.length;
-        
+
         setMessage(newText);
-        
+
         // 🔹 KEYBOARD FIX: Focus back on the input programmatically
         setTimeout(() => {
             if (messageInputRef.current) {
@@ -581,10 +595,10 @@ const scheduleDoneNotification = async () => {
     const { refreshStreak } = useStreak()
     const handleSubmit = async () => {
         if (!title.trim() || !message.trim()) { Alert.alert("Error", "Title and Message are required."); return; }
-        
+
         // Block submission if offline
-        if(isOfflineMode) { Alert.alert("Offline", "Cannot transmit data while offline. Draft saved."); return; }
-        
+        if (isOfflineMode) { Alert.alert("Offline", "Cannot transmit data while offline. Draft saved."); return; }
+
         setSubmitting(true);
         try {
             const response = await apiFetch(`${API_BASE}/posts`, {
@@ -599,10 +613,10 @@ const scheduleDoneNotification = async () => {
             const data = await response.json();
             updateStreak(fingerprint);
             if (!response.ok) throw new Error(data.message || "Failed to create post");
-            
+
             // Remove draft after successful post
             await AsyncStorage.removeItem(`draft_${fingerprint}`);
-            
+
             Alert.alert("Success", "Your entry has been submitted for approval!");
             setRewardToken(null);
             setCanPostAgain(false);
@@ -621,22 +635,22 @@ const scheduleDoneNotification = async () => {
     const parseMessageSections = (msg) => {
         // Regex for: s(), h(), l(), link()-text(), and [br]
         const regex = /s\((.*?)\)|h\((.*?)\)|l\((.*?)\)|link\((.*?)\)-text\((.*?)\)|\[br\]/gs;
-        
+
         const parts = [];
         let lastIndex = 0;
         let match;
-        
+
         while ((match = regex.exec(msg)) !== null) {
             // Push text before the match
             if (match.index > lastIndex) parts.push({ type: "text", content: msg.slice(lastIndex, match.index) });
-            
+
             // Identify match type based on capture group index
             if (match[1] !== undefined) parts.push({ type: "section", content: match[1].trim() }); // s()
             else if (match[2] !== undefined) parts.push({ type: "heading", content: match[2].trim() }); // h()
             else if (match[3] !== undefined) parts.push({ type: "listItem", content: match[3].trim() }); // l()
             else if (match[4] !== undefined) parts.push({ type: "link", url: match[4], content: match[5] }); // link()-text()
             else parts.push({ type: "br" }); // [br] (if you still use it)
-            
+
             lastIndex = regex.lastIndex;
         }
         if (lastIndex < msg.length) parts.push({ type: "text", content: msg.slice(lastIndex) });
@@ -746,50 +760,48 @@ const scheduleDoneNotification = async () => {
                         Diary Archives{isOfflineMode ? "(CACHED)" : "(Last 24h)"}
                     </Text>
                 </View>
-                
+
                 {todayPosts.map((post, index) => (
-                    <View 
-                        key={post._id || index} 
-                        style={{ backgroundColor: THEME.card, borderColor: THEME.border }} 
+                    <View
+                        key={post._id || index}
+                        style={{ backgroundColor: THEME.card, borderColor: THEME.border }}
                         className="mb-3 p-4 rounded-2xl border flex-row items-center"
                     >
                         <View className="flex-1">
                             <Text className="font-black text-sm uppercase mb-1" numberOfLines={1}>{post.title}</Text>
                             <View className="flex-row items-center">
-                                <View 
-                                    className={`w-1.5 h-1.5 rounded-full mr-2 ${
-                                        post.status === 'approved' ? 'bg-green-500' : 
+                                <View
+                                    className={`w-1.5 h-1.5 rounded-full mr-2 ${post.status === 'approved' ? 'bg-green-500' :
                                         post.status === 'rejected' ? 'bg-red-500' : 'bg-yellow-500'
-                                    }`} 
+                                        }`}
                                 />
-                                <Text className={`text-[9px] font-black uppercase tracking-tighter ${
-                                    post.status === 'approved' ? 'text-green-500' : 
+                                <Text className={`text-[9px] font-black uppercase tracking-tighter ${post.status === 'approved' ? 'text-green-500' :
                                     post.status === 'rejected' ? 'text-red-500' : 'text-yellow-500'
-                                }`}>
+                                    }`}>
                                     {post.status}
                                 </Text>
                             </View>
-                            
+
                             {/* Show Rejection Reason */}
-{post.rejectionReason && (
-    <View className={`mt-2 p-2 rounded-lg border ${post.status === 'approved' ? 'bg-green-500/5 border-green-500/10' : 'bg-red-500/5 border-red-500/10'}`}>
-        <Text className={`text-[10px] font-medium italic ${post.status === 'approved' ? 'text-green-400' : 'text-red-400'}`}>
-            REASON: {post.rejectionReason}
-        </Text>
-    </View>
-)}
+                            {post.rejectionReason && (
+                                <View className={`mt-2 p-2 rounded-lg border ${post.status === 'approved' ? 'bg-green-500/5 border-green-500/10' : 'bg-red-500/5 border-red-500/10'}`}>
+                                    <Text className={`text-[10px] font-medium italic ${post.status === 'approved' ? 'text-green-400' : 'text-red-400'}`}>
+                                        REASON: {post.rejectionReason}
+                                    </Text>
+                                </View>
+                            )}
 
 
                         </View>
-                        
+
                         <View className="items-end">
                             <Text className="text-[8px] text-gray-600 font-bold">
                                 {new Date(post.createdAt).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
                             </Text>
-                            <Ionicons 
-                                name={post.status === 'approved' ? "checkmark-circle" : post.status === 'rejected' ? "alert-circle" : "sync"} 
-                                size={18} 
-                                color={post.status === 'approved' ? "#22c55e" : post.status === 'rejected' ? "#ef4444" : "#eab308"} 
+                            <Ionicons
+                                name={post.status === 'approved' ? "checkmark-circle" : post.status === 'rejected' ? "alert-circle" : "sync"}
+                                size={18}
+                                color={post.status === 'approved' ? "#22c55e" : post.status === 'rejected' ? "#ef4444" : "#eab308"}
                                 style={{ marginTop: 4 }}
                             />
                         </View>
@@ -800,9 +812,9 @@ const scheduleDoneNotification = async () => {
     };
 
     if (contextLoading || submitting || isDraftRestoring) {
-        return <AnimeLoading 
-            message={submitting ? "Submitting" : uploading ? "Uploading" : isDraftRestoring ? "Restoring" : "Loading"} 
-            subMessage={isDraftRestoring ? "Synchronizing core draft modules..." : "Fetching Otaku diary"} 
+        return <AnimeLoading
+            message={submitting ? "Submitting" : uploading ? "Uploading" : isDraftRestoring ? "Restoring" : "Loading"}
+            subMessage={isDraftRestoring ? "Synchronizing core draft modules..." : "Fetching Otaku diary"}
         />
     }
 
@@ -814,11 +826,11 @@ const scheduleDoneNotification = async () => {
             <View style={{ position: 'absolute', top: -100, right: -100, width: 400, height: 400, borderRadius: 200, backgroundColor: THEME.glowBlue }} />
             <View style={{ position: 'absolute', bottom: -100, left: -100, width: 300, height: 300, borderRadius: 150, backgroundColor: THEME.glowRed }} />
 
-            <ScrollView 
-                className="flex-1" 
+            <ScrollView
+                className="flex-1"
                 contentContainerStyle={{ padding: 24, paddingBottom: 100 }}
                 // Important for keyboard handling on scrolling
-                keyboardShouldPersistTaps="handled" 
+                keyboardShouldPersistTaps="handled"
             >
 
                 {/* --- HEADER --- */}
@@ -826,14 +838,14 @@ const scheduleDoneNotification = async () => {
                     <View>
                         <View className="flex-row items-center mb-1">
                             {/* 🔹 Offline/Online Status Indicator */}
-                            <View 
-                                className={`h-2 w-2 rounded-full mr-2 ${isOfflineMode ? 'bg-orange-500' : 'bg-blue-600'}`} 
-                                style={{ shadowColor: isOfflineMode ? '#f97316' : '#2563eb', shadowRadius: 8, shadowOpacity: 0.8 }} 
+                            <View
+                                className={`h-2 w-2 rounded-full mr-2 ${isOfflineMode ? 'bg-orange-500' : 'bg-blue-600'}`}
+                                style={{ shadowColor: isOfflineMode ? '#f97316' : '#2563eb', shadowRadius: 8, shadowOpacity: 0.8 }}
                             />
                             <Text className={`text-[10px] font-black uppercase tracking-[0.2em] ${isOfflineMode ? 'text-orange-500' : 'text-blue-600'}`}>
                                 {isOfflineMode ? "ARCHIVED_DATA // OFFLINE" : "LIVE_UPLINK // ACTIVE"}
                             </Text>
-                            
+
                             {/* Sync Status Badge */}
                             <View className="ml-4 flex-row items-center bg-gray-900 px-2 py-0.5 rounded-full border border-gray-800">
                                 {saveStatus === "saving" ? (
@@ -902,7 +914,7 @@ const scheduleDoneNotification = async () => {
                                 </TouchableOpacity>
                             </Link>
                         </View>
-                        
+
                         {renderMissionLog()}
                     </View>
                 ) : (
@@ -920,7 +932,7 @@ const scheduleDoneNotification = async () => {
                         </View>
 
                         {/* Mission Log Toggle */}
-                        <TouchableOpacity 
+                        <TouchableOpacity
                             onPress={() => setShowMissionLog(!showMissionLog)}
                             className="mb-6 flex-row items-center justify-between bg-blue-600/5 p-4 rounded-2xl border border-blue-600/20"
                         >
@@ -936,12 +948,12 @@ const scheduleDoneNotification = async () => {
                         {/* --- FORM SECTION --- */}
                         <View className="flex-row justify-between items-center mb-6 mt-4">
                             <Text className="text-lg font-black uppercase italic text-white">{showPreview ? "Intel Preview" : "Create New Intel"}</Text>
-                            
+
                             <View className="flex-row gap-2">
                                 <TouchableOpacity onPress={handleClearAll} className="bg-red-600/10 px-4 py-2 rounded-xl border border-red-600/20">
                                     <Text className="text-red-500 text-[10px] font-black uppercase">Clear All</Text>
                                 </TouchableOpacity>
-                                
+
                                 <TouchableOpacity onPress={() => setShowPreview(!showPreview)} className="bg-blue-600/10 px-4 py-2 rounded-xl border border-blue-600/20">
                                     <Text className="text-blue-500 text-[10px] font-black uppercase">{showPreview ? "Edit Mode" : "Preview"}</Text>
                                 </TouchableOpacity>
@@ -952,13 +964,13 @@ const scheduleDoneNotification = async () => {
                             <View style={{ backgroundColor: THEME.card, borderColor: THEME.border }} className="mb-6 rounded-3xl border-2 p-2">{renderPreviewContent()}</View>
                         ) : (
                             <View className="space-y-6">
-                                 <Link href={"/screens/Instructions"} asChild>
-                            <TouchableOpacity className="mt-4">
-                                <Text className="text-gray-600 font-bold uppercase tracking-tighter text-xs">
-                                    Don't understand how to go about this? Check out this page for clear explanation
-                                </Text>
-                            </TouchableOpacity>
-                        </Link>
+                                <Link href={"/screens/Instructions"} asChild>
+                                    <TouchableOpacity className="mt-4">
+                                        <Text className="text-gray-600 font-bold uppercase tracking-tighter text-xs">
+                                            Don't understand how to go about this? Check out this page for clear explanation
+                                        </Text>
+                                    </TouchableOpacity>
+                                </Link>
                                 {/* Title */}
                                 <View>
                                     <Text className="text-[9px] font-black uppercase text-gray-500 mb-2 ml-1">Subject Title</Text>
@@ -967,7 +979,7 @@ const scheduleDoneNotification = async () => {
                                         value={title}
                                         onChangeText={setTitle}
                                         placeholderTextColor="#334155"
-                                        style={{ backgroundColor: THEME.card, borderColor: THEME.border, color: THEME.text}}
+                                        style={{ backgroundColor: THEME.card, borderColor: THEME.border, color: THEME.text }}
                                         className="w-full border-2 p-5 rounded-2xl text-white font-black text-lg"
                                     />
                                 </View>
@@ -976,28 +988,28 @@ const scheduleDoneNotification = async () => {
                                 <View>
                                     <View className="flex-col gap-1 mb-2 mt-2 px-1">
                                         <Text className="text-[13px] font-black uppercase text-gray-500">Content Module</Text>
-                                        
+
                                         {/* 🔹 UPDATED: Formatting Buttons */}
                                         <View className="flex-row gap-2">
                                             {/* Using your new functional syntax logic */}
                                             <TouchableOpacity onPress={() => insertTag('section')}>
                                                 <Text className="text-[11px] font-mono bg-blue-600/10 px-2 py-1 rounded text-blue-500 border border-blue-500/20">s(Section)</Text>
                                             </TouchableOpacity>
-                                            
+
                                             <TouchableOpacity onPress={() => insertTag('heading')}>
                                                 <Text className="text-[11px] font-mono bg-blue-600/10 px-2 py-1 rounded text-blue-500 border border-blue-500/20">h(Heading)</Text>
                                             </TouchableOpacity>
-                                            
+
                                             <TouchableOpacity onPress={() => insertTag('list')}>
                                                 <Text className="text-[11px] font-mono bg-blue-600/10 px-2 py-1 rounded text-blue-500 border border-blue-500/20">l(List)</Text>
                                             </TouchableOpacity>
-                                            
+
                                             <TouchableOpacity onPress={() => insertTag('link')}>
                                                 <Text className="text-[11px] font-mono bg-blue-600/10 px-2 py-1 rounded text-blue-500 border border-blue-500/20">Link</Text>
                                             </TouchableOpacity>
                                         </View>
                                     </View>
-                                    
+
                                     {/* 🔹 UPDATED: TextInput with Ref for focus control */}
                                     <TextInput
                                         ref={messageInputRef} // Attached ref here
@@ -1058,12 +1070,12 @@ const scheduleDoneNotification = async () => {
                                 <View style={{ backgroundColor: THEME.card, borderColor: hasPoll ? THEME.accent : THEME.border }} className="p-6 rounded-3xl border-2 mt-4">
                                     <View className="flex-row justify-between items-center mb-4">
                                         <Text className="font-black uppercase tracking-widest text-[11px]">Deploy Poll Module</Text>
-                                        <Switch 
-  value={hasPoll} 
-  onValueChange={setHasPoll} 
-  trackColor={{ false: '#3f3f46', true: '#2563eb' }} 
-  thumbColor={THEME.text} 
-/>
+                                        <Switch
+                                            value={hasPoll}
+                                            onValueChange={setHasPoll}
+                                            trackColor={{ false: '#3f3f46', true: '#2563eb' }}
+                                            thumbColor={THEME.text}
+                                        />
 
                                     </View>
                                     {hasPoll && (
@@ -1074,7 +1086,7 @@ const scheduleDoneNotification = async () => {
                                                         placeholder={`Option ${i + 1}`}
                                                         value={option}
                                                         onChangeText={(t) => updatePollOption(t, i)}
-                                                        style={{ backgroundColor: THEME.card, borderColor: THEME.border, color: THEME.text}}
+                                                        style={{ backgroundColor: THEME.card, borderColor: THEME.border, color: THEME.text }}
                                                         className="flex-1 border p-4 rounded-xl text-white font-bold"
                                                     />
                                                     {pollOptions.length > 2 && <TouchableOpacity onPress={() => removePollOption(i)}><Ionicons name="close-circle" size={24} color={THEME.red} /></TouchableOpacity>}

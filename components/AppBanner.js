@@ -1,9 +1,9 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { ActivityIndicator, View } from 'react-native';
-import { BannerAd, BannerAdSize, TestIds } from 'react-native-google-mobile-ads';
+import { BannerAd, BannerAdSize } from 'react-native-google-mobile-ads';
 import { AdConfig } from '../utils/AdConfig';
 
-const BANNER_ID = __DEV__ ? TestIds.BANNER : AdConfig.banner;
+const BANNER_ID = AdConfig.banner;
 
 const AppBanner = ({ size = BannerAdSize.MEDIUM_RECTANGLE }) => {
   const [failed, setFailed] = useState(false);

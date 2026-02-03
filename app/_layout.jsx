@@ -1,23 +1,23 @@
 import Constants from 'expo-constants';
 import { useFonts } from "expo-font";
-import * as Linking from 'expo-linking'; 
+import * as Linking from 'expo-linking';
 import * as Notifications from "expo-notifications";
 import { Stack, usePathname, useRouter } from "expo-router";
 import * as SplashScreen from "expo-splash-screen";
-import * as Updates from 'expo-updates'; 
+import * as Updates from 'expo-updates';
 import { useColorScheme } from "nativewind";
 import { useEffect, useRef, useState } from "react";
-import { AppState, BackHandler, DeviceEventEmitter, Platform, StatusBar, View } from "react-native";
+import { AppState, BackHandler, DeviceEventEmitter, Platform, StatusBar, StyleSheet, Text, TouchableOpacity, View } from "react-native";
+import mobileAds, { AdEventType, InterstitialAd, MaxAdContentRating } from 'react-native-google-mobile-ads';
 import { SafeAreaProvider } from "react-native-safe-area-context";
 import Toast from 'react-native-toast-message';
-import { InterstitialAd, AdEventType, TestIds, MobileAds } from 'react-native-google-mobile-ads';
 
 import AnimeLoading from "../components/AnimeLoading";
-import apiFetch from "../utils/apiFetch"
 import { loadAppOpenAd, showAppOpenAd } from "../components/appOpenAd";
 import { StreakProvider, useStreak } from "../context/StreakContext";
 import { UserProvider, useUser } from "../context/UserContext";
 import { AdConfig } from '../utils/AdConfig';
+import apiFetch from "../utils/apiFetch";
 import "./globals.css";
 
 SplashScreen.preventAutoHideAsync();
@@ -26,13 +26,13 @@ SplashScreen.preventAutoHideAsync();
 const FIRST_AD_DELAY_MS = 60000; 
 const COOLDOWN_MS = 180000;      
 
-const INTERSTITIAL_ID = __DEV__ ? TestIds.INTERSTITIAL : AdConfig.interstitial;
+const INTERSTITIAL_ID = AdConfig.interstitial;
 
 let lastShownTime = Date.now() - (COOLDOWN_MS - FIRST_AD_DELAY_MS);
 let interstitial = null;
 let interstitialLoaded = false;
 
-// 🔹 NOTIFICATION HANDLER (Foreground Behavior)
+// 🔹 NOTIFICATION HANDLER
 Notifications.setNotificationHandler({
     handleNotification: async () => ({
         shouldShowAlert: true,
@@ -51,16 +51,18 @@ const loadInterstitial = () => {
 
     ad.addAdEventListener(AdEventType.LOADED, () => {
         interstitialLoaded = true;
+        console.log("✅ Interstitial Loaded");
     });
 
     ad.addAdEventListener(AdEventType.CLOSED, () => {
         interstitialLoaded = false;
         interstitial = null;
         lastShownTime = Date.now(); 
-        loadInterstitial(); // Pre-load the next one immediately
+        loadInterstitial(); 
     });
 
     ad.addAdEventListener(AdEventType.ERROR, (err) => {
+        console.log("❌ Interstitial Error: ", err);
         interstitial = null;
         interstitialLoaded = false;
         setTimeout(loadInterstitial, 30000);
@@ -105,20 +107,52 @@ function RootLayoutContent() {
     const [isSyncing, setIsSyncing] = useState(true);
     const [isUpdating, setIsUpdating] = useState(false); 
     const [appReady, setAppReady] = useState(false); 
+    const [isAdReady, setIsAdReady] = useState(false); 
     
     const appState = useRef(AppState.currentState);
-    const lastHandledNotificationId = useRef(null); // Session-based lock
+    const lastHandledNotificationId = useRef(null); 
     const hasHandledRedirect = useRef(false);
     const hasShownWelcomeAd = useRef(false);
 
-    // --- 1. AD LOGIC ---
+    // --- 1. AD INITIALIZATION WITH SAFETY DELAY ---
     useEffect(() => {
-        if (Platform.OS === 'web') return;
+        if (Platform.OS === 'web') {
+            setIsAdReady(true);
+            return;
+        }
 
-        MobileAds().initialize().then(() => {
-            loadAppOpenAd();
-            loadInterstitial();
-        });
+        const runMediationInit = async () => {
+            try {
+                // IMPORTANT: Give the Activity time to mount (Fixes "Failed to create Adapter")
+                await new Promise(resolve => setTimeout(resolve, 3000));
+
+                await mobileAds().setRequestConfiguration({
+                    maxAdContentRating: MaxAdContentRating.G,
+                });
+
+                const adapterStatuses = await mobileAds().initialize();
+                console.log(adapterStatuses);
+                
+                console.log('--- 🛡️ MEDIATION STATUS 🛡️ ---');
+                let anyAdapterReady = false;
+                Object.entries(adapterStatuses).forEach(([adapter, status]) => {
+                    const name = adapter.split('.').pop();
+                    const isReady = status.state === 1 || status.state === 'READY';
+                    console.log(`${isReady ? '✅' : '❌'} ${name}: ${isReady ? 'READY' : 'FAILED'}`);
+                    if (isReady) anyAdapterReady = true;
+                });
+
+                // Preload ads only after initialization
+                loadAppOpenAd();
+                loadInterstitial();
+                setIsAdReady(true);
+            } catch (e) {
+                console.error("Ad Engine Init Failure:", e);
+                setIsAdReady(true);
+            }
+        };
+
+        runMediationInit();
 
         const sub = AppState.addEventListener('change', nextState => {
             if (appState.current.match(/inactive|background/) && nextState === 'active') {
@@ -129,10 +163,7 @@ function RootLayoutContent() {
 
         const interstitialListener = DeviceEventEmitter.addListener("tryShowInterstitial", () => {
             const now = Date.now();
-            const timeSinceLast = now - lastShownTime;
-            
-            // Only show if loaded AND cooldown has passed
-            if (interstitialLoaded && interstitial && timeSinceLast > COOLDOWN_MS) {
+            if (interstitialLoaded && interstitial && (now - lastShownTime > COOLDOWN_MS)) {
                 interstitial.show();
             }
         });
@@ -153,24 +184,22 @@ function RootLayoutContent() {
         };
     }, [router]);
 
-    // --- 2. ONE-TIME WELCOME AD LOGIC ---
+    // --- 2. WELCOME AD ---
     useEffect(() => {
-        if (appReady && !hasShownWelcomeAd.current) {
+        if (appReady && isAdReady && !hasShownWelcomeAd.current) {
             const adShown = showAppOpenAd();
             if (adShown) {
                 hasShownWelcomeAd.current = true;
             } else {
-                // Retry once if not ready immediately
                 const retryTimeout = setTimeout(() => {
-                    const retryShown = showAppOpenAd();
-                    if (retryShown) hasShownWelcomeAd.current = true;
+                    if (showAppOpenAd()) hasShownWelcomeAd.current = true;
                 }, 2000);
                 return () => clearTimeout(retryTimeout);
             }
         }
-    }, [appReady]); 
+    }, [appReady, isAdReady]); 
 
-    // --- 3. DEEP LINKING (External Links) ---
+    // --- 3. DEEP LINKING ---
     const url = Linking.useURL(); 
     useEffect(() => {
         if (url && !isSyncing && !isUpdating && !hasHandledRedirect.current) {
@@ -178,7 +207,6 @@ function RootLayoutContent() {
             if (path && path !== "/") {
                 const targetPath = path.startsWith('/') ? path : `/${path}`;
                 hasHandledRedirect.current = true;
-                // Small delay to ensure navigation stack is ready
                 setTimeout(() => router.replace(targetPath), 500);
             }
         }
@@ -207,7 +235,7 @@ function RootLayoutContent() {
 
     useEffect(() => { refreshStreak(); }, [pathname, refreshStreak]);
 
-    // --- 5. SYNC & PUSH TOKEN ---
+    // --- 5. SYNC ---
     useEffect(() => {
         async function performSync() {
             if (!fontsLoaded || isUpdating) return; 
@@ -227,18 +255,14 @@ function RootLayoutContent() {
         performSync();
     }, [fontsLoaded, user?.deviceId, isUpdating]);
 
-    // --- 6. NOTIFICATIONS (Enhanced) ---
+    // --- 6. NOTIFICATIONS ---
     const handleNotificationNavigation = (response) => {
         const notificationId = response?.notification?.request?.identifier;
-        
-        // Prevent double handling of the exact same notification instance
         if (!notificationId || lastHandledNotificationId.current === notificationId) return;
         lastHandledNotificationId.current = notificationId;
 
         const content = response?.notification?.request?.content;
         const data = content?.data || {};
-        
-        // Extract targets safely (handles nested body/data issues common in Expo)
         const targetPostId = data?.postId || data?.body?.postId || data?.id;
         const targetType = data?.type || data?.body?.type;
 
@@ -252,30 +276,28 @@ function RootLayoutContent() {
     };
 
     useEffect(() => {
-        // Wait for sync to finish before processing notifications 
-        // to avoid navigating before the root stack is ready.
         if (isSyncing || isUpdating) return;
-
-        // A. Check for initial notification (Cold Start)
         Notifications.getLastNotificationResponseAsync().then(response => {
             if (response && !hasHandledRedirect.current) {
                 handleNotificationNavigation(response);
             }
         });
-
-        // B. Listen for foreground/background taps (Warm Start)
         const responseSub = Notifications.addNotificationResponseReceivedListener(response => {
             handleNotificationNavigation(response);
         });
-
         return () => responseSub.remove();
     }, [isSyncing, isUpdating]);
 
-    // 🔹 Splash Screen Hiding
     useEffect(() => { if (appReady || fontError) SplashScreen.hideAsync(); }, [appReady, fontError]);
 
-    if (!fontsLoaded || isSyncing || isUpdating) {
-        return <AnimeLoading message={isUpdating ? "UPDATING_CORE" : "LOADING_PAGE"} subMessage={isUpdating ? "Updating system configurations..." : "Syncing Account"} />;
+    // --- 7. FINAL RENDER ---
+    if (!fontsLoaded || isSyncing || isUpdating || !isAdReady) {
+        return (
+            <AnimeLoading 
+                message={isUpdating ? "UPDATING_CORE" : "LOADING_PAGE"} 
+                subMessage={isUpdating ? "Updating system configurations..." : (!isAdReady ? "Initializing Ad Services..." : "Syncing Account")} 
+            />
+        );
     }
 
     return (
@@ -284,14 +306,44 @@ function RootLayoutContent() {
             <Stack
                 screenOptions={{ headerShown: false, contentStyle: { backgroundColor: isDark ? "#0a0a0a" : "#ffffff" } }}
                 onStateChange={() => {
-                    // Try to show interstitial on navigation state change
                     setTimeout(() => { DeviceEventEmitter.emit("tryShowInterstitial"); }, 500);
                 }}
             />
+            
+            {__DEV__ && (
+                <TouchableOpacity 
+                    onPress={() => mobileAds().openDebugMenu(INTERSTITIAL_ID)}
+                    style={styles.debugButton}
+                >
+                    <Text style={styles.debugText}>Ad Inspector</Text>
+                </TouchableOpacity>
+            )}
+
             <Toast />
         </View>
     );
 }
+
+const styles = StyleSheet.create({
+  debugButton: { 
+    position: 'absolute', 
+    bottom: 50, 
+    right: 20, 
+    backgroundColor: '#E6F4FE', 
+    paddingHorizontal: 15, 
+    paddingVertical: 8, 
+    borderRadius: 20,
+    borderWidth: 1,
+    borderColor: '#2196F3',
+    elevation: 5,
+    zIndex: 999
+  },
+  debugText: { 
+    color: '#2196F3', 
+    fontSize: 12, 
+    fontWeight: 'bold' 
+  }
+});
 
 export default function RootLayout() {
     return (

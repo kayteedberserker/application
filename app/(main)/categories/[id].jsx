@@ -1,25 +1,23 @@
 import { MaterialCommunityIcons } from '@expo/vector-icons';
+import AsyncStorage from "@react-native-async-storage/async-storage";
 import { useLocalSearchParams } from "expo-router";
 import { useColorScheme } from "nativewind";
 import { useEffect, useRef, useState } from "react";
 import {
+    Animated,
     DeviceEventEmitter,
     Dimensions,
+    Easing,
     FlatList,
-    Text as RNText,
-    View,
-    Animated,
-    Easing
+    View
 } from "react-native";
-import AsyncStorage from "@react-native-async-storage/async-storage";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import AnimeLoading from "../../../components/AnimeLoading";
-import AppBanner from "../../../components/AppBanner";
+import { NativeAdPostStyle } from "../../../components/NativeAd";
 import PostCard from "../../../components/PostCard";
 import { SyncLoading } from "../../../components/SyncLoading";
 import { Text } from "../../../components/Text";
 import apiFetch from "../../../utils/apiFetch";
-import { NativeAdAuthorStyle, NativeAdPostStyle } from "../../../components/NativeAd";
 const { width } = Dimensions.get('window');
 
 const API_BASE = "https://oreblogda.com/api";
@@ -145,10 +143,7 @@ export default function CategoryPage() {
             <View className="px-4">
                 <PostCard post={item} isFeed />
                 {showAd && (
-                    <View className="mb-8 mt-2 items-center bg-gray-50 dark:bg-gray-800/30 py-4 rounded-2xl border border-gray-100 dark:border-gray-800">
-                        <RNText className="text-[10px] text-gray-400 mb-2 uppercase tracking-widest">Sponsored Transmission</RNText>
-                        <AppBanner size="MEDIUM_RECTANGLE" />
-                    </View>
+                    <NativeAdPostStyle isDark={isDark} />
                 )}
             </View>
         );

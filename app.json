@@ -81,13 +81,20 @@
         "expo-build-properties",
         {
           "android": {
+            "minSdkVersion": 24,
             "extraMavenRepos": [
-              "https://dl-maven-android.mintegral.com/repository/mbridge_android_sdk_oversea"
+              "https://dl-maven-android.mintegral.com/repository/mbridge_android_sdk_oversea",
+              "https://artifacts.applovin.com/android",
+              "https://unity3d.jfrog.io/artifactory/unity-ads-android-master"
             ],
             "dependencies": [
-              "com.google.ads.mediation:applovin:13.1.0.0",
+              "com.google.android.gms:play-services-ads:23.3.0",
+              "com.google.ads.mediation:unity:4.16.6.0",
+              "com.unity3d.ads:unity-ads:4.16.5",
+              "com.google.ads.mediation:applovin:13.0.1.0",
               "com.google.ads.mediation:mintegral:17.0.51.0"
-            ]
+            ],
+            "proguardRules": "-keep class com.unity3d.ads.** { *; }\n-keep class com.google.ads.mediation.unity.** { *; }\n-keep class com.applovin.** { *; }\n-keep class com.google.ads.mediation.applovin.** { *; }\n-keep class com.mbridge.msdk.** { *; }\n-keep class com.google.ads.mediation.mintegral.** { *; }"
           }
         }
       ]
@@ -99,16 +106,16 @@
     "extra": {
       "router": {},
       "eas": {
-        "projectId": "b6b7afd1-028a-425e-a84e-6a2af706a736"
+        "projectId": "b80ec13d-3fc7-48c7-81cb-809096317ab5"
       }
     },
-    "runtimeVersion": "v1_global",
+    "runtimeVersion": "v2_global",
     "updates": {
-      "url": "https://u.expo.dev/b6b7afd1-028a-425e-a84e-6a2af706a736",
+      "url": "https://u.expo.dev/b80ec13d-3fc7-48c7-81cb-809096317ab5",
       "enabled": true,
       "checkAutomatically": "ON_LOAD",
-      "fallbackToCacheTimeout": 0 
+      "fallbackToCacheTimeout": 0
     },
-    "owner": "oreblogda"
+    "owner": "kaytee07"
   }
 }

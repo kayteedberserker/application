@@ -1,0 +1,29 @@
+{
+  "project_info": {
+    "project_number": "991926389832",
+    "project_id": "ore-blogda",
+    "storage_bucket": "ore-blogda.firebasestorage.app"
+  },
+  "client": [
+    {
+      "client_info": {
+        "mobilesdk_app_id": "1:991926389832:android:f9ec7434b42ddd0e5e1c7d",
+        "android_client_info": {
+          "package_name": "com.kaytee.oreblogda"
+        }
+      },
+      "oauth_client": [],
+      "api_key": [
+        {
+          "current_key": "AIzaSyDO1ua2s39pioctjlntNtKp6-QQvguvNac"
+        }
+      ],
+      "services": {
+        "appinvite_service": {
+          "other_platform_oauth_client": []
+        }
+      }
+    }
+  ],
+  "configuration_version": "1"
+}
