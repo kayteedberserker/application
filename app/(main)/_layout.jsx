@@ -170,8 +170,8 @@ export default function MainLayout() {
 					shadowOffset: { width: 0, height: 4 },
 					shadowOpacity: 0.2,
 					shadowRadius: 5,
-					borderWidth: isDark ? 1 : 0,
-					borderColor: "#1e293b",
+					borderWidth: isDark ? 1 : 1,
+					borderColor: isDark ? "#1e293b" : "#e2e8f0",
 					transform: [{ translateX: 0 }], 
 					zIndex: 999,
 				}}
@@ -212,7 +212,7 @@ export default function MainLayout() {
 				style={{
 					position: "absolute",
 					bottom: insets.bottom + 20,
-					right: 5,
+					right: 15,
 					gap: 12,
 					alignItems: "center",
 					zIndex: 1000,
@@ -222,15 +222,10 @@ export default function MainLayout() {
 					<TouchableOpacity
 						onPress={handleBackToTop}
 						activeOpacity={0.7}
+						className="w-[48px] h-[48px] rounded-[16px] justify-center items-center border-1.5 shadow-md"
 						style={{
-							width: 48,
-							height: 48,
-							borderRadius: 16,
-							justifyContent: "center",
-							alignItems: "center",
-							backgroundColor: "#111111",
-							borderWidth: 1.5,
-							borderColor: "#1e293b",
+							backgroundColor: isDark ? "#111111" : "#ffffff",
+							borderColor: isDark ? "#1e293b" : "#e2e8f0",
 							elevation: 5,
 						}}
 					>
@@ -238,18 +233,25 @@ export default function MainLayout() {
 					</TouchableOpacity>
 				)}
 
-				{/* UPDATED: CLAN BUTTON */}
+				{/* UPDATED: CLAN BUTTON (Theme Aware) */}
 				<TouchableOpacity
 					onPress={handleClanPress}
 					activeOpacity={0.8}
-					className="w-[48px] h-[48px] items-center justify-center rounded-[18px] border-2 border-[#111111] bg-[#111111]"
-					style={{ elevation: 8, shadowColor: '#60a5fa', shadowOpacity: 0.5, shadowRadius: 10 }}
+					className="w-[48px] h-[48px] items-center justify-center rounded-[18px] border-2 shadow-lg"
+					style={{ 
+						elevation: 8, 
+						shadowColor: '#60a5fa', 
+						shadowOpacity: 0.5, 
+						shadowRadius: 10,
+						backgroundColor: isDark ? "#111111" : "#ffffff",
+						borderColor: isDark ? "#111111" : "#e2e8f0"
+					}}
 				>
 					<Ionicons name="shield-half" size={25} color="#60a5fa" />
 				</TouchableOpacity>
 			</View>
 
-			{/* COOKING MODAL */}
+			{/* COOKING MODAL (Theme Aware) */}
 			<Modal
 				animationType="fade"
 				transparent={true}
@@ -257,29 +259,29 @@ export default function MainLayout() {
 				onRequestClose={() => setClanModalVisible(false)}
 			>
 				<Pressable 
-					className="flex-1 justify-center items-center bg-black/80 px-10"
+					className="flex-1 justify-center items-center bg-black/60 dark:bg-black/80 px-10"
 					onPress={() => !isCooking && setClanModalVisible(false)}
 				>
-					<View className="w-full bg-[#111] border border-slate-800 rounded-[30px] p-8 items-center shadow-2xl">
+					<View className="w-full bg-white dark:bg-[#111] border border-slate-200 dark:border-slate-800 rounded-[30px] p-8 items-center shadow-2xl">
 						{isCooking ? (
 							<View className="items-center py-4">
 								<ActivityIndicator size="large" color="#60a5fa" />
-								<Text className="text-blue-400 mt-4 font-bold tracking-widest italic">THE SYSTEM IS COOKING...</Text>
+								<Text className="text-blue-500 dark:text-blue-400 mt-4 font-bold tracking-widest italic">THE SYSTEM IS COOKING...</Text>
 							</View>
 						) : (
 							<View className="items-center">
 								<View className="bg-blue-500/10 p-4 rounded-full mb-4">
 									<Ionicons name="flash" size={40} color="#60a5fa" />
 								</View>
-								<Text className="text-white text-xl font-black text-center mb-2">CLAN SYSTEM 2.0</Text>
-								<Text className="text-slate-400 text-center leading-5 font-medium mb-6">
+								<Text className="text-slate-900 dark:text-white text-xl font-black text-center mb-2">CLAN SYSTEM 2.0</Text>
+								<Text className="text-slate-600 dark:text-slate-400 text-center leading-5 font-medium mb-6">
 									THE SYSTEM is cooking something nice🔥🔥. New features are coming to the app to make your experience even more legendary. ANTICIPATE!
 								</Text>
 								<TouchableOpacity 
 									onPress={() => setClanModalVisible(false)}
-									className="bg-blue-500 py-3 px-8 rounded-xl"
+									className="bg-blue-500 py-3 px-8 rounded-xl shadow-md"
 								>
-									<Text className="text-black font-black text-sm">NOTED</Text>
+									<Text className="text-white dark:text-black font-black text-sm uppercase">Noted</Text>
 								</TouchableOpacity>
 							</View>
 						)}
@@ -288,4 +290,4 @@ export default function MainLayout() {
 			</Modal>
 		</View>
 	);
-						}
+}
