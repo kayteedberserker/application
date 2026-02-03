@@ -38,6 +38,9 @@ Notifications.setNotificationHandler({
         shouldShowAlert: true,
         shouldPlaySound: true,
         shouldSetBadge: false,
+        // The 'color' here helps resolve the "white square" by providing the accent color 
+        // for the notification content area on Android.
+        priority: Notifications.AndroidImportance.MAX,
     }),
 });
 
@@ -77,7 +80,7 @@ async function registerForPushNotificationsAsync() {
             name: 'default',
             importance: Notifications.AndroidImportance.MAX,
             vibrationPattern: [0, 250, 250, 250],
-            lightColor: '#FF231F7C',
+            lightColor: '#60a5fa', // Matches your "System" Blue
         });
     }
     const { status: existingStatus } = await Notifications.getPermissionsAsync();
@@ -107,7 +110,7 @@ function RootLayoutContent() {
     const [appReady, setAppReady] = useState(false); 
     
     const appState = useRef(AppState.currentState);
-    const lastHandledNotificationId = useRef(null); // Session-based lock
+    const lastHandledNotificationId = useRef(null); 
     const hasHandledRedirect = useRef(false);
     const hasShownWelcomeAd = useRef(false);
 
@@ -131,7 +134,6 @@ function RootLayoutContent() {
             const now = Date.now();
             const timeSinceLast = now - lastShownTime;
             
-            // Only show if loaded AND cooldown has passed
             if (interstitialLoaded && interstitial && timeSinceLast > COOLDOWN_MS) {
                 interstitial.show();
             }
@@ -160,7 +162,6 @@ function RootLayoutContent() {
             if (adShown) {
                 hasShownWelcomeAd.current = true;
             } else {
-                // Retry once if not ready immediately
                 const retryTimeout = setTimeout(() => {
                     const retryShown = showAppOpenAd();
                     if (retryShown) hasShownWelcomeAd.current = true;
@@ -170,15 +171,14 @@ function RootLayoutContent() {
         }
     }, [appReady]); 
 
-    // --- 3. DEEP LINKING (External Links) ---
+    // --- 3. DEEP LINKING ---
     const url = Linking.useURL(); 
     useEffect(() => {
         if (url && !isSyncing && !isUpdating && !hasHandledRedirect.current) {
             const { path } = Linking.parse(url);
-            if (path && path !== "/") {
+            if (path && path !== "/" && pathname !== `/${path}`) {
                 const targetPath = path.startsWith('/') ? path : `/${path}`;
                 hasHandledRedirect.current = true;
-                // Small delay to ensure navigation stack is ready
                 setTimeout(() => router.replace(targetPath), 500);
             }
         }
@@ -227,49 +227,48 @@ function RootLayoutContent() {
         performSync();
     }, [fontsLoaded, user?.deviceId, isUpdating]);
 
-    // --- 6. NOTIFICATIONS (Enhanced) ---
+    // --- 6. NOTIFICATIONS (Enhanced Navigation) ---
     const handleNotificationNavigation = (response) => {
         const notificationId = response?.notification?.request?.identifier;
-        
-        // Prevent double handling of the exact same notification instance
         if (!notificationId || lastHandledNotificationId.current === notificationId) return;
         lastHandledNotificationId.current = notificationId;
 
         const content = response?.notification?.request?.content;
         const data = content?.data || {};
         
-        // Extract targets safely (handles nested body/data issues common in Expo)
         const targetPostId = data?.postId || data?.body?.postId || data?.id;
         const targetType = data?.type || data?.body?.type;
 
+        // Check current pathname to avoid duplicate "Stacking"
         if (targetPostId) {
-            hasHandledRedirect.current = true;
-            router.push(`/post/${targetPostId}`);
+            const targetPath = `/post/${targetPostId}`;
+            if (pathname !== targetPath) {
+                hasHandledRedirect.current = true;
+                router.push(targetPath);
+            }
         } else if (targetType === "open_diary" || targetType === "diary") {
-            hasHandledRedirect.current = true;
-            router.push("/authordiary");
+            if (pathname !== "/authordiary") {
+                hasHandledRedirect.current = true;
+                router.push("/authordiary");
+            }
         }
     };
 
     useEffect(() => {
-        // Wait for sync to finish before processing notifications 
-        // to avoid navigating before the root stack is ready.
         if (isSyncing || isUpdating) return;
 
-        // A. Check for initial notification (Cold Start)
         Notifications.getLastNotificationResponseAsync().then(response => {
             if (response && !hasHandledRedirect.current) {
                 handleNotificationNavigation(response);
             }
         });
 
-        // B. Listen for foreground/background taps (Warm Start)
         const responseSub = Notifications.addNotificationResponseReceivedListener(response => {
             handleNotificationNavigation(response);
         });
 
         return () => responseSub.remove();
-    }, [isSyncing, isUpdating]);
+    }, [isSyncing, isUpdating, pathname]); // Added pathname as dependency
 
     // 🔹 Splash Screen Hiding
     useEffect(() => { if (appReady || fontError) SplashScreen.hideAsync(); }, [appReady, fontError]);
@@ -280,11 +279,18 @@ function RootLayoutContent() {
 
     return (
         <View key={colorScheme} className="flex-1 bg-white dark:bg-gray-900">
-            <StatusBar barStyle={isDark ? "light-content" : "dark-content"} backgroundColor={isDark ? "#0a0a0a" : "#ffffff"} />
+            <StatusBar 
+                barStyle={isDark ? "light-content" : "dark-content"} 
+                backgroundColor={isDark ? "#000000" : "#ffffff"} 
+                translucent={true}
+            />
             <Stack
-                screenOptions={{ headerShown: false, contentStyle: { backgroundColor: isDark ? "#0a0a0a" : "#ffffff" } }}
+                screenOptions={{ 
+                    headerShown: false, 
+                    contentStyle: { backgroundColor: isDark ? "#000000" : "#ffffff" },
+                    animation: 'fade_from_bottom' 
+                }}
                 onStateChange={() => {
-                    // Try to show interstitial on navigation state change
                     setTimeout(() => { DeviceEventEmitter.emit("tryShowInterstitial"); }, 500);
                 }}
             />
