@@ -44,7 +44,7 @@ async function getUserTotalPosts(deviceId) {
         const res = await apiFetch(`${API_BASE}/posts?author=${deviceId}`);
         if (!res.ok) throw new Error("Failed to fetch posts");
         const data = await res.json();
-        return data.posts?.length || 0;
+        return data?.total || 0;
     } catch (err) {
         console.error("Error fetching total posts:", err);
         return null; // Return null on error to signal we should keep using cache
