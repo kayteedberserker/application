@@ -21,6 +21,7 @@ import Animated, {
 import { useStreak } from "../context/StreakContext";
 import { useUser } from "../context/UserContext";
 import { AdConfig } from "../utils/AdConfig";
+import apiFetch from "../utils/apiFetch";
 import { Text } from "./Text";
 
 const TopBar = ({ isDark }) => {
@@ -78,7 +79,7 @@ const TopBar = ({ isDark }) => {
             if (isEarnedReward && isClosed && user?.deviceId) {
                 try {
                     setIsRestoring(true);
-                    const response = await fetch("https://oreblogda.com/api/users/streak/restore", {
+                    const response = await apiFetch("/users/streak/restore", {
                         method: "POST",
                         headers: { "Content-Type": "application/json" },
                         body: JSON.stringify({ deviceId: user.deviceId }),
