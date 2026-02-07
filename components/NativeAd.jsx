@@ -4,12 +4,11 @@ import { ActivityIndicator, Platform, Text as RNText, View } from "react-native"
 import {
   NativeAd,
   NativeAdView,
-  NativeMediaView,
-  TestIds
+  NativeMediaView
 } from "react-native-google-mobile-ads";
 import Animated, { FadeIn, FadeInDown } from "react-native-reanimated";
 
-const AD_UNIT_ID = __DEV__ ? TestIds.NATIVE : "ca-app-pub-8021671365048667/9973628010"
+const AD_UNIT_ID = "ca-app-pub-8021671365048667/9973628010";
 
 /* ================== AUTHOR STYLE ================== */
 export const NativeAdAuthorStyle = ({ isDark }) => {
@@ -19,29 +18,44 @@ export const NativeAdAuthorStyle = ({ isDark }) => {
 
   useEffect(() => {
     let isMounted = true;
-    NativeAd.createForAdRequest(AD_UNIT_ID)
-      .then((ad) => {
-        if (isMounted) {
-          setNativeAd(ad);
-          setLoaded(true);
-        }
-      })
-      .catch((err) => {
-        console.error("Native Author Ad Load Error:", err);
-        if (isMounted) setError(true);
-      });
-    return () => { isMounted = false; };
+
+    const loadAd = () => {
+      NativeAd.createForAdRequest(AD_UNIT_ID)
+        .then((ad) => {
+          if (isMounted) {
+            setNativeAd(ad);
+            setLoaded(true);
+            setError(false);
+          }
+        })
+        .catch(() => {
+          if (isMounted) {
+            setError(true);
+            // retry after 10s as per logic intent
+            setTimeout(() => {
+              if (isMounted) loadAd();
+            }, 10000); 
+          }
+        });
+    };
+
+    loadAd();
+
+    return () => {
+      isMounted = false;
+    };
   }, []);
 
-  if (error || (!loaded && !nativeAd)) {
+  if (error || !loaded || !nativeAd) {
     return (
-      <View 
-        style={{ height: 140 }} 
+      <View
+        style={{ height: 140 }}
         className={`mb-3 w-full justify-center items-center rounded-3xl border ${
           isDark ? "bg-[#0f0f0f] border-zinc-800" : "bg-white border-zinc-100"
         }`}
       >
         {!error && <ActivityIndicator color={isDark ? "white" : "#3b82f6"} />}
+        {error && <RNText className="text-zinc-500 text-[10px]">Ad unavailable</RNText>}
       </View>
     );
   }
@@ -49,12 +63,16 @@ export const NativeAdAuthorStyle = ({ isDark }) => {
   const adColor = "#3b82f6";
 
   return (
-    <Animated.View 
-      key="author-ad-container" 
-      entering={FadeInDown.duration(400)} 
+    <Animated.View
+      key="author-ad-container"
+      entering={FadeInDown.duration(400)}
       className="mb-3"
     >
-      <NativeAdView nativeAd={nativeAd} style={{ width: "100%", height: 140 }}>
+      <NativeAdView 
+        nativeAd={nativeAd} 
+        style={{ width: "100%", height: 140 }}
+        adChoicesPlacement="topRight"
+      >
         <View
           className={`p-4 rounded-3xl border flex-row items-center ${
             isDark ? "bg-[#0f0f0f] border-zinc-800" : "bg-white border-zinc-100 shadow-sm"
@@ -71,9 +89,9 @@ export const NativeAdAuthorStyle = ({ isDark }) => {
 
           <View className="flex-1 ml-4 justify-center">
             <View className="flex-row items-center justify-between mb-1">
-              <RNText 
+              <RNText
                 nativeID="adHeadlineView"
-                numberOfLines={1} 
+                numberOfLines={1}
                 className={`font-black italic uppercase tracking-tighter text-lg ${isDark ? 'text-white' : 'text-black'}`}
                 style={{ flex: 1, marginRight: 8, fontFamily: Platform.OS === 'ios' ? 'System' : 'sans-serif-condensed' }}
               >
@@ -85,9 +103,9 @@ export const NativeAdAuthorStyle = ({ isDark }) => {
               </View>
             </View>
 
-            <RNText 
+            <RNText
               nativeID="adTaglineView"
-              numberOfLines={1} 
+              numberOfLines={1}
               className={`text-[11px] font-medium italic mb-2 ${isDark ? 'text-zinc-500' : 'text-zinc-400'}`}
             >
               {nativeAd.tagline}
@@ -100,14 +118,14 @@ export const NativeAdAuthorStyle = ({ isDark }) => {
                   <RNText className="text-[10px] font-bold ml-1 text-zinc-500">Verified</RNText>
                 </View>
               </View>
-              
+
               <View className="bg-blue-600 px-4 py-1.5 rounded-full">
-                  <RNText
-                    nativeID="adCallToActionView"
-                    style={{ color: "white", fontSize: 9, fontWeight: "900", textTransform: "uppercase" }}
-                  >
-                    {nativeAd.callToAction}
-                  </RNText>
+                <RNText
+                  nativeID="adCallToActionView"
+                  style={{ color: "white", fontSize: 9, fontWeight: "900", textTransform: "uppercase" }}
+                >
+                  {nativeAd.callToAction}
+                </RNText>
               </View>
             </View>
           </View>
@@ -125,40 +143,62 @@ export const NativeAdPostStyle = ({ isDark }) => {
 
   useEffect(() => {
     let isMounted = true;
-    NativeAd.createForAdRequest(AD_UNIT_ID)
-      .then((ad) => {
-        if (isMounted) {
-          setNativeAd(ad);
-          setLoaded(true);
-        }
-      })
-      .catch((err) => {
-        console.error("Native Post Ad Load Error:", err);
-        if (isMounted) setError(true);
-      });
-    return () => { isMounted = false; };
+
+    const loadAd = () => {
+      NativeAd.createForAdRequest(AD_UNIT_ID)
+        .then((ad) => {
+          if (isMounted) {
+            setNativeAd(ad);
+            setLoaded(true);
+            setError(false);
+          }
+        })
+        .catch(() => {
+          console.log("failed");
+          if (isMounted) {
+            setError(true);
+            console.log("failed to load");
+            // retry after 10s
+            setTimeout(() => {
+              console.log("retrying to load native");
+              if (isMounted) loadAd();
+            }, 10000);
+          }
+        });
+    };
+
+    loadAd();
+
+    return () => {
+      isMounted = false;
+    };
   }, []);
 
-  if (error || (!loaded && !nativeAd)) {
+  if (error || !loaded || !nativeAd) {
     return (
-      <View 
-        style={{ height: 350 }} 
+      <View
+        style={{ height: 350 }}
         className={`mb-5 w-full justify-center items-center rounded-[2.5rem] border ${
           isDark ? "bg-zinc-900/40 border-zinc-800" : "bg-white border-zinc-100"
         }`}
       >
-          {!error && <ActivityIndicator color={isDark ? "white" : "#3b82f6"} />}
+        {!error && <ActivityIndicator color={isDark ? "white" : "#3b82f6"} />}
+        {error && <RNText className="text-zinc-500 text-[10px]">Ad could not load</RNText>}
       </View>
     );
   }
 
   return (
-    <Animated.View 
-      key="post-ad-container" 
-      entering={FadeIn.duration(500)} 
+    <Animated.View
+      key="post-ad-container"
+      entering={FadeIn.duration(500)}
       className="mb-5"
     >
-      <NativeAdView nativeAd={nativeAd} style={{ width: "100%", height: 350 }}>
+      <NativeAdView 
+        nativeAd={nativeAd} 
+        style={{ width: "100%", height: 350 }}
+        adChoicesPlacement="topRight"
+      >
         <View
           className={`rounded-[2.5rem] border overflow-hidden ${
             isDark ? "bg-zinc-900/40 border-zinc-800" : "bg-white border-zinc-100 shadow-sm"
@@ -167,7 +207,7 @@ export const NativeAdPostStyle = ({ isDark }) => {
         >
           <NativeMediaView
             nativeID="adMediaView"
-            style={{ width: "100%", height: 190, backgroundColor: isDark ? "#111" : "#eee", margin:"auto" }}
+            style={{ width: "100%", height: 190, backgroundColor: isDark ? "#111" : "#eee", margin: "auto" }}
           />
 
           <View className="p-5">
@@ -180,17 +220,17 @@ export const NativeAdPostStyle = ({ isDark }) => {
               </RNText>
             </View>
 
-            <RNText 
+            <RNText
               nativeID="adHeadlineView"
               className={`font-black text-xl mb-1 leading-tight tracking-tight ${isDark ? 'text-white' : 'text-black'}`}
             >
               {nativeAd.headline}
             </RNText>
-            
-            <RNText 
+
+            <RNText
               nativeID="adTaglineView"
-              className={`${isDark ? 'text-zinc-400' : 'text-zinc-500'} text-xs mb-4 italic`} 
-              numberOfLines={2} 
+              className={`${isDark ? 'text-zinc-400' : 'text-zinc-500'} text-xs mb-4 italic`}
+              numberOfLines={2}
             >
               {nativeAd.tagline || nativeAd.body}
             </RNText>
@@ -202,12 +242,12 @@ export const NativeAdPostStyle = ({ isDark }) => {
               </View>
 
               <View className="bg-blue-600 px-6 py-2 rounded-full">
-                  <RNText
-                    nativeID="adCallToActionView"
-                    style={{ color: "white", fontSize: 10, fontWeight: "900", textTransform: "uppercase" }}
-                  >
-                    {nativeAd.callToAction}
-                  </RNText>
+                <RNText
+                  nativeID="adCallToActionView"
+                  style={{ color: "white", fontSize: 10, fontWeight: "900", textTransform: "uppercase" }}
+                >
+                  {nativeAd.callToAction}
+                </RNText>
               </View>
             </View>
           </View>

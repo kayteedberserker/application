@@ -1,40 +1,55 @@
 import { Feather, Ionicons, MaterialCommunityIcons } from "@expo/vector-icons";
 import AsyncStorage from "@react-native-async-storage/async-storage";
-import { Video, ResizeMode } from "expo-av"; 
+import { ResizeMode, Video } from "expo-av";
 import { useRouter } from "expo-router";
-import { useEffect, useMemo, useState, useRef } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import {
+  ActivityIndicator,
   Alert,
+  Animated,
   BackHandler,
+  DeviceEventEmitter,
   Dimensions,
+  Easing,
   Image,
   Linking,
   Modal,
   Pressable,
   Share,
   useColorScheme,
-  View,
-  Animated,
-  Easing
+  View
 } from "react-native";
+import { GestureHandlerRootView } from 'react-native-gesture-handler';
+import ImageZoom from 'react-native-image-pan-zoom';
 import { WebView } from "react-native-webview";
 import YoutubePlayer from "react-native-youtube-iframe";
-import ImageZoom from 'react-native-image-pan-zoom'; 
-import { GestureHandlerRootView } from 'react-native-gesture-handler';
 import useSWR from "swr";
 
 // Components & Context
 import { useUser } from "../context/UserContext";
+import apiFetch from "../utils/apiFetch";
 import AppBanner from "./AppBanner";
 import Poll from "./Poll";
 import { SyncLoading } from "./SyncLoading";
 import { Text } from "./Text";
-import apiFetch from "../utils/apiFetch";
 
 const { width: SCREEN_WIDTH, height: SCREEN_HEIGHT } = Dimensions.get('window');
 const fetcher = (url) => apiFetch(url).then((res) => res.json());
 
-// 🔹 AURA UI UTILITY (Fully Synced Colors & Icons)
+// 🔹 CLAN RANK UTILITY
+const getClanRankTitle = (rank) => {
+  switch (rank) {
+    case 1: return "Wandering Ronin";
+    case 2: return "Squad 13";
+    case 3: return "Upper Moon";
+    case 4: return "Phantom Troupe";
+    case 5: return "The Espada";
+    case 6: return "The Akatsuki";
+    default: return "Wandering Ronin";
+  }
+};
+
+// 🔹 AURA UI UTILITY
 const getAuraVisuals = (rank) => {
   if (!rank || rank > 10 || rank <= 0) return null;
   switch (rank) {
@@ -42,7 +57,7 @@ const getAuraVisuals = (rank) => {
     case 2: return { color: '#ef4444', label: 'YONKO', icon: 'flare' };
     case 3: return { color: '#a855f7', label: 'KAGE', icon: 'moon-waxing-crescent' };
     case 4: return { color: '#3b82f6', label: 'SHOGUN', icon: 'shield-star' };
-    case 5: return { color: '#e0f2fe', label: 'ESPADA 0', icon: 'skull' }; // Reiatsu White
+    case 5: return { color: '#e0f2fe', label: 'ESPADA 0', icon: 'skull' };
     case 6: return { color: '#cbd5e1', label: 'ESPADA 1', icon: 'sword-cross' };
     case 7: return { color: '#94a3b8', label: 'ESPADA 2', icon: 'sword-cross' };
     case 8: return { color: '#64748b', label: 'ESPADA 3', icon: 'sword-cross' };
@@ -56,19 +71,19 @@ const resolveUserRank = (totalPosts) => {
   const count = totalPosts;
   const rankTitle =
     count > 200 ? "Master_Writer" :
-    count > 150 ? "Elite_Writer" :
-    count > 100 ? "Senior_Writer" :
-    count > 50 ? "Novice_Writer" :
-    count > 25 ? "Senior_Researcher" :
-    "Novice_Researcher";
+      count > 150 ? "Elite_Writer" :
+        count > 100 ? "Senior_Writer" :
+          count > 50 ? "Novice_Writer" :
+            count > 25 ? "Senior_Researcher" :
+              "Novice_Researcher";
 
   const rankIcon =
     count > 200 ? "👑" :
-    count > 150 ? "💎" :
-    count > 100 ? "🔥" :
-    count > 50 ? "⚔️" :
-    count > 25 ? "📜" :
-    "🛡️";
+      count > 150 ? "💎" :
+        count > 100 ? "🔥" :
+          count > 50 ? "⚔️" :
+            count > 25 ? "📜" :
+              "🛡️";
   return { rankName: rankIcon + rankTitle };
 };
 
@@ -117,8 +132,13 @@ export default function PostCard({ post, setPosts, isFeed, hideMedia, similarPos
   const [liked, setLiked] = useState(false);
   const [author, setAuthor] = useState({ name: post.authorName, image: null, streak: null, rank: null });
 
+  // Clan specific states
+  const [clanInfo, setClanInfo] = useState(null);
+  const [isFollowingClan, setIsFollowingClan] = useState(false);
+  const [loadingClan, setLoadingClan] = useState(false);
+
   // Media States
-  const [loadMedia, setLoadMedia] = useState(false); 
+  const [loadMedia, setLoadMedia] = useState(false);
   const [videoReady, setVideoReady] = useState(false);
   const [tikTokReady, setTikTokReady] = useState(false);
   const [imageReady, setImageReady] = useState(false);
@@ -180,12 +200,14 @@ export default function PostCard({ post, setPosts, isFeed, hideMedia, similarPos
   const totalAuthorPost = postData?.authorPostCount || 0;
   const userRank = useMemo(() => resolveUserRank(totalAuthorPost), [totalAuthorPost]);
 
+  // Fetch Author and Clan Data
   useEffect(() => {
-    const fetchAuthor = async () => {
+    const fetchData = async () => {
       try {
-        const res = await apiFetch(`https://oreblogda.com/api/users/${post.authorUserId}`);
-        if (res.ok) {
-          const data = await res.json();
+        // Fetch Author
+        const resAuthor = await apiFetch(`/users/${post.authorUserId}`);
+        if (resAuthor.ok) {
+          const data = await resAuthor.json();
           setAuthor({
             name: data.user?.username || post.authorName,
             image: data.user?.profilePic?.url,
@@ -193,14 +215,61 @@ export default function PostCard({ post, setPosts, isFeed, hideMedia, similarPos
             rank: data.user?.previousRank || 0
           });
         }
+
+        // Fetch Clan Info if clanId/Tag exists
+        const clanTag = post.clanId || post.clanTag;
+        if (clanTag) {
+          const resClan = await apiFetch(`/clans/${clanTag}?deviceId=${user?.deviceId}`);
+          if (resClan.ok) {
+            const cData = await resClan.json();
+            setClanInfo(cData);
+
+            // Check Local Storage for following status
+            const followedClans = await AsyncStorage.getItem('followed_clans');
+            const clanList = followedClans ? JSON.parse(followedClans) : [];
+            if (clanList.includes(clanTag)) {
+              setIsFollowingClan(true);
+            }
+          }
+        }
       } catch (err) {
-        console.error("Author fetch err", err);
+        console.error("Data fetch err", err);
       }
     };
-    if (post.authorId || post.authorUserId) fetchAuthor();
-  }, [post.authorId, post.authorUserId]);
+    fetchData();
+  }, [post.authorUserId, post.clanId, post.clanTag, user?.deviceId]);
 
-  // View Tracking & Like logic (Existing implementation maintained)
+  // Handle Clan Follow logic
+  const handleFollowClan = async () => {
+    if (!user) {
+      Alert.alert("Authentication", "Please log in to follow clans.");
+      return;
+    }
+    setLoadingClan(true);
+    const clanTag = clanInfo?.tag || post.clanId || post.clanTag;
+    try {
+      const res = await apiFetch(`/clans/follow`, {
+        method: "POST",
+        body: JSON.stringify({ clanTag, deviceId: user.deviceId, action: "follow" })
+      });
+
+      if (res.ok) {
+        setIsFollowingClan(true);
+        const followedClans = await AsyncStorage.getItem('followed_clans');
+        const clanList = followedClans ? JSON.parse(followedClans) : [];
+        if (!clanList.includes(clanTag)) {
+          clanList.push(clanTag);
+          await AsyncStorage.setItem('followed_clans', JSON.stringify(clanList));
+        }
+      }
+    } catch (err) {
+      console.error("Follow Clan err", err);
+    } finally {
+      setLoadingClan(false);
+    }
+  };
+
+  // View Tracking & Like logic
   useEffect(() => {
     if (!post?._id || !user?.deviceId) return;
     const handleView = async () => {
@@ -209,7 +278,7 @@ export default function PostCard({ post, setPosts, isFeed, hideMedia, similarPos
         const stored = await AsyncStorage.getItem(viewedKey);
         const viewed = stored ? JSON.parse(stored) : [];
         if (viewed.includes(post._id)) return;
-        const res = await apiFetch(`https://oreblogda.com/api/posts/${post._id}`, {
+        const res = await apiFetch(`/posts/${post._id}`, {
           method: "PATCH",
           body: JSON.stringify({ action: "view", fingerprint: user.deviceId }),
         });
@@ -246,7 +315,7 @@ export default function PostCard({ post, setPosts, isFeed, hideMedia, similarPos
     try {
       setLiked(true);
       mutate({ ...postData, likes: [...(postData?.likes || []), { fingerprint }] }, false);
-      apiFetch(`https://oreblogda.com/api/posts/${post?._id}`, {
+      apiFetch(`/posts/${post?._id}`, {
         method: "PATCH",
         body: JSON.stringify({ action: "like", fingerprint }),
       });
@@ -263,7 +332,7 @@ export default function PostCard({ post, setPosts, isFeed, hideMedia, similarPos
     try {
       const url = `https://oreblogda.com/post/${post?.slug || post?._id}`;
       await Share.share({ message: `Check out this post on Oreblogda: ${post?.title}\n${url}` });
-      apiFetch(`https://oreblogda.com/api/posts/${post?._id}`, { method: "PATCH", body: JSON.stringify({ action: "share", fingerprint: user.deviceId }) });
+      apiFetch(`/posts/${post?._id}`, { method: "PATCH", body: JSON.stringify({ action: "share", fingerprint: user.deviceId }) });
       mutate();
     } catch (error) { console.error("Share error", error); }
   };
@@ -335,7 +404,7 @@ export default function PostCard({ post, setPosts, isFeed, hideMedia, similarPos
         const match = url.match(regex);
         return match ? match[1] : null;
       };
-      return <View className="w-full rounded-2xl overflow-hidden my-2 bg-black" style={glassStyle}>{!videoReady && <MediaSkeleton height={similarPosts ? 160 : 210} />}<YoutubePlayer height={similarPosts ? 160 : videoReady ? 210 : 0} play={false} videoId={getYouTubeID(post.mediaUrl)} onReady={() => setVideoReady(true)} webViewProps={{ allowsInlineMediaPlayback: true, androidLayerType: "hardware" }}/></View>;
+      return <View className="w-full rounded-2xl overflow-hidden my-2 bg-black" style={glassStyle}>{!videoReady && <MediaSkeleton height={similarPosts ? 160 : 210} />}<YoutubePlayer height={similarPosts ? 160 : videoReady ? 210 : 0} play={false} videoId={getYouTubeID(post.mediaUrl)} onReady={() => setVideoReady(true)} webViewProps={{ allowsInlineMediaPlayback: true, androidLayerType: "hardware" }} /></View>;
     }
 
     if (isTikTok) {
@@ -343,7 +412,7 @@ export default function PostCard({ post, setPosts, isFeed, hideMedia, similarPos
         const match = url.match(/\/video\/(\d+)/);
         return match?.[1] ? `https://www.tiktok.com/embed/${match[1]}` : url;
       }
-      return <View className="w-full rounded-2xl overflow-hidden my-2 bg-black" style={[{ height: similarPosts ? 200 : 600 }, glassStyle]}>{!tikTokReady && <MediaSkeleton height={similarPosts ? 200 : 600} />}<WebView source={{ uri: getTikTokEmbedUrl(post.mediaUrl) }} userAgent="Mozilla/5.0 (iPhone; CPU iPhone OS 15_0 like Mac OS X)" onLoadEnd={() => setTikTokReady(true)} scrollEnabled={false} allowsFullscreenVideo javaScriptEnabled domStorageEnabled allowsInlineMediaPlayback={true} style={{ flex: 1, opacity: tikTokReady ? 1 : 0 }}/></View>;
+      return <View className="w-full rounded-2xl overflow-hidden my-2 bg-black" style={[{ height: similarPosts ? 200 : 600 }, glassStyle]}>{!tikTokReady && <MediaSkeleton height={similarPosts ? 200 : 600} />}<WebView source={{ uri: getTikTokEmbedUrl(post.mediaUrl) }} userAgent="Mozilla/5.0 (iPhone; CPU iPhone OS 15_0 like Mac OS X)" onLoadEnd={() => setTikTokReady(true)} scrollEnabled={false} allowsFullscreenVideo javaScriptEnabled domStorageEnabled allowsInlineMediaPlayback={true} style={{ flex: 1, opacity: tikTokReady ? 1 : 0 }} /></View>;
     }
 
     return (
@@ -351,11 +420,11 @@ export default function PostCard({ post, setPosts, isFeed, hideMedia, similarPos
         {!imageReady && !isDirectVideo && <MediaSkeleton height={300} />}
         {!videoReady && isDirectVideo && <MediaSkeleton height={similarPosts ? 200 : 250} />}
         {isDirectVideo ? (
-          <Video 
-            source={{ uri: post.mediaUrl }} 
-            style={{ width: "100%", aspectRatio: videoAspectRatio, maxHeight: similarPosts ? 200 : 500 }} 
-            useNativeControls 
-            resizeMode={ResizeMode.CONTAIN} 
+          <Video
+            source={{ uri: post.mediaUrl }}
+            style={{ width: "100%", aspectRatio: videoAspectRatio, maxHeight: similarPosts ? 200 : 500 }}
+            useNativeControls
+            resizeMode={ResizeMode.CONTAIN}
             isMuted={false}
             onLoad={(data) => {
               if (data.naturalSize) setVideoAspectRatio(data.naturalSize.width / data.naturalSize.height);
@@ -374,6 +443,7 @@ export default function PostCard({ post, setPosts, isFeed, hideMedia, similarPos
   const aura = getAuraVisuals(author.rank);
   const isTop3 = author.rank > 0 && author.rank <= 3;
   const isTop10 = author.rank > 0 && author.rank <= 10;
+  const isClanPost = !!(post.clanId || post.clanTag);
 
   const getRankedFrameStyle = () => {
     if (author.rank === 1) return { borderRadius: 14, transform: [{ rotate: '45deg' }], borderWidth: 2 };
@@ -384,25 +454,39 @@ export default function PostCard({ post, setPosts, isFeed, hideMedia, similarPos
 
   return (
     <View className={`mb-8 overflow-hidden rounded-[32px] border ${isDark ? "bg-[#0d1117] border-gray-800" : "bg-white border-gray-100 shadow-sm"}`}>
-      {isTop3 && (
-        <View className="absolute inset-0 opacity-[0.04]" style={{ backgroundColor: aura.color }} />
+
+      {/* 🔹 SOFT GLOW BACKGROUND (Restored) */}
+      {isTop10 && (
+        <View
+          className="absolute inset-0 opacity-[0.04]"
+          style={{ backgroundColor: aura.color }}
+          pointerEvents="none"
+        />
       )}
 
-      <View className="h-[2px] w-full bg-blue-600 opacity-20" />
+      {/* Visual indicator for Clans or Top Authors */}
+      {(isClanPost || isTop3) && (
+        <View className="absolute inset-0 opacity-[0.04]" style={{ backgroundColor: isClanPost ? '#60a5fa' : aura.color }} />
+      )}
+
+      <View className={`h-[3px] w-full bg-blue-600 opacity-20`} />
       <View className="p-4 px-2">
         <View className="flex-row justify-between items-start mb-5">
-          <Pressable onPress={() => router.push(`/author/${post.authorUserId}`)} className="flex-row items-center gap-3 flex-1 pr-2">
-            
-            {/* 🔹 ANIMATED PROFILE PIC SECTION */}
-            <View className="relative shrink-0 w-14 h-14 items-center justify-center">
-              
+          {/* 🔹 AUTHOR & CLAN ROW (Parent is now a View, not a Pressable) */}
+          <View className="flex-row items-center gap-4 flex-1 pr-2">
+
+            {/* 1. PROFILE PIC (Now its own Pressable) */}
+            <Pressable
+              onPress={() => DeviceEventEmitter.emit("navigateSafely", `/author/${post.authorUserId}`)}
+              className="relative shrink-0 w-14 h-14 items-center justify-center"
+            >
               {/* Rotating Outer Frame (Top 5 only) */}
               {isTop10 && author.rank <= 5 && (
-                <Animated.View 
+                <Animated.View
                   style={[
                     getRankedFrameStyle(),
-                    { 
-                      position: 'absolute', width: 56, height: 56, borderColor: aura.color, 
+                    {
+                      position: 'absolute', width: 56, height: 56, borderColor: aura.color,
                       borderStyle: 'dashed', opacity: 0.6,
                       transform: [...getRankedFrameStyle().transform || [], { rotate: spin }]
                     }
@@ -412,11 +496,11 @@ export default function PostCard({ post, setPosts, isFeed, hideMedia, similarPos
 
               {/* Pulsing Glow Frame (All Top 10) */}
               {isTop10 && (
-                <Animated.View 
+                <Animated.View
                   style={[
                     getRankedFrameStyle(),
-                    { 
-                      position: 'absolute', width: 50, height: 50, borderColor: aura.color, 
+                    {
+                      position: 'absolute', width: 50, height: 50, borderColor: aura.color,
                       opacity: 0.3, transform: [...getRankedFrameStyle().transform || [], { scale: pulseAnim }]
                     }
                   ]}
@@ -426,11 +510,11 @@ export default function PostCard({ post, setPosts, isFeed, hideMedia, similarPos
               {/* Main Avatar Container */}
               <View style={[getRankedFrameStyle(), { width: 44, height: 44, borderColor: isTop10 ? aura.color : 'rgba(96, 165, 250, 0.3)', overflow: 'hidden', backgroundColor: isDark ? '#1a1d23' : '#f3f4f6' }]}>
                 {author.image ? (
-                  <Image 
-                    source={{ uri: author.image }} 
-                    className="w-full h-full bg-gray-200" 
-                    resizeMode="cover" 
-                    style={author.rank === 1 ? { transform: [{ rotate: '-45deg' }], scale: 1.4 } : {}} 
+                  <Image
+                    source={{ uri: author.image }}
+                    className="w-full h-full bg-gray-200"
+                    resizeMode="cover"
+                    style={author.rank === 1 ? { transform: [{ rotate: '-45deg' }], scale: 1.4 } : {}}
                   />
                 ) : (
                   <View className="flex-1 items-center justify-center" style={{ backgroundColor: isTop10 ? aura.color : '#2563eb' }}>
@@ -441,38 +525,65 @@ export default function PostCard({ post, setPosts, isFeed, hideMedia, similarPos
 
               {/* Status Dot */}
               <View style={{ backgroundColor: isTop10 ? aura.color : '#2563eb' }} className="absolute bottom-1 right-1 w-3.5 h-3.5 border-2 border-white dark:border-[#0d1117] rounded-full shadow-sm" />
-            </View>
+            </Pressable>
 
             <View className="flex-1">
-              <View className="flex-row items-center gap-1 flex-wrap">
-                <Text style={{ color: isTop10 ? aura.color : (isDark ? "#60a5fa" : "#2563eb") }} className="font-[900] uppercase tracking-widest text-[14px]">
-                  {author.name || "Unknown Entity"} 
-                </Text>
-                
-                {/* 🛡️ RANK BADGE (Now visible on all pages) */}
-                
+              {/* 🔹 CLAN SECTION (Independent Interaction) */}
+              {isClanPost && clanInfo && (
+                <View className="flex-row items-center gap-[2px]">
+                  <MaterialCommunityIcons name="shield-half-full" size={14} color="#3b82f6" />
+                  <Pressable onPress={() => DeviceEventEmitter.emit("navigateSafely", `/clans/${clanInfo.tag || post.clanId}`)}>
+                    <Text className="text-[14px] font-black text-blue-500 uppercase tracking-tighter">
+                      {clanInfo.name} <Text className="text-gray-400 font-normal">|</Text> <Text className="text-[11px] text-blue-400 font-black uppercase italic">{getClanRankTitle(clanInfo.rank)}</Text>
+                    </Text>
+                  </Pressable>
 
-                <Text className="text-gray-500 font-normal normal-case tracking-normal"> • </Text>
-                <Ionicons name="flame" size={12} color={author.streak < 0 ? "#ef4444" : "#f97316"} />
-                <Text className="text-gray-500 text-[11px] font-bold">{author.streak || "0"}</Text>
-              </View>
-                  {isTop10 && (
-                  <View className="bg-white/10 px-1.5 py-0.5 w-fit rounded border flex-row items-center gap-1" style={{ borderColor: aura.color + '40', alignSelf: 'flex-start' }}>
+                  {/* 🔹 CLAN FOLLOW BUTTON */}
+                  <Pressable
+                    onPress={handleFollowClan}
+                    disabled={isFollowingClan || loadingClan}
+                    className={`bg-blue-600 w-7 h-7 rounded-full items-center justify-center shadow-lg shadow-blue-500/50 border-2 border-white dark:border-[#0d1117] ml-1`}
+                  >
+                    {loadingClan ? (
+                      <ActivityIndicator size="small" color="white" />
+                    ) : (
+                      <Feather name={isFollowingClan ? "check" : "plus"} size={12} color="white" />
+                    )}
+                  </Pressable>
+                </View>
+              )}
+              {/* 🔹 AUTHOR NAME SECTION (Now its own Pressable) */}
+              <Pressable onPress={() => DeviceEventEmitter.emit("navigateSafely", `/author/${post.authorUserId}`)}>
+                <View className="flex-row items-center gap-1 flex-wrap">
+                  <Text style={{ color: isTop10 ? aura.color : (isDark ? "#60a5fa" : "#2563eb") }} className="font-[900] uppercase tracking-widest text-[12px]">
+                    {author.name || "Unknown Entity"}
+                  </Text>
+
+                  <Text className="text-gray-500 font-normal normal-case tracking-normal"> • </Text>
+                  <Ionicons name="flame" size={12} color={author.streak < 0 ? "#ef4444" : "#f97316"} />
+                  <Text className="text-gray-500 text-[10px] font-bold">{author.streak || "0"}</Text>
+                </View>
+
+                {isTop10 && (
+                  <View className="bg-white/10 px-1.5 py-0.5 w-fit rounded border flex-row items-center gap-1 mt-1" style={{ borderColor: aura.color + '40', alignSelf: 'flex-start' }}>
                     <MaterialCommunityIcons name={aura.icon} size={8} color={aura.color} />
                     <Text style={{ color: aura.color, fontSize: 7, fontWeight: '900' }}>{aura.label}</Text>
                   </View>
                 )}
-              <Text className="text-[11px] mt-1 text-gray-900 dark:text-white font-bold uppercase tracking-tighter">{userRank.rankName || "Verified Author"}</Text>
+                <Text className="text-[10px] mt-1 text-gray-900 dark:text-white font-bold uppercase tracking-tighter">{userRank.rankName || "Verified Author"}</Text>
+              </Pressable>
             </View>
-          </Pressable>
+          </View>
 
-          <View className="shrink-0 flex-row items-center gap-2 bg-gray-50 dark:bg-gray-800/50 px-3 py-1.5 rounded-full border border-gray-100 dark:border-gray-700">
-            <View className="w-1.5 h-1.5 bg-green-500 rounded-full" />
-            <Text className="text-[10px] font-black text-gray-900 dark:text-white uppercase tracking-widest">{formatViews(totalViews)}</Text>
+          <View className="items-end gap-3">
+            <View className="shrink-0 flex-row items-center gap-2 bg-gray-50 dark:bg-gray-800/50 px-3 py-1.5 rounded-full border border-gray-100 dark:border-gray-700">
+              <View className="w-1.5 h-1.5 bg-green-500 rounded-full" />
+              <Text className="text-[10px] font-black text-gray-900 dark:text-white uppercase tracking-widest">{formatViews(totalViews)}</Text>
+            </View>
           </View>
         </View>
 
-        <Pressable onPress={() => isFeed && router.push(`/post/${post.slug || post?._id}`)} className="mb-4">
+        <Pressable onPress={() => isFeed && DeviceEventEmitter.emit("navigateSafely", `/post/${post.slug || post?._id}`)} className="mb-4">
           <Text className={`font-[900] uppercase italic tracking-tighter leading-tight mb-2 ${isDark ? "text-white" : "text-gray-900"} ${isFeed ? "text-2xl" : "text-3xl"}`}>
             {post?.title}
           </Text>
@@ -490,10 +601,10 @@ export default function PostCard({ post, setPosts, isFeed, hideMedia, similarPos
         {post.poll && (
           <View className={similarPosts ? "mt-2 pt-3 border-t border-gray-200 dark:border-gray-800" : "mb-6 p-4 bg-gray-50 dark:bg-gray-900/50 rounded-2xl border border-gray-100 dark:border-gray-800"}>
             {similarPosts ? (
-               <View className="flex-row px-3 items-center gap-2">
-                 <MaterialCommunityIcons name="poll" size={20} color={isDark ? "#60a5fa" : "#3b82f6"} />
-                 <Text className="text-sm font-black text-gray-500 uppercase tracking-widest">Includes a poll</Text>
-               </View>
+              <View className="flex-row px-3 items-center gap-2">
+                <MaterialCommunityIcons name="poll" size={20} color={isDark ? "#60a5fa" : "#3b82f6"} />
+                <Text className="text-sm font-black text-gray-500 uppercase tracking-widest">Includes a poll</Text>
+              </View>
             ) : (
               <Poll poll={post.poll} postId={post?._id} deviceId={user?.deviceId} />
             )}
@@ -507,10 +618,10 @@ export default function PostCard({ post, setPosts, isFeed, hideMedia, similarPos
                 <Ionicons name={liked ? "heart" : "heart-outline"} size={20} color={liked ? "#ef4444" : isDark ? "#9ca3af" : "#4b5563"} />
                 <Text className={`text-xs font-black ${liked ? "text-red-500" : "text-gray-500"}`}>{totalLikes}</Text>
               </Pressable>
-              <View className="flex-row items-center gap-2">
+              <Pressable onPress={() => DeviceEventEmitter.emit("navigateSafely", `/post/${post.slug || post?._id}`)} className="flex-row items-center gap-2">
                 <MaterialCommunityIcons name="comment-text-outline" size={18} color={isDark ? "#9ca3af" : "#4b5563"} />
                 <Text className="text-xs font-black text-gray-500">{totalComments}</Text>
-              </View>
+              </Pressable>
             </View>
             <Pressable onPress={handleNativeShare} className="w-10 h-10 items-center justify-center bg-gray-50 dark:bg-gray-800/80 rounded-full border border-gray-200 dark:border-gray-700">
               <Feather name="share-2" size={16} color={isDark ? "#60a5fa" : "#2563eb"} />
@@ -519,7 +630,7 @@ export default function PostCard({ post, setPosts, isFeed, hideMedia, similarPos
         )}
       </View>
 
-      {/* LIGHTBOX MODAL (Existing implementation) */}
+      {/* LIGHTBOX MODAL */}
       <Modal visible={lightbox.open} transparent animationType="fade" onRequestClose={closeLightbox}>
         <GestureHandlerRootView style={{ flex: 1, backgroundColor: 'black' }}>
           <ImageZoom cropWidth={SCREEN_WIDTH} cropHeight={SCREEN_HEIGHT} imageWidth={SCREEN_WIDTH} imageHeight={SCREEN_HEIGHT} onSwipeDown={closeLightbox} enableSwipeDown={true}>

@@ -23,7 +23,7 @@ const fetcher = (url) => apiFetch(url).then(res => res.json());
 
 const { width, height } = Dimensions.get('window');
 const LIMIT = 15;
-const API_URL = "https://oreblogda.com/api/posts";
+// const API_URL = "https://oreblogda.com/api/posts";
 const CACHE_KEY = "POSTS_CACHE_V1"; // 👈 Unique key for storage
 
 // Standard fetcher
@@ -83,7 +83,7 @@ export default function PostsViewer() {
     const getKey = (pageIndex, previousPageData) => {
         if (!ready) return null;
         if (previousPageData && previousPageData.posts?.length < LIMIT) return null;
-        return `${API_URL}?page=${pageIndex + 1}&limit=${LIMIT}`;
+        return `/posts?page=${pageIndex + 1}&limit=${LIMIT}`;
     };
 
     // 2. SWR Implementation with Fallback & Error Handling

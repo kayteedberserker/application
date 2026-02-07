@@ -1,6 +1,5 @@
 import { MaterialCommunityIcons } from '@expo/vector-icons';
 import AsyncStorage from "@react-native-async-storage/async-storage";
-import { useLocalSearchParams } from "expo-router";
 import { useColorScheme } from "nativewind";
 import { useEffect, useRef, useState } from "react";
 import {
@@ -20,11 +19,10 @@ import { Text } from "../../../components/Text";
 import apiFetch from "../../../utils/apiFetch";
 const { width } = Dimensions.get('window');
 
-const API_BASE = "https://oreblogda.com/api";
 const LIMIT = 10;
 
-export default function CategoryPage() {
-    const { id } = useLocalSearchParams();
+export default function CategoryPage({ forcedId }) {
+    const id = forcedId
     const insets = useSafeAreaInsets();
     const { colorScheme } = useColorScheme();
     const isDark = colorScheme === "dark";
@@ -99,7 +97,7 @@ export default function CategoryPage() {
         setLoading(true);
         try {
             const res = await apiFetch(
-                `${API_BASE}/posts?category=${categoryName}&page=${pageNum}&limit=${LIMIT}`
+                `/posts?category=${categoryName}&page=${pageNum}&limit=${LIMIT}`
             );
             const data = await res.json();
             const newPosts = data.posts || [];

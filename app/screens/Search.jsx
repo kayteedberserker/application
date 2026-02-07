@@ -4,6 +4,7 @@ import { useRouter } from "expo-router";
 import { useCallback, useEffect, useMemo, useState } from "react";
 import {
     ActivityIndicator,
+    DeviceEventEmitter,
     FlatList,
     Image,
     Platform,
@@ -16,11 +17,13 @@ import {
     View
 } from "react-native";
 import Animated, { FadeIn, FadeInDown, Layout } from "react-native-reanimated";
+import ClanCrest from '../../components/ClanCrest';
 import { Text } from "../../components/Text";
 import apiFetch from "../../utils/apiFetch";
 
 // 🔹 IMPORT YOUR AD COMPONENTS
 import { NativeAdAuthorStyle, NativeAdPostStyle } from "../../components/NativeAd";
+import { SyncLoading } from "../../components/SyncLoading";
 
 // --- HELPER: RESOLVE WRITER RANK ---
 const resolveUserRank = (totalPosts) => {
@@ -36,7 +39,7 @@ const resolveUserRank = (totalPosts) => {
 // --- AUTHOR CARD COMPONENT ---
 const AuthorCard = ({ author, isDark }) => {
     const router = useRouter();
-    
+
     // 🔹 UPDATED AURA VISUALS LOGIC
     const getAuraVisuals = (rank) => {
         if (!rank || rank > 10 || rank <= 0) return { color: isDark ? '#1e293b' : '#cbd5e1', label: 'OPERATIVE', icon: 'target' };
@@ -61,7 +64,7 @@ const AuthorCard = ({ author, isDark }) => {
     return (
         <Animated.View entering={FadeInDown.duration(400)} layout={Layout.springify()}>
             <TouchableOpacity
-                onPress={() => router.push(`/author/${author._id}`)}
+                onPress={() => DeviceEventEmitter.emit("navigateSafely", `/author/${author._id}`)}
                 className={`mb-3 p-4 rounded-3xl border ${
                     isDark ? "bg-[#0f0f0f] border-zinc-800" : "bg-white border-zinc-100 shadow-sm"
                 }`}
@@ -119,13 +122,124 @@ const AuthorCard = ({ author, isDark }) => {
     );
 };
 
+const ClanCard = ({ clan, isDark }) => {
+    // Calculate stats for display
+    const badgeCount = clan.badges ? clan.badges.length : 0;
+    const isWar = clan.isInWar;
+
+    return (
+        <Animated.View entering={FadeInDown.duration(400)} layout={Layout.springify()}>
+            <TouchableOpacity
+                onPress={() => DeviceEventEmitter.emit("navigateSafely", `/clan/${clan.tag}`)}
+                className={`mb-3 mx-1 rounded-3xl border overflow-hidden relative ${
+                    isDark ? "bg-[#0f0f0f] border-zinc-800" : "bg-white border-zinc-100 shadow-sm"
+                }`}
+                style={{
+                    // Add a subtle red glow if in war
+                    shadowColor: isWar ? "#ef4444" : "#000",
+                    shadowOpacity: isWar ? 0.3 : 0.1,
+                    shadowRadius: isWar ? 10 : 4,
+                    borderColor: isWar ? 'rgba(239, 68, 68, 0.4)' : isDark ? '#27272a' : '#f4f4f5'
+                }}
+            >
+                {/* ⚔️ ACTIVE WAR BANNER OVERLAY */}
+                {isWar && (
+                    <View className="absolute top-0 right-0 z-20 bg-red-600/90 px-3 py-1 rounded-bl-xl">
+                        <View className="flex-row items-center gap-1">
+                            <MaterialCommunityIcons name="sword-cross" size={12} color="white" />
+                            <Text className="text-white text-[9px] font-black uppercase tracking-widest">
+                                WAR ACTIVE
+                            </Text>
+                        </View>
+                    </View>
+                )}
+
+                <View className="p-4 flex-row items-center">
+                    {/* LEFT: CLAN CREST */}
+                    <View className="mr-4 items-center justify-center">
+                        <ClanCrest rank={clan.rank || 1} size={70} />
+                        
+                        {/* Rank Badge below crest */}
+                        <View className="mt-2 bg-zinc-900/80 px-2 py-0.5 rounded-full border border-zinc-800">
+                             <Text className="text-zinc-400 text-[8px] font-bold uppercase">
+                                LVL {clan.rank || 1}
+                             </Text>
+                        </View>
+                    </View>
+
+                    {/* RIGHT: CONTENT */}
+                    <View className="flex-1 justify-center">
+                        
+                        {/* Header: Name & Tag */}
+                        <View className="flex-row items-center justify-between mb-1 pr-2">
+                            <View className="flex-1 mr-2">
+                                <Text numberOfLines={1} className={`font-black italic uppercase text-lg ${isDark ? 'text-white' : 'text-black'}`}>
+                                    {clan.name}
+                                </Text>
+                            </View>
+                            <View className={`px-2 py-0.5 rounded-md border ${isDark ? 'bg-zinc-800 border-zinc-700' : 'bg-zinc-100 border-zinc-200'}`}>
+                                <Text className={`text-[10px] font-black uppercase tracking-widest ${isDark ? 'text-zinc-400' : 'text-zinc-600'}`}>
+                                    [{clan.tag}]
+                                </Text>
+                            </View>
+                        </View>
+
+                        {/* Description */}
+                        <Text numberOfLines={1} className={`text-[11px] font-medium italic mb-3 ${isDark ? 'text-zinc-500' : 'text-zinc-400'}`}>
+                            {clan.description || "A powerful alliance awaiting destiny..."}
+                        </Text>
+
+                        {/* Stats Grid */}
+                        <View className={`flex-row items-center justify-between border-t pt-2 ${isDark ? 'border-zinc-800/50' : 'border-zinc-100'}`}>
+                            
+                            {/* Members */}
+                            <View className="flex-row items-center">
+                                <Ionicons name="people" size={12} color={isDark ? "#a1a1aa" : "#71717a"} />
+                                <Text className={`text-[10px] font-bold ml-1.5 ${isDark ? 'text-zinc-400' : 'text-zinc-500'}`}>
+                                    {clan.memberCount || 0}
+                                </Text>
+                            </View>
+
+                            {/* Followers */}
+                            <View className="flex-row items-center">
+                                <Ionicons name="heart" size={12} color="#f472b6" />
+                                <Text className={`text-[10px] font-bold ml-1.5 ${isDark ? 'text-zinc-400' : 'text-zinc-500'}`}>
+                                    {clan.followerCount || 0}
+                                </Text>
+                            </View>
+
+                            {/* Badges/Trophies */}
+                            <View className="flex-row items-center">
+                                <MaterialCommunityIcons name="trophy" size={12} color="#fbbf24" />
+                                <Text className={`text-[10px] font-bold ml-1.5 ${isDark ? 'text-zinc-400' : 'text-zinc-500'}`}>
+                                    {badgeCount}
+                                </Text>
+                            </View>
+
+                            {/* Recruiting Indicator */}
+                            {clan.isRecruiting && (
+                                <View className="flex-row items-center bg-emerald-500/10 px-1.5 py-0.5 rounded border border-emerald-500/20">
+                                    <View className="w-1.5 h-1.5 rounded-full bg-emerald-500 mr-1" />
+                                    <Text className="text-[8px] font-bold text-emerald-500 uppercase">
+                                        OPEN
+                                    </Text>
+                                </View>
+                            )}
+                        </View>
+                    </View>
+                </View>
+            </TouchableOpacity>
+        </Animated.View>
+    );
+};
+
 // --- POST SEARCH CARD ---
 const PostSearchCard = ({ item, isDark }) => {
     const router = useRouter();
     return (
         <Animated.View entering={FadeIn.duration(500)} layout={Layout.springify()}>
             <TouchableOpacity 
-                onPress={() => router.push(`/post/${item._id}`)}
+                onPress={() => DeviceEventEmitter.emit("navigateSafely", `/post/${item._id}`)}
                 className={`mb-5 rounded-[2.5rem] border overflow-hidden ${isDark ? "bg-zinc-900/40 border-zinc-800" : "bg-white border-zinc-100 shadow-sm"}`}
             >
                 {item.mediaUrl ? (
@@ -133,7 +247,7 @@ const PostSearchCard = ({ item, isDark }) => {
                 ) : (
                     <View className="w-full h-2 bg-blue-600" /> 
                 )}
-                
+
                 <View className="p-5">
                     <View className="flex-row justify-between items-center mb-3">
                         <View className="bg-blue-600/10 border border-blue-500/20 px-3 py-1 rounded-full">
@@ -143,10 +257,10 @@ const PostSearchCard = ({ item, isDark }) => {
                             <Text className={`${isDark ? 'text-zinc-600' : 'text-zinc-400'} font-normal`}>OP:</Text> {item.authorName}
                         </Text>
                     </View>
-                    
+
                     <Text className={`font-black text-xl mb-2 leading-tight tracking-tight ${isDark ? 'text-white' : 'text-black'}`}>{item.title}</Text>
                     <Text className={`${isDark ? 'text-zinc-400' : 'text-zinc-500'} text-xs mb-5 italic`} numberOfLines={2}>{item.message}</Text>
-                    
+
                     <View className={`flex-row items-center justify-between pt-4 border-t ${isDark ? 'border-zinc-800' : 'border-zinc-100'}`}>
                         <View className="flex-row items-center gap-5">
                             <View className="flex-row items-center">
@@ -170,16 +284,16 @@ const SearchScreen = () => {
     const router = useRouter();
     const systemTheme = useColorScheme(); 
     const isDark = systemTheme === 'dark';
-    
+
     const [query, setQuery] = useState("");
     const [loading, setLoading] = useState(false);
     const [loadingMore, setLoadingMore] = useState(false);
-    const [results, setResults] = useState({ authors: [], posts: [] });
+    const [results, setResults] = useState({ authors: [], clans: [], posts: [] });
     const [activeTab, setActiveTab] = useState("all");
     const [recentSearches, setRecentSearches] = useState([]);
-    const [trending] = useState(["Solo Leveling", "Genshin Build", "Aura Guide", "Top Operatives", "Winter 2026 Anime"]);
+    const [trending] = useState(["Solo Leveling", "Genshin Build", "Aura Guide", "Top Clans", "Winter 2026 Anime"]);
     const [isOffline, setIsOffline] = useState(false); 
-    
+
     const [page, setPage] = useState(1);
     const [hasMore, setHasMore] = useState(true);
 
@@ -201,7 +315,7 @@ const SearchScreen = () => {
 
     const performSearch = useCallback(async (text, pageNum = 1, shouldAppend = false) => {
         if (text.length < 2) {
-            setResults({ authors: [], posts: [] });
+            setResults({ authors: [], clans: [], posts: [] });
             return;
         }
 
@@ -210,12 +324,13 @@ const SearchScreen = () => {
         setIsOffline(false);
 
         try {
-            const response = await apiFetch(`https://oreblogda.com/api/search?q=${encodeURIComponent(text)}&page=${pageNum}&limit=10`);
+            const response = await apiFetch(`/search?q=${encodeURIComponent(text)}&page=${pageNum}&limit=10`);
             const data = await response.json();
-            
+
             if (response.ok) {
                 setResults(prev => ({
                     authors: shouldAppend ? prev.authors : (data.users || []),
+                    clans: shouldAppend ? prev.clans : (data.clans || []),
                     posts: shouldAppend ? [...prev.posts, ...data.posts] : (data.posts || [])
                 }));
                 setHasMore(data.pagination?.hasNextPage);
@@ -252,6 +367,7 @@ const SearchScreen = () => {
     const listData = useMemo(() => {
         const rawResults = [
             ...(activeTab === 'all' || activeTab === 'authors' ? results.authors : []),
+            ...(activeTab === 'all' || activeTab === 'clans' ? results.clans : []),
             ...(activeTab === 'all' || activeTab === 'posts' ? results.posts : [])
         ];
 
@@ -277,16 +393,17 @@ const SearchScreen = () => {
                 ? <NativeAdAuthorStyle isDark={isDark} /> 
                 : <NativeAdPostStyle isDark={isDark} />;
         }
-        
+
         // Handle Organic Content
         if (item.username) return <AuthorCard author={item} isDark={isDark} />;
+        if (item.tag) return <ClanCard clan={item} isDark={isDark} />;
         return <PostSearchCard item={item} isDark={isDark} />;
     };
 
     return (
         <SafeAreaView className={`flex-1 ${isDark ? "bg-[#050505]" : "bg-white"}`}>
             <StatusBar barStyle={isDark ? "light-content" : "dark-content"} />
-            
+
             <View style={{ height: Platform.OS === 'android' ? StatusBar.currentHeight : 0 }} />
 
             {/* Header / Search Bar */}
@@ -319,7 +436,7 @@ const SearchScreen = () => {
             {query.length < 2 ? (
                 <ScrollView 
                     className="flex-1 px-6"
-                    keyboardShouldPersistTaps="handled" // 🔹 FIX: Prevents keyboard from intercepting taps
+                    keyboardShouldPersistTaps="handled" 
                 >
                     <View className="mt-8">
                         <Text className="text-blue-500 font-black text-[10px] uppercase tracking-[0.4em] mb-6">Recent_Inquiries</Text>
@@ -354,11 +471,11 @@ const SearchScreen = () => {
                     {/* Tabs Section */}
                     {!isOffline && (
                         <View className="flex-row px-4 py-3 gap-2">
-                            {['all', 'authors', 'posts'].map((tab) => (
+                            {['all', 'authors', 'clans', 'posts'].map((tab) => (
                                 <TouchableOpacity
                                     key={tab}
                                     onPress={() => setActiveTab(tab)}
-                                    className={`px-6 py-2 rounded-xl border ${activeTab === tab ? "bg-blue-600 border-blue-600 shadow-sm" : isDark ? "bg-transparent border-zinc-800" : "bg-gray-50 border-gray-200"}`}
+                                    className={`px-4 py-2 rounded-xl border ${activeTab === tab ? "bg-blue-600 border-blue-600 shadow-sm" : isDark ? "bg-transparent border-zinc-800" : "bg-gray-50 border-gray-200"}`}
                                 >
                                     <Text className={`text-[10px] font-black uppercase tracking-widest ${activeTab === tab ? "text-white" : "text-zinc-500"}`}>{tab}</Text>
                                 </TouchableOpacity>
@@ -370,8 +487,7 @@ const SearchScreen = () => {
                     <View className="flex-1 px-4 mt-2">
                         {loading && page === 1 ? (
                             <View className="flex-1 justify-center items-center">
-                                <ActivityIndicator color="#2563eb" size="large" />
-                                <Text className="text-blue-500 text-[10px] font-black mt-6 tracking-[0.5em] uppercase animate-pulse">Establishing_Link...</Text>
+                                <SyncLoading message="Establishing Link...." />
                             </View>
                         ) : isOffline ? (
                             <Animated.View entering={FadeIn.duration(400)} className="flex-1 items-center justify-center px-10">
@@ -393,7 +509,7 @@ const SearchScreen = () => {
                                 data={listData}
                                 keyExtractor={(item) => item._id}
                                 renderItem={renderItem}
-                                keyboardShouldPersistTaps="handled" // 🔹 FIX: Prevents keyboard from intercepting taps
+                                keyboardShouldPersistTaps="handled" 
                                 onEndReached={handleLoadMore}
                                 onEndReachedThreshold={0.5}
                                 ListFooterComponent={() => loadingMore ? (

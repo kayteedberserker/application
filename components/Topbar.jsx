@@ -4,6 +4,7 @@ import { useEffect, useState } from "react";
 import {
     ActivityIndicator,
     Alert,
+    DeviceEventEmitter,
     Image,
     SafeAreaView,
     TouchableOpacity,
@@ -21,6 +22,7 @@ import Animated, {
 import { useStreak } from "../context/StreakContext";
 import { useUser } from "../context/UserContext";
 import { AdConfig } from "../utils/AdConfig";
+import apiFetch from "../utils/apiFetch";
 import { Text } from "./Text";
 
 const TopBar = ({ isDark }) => {
@@ -78,7 +80,7 @@ const TopBar = ({ isDark }) => {
             if (isEarnedReward && isClosed && user?.deviceId) {
                 try {
                     setIsRestoring(true);
-                    const response = await fetch("https://oreblogda.com/api/users/streak/restore", {
+                    const response = await apiFetch("/users/streak/restore", {
                         method: "POST",
                         headers: { "Content-Type": "application/json" },
                         body: JSON.stringify({ deviceId: user.deviceId }),
@@ -134,7 +136,7 @@ const TopBar = ({ isDark }) => {
                     
                     {/* 🏆 LEADERBOARD */}
                     <TouchableOpacity
-                        onPress={() => router.push("/screens/Leaderboard")}
+                        onPress={() => DeviceEventEmitter.emit("navigateSafely", "/screens/Leaderboard")}
                         className={`p-1.5 rounded-xl ${isDark ? "bg-blue-500/10 border border-blue-500/20" : "bg-gray-100"}`}
                     >
                         <Ionicons
@@ -146,7 +148,7 @@ const TopBar = ({ isDark }) => {
 
                     {/* 🔍 SEARCH - NEW ICON */}
                     <TouchableOpacity
-                        onPress={() => router.push("/screens/Search")}
+                        onPress={() => DeviceEventEmitter.emit("navigateSafely", "/screens/Search")}
                         className={`p-1.5 rounded-xl ${isDark ? "bg-blue-500/10 border border-blue-500/20" : "bg-gray-100"}`}
                     >
                         <Ionicons
@@ -223,7 +225,7 @@ const TopBar = ({ isDark }) => {
 
                     {/* MENU */}
                     <TouchableOpacity
-                        onPress={() => router.push("/screens/MoreOptions")}
+                        onPress={() => DeviceEventEmitter.emit("navigateSafely", "/screens/MoreOptions")}
                         className={`p-1.5 rounded-xl ${isDark ? "bg-blue-500/10 border border-blue-500/20" : "bg-gray-100"}`}
                     >
                         <Ionicons

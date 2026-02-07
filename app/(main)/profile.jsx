@@ -1,7 +1,9 @@
-import { Ionicons, Feather, MaterialCommunityIcons } from "@expo/vector-icons"; 
+import { Feather, Ionicons, MaterialCommunityIcons } from "@expo/vector-icons";
+import AsyncStorage from '@react-native-async-storage/async-storage';
+import * as Clipboard from 'expo-clipboard';
 import * as ImagePicker from "expo-image-picker";
 import { useRouter } from "expo-router";
-import { useColorScheme as useNativeWind } from "nativewind"; 
+import { useColorScheme as useNativeWind } from "nativewind";
 import { useEffect, useMemo, useRef, useState } from "react";
 import {
     ActivityIndicator,
@@ -11,15 +13,13 @@ import {
     Easing,
     FlatList,
     Image,
+    Modal,
     Platform,
     Pressable,
     TextInput,
     TouchableOpacity,
-    View,
-    Modal
+    View
 } from "react-native";
-import * as Clipboard from 'expo-clipboard';
-import AsyncStorage from '@react-native-async-storage/async-storage'; 
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import Toast from "react-native-toast-message";
 import useSWRInfinite from "swr/infinite";
@@ -28,7 +28,7 @@ import AppOnboarding from "../../components/AppOnboarding";
 import { SyncLoading } from "../../components/SyncLoading";
 import { Text } from "../../components/Text";
 import { useUser } from "../../context/UserContext";
-import apiFetch from "../../utils/apiFetch"
+import apiFetch from "../../utils/apiFetch";
 
 const { width } = Dimensions.get("window");
 const API_BASE = "https://oreblogda.com/api";
@@ -218,7 +218,7 @@ export default function MobileProfilePage() {
                     setDescription(dbUser.description || "");
                     setUsername(dbUser.username || "");
 
-                    const postRes = await apiFetch(`${API_BASE}/posts?author=${dbUser._id}&limit=1`);
+                    const postRes = await apiFetch(`/posts?author=${dbUser._id}&limit=1`);
                     const postData = await postRes.json();
                     const newTotal = postData.total || 0;
                     if (postRes.ok) {

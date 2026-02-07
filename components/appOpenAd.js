@@ -1,7 +1,7 @@
 import { AdEventType, AppOpenAd, TestIds } from 'react-native-google-mobile-ads';
 import { AdConfig } from '../utils/AdConfig';
 
-const AD_UNIT_ID = __DEV__ ? TestIds.APP_OPEN : AdConfig.appOpen;
+const AD_UNIT_ID = __DEV__? TestIds.APP_OPEN : AdConfig.appOpen;
 
 let appOpenAd = null;
 let isAdLoaded = false;
@@ -38,7 +38,6 @@ export const loadAppOpenAd = (onLoadedCallback = null) => {
     appOpenAd = null;
     isAdLoaded = false;
     isShowingAd = false;
-    if (__DEV__) console.error("App Open Ad Error: ", error);
     // Retry loading after 30 seconds if it fails (e.g. No Fill)
     setTimeout(() => loadAppOpenAd(), 30000);
   });

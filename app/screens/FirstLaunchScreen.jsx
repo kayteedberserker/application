@@ -17,9 +17,9 @@ import {
 import AnimeLoading from "../../components/AnimeLoading";
 import { Text } from "../../components/Text";
 import THEME from "../../components/useAppTheme";
-import { useUser } from "../../context/UserContext"; 
+import { useUser } from "../../context/UserContext";
+import apiFetch from "../../utils/apiFetch";
 import { getFingerprint } from "../../utils/device";
-import apiFetch from "../../utils/apiFetch"
 
 const { width } = Dimensions.get('window');
 
@@ -88,7 +88,6 @@ export default function FirstLaunchScreen() {
             return notify("Invalid Username", "Username must be at least 3 characters.");
         }
         
-        // 🔹 Check against forbidden names (Case Insensitive)
         if (FORBIDDEN_NAMES.includes(cleanUsername.toLowerCase())) {
             return notify("Restricted Alias", "This callsign is reserved for system authority.");
         }
@@ -122,10 +121,15 @@ export default function FirstLaunchScreen() {
       const data = await res.json();
       if (!res.ok) throw new Error(data.message || "Operation failed");
 
+      // 🔹 PERSONALIZATION: Extract country from the backend response
+      // Your backend returns { message, user: { country, username, ... } }
+      const detectedCountry = data.user?.country || "Unknown";
+
       const userData = {
         deviceId: targetId,
-        username: data.username || cleanUsername, // 🔹 No longer forced to uppercase
+        username: data.user?.username || cleanUsername, 
         pushToken,
+        country: detectedCountry, // 🔹 Added country to storage
       };
 
       await AsyncStorage.setItem("mobileUser", JSON.stringify(userData));
@@ -197,7 +201,7 @@ export default function FirstLaunchScreen() {
                 className="w-full border-2 rounded-2xl px-5 py-5 mb-4 font-black italic"
                 placeholder="ENTER USERNAME..."
                 placeholderTextColor={THEME.textSecondary + '80'}
-                autoCapitalize="none" // 🔹 Respect user input case
+                autoCapitalize="none" 
                 autoCorrect={false}
                 spellCheck={false}
                 value={username}
@@ -251,4 +255,4 @@ export default function FirstLaunchScreen() {
       </View>
     </View>
   );
-        }
+}

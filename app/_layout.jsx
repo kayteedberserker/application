@@ -7,13 +7,14 @@ import * as SplashScreen from "expo-splash-screen";
 import * as Updates from 'expo-updates';
 import { useColorScheme } from "nativewind";
 import { useEffect, useRef, useState } from "react";
-import { AppState, BackHandler, DeviceEventEmitter, Platform, StatusBar, StyleSheet, Text, TouchableOpacity, View } from "react-native";
+import { AppState, BackHandler, DeviceEventEmitter, Platform, StatusBar, StyleSheet, View } from "react-native";
 import mobileAds, { AdEventType, InterstitialAd, MaxAdContentRating } from 'react-native-google-mobile-ads';
 import { SafeAreaProvider } from "react-native-safe-area-context";
 import Toast from 'react-native-toast-message';
 
 import AnimeLoading from "../components/AnimeLoading";
 import { loadAppOpenAd, showAppOpenAd } from "../components/appOpenAd";
+import { ClanProvider } from "../context/ClanContext";
 import { StreakProvider, useStreak } from "../context/StreakContext";
 import { UserProvider, useUser } from "../context/UserContext";
 import { AdConfig } from '../utils/AdConfig';
@@ -23,7 +24,7 @@ import "./globals.css";
 SplashScreen.preventAutoHideAsync();
 
 // 🔹 AD CONFIGURATION
-const FIRST_AD_DELAY_MS = 60000; 
+const FIRST_AD_DELAY_MS = 120000; 
 const COOLDOWN_MS = 180000;      
 
 const INTERSTITIAL_ID = AdConfig.interstitial;
@@ -114,7 +115,64 @@ function RootLayoutContent() {
     const hasHandledRedirect = useRef(false);
     const hasShownWelcomeAd = useRef(false);
 
-    // --- 1. AD INITIALIZATION WITH SAFETY DELAY ---
+    // 🔹 FIX: Ref to track the current pathname without re-triggering listeners
+    const currentPathRef = useRef(pathname);
+    useEffect(() => {
+        currentPathRef.current = pathname;
+    }, [pathname]);
+
+    // --- 1. GLOBAL NAVIGATION & BACK HANDLER ---
+    useEffect(() => {
+        // Safe Navigation Listener
+        const navSub = DeviceEventEmitter.addListener("navigateSafely", (targetPath) => {
+            if (currentPathRef.current === targetPath) {
+                console.log("Blocked redundant navigation to:", targetPath);
+                return;
+            }
+            router.push(targetPath);
+        });
+
+        // Ad Listener
+        const interstitialListener = DeviceEventEmitter.addListener("tryShowInterstitial", () => {
+            const now = Date.now();
+            if (interstitialLoaded && interstitial && (now - lastShownTime > COOLDOWN_MS)) {
+                interstitial.show();
+            }
+        });
+
+        // App State Listener
+        const stateSub = AppState.addEventListener('change', nextState => {
+            if (appState.current.match(/inactive|background/) && nextState === 'active') {
+                showAppOpenAd();
+            }
+            appState.current = nextState;
+        });
+
+        // Global Back Button Handler
+        const backHandler = BackHandler.addEventListener("hardwareBackPress", () => {
+            if (router.canGoBack()) {
+                DeviceEventEmitter.emit("tryShowInterstitial");
+                router.back();
+                return true; 
+            }
+            
+            // If on home, exit. Otherwise, go home.
+            if (currentPathRef.current !== "/" && currentPathRef.current !== "/(tabs)") {
+                router.replace("/");
+                return true;
+            }
+            return false; 
+        });
+
+        return () => {
+            navSub.remove();
+            interstitialListener.remove();
+            stateSub.remove();
+            backHandler.remove();
+        };
+    }, []); // Empty array means this runs ONCE on mount. No more loops.
+
+    // --- 2. AD INITIALIZATION ---
     useEffect(() => {
         if (Platform.OS === 'web') {
             setIsAdReady(true);
@@ -123,26 +181,9 @@ function RootLayoutContent() {
 
         const runMediationInit = async () => {
             try {
-                // IMPORTANT: Give the Activity time to mount (Fixes "Failed to create Adapter")
                 await new Promise(resolve => setTimeout(resolve, 3000));
-
-                await mobileAds().setRequestConfiguration({
-                    maxAdContentRating: MaxAdContentRating.G,
-                });
-
-                const adapterStatuses = await mobileAds().initialize();
-                console.log(adapterStatuses);
-                
-                console.log('--- 🛡️ MEDIATION STATUS 🛡️ ---');
-                let anyAdapterReady = false;
-                Object.entries(adapterStatuses).forEach(([adapter, status]) => {
-                    const name = adapter.split('.').pop();
-                    const isReady = status.state === 1 || status.state === 'READY';
-                    console.log(`${isReady ? '✅' : '❌'} ${name}: ${isReady ? 'READY' : 'FAILED'}`);
-                    if (isReady) anyAdapterReady = true;
-                });
-
-                // Preload ads only after initialization
+                await mobileAds().setRequestConfiguration({ maxAdContentRating: MaxAdContentRating.G });
+                await mobileAds().initialize();
                 loadAppOpenAd();
                 loadInterstitial();
                 setIsAdReady(true);
@@ -151,40 +192,10 @@ function RootLayoutContent() {
                 setIsAdReady(true);
             }
         };
-
         runMediationInit();
+    }, []);
 
-        const sub = AppState.addEventListener('change', nextState => {
-            if (appState.current.match(/inactive|background/) && nextState === 'active') {
-                showAppOpenAd();
-            }
-            appState.current = nextState;
-        });
-
-        const interstitialListener = DeviceEventEmitter.addListener("tryShowInterstitial", () => {
-            const now = Date.now();
-            if (interstitialLoaded && interstitial && (now - lastShownTime > COOLDOWN_MS)) {
-                interstitial.show();
-            }
-        });
-
-        const backHandler = BackHandler.addEventListener("hardwareBackPress", () => {
-            if (router.canGoBack()) {
-                DeviceEventEmitter.emit("tryShowInterstitial");
-                router.back();
-                return true; 
-            }
-            return false; 
-        });
-
-        return () => {
-            sub.remove();
-            interstitialListener.remove();
-            backHandler.remove();
-        };
-    }, [router]);
-
-    // --- 2. WELCOME AD ---
+    // --- 3. WELCOME AD ---
     useEffect(() => {
         if (appReady && isAdReady && !hasShownWelcomeAd.current) {
             const adShown = showAppOpenAd();
@@ -199,7 +210,7 @@ function RootLayoutContent() {
         }
     }, [appReady, isAdReady]); 
 
-    // --- 3. DEEP LINKING ---
+    // --- 4. DEEP LINKING ---
     const url = Linking.useURL(); 
     useEffect(() => {
         if (url && !isSyncing && !isUpdating && !hasHandledRedirect.current) {
@@ -212,7 +223,7 @@ function RootLayoutContent() {
         }
     }, [url, isSyncing, isUpdating]);
 
-    // --- 4. EAS UPDATES ---
+    // --- 5. EAS UPDATES ---
     useEffect(() => {
         async function onFetchUpdateAsync() {
             if (__DEV__) return; 
@@ -235,7 +246,7 @@ function RootLayoutContent() {
 
     useEffect(() => { refreshStreak(); }, [pathname, refreshStreak]);
 
-    // --- 5. SYNC ---
+    // --- 6. SYNC ---
     useEffect(() => {
         async function performSync() {
             if (!fontsLoaded || isUpdating) return; 
@@ -255,7 +266,7 @@ function RootLayoutContent() {
         performSync();
     }, [fontsLoaded, user?.deviceId, isUpdating]);
 
-    // --- 6. NOTIFICATIONS ---
+    // --- 7. NOTIFICATIONS ---
     const handleNotificationNavigation = (response) => {
         const notificationId = response?.notification?.request?.identifier;
         if (!notificationId || lastHandledNotificationId.current === notificationId) return;
@@ -290,12 +301,11 @@ function RootLayoutContent() {
 
     useEffect(() => { if (appReady || fontError) SplashScreen.hideAsync(); }, [appReady, fontError]);
 
-    // --- 7. FINAL RENDER ---
     if (!fontsLoaded || isSyncing || isUpdating || !isAdReady) {
         return (
             <AnimeLoading 
                 message={isUpdating ? "UPDATING_CORE" : "LOADING_PAGE"} 
-                subMessage={isUpdating ? "Updating system configurations..." : (!isAdReady ? "Initializing Ad Services..." : "Syncing Account")} 
+                subMessage={isUpdating ? "Updating system configurations..." : "Syncing Account"} 
             />
         );
     }
@@ -310,15 +320,14 @@ function RootLayoutContent() {
                 }}
             />
             
-            {__DEV__ && (
+            {/* {__DEV__ && (
                 <TouchableOpacity 
                     onPress={() => mobileAds().openDebugMenu(INTERSTITIAL_ID)}
                     style={styles.debugButton}
                 >
                     <Text style={styles.debugText}>Ad Inspector</Text>
                 </TouchableOpacity>
-            )}
-
+            )} */}
             <Toast />
         </View>
     );
@@ -326,23 +335,10 @@ function RootLayoutContent() {
 
 const styles = StyleSheet.create({
   debugButton: { 
-    position: 'absolute', 
-    bottom: 50, 
-    right: 20, 
-    backgroundColor: '#E6F4FE', 
-    paddingHorizontal: 15, 
-    paddingVertical: 8, 
-    borderRadius: 20,
-    borderWidth: 1,
-    borderColor: '#2196F3',
-    elevation: 5,
-    zIndex: 999
+    position: 'absolute', bottom: 100, right: 20, backgroundColor: '#E6F4FE', 
+    paddingHorizontal: 15, paddingVertical: 8, borderRadius: 20, borderWidth: 1, borderColor: '#2196F3', elevation: 5, zIndex: 999
   },
-  debugText: { 
-    color: '#2196F3', 
-    fontSize: 12, 
-    fontWeight: 'bold' 
-  }
+  debugText: { color: '#2196F3', fontSize: 12, fontWeight: 'bold' }
 });
 
 export default function RootLayout() {
@@ -350,7 +346,9 @@ export default function RootLayout() {
         <SafeAreaProvider>
             <UserProvider>
                 <StreakProvider>
-                    <RootLayoutContent />
+                    <ClanProvider>
+                        <RootLayoutContent />
+                    </ClanProvider>
                 </StreakProvider>
             </UserProvider>
         </SafeAreaProvider>

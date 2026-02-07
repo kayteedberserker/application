@@ -1,36 +1,36 @@
 import { Ionicons } from "@expo/vector-icons";
 import * as Haptics from "expo-haptics";
-import { useEffect, useState, useRef, useMemo } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import {
 	ActivityIndicator,
 	Alert,
 	Dimensions,
+	Keyboard,
+	KeyboardAvoidingView,
+	Linking,
+	Modal,
+	PanResponder,
+	Platform,
 	Pressable,
 	Animated as RNAnimated,
 	ScrollView,
-	TextInput,
-	View,
-	Modal,
-	Platform,
-	PanResponder,
-	Keyboard,
-	KeyboardAvoidingView,
 	Share,
-	Linking
+	TextInput,
+	View
 } from "react-native";
 import Animated, {
 	Easing,
+	FadeIn,
+	FadeOut,
 	useAnimatedStyle,
 	useSharedValue,
 	withRepeat,
 	withTiming,
-	FadeIn,
-	FadeOut,
 } from "react-native-reanimated";
 import useSWR from "swr";
 import { useUser } from "../context/UserContext";
+import apiFetch from "../utils/apiFetch";
 import { Text } from "./Text";
-import apiFetch from "../utils/apiFetch"
 const { width: SCREEN_WIDTH, height: SCREEN_HEIGHT } = Dimensions.get("window");
 const API_URL = "https://oreblogda.com";
 
@@ -315,7 +315,7 @@ export default function CommentSection({ postId, slug }) {
 		setIsLoadingMore(true);
 		try {
 			const nextPage = page + 1;
-			const res = await apiFetch(`${API_URL}/api/posts/${postId}/comment?page=${nextPage}&limit=40`);
+			const res = await apiFetch(`/posts/${postId}/comment?page=${nextPage}&limit=40`);
 			const result = await res.json();
 			setPagedComments(prev => [...prev, ...result.comments]);
 			setPage(nextPage);
@@ -351,7 +351,7 @@ export default function CommentSection({ postId, slug }) {
 		if (!content.trim() || !user?.deviceId) return;
 		setIsPosting(true);
 		try {
-			const res = await apiFetch(`${API_URL}/api/posts/${postId}/comment`, {
+			const res = await apiFetch(`/posts/${postId}/comment`, {
 				method: "POST",
 				headers: { "Content-Type": "application/json" },
 				body: JSON.stringify({

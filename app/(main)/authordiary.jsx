@@ -3,15 +3,15 @@ import AsyncStorage from '@react-native-async-storage/async-storage';
 import * as ImagePicker from 'expo-image-picker';
 import * as Notifications from 'expo-notifications';
 import { Link, useRouter } from "expo-router";
-
 import { useEffect, useMemo, useRef, useState } from "react";
 import {
     ActivityIndicator, Alert,
     Linking,
+    Platform,
     ScrollView,
     StatusBar,
     Switch, TextInput, TouchableOpacity,
-    View
+    View,
 } from "react-native";
 import { useRewardedAd } from 'react-native-google-mobile-ads';
 import Toast from "react-native-toast-message";
@@ -19,10 +19,12 @@ import useSWR from "swr";
 import AnimeLoading from "../../components/AnimeLoading";
 import { Text } from "../../components/Text";
 import THEME from "../../components/useAppTheme";
+import { useClan } from "../../context/ClanContext"; // 🔹 CLAN CONTEXT IMPORTED
 import { useStreak } from "../../context/StreakContext";
 import { useUser } from "../../context/UserContext";
 import { AdConfig } from "../../utils/AdConfig";
 import apiFetch from "../../utils/apiFetch";
+
 // 🔹 Notification Handler Configuration
 Notifications.setNotificationHandler({
     handleNotification: async () => ({
@@ -31,8 +33,8 @@ Notifications.setNotificationHandler({
         shouldSetBadge: false,
     }),
 });
-const COOLDOWN_NOTIFICATION_KEY = "cooldown_notification_id";
 
+const COOLDOWN_NOTIFICATION_KEY = "cooldown_notification_id";
 
 const API_BASE = "https://oreblogda.com/api";
 const fetcher = (url) => apiFetch(url).then((res) => res.json());
@@ -41,10 +43,11 @@ const fetcher = (url) => apiFetch(url).then((res) => res.json());
 async function getUserTotalPosts(deviceId) {
     if (!deviceId) return 0;
     try {
-        const res = await apiFetch(`${API_BASE}/posts?author=${deviceId}`);
+        const res = await apiFetch(`/posts?author=${deviceId}`);
         if (!res.ok) throw new Error("Failed to fetch posts");
         const data = await res.json();
-        return data.posts?.length || 0;
+        
+        return data?.total;
     } catch (err) {
         console.error("Error fetching total posts:", err);
         return null; // Return null on error to signal we should keep using cache
@@ -85,6 +88,7 @@ const resolveUserRank = (totalPosts) => {
 
 export default function AuthorDiaryDashboard() {
     const { user, loading: contextLoading } = useUser();
+    const { userClan, isInClan } = useClan(); // 🔹 GET CLAN INFO
     const { streak } = useStreak();
     const fingerprint = user?.deviceId;
     const router = useRouter();
@@ -103,7 +107,11 @@ export default function AuthorDiaryDashboard() {
     // Form & System States
     const [title, setTitle] = useState("");
     const [message, setMessage] = useState("");
+
+    // 🔹 Category States
     const [category, setCategory] = useState("News");
+    const [clanSubCategory, setClanSubCategory] = useState("General"); // For Clan sub-selection
+
     const [mediaUrl, setMediaUrl] = useState("");
     const [mediaUrlLink, setMediaUrlLink] = useState("");
     const [mediaType, setMediaType] = useState("image");
@@ -156,6 +164,7 @@ export default function AuthorDiaryDashboard() {
                     if (data.title) setTitle(data.title);
                     if (data.message) setMessage(data.message);
                     if (data.category) setCategory(data.category);
+                    if (data.clanSubCategory) setClanSubCategory(data.clanSubCategory); // Restore sub cat
                     if (data.hasPoll) setHasPoll(data.hasPoll);
                     if (data.pollOptions) setPollOptions(data.pollOptions);
                     if (data.timestamp) setLastSavedTime(data.timestamp);
@@ -195,7 +204,7 @@ export default function AuthorDiaryDashboard() {
             if (!user?.deviceId) return;
 
             const total = await getUserTotalPosts(user?.deviceId);
-
+            
             if (total !== null) {
                 // Online success
                 const rank = resolveUserRank(total);
@@ -235,8 +244,9 @@ export default function AuthorDiaryDashboard() {
     const postsLast24h = todayPosts.length;
     const todayPost = todayPosts.length > 0 ? todayPosts[0] : null;
 
-    // Rank Limits
-    const maxPostsToday = userRank.postLimit;
+    // 🔹 RANK LIMITS & CLAN BONUS LOGIC
+    // If user is in a clan, they get +1 to their rank limit
+    const maxPostsToday = isInClan ? userRank.postLimit + 1 : userRank.postLimit;
 
     // =================================================================
     // 3. DRAFT AUTO-SAVE LOGIC
@@ -252,6 +262,7 @@ export default function AuthorDiaryDashboard() {
                     title,
                     message,
                     category,
+                    clanSubCategory,
                     hasPoll,
                     pollOptions,
                     timestamp: now
@@ -265,7 +276,7 @@ export default function AuthorDiaryDashboard() {
         }, 1500);
 
         return () => clearTimeout(timer);
-    }, [title, message, category, hasPoll, pollOptions, fingerprint, isDraftRestoring]);
+    }, [title, message, category, clanSubCategory, hasPoll, pollOptions, fingerprint, isDraftRestoring]);
 
     const handleClearAll = () => {
         Alert.alert(
@@ -334,13 +345,21 @@ export default function AuthorDiaryDashboard() {
     }, [isEarnedReward, fingerprint]);
 
     useEffect(() => { if (isClosed) { load(); } }, [isClosed, load]);
+    // Run this once when your component mounts or when the app starts
+    useEffect(() => {
+        if (Platform.OS === 'android') {
+            Notifications.setNotificationChannelAsync('cooldown-timer', {
+                name: 'Cooldown Reminders',
+                importance: Notifications.AndroidImportance.HIGH,
+                sound: 'default',
+                vibrationPattern: [0, 250, 250, 250],
+                lightColor: '#FF231F7C',
+            });
+        }
+    }, []);
 
-    /* 🔹 UPDATED TIMER LOGIC 
-   Scans ALL today's posts to find the one that expires SOONEST.
-*/
-    /* 🔹 UPDATED TIMER LOGIC 
-   Scans ALL today's posts to find the one that expires SOONEST.
-*/
+
+    /* 🔹 UPDATED TIMER LOGIC */
     useEffect(() => {
         let interval;
 
@@ -390,51 +409,42 @@ export default function AuthorDiaryDashboard() {
                 if (rewardToken) return;
 
                 const now = Date.now();
-                // 🔹 Ensure trigger is a whole number
                 const triggerInSeconds = Math.floor((targetTime - now) / 1000);
 
-                // 🔹 Safety: Don't schedule if time is already here or negative
                 if (triggerInSeconds <= 0) {
                     console.log("Target time already passed");
                     return;
                 }
 
-                // 🔹 Check if we already scheduled one
                 const existingId = await AsyncStorage.getItem(COOLDOWN_NOTIFICATION_KEY);
-
                 if (existingId) {
-                    // 🔹 Cancel only this specific cooldown notification
                     try {
                         await Notifications.cancelScheduledNotificationAsync(existingId);
-                        console.log("Existing notification cancelled:", existingId);
                     } catch (e) {
                         console.log("Error cancelling notification:", e);
                     }
                 }
 
-                // 🔹 Schedule fresh notification with FIXED trigger
                 try {
                     const notificationId = await Notifications.scheduleNotificationAsync({
                         content: {
                             title: "Cooldown Finished! 🎉",
                             body: "New slot available. Post now!",
-                            sound: true,
+                            sound: 'default', // Changed to string 'default'
+                            priority: 'high', // Ensure high priority for Android
                             data: { type: "open_diary" },
                         },
                         trigger: {
-                            // 🔹 This is the fix for the TypeError
-                            type: 'timeInterval',
+                            // Use the channelId we created above
+                            channelId: 'cooldown-timer',
+                            type: Notifications.SchedulableTriggerInputTypes.TIME_INTERVAL,
                             seconds: triggerInSeconds,
                             repeats: false,
                         },
                     });
 
-                    // 🔹 Store the new ID
-                    await AsyncStorage.setItem(
-                        COOLDOWN_NOTIFICATION_KEY,
-                        notificationId
-                    );
-                    console.log("Scheduled new notification ID:", notificationId, "in", triggerInSeconds, "s");
+                    await AsyncStorage.setItem(COOLDOWN_NOTIFICATION_KEY, notificationId);
+                    console.log("Notification scheduled for:", triggerInSeconds, "seconds");
                 } catch (error) {
                     console.error("Failed to schedule notification:", error);
                 }
@@ -486,15 +496,7 @@ export default function AuthorDiaryDashboard() {
 
     // 🔹 UPDATED: sanitizeMessage for new syntax s(), h(), l(), link()
     const sanitizeMessage = (text) => {
-        const patterns = [
-            /s\([\s\S]*?\)/g,           // Section: s(...)
-            /h\([\s\S]*?\)/g,           // Heading: h(...)
-            /l\([\s\S]*?\)/g,           // List: l(...)
-            /link\(.*?\)-text\(.*?\)/g  // Link: link(...)-text(...)
-        ];
-
         let cleaned = text;
-        // Keep checking for broken patterns if necessary, or just return cleaned
         return cleaned;
     };
 
@@ -593,6 +595,8 @@ export default function AuthorDiaryDashboard() {
         } catch (err) { console.error("Streak update error:", err); return null; }
     }
     const { refreshStreak } = useStreak()
+
+    // 🔹 SUBMIT HANDLER WITH CLAN LOGIC
     const handleSubmit = async () => {
         if (!title.trim() || !message.trim()) { Alert.alert("Error", "Title and Message are required."); return; }
 
@@ -601,13 +605,32 @@ export default function AuthorDiaryDashboard() {
 
         setSubmitting(true);
         try {
-            const response = await apiFetch(`${API_BASE}/posts`, {
+            // 🔹 Construct Clan Data for Payload
+            let finalCategory = category;
+            let finalClanId = null;
+
+            if (category === "Clan") {
+                // If Clan is selected, combine with subcategory (e.g., Clan-News)
+                // Using "Clan-SubCategory" format as requested
+                finalCategory = `Clan-${clanSubCategory}`;
+                // Set the clanId using the userClan tag
+                finalClanId = userClan?.tag;
+            }
+
+            const response = await apiFetch(`/posts`, {
                 method: "POST",
                 body: JSON.stringify({
-                    title, message, category, mediaUrl: mediaUrl || mediaUrlLink || null,
+                    title,
+                    message,
+                    category: finalCategory, // Send the composed category
+                    clanId: finalClanId,     // Send the clan ID/Tag
+                    mediaUrl: mediaUrl || mediaUrlLink || null,
                     mediaType: mediaUrl ? mediaType : (mediaUrlLink?.includes("video") ? "video" : "image"),
-                    hasPoll, pollMultiple, pollOptions: hasPoll ? pollOptions.filter(opt => opt.trim() !== "").map(opt => ({ text: opt })) : [],
-                    fingerprint, rewardToken
+                    hasPoll,
+                    pollMultiple,
+                    pollOptions: hasPoll ? pollOptions.filter(opt => opt.trim() !== "").map(opt => ({ text: opt })) : [],
+                    fingerprint,
+                    rewardToken
                 }),
             });
             const data = await response.json();
@@ -927,7 +950,7 @@ export default function AuthorDiaryDashboard() {
                             </View>
                             <View className="items-end">
                                 <Text className="text-[9px] font-black text-gray-500 uppercase tracking-widest">Daily Quota</Text>
-                                <Text className="text-blue-500 font-black">{postsLast24h} / {maxPostsToday}</Text>
+                                <Text className="text-blue-500 font-black">{postsLast24h} / {maxPostsToday} {isInClan && <Text className="text-yellow-500 text-[8px]">(+1 CLAN BONUS)</Text>}</Text>
                             </View>
                         </View>
 
@@ -1023,11 +1046,12 @@ export default function AuthorDiaryDashboard() {
                                     />
                                 </View>
 
-                                {/* Category Selection */}
+                                {/* 🔹 CATEGORY SELECTION (Updated for Clan Logic) */}
                                 <View>
                                     <Text className="text-[9px] font-black uppercase text-gray-500 mb-2 ml-1">Archive Category</Text>
                                     <ScrollView horizontal showsHorizontalScrollIndicator={false}>
-                                        {["News", "Memes", "Polls", "Gaming", "Review"].map((cat) => (
+                                        {/* 🔹 If in Clan, show 'Clan' as an option. Otherwise standard list. */}
+                                        {(isInClan ? ["Clan", "News", "Memes", "Polls", "Gaming", "Review"] : ["News", "Memes", "Polls", "Gaming", "Review"]).map((cat) => (
                                             <TouchableOpacity
                                                 key={cat}
                                                 onPress={() => setCategory(cat)}
@@ -1037,6 +1061,24 @@ export default function AuthorDiaryDashboard() {
                                             </TouchableOpacity>
                                         ))}
                                     </ScrollView>
+
+                                    {/* 🔹 SUB-CATEGORY SELECTION (Only visible if Clan is selected) */}
+                                    {category === "Clan" && (
+                                        <View className="mt-4 bg-blue-600/5 p-4 rounded-xl border border-blue-600/20">
+                                            <Text className="text-[9px] font-black uppercase text-blue-400 mb-2 ml-1">Select Clan Sub-Channel</Text>
+                                            <ScrollView horizontal showsHorizontalScrollIndicator={false}>
+                                                {["Memes", "News", "Polls", "Review", "Gaming"].map((subCat) => (
+                                                    <TouchableOpacity
+                                                        key={subCat}
+                                                        onPress={() => setClanSubCategory(subCat)}
+                                                        className={`mr-2 px-4 py-2 rounded-lg border ${clanSubCategory === subCat ? 'bg-blue-500 border-blue-500' : 'bg-gray-800 border-gray-700'}`}
+                                                    >
+                                                        <Text className={`text-[10px] font-bold uppercase ${clanSubCategory === subCat ? "text-white" : "text-gray-400"}`}>{subCat}</Text>
+                                                    </TouchableOpacity>
+                                                ))}
+                                            </ScrollView>
+                                        </View>
+                                    )}
                                 </View>
 
                                 {/* Media & URL */}

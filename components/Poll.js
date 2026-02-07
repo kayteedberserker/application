@@ -1,12 +1,12 @@
 import { MaterialCommunityIcons } from "@expo/vector-icons";
 import { usePathname, useRouter } from "expo-router"; // Added useRouter for navigation
 import { useEffect, useState } from "react";
-import { Pressable, View } from "react-native";
+import { DeviceEventEmitter, Pressable, View } from "react-native";
 import Toast from "react-native-toast-message";
 import useSWR from "swr";
 import { useUser } from "../context/UserContext";
+import apiFetch from "../utils/apiFetch";
 import { Text } from "./Text";
-import apiFetch from "../utils/apiFetch"
 
 const API_URL = "https://oreblogda.com";
 
@@ -190,7 +190,7 @@ export default function Poll({ poll, postId, readOnly = false }) {
             {/* ✅ Check More Options Trigger (Only in Feed) */}
             {hasMoreOptions && (
                 <Pressable 
-                    onPress={() => router.push(`/post/${postId}`)}
+                    onPress={() => DeviceEventEmitter.emit("navigateSafely", `/post/${postId}`)}
                     className="mt-1 mb-4 pt-4 border-t border-gray-100 dark:border-gray-800 flex-row items-center justify-center gap-2"
                 >
                     <MaterialCommunityIcons name="poll" size={14} color="#3b82f6" />

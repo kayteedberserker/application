@@ -4,15 +4,15 @@ import * as Notifications from 'expo-notifications';
 import { useRouter } from 'expo-router';
 import { useEffect, useState } from 'react';
 import {
-  ActivityIndicator,
-  Alert,
-  Dimensions,
-  Platform,
-  SafeAreaView,
-  ScrollView,
-  Switch,
-  TouchableOpacity,
-  View
+    ActivityIndicator,
+    Alert,
+    Dimensions,
+    Platform,
+    SafeAreaView,
+    ScrollView,
+    Switch,
+    TouchableOpacity,
+    View
 } from 'react-native';
 import { Text } from '../../components/Text';
 import THEME from '../../components/useAppTheme';
@@ -73,7 +73,7 @@ export default function MoreOptions() {
 
   const MenuRow = ({ title, icon, route, color = "#2563eb" }) => (
     <TouchableOpacity 
-      onPress={() => router.push(route)}
+      onPress={() => DeviceEventEmitter.emit("navigateSafely", route)}
       activeOpacity={0.8}
       style={{ backgroundColor: THEME.card, borderColor: THEME.border }}
       className="flex-row items-center p-5 mb-3 rounded-2xl border-2"

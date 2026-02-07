@@ -130,7 +130,7 @@ export default function AuthorPage() {
     try {
       const [userRes, postRes] = await Promise.all([
         apiFetch(`${API_BASE}/users/${id}`),
-        apiFetch(`${API_BASE}/posts?author=${id}&page=1&limit=10`),
+        apiFetch(`/posts?author=${id}&page=1&limit=10`),
       ]);
 
       const userData = await userRes.json();
@@ -368,7 +368,7 @@ export default function AuthorPage() {
   const renderItem = ({ item, index }) => {
     const showAd = (index + 1) % 4 === 0;
     return (
-      <View>
+      <View className={'px-3'}>
         <PostCard post={item} isFeed />
         {showAd && (
           <NativeAdPostStyle isDark={isDark} />

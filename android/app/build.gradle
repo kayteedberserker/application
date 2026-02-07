@@ -4,9 +4,6 @@ apply plugin: "com.facebook.react"
 
 def projectRoot = rootDir.getAbsoluteFile().getParentFile().getAbsolutePath()
 
-/**
- * This is the configuration block to customize your React Native Android app.
- */
 react {
     entryFile = file(["node", "-e", "require('expo/scripts/resolveAppEntry')", projectRoot, "android", "absolute"].execute(null, rootDir).text.trim())
     reactNativeDir = new File(["node", "--print", "require.resolve('react-native/package.json')"].execute(null, rootDir).text.trim()).getParentFile().getAbsoluteFile()
@@ -39,8 +36,6 @@ android {
         buildConfigField "String", "REACT_NATIVE_RELEASE_LEVEL", "\"${findProperty('reactNativeReleaseLevel') ?: 'stable'}\""
     }
 
-    // --- ADDED FOR UNITY COMPATIBILITY ---
-    // Unity 4.7.0+ requires Java 8 features to be explicitly enabled
     compileOptions {
         sourceCompatibility JavaVersion.VERSION_1_8
         targetCompatibility JavaVersion.VERSION_1_8
@@ -54,9 +49,17 @@ android {
             keyPassword 'android'
         }
     }
+
     buildTypes {
         debug {
             signingConfig signingConfigs.debug
+            
+            // --- ADDED FOR SIDE-BY-SIDE DEV BUILD ---
+            // This appends .dev to your package name so you can have 2 apps
+            applicationIdSuffix ".dev"
+            
+            // This changes the name on the home screen for the debug build
+            resValue "string", "app_name", "Oreblogda (DEV)"
         }
         release {
             signingConfig signingConfigs.debug
@@ -66,19 +69,21 @@ android {
             proguardFiles getDefaultProguardFile("proguard-android.txt"), "proguard-rules.pro"
             def enablePngCrunchInRelease = findProperty('android.enablePngCrunchInReleaseBuilds') ?: 'true'
             crunchPngs enablePngCrunchInRelease.toBoolean()
+
+            // Ensures release build uses the real name from strings.xml
+            resValue "string", "app_name", "Oreblogda"
         }
     }
+
     packagingOptions {
         jniLibs {
             def enableLegacyPackaging = findProperty('expo.useLegacyPackaging') ?: 'false'
             useLegacyPackaging enableLegacyPackaging.toBoolean()
         }
     }
-    androidResources {
-        ignoreAssetsPattern '!.svn:!.git:!.ds_store:!*.scc:!CVS:!thumbs.db:!picasa.ini:!*~'
-    }
 }
 
+// ... (Rest of your logic for packagingOptions/pickFirsts stays exactly the same)
 ["pickFirsts", "excludes", "merges", "doNotStrip"].each { prop ->
     def options = (findProperty("android.packagingOptions.$prop") ?: "").split(",");
     for (i in 0..<options.size()) options[i] = options[i].trim();
@@ -91,18 +96,13 @@ android {
 }
 
 dependencies {
-    // The version of react-native is set by the React Native Gradle Plugin
     implementation("com.facebook.react:react-android")
 
-    // --- UNITY MEDIATION & SDK (LATEST 2026 VERSIONS) ---
-    // The Unity Mediation Adapter (The bridge)
+    // UNITY MEDIATION & SDK
     implementation("com.google.ads.mediation:unity:4.16.6.0")
-    // The actual Unity Ads SDK (The engine)
     implementation("com.unity3d.ads:unity-ads:4.16.5")
-    // Latest Google Ads SDK (Required for the bridge to work)
     implementation("com.google.android.gms:play-services-ads:23.3.0")
 
-    // Other mediation partners (Kept for functionality)
     implementation("com.google.ads.mediation:applovin:13.0.1.0")
     implementation("com.google.ads.mediation:mintegral:17.0.51.0")
 

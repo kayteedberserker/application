@@ -1,13 +1,61 @@
-import { usePathname, useRouter } from "expo-router";
-import { FlatList, TouchableOpacity, View } from "react-native";
+import { usePathname, useRouter } from "expo-router"; // Added these
+import { useEffect, useState } from "react";
+import { BackHandler, DeviceEventEmitter, FlatList, TouchableOpacity, View } from "react-native";
 import { Text } from "./Text";
 
+// Categories match the IDs in HomePage CHANNELS (excluding 'all')
 const categories = ["News", "Memes", "Polls", "Review", "Gaming"];
 
 export default function CategoryNav({ isDark }) {
-    // Keep your original functions and hooks
-    const router = useRouter();
+    const [activeIndex, setActiveIndex] = useState(0);
     const pathname = usePathname();
+    const router = useRouter();
+
+    useEffect(() => {
+        // 🔹 1. Listen for swipes from HomePage
+        const sub = DeviceEventEmitter.addListener("pageSwiped", (index) => {
+            setActiveIndex(index);
+        });
+
+        // 🔹 2. Handle Hardware Back Button
+        const backAction = () => {
+            if (activeIndex !== 0) {
+                setActiveIndex(0);
+                DeviceEventEmitter.emit("scrollToIndex", 0);
+                return true; 
+            }
+            return false;
+        };
+
+        const backHandler = BackHandler.addEventListener(
+            "hardwareBackPress",
+            backAction
+        );
+
+        return () => {
+            sub.remove();
+            backHandler.remove();
+        };
+    }, [activeIndex]);
+
+    const handleCategoryPress = (actualSwiperIndex) => {
+        setActiveIndex(actualSwiperIndex);
+
+        // Check if we are actually on the home screen
+        if (pathname === "/") {
+            // We are already home, just scroll
+            DeviceEventEmitter.emit("scrollToIndex", actualSwiperIndex);
+        } else {
+            // We are on Profile/Diary/etc. 
+            // 1. Navigate home first
+            router.replace("/");
+            
+            // 2. Wait for the HomePage to mount, then scroll
+            setTimeout(() => {
+                DeviceEventEmitter.emit("scrollToIndex", actualSwiperIndex);
+            }, 100); 
+        }
+    };
 
     return (
         <View 
@@ -23,23 +71,19 @@ export default function CategoryNav({ isDark }) {
                 data={categories}
                 keyExtractor={(item) => item}
                 showsHorizontalScrollIndicator={false}
-                // Keep your original props for Android touch stability
                 contentContainerStyle={{ 
-                    paddingHorizontal: 3, 
+                    paddingHorizontal: 15, 
                     alignItems: 'center',
                     height: '100%' 
                 }}
-                scrollEnabled={true}
-                nestedScrollEnabled={true}
-                renderItem={({ item }) => {
-                    // Keep your original logic
-                    const catSlug = item.toLowerCase().replace("/", "-");
-                    const isActive = pathname.includes(catSlug);
-                    const displayName = item === "Videos/Edits" ? "Videos" : item;
+                renderItem={({ item, index }) => {
+                    const actualSwiperIndex = index + 1;
+                    const isActive = activeIndex === actualSwiperIndex;
+                    const displayName = item === "Review" ? "Reviews" : item;
 
                     return (
                         <TouchableOpacity
-                            onPress={() => router.push(`/categories/${catSlug}`)}
+                            onPress={() => handleCategoryPress(actualSwiperIndex)}
                             activeOpacity={0.7}
                             style={{ marginRight: 8 }}
                             className={`px-4 py-2 rounded-lg relative ${
@@ -54,7 +98,6 @@ export default function CategoryNav({ isDark }) {
                                 {displayName}
                             </Text>
 
-                            {/* Tactical Corners - Only for Active (Visual UI) */}
                             {isActive && (
                                 <>
                                     <View style={{ position: 'absolute', top: 0, left: 0, width: 4, height: 4, borderTopWidth: 1, borderLeftWidth: 1, borderColor: 'white' }} />

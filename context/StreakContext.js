@@ -1,11 +1,13 @@
+import apiFetch from "@/utils/apiFetch";
 import AsyncStorage from "@react-native-async-storage/async-storage";
-import { createContext, useContext, useMemo, useEffect, useState, useCallback } from "react";
 import * as Notifications from 'expo-notifications';
+import { createContext, useCallback, useContext, useEffect, useMemo, useState } from "react";
 
 const StreakContext = createContext();
 const STREAK_CACHE_KEY = "streak_local_cache";
 const APP_SECRET = "thisismyrandomsuperlongsecretkey";
 
+// --- UPDATED FUNCTION ---
 const scheduleStreakReminders = async (expiresAt) => {
   if (!expiresAt) return;
   try {
@@ -13,27 +15,52 @@ const scheduleStreakReminders = async (expiresAt) => {
     const expiryDate = new Date(expiresAt).getTime();
     const now = Date.now();
 
+    // 1. 24 Hour Reminder
     const trigger24h = expiryDate - (24 * 60 * 60 * 1000);
     if (trigger24h > now) {
       await Notifications.scheduleNotificationAsync({
-        content: { title: "🔥 Streak at Risk!", body: "24 hours left to post!", data: { screen: 'CreatePost' } },
-        trigger: new Date(trigger24h),
+        content: { 
+          title: "🔥 Streak at Risk!", 
+          body: "24 hours left to post!", 
+          data: { screen: 'CreatePost' } 
+        },
+        trigger: {
+          type: Notifications.SchedulableTriggerInputTypes.DATE, // Fixed
+          date: new Date(trigger24h),
+        },
       });
     }
 
+    // 2. 2 Hour Reminder
     const trigger2h = expiryDate - (2 * 60 * 60 * 1000);
     if (trigger2h > now) {
       await Notifications.scheduleNotificationAsync({
-        content: { title: "⚠️ FINAL WARNING", body: "2 hours left! Post now!", sound: 'default', priority: 'high' },
-        trigger: new Date(trigger2h),
+        content: { 
+          title: "⚠️ FINAL WARNING", 
+          body: "2 hours left! Post now!", 
+          sound: 'default', 
+          priority: 'high' 
+        },
+        trigger: {
+          type: Notifications.SchedulableTriggerInputTypes.DATE, // Fixed
+          date: new Date(trigger2h),
+        },
       });
     }
 
-    await Notifications.scheduleNotificationAsync({
-      content: { title: "💀 Streak Lost", body: "Your streak has expired." },
-      trigger: new Date(expiryDate),
-    });
-  } catch (e) { console.error("Notif Error:", e); }
+    // 3. Expiration Notification
+    if (expiryDate > now) {
+      await Notifications.scheduleNotificationAsync({
+        content: { title: "💀 Streak Lost", body: "Your streak has expired." },
+        trigger: {
+          type: Notifications.SchedulableTriggerInputTypes.DATE, // Fixed
+          date: new Date(expiryDate),
+        },
+      });
+    }
+  } catch (e) { 
+    console.error("Notif Error:", e); 
+  }
 };
 
 export function StreakProvider({ children }) {
@@ -46,7 +73,6 @@ export function StreakProvider({ children }) {
   });
   const [loading, setLoading] = useState(true);
 
-  // 🔹 The Manual Fetcher
   const fetchStreak = useCallback(async () => {
     try {
       const userData = await AsyncStorage.getItem("mobileUser");
@@ -54,7 +80,7 @@ export function StreakProvider({ children }) {
       const { deviceId } = JSON.parse(userData);
       if (!deviceId) return;
 
-      const res = await fetch(`https://oreblogda.com/api/users/streak/${deviceId}`, {
+      const res = await apiFetch(`/users/streak/${deviceId}`, {
         method: "GET",
         headers: {
           "Content-Type": "application/json",
@@ -75,7 +101,6 @@ export function StreakProvider({ children }) {
     }
   }, []);
 
-  // 🔹 1. Load from Cache + Fetch ONCE on app launch
   useEffect(() => {
     const init = async () => {
       const saved = await AsyncStorage.getItem(STREAK_CACHE_KEY);
@@ -84,7 +109,6 @@ export function StreakProvider({ children }) {
         setStreakData(parsed);
         if (parsed.expiresAt) scheduleStreakReminders(parsed.expiresAt);
       }
-      // Only fetch from network once per app session
       fetchStreak();
     };
     init();
@@ -93,7 +117,7 @@ export function StreakProvider({ children }) {
   const value = useMemo(() => ({
     streak: streakData,
     loading,
-    refreshStreak: fetchStreak // Call this manually after creating a post!
+    refreshStreak: fetchStreak 
   }), [streakData, loading, fetchStreak]);
 
   return (
