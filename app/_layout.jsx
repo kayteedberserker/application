@@ -7,7 +7,7 @@ import * as SplashScreen from "expo-splash-screen";
 import * as Updates from 'expo-updates';
 import { useColorScheme } from "nativewind";
 import { useEffect, useRef, useState } from "react";
-import { AppState, BackHandler, DeviceEventEmitter, Platform, StatusBar, StyleSheet, View } from "react-native";
+import { AppState, BackHandler, DeviceEventEmitter, Platform, StatusBar, StyleSheet, TouchableOpacity, View } from "react-native";
 import mobileAds, { AdEventType, InterstitialAd, MaxAdContentRating } from 'react-native-google-mobile-ads';
 import { SafeAreaProvider } from "react-native-safe-area-context";
 import Toast from 'react-native-toast-message';
@@ -24,8 +24,8 @@ import "./globals.css";
 SplashScreen.preventAutoHideAsync();
 
 // 🔹 AD CONFIGURATION
-const FIRST_AD_DELAY_MS = 120000; 
-const COOLDOWN_MS = 180000;      
+const FIRST_AD_DELAY_MS = 120000;
+const COOLDOWN_MS = 180000;
 
 const INTERSTITIAL_ID = AdConfig.interstitial;
 
@@ -44,7 +44,7 @@ Notifications.setNotificationHandler({
 
 // 🔹 HELPER: Load Interstitial
 const loadInterstitial = () => {
-    if (interstitial) return; 
+    if (interstitial) return;
 
     const ad = InterstitialAd.createForAdRequest(INTERSTITIAL_ID, {
         requestNonPersonalizedAdsOnly: true,
@@ -58,8 +58,8 @@ const loadInterstitial = () => {
     ad.addAdEventListener(AdEventType.CLOSED, () => {
         interstitialLoaded = false;
         interstitial = null;
-        lastShownTime = Date.now(); 
-        loadInterstitial(); 
+        lastShownTime = Date.now();
+        loadInterstitial();
     });
 
     ad.addAdEventListener(AdEventType.ERROR, (err) => {
@@ -104,14 +104,16 @@ function RootLayoutContent() {
     const router = useRouter();
     const pathname = usePathname();
     const { user } = useUser();
-    
+
     const [isSyncing, setIsSyncing] = useState(true);
-    const [isUpdating, setIsUpdating] = useState(false); 
-    const [appReady, setAppReady] = useState(false); 
-    const [isAdReady, setIsAdReady] = useState(false); 
-    
+    const [isUpdating, setIsUpdating] = useState(false);
+    const [appReady, setAppReady] = useState(false);
+    const [isAdReady, setIsAdReady] = useState(false);
+    const [adStatusLog, setAdStatusLog] = useState("Initializing Ad Engine...");
+    const [debugTapCount, setDebugTapCount] = useState(0);
+
     const appState = useRef(AppState.currentState);
-    const lastHandledNotificationId = useRef(null); 
+    const lastHandledNotificationId = useRef(null);
     const hasHandledRedirect = useRef(false);
     const hasShownWelcomeAd = useRef(false);
 
@@ -123,16 +125,11 @@ function RootLayoutContent() {
 
     // --- 1. GLOBAL NAVIGATION & BACK HANDLER ---
     useEffect(() => {
-        // Safe Navigation Listener
         const navSub = DeviceEventEmitter.addListener("navigateSafely", (targetPath) => {
-            if (currentPathRef.current === targetPath) {
-                console.log("Blocked redundant navigation to:", targetPath);
-                return;
-            }
+            if (currentPathRef.current === targetPath) return;
             router.push(targetPath);
         });
 
-        // Ad Listener
         const interstitialListener = DeviceEventEmitter.addListener("tryShowInterstitial", () => {
             const now = Date.now();
             if (interstitialLoaded && interstitial && (now - lastShownTime > COOLDOWN_MS)) {
@@ -140,7 +137,6 @@ function RootLayoutContent() {
             }
         });
 
-        // App State Listener
         const stateSub = AppState.addEventListener('change', nextState => {
             if (appState.current.match(/inactive|background/) && nextState === 'active') {
                 showAppOpenAd();
@@ -148,20 +144,17 @@ function RootLayoutContent() {
             appState.current = nextState;
         });
 
-        // Global Back Button Handler
         const backHandler = BackHandler.addEventListener("hardwareBackPress", () => {
             if (router.canGoBack()) {
                 DeviceEventEmitter.emit("tryShowInterstitial");
                 router.back();
-                return true; 
+                return true;
             }
-            
-            // If on home, exit. Otherwise, go home.
             if (currentPathRef.current !== "/" && currentPathRef.current !== "/(tabs)") {
                 router.replace("/");
                 return true;
             }
-            return false; 
+            return false;
         });
 
         return () => {
@@ -170,7 +163,7 @@ function RootLayoutContent() {
             stateSub.remove();
             backHandler.remove();
         };
-    }, []); // Empty array means this runs ONCE on mount. No more loops.
+    }, []);
 
     // --- 2. AD INITIALIZATION ---
     useEffect(() => {
@@ -181,17 +174,33 @@ function RootLayoutContent() {
 
         const runMediationInit = async () => {
             try {
-                await new Promise(resolve => setTimeout(resolve, 3000));
-                await mobileAds().setRequestConfiguration({ maxAdContentRating: MaxAdContentRating.G });
-                await mobileAds().initialize();
-                loadAppOpenAd();
-                loadInterstitial();
-                setIsAdReady(true);
+                setAdStatusLog("Configuring Ads...");
+                await mobileAds().setRequestConfiguration({
+                    maxAdContentRating: MaxAdContentRating.G,
+                    tagForChildDirectedTreatment: false,
+                });
+
+                setAdStatusLog("Connecting to Mediation...");
+                const adapterStatuses = await mobileAds().initialize();
+                
+                // Construct a visual log for the loading screen
+                const statusSummary = Object.entries(adapterStatuses)
+                    .map(([name, status]) => `${name}: ${status.state === 1 ? '✅' : '❌'}`)
+                    .join(' | ');
+                
+                setAdStatusLog(statusSummary || "Ads Engine Ready");
+
+                if (typeof loadAppOpenAd === 'function') loadAppOpenAd();
+                if (typeof loadInterstitial === 'function') loadInterstitial();
+
+                // Give the user a moment to see the status if they want
+                setTimeout(() => setIsAdReady(true), 1000);
             } catch (e) {
-                console.error("Ad Engine Init Failure:", e);
-                setIsAdReady(true);
+                setAdStatusLog("Ad Init Error: " + e.message);
+                setTimeout(() => setIsAdReady(true), 2000);
             }
         };
+
         runMediationInit();
     }, []);
 
@@ -208,10 +217,10 @@ function RootLayoutContent() {
                 return () => clearTimeout(retryTimeout);
             }
         }
-    }, [appReady, isAdReady]); 
+    }, [appReady, isAdReady]);
 
     // --- 4. DEEP LINKING ---
-    const url = Linking.useURL(); 
+    const url = Linking.useURL();
     useEffect(() => {
         if (url && !isSyncing && !isUpdating && !hasHandledRedirect.current) {
             const { path } = Linking.parse(url);
@@ -226,11 +235,11 @@ function RootLayoutContent() {
     // --- 5. EAS UPDATES ---
     useEffect(() => {
         async function onFetchUpdateAsync() {
-            if (__DEV__) return; 
+            if (__DEV__) return;
             try {
                 const update = await Updates.checkForUpdateAsync();
                 if (update.isAvailable) {
-                    setIsUpdating(true); 
+                    setIsUpdating(true);
                     await Updates.fetchUpdateAsync();
                     setTimeout(async () => { await Updates.reloadAsync(); }, 1500);
                 }
@@ -249,7 +258,7 @@ function RootLayoutContent() {
     // --- 6. SYNC ---
     useEffect(() => {
         async function performSync() {
-            if (!fontsLoaded || isUpdating) return; 
+            if (!fontsLoaded || isUpdating) return;
             const token = await registerForPushNotificationsAsync();
             if (token && user?.deviceId) {
                 try {
@@ -301,12 +310,29 @@ function RootLayoutContent() {
 
     useEffect(() => { if (appReady || fontError) SplashScreen.hideAsync(); }, [appReady, fontError]);
 
+    // 🔹 DEBUG MENU TRIGGER: Tap 5 times to see the Ad Inspector
+    const handleDebugTap = () => {
+        const next = debugTapCount + 1;
+        if (next >= 5) {
+            mobileAds().openDebugMenu(INTERSTITIAL_ID);
+            setDebugTapCount(0);
+        } else {
+            setDebugTapCount(next);
+        }
+    };
+
     if (!fontsLoaded || isSyncing || isUpdating || !isAdReady) {
         return (
-            <AnimeLoading 
-                message={isUpdating ? "UPDATING_CORE" : "LOADING_PAGE"} 
-                subMessage={isUpdating ? "Updating system configurations..." : "Syncing Account"} 
-            />
+            <TouchableOpacity 
+                activeOpacity={1} 
+                onPress={handleDebugTap} 
+                style={{ flex: 1 }}
+            >
+                <AnimeLoading
+                    message={isUpdating ? "UPDATING_CORE" : "LOADING_PAGE"}
+                    subMessage={isUpdating ? "Updating system configurations..." : adStatusLog}
+                />
+            </TouchableOpacity>
         );
     }
 
@@ -319,26 +345,17 @@ function RootLayoutContent() {
                     setTimeout(() => { DeviceEventEmitter.emit("tryShowInterstitial"); }, 500);
                 }}
             />
-            
-            {/* {__DEV__ && (
-                <TouchableOpacity 
-                    onPress={() => mobileAds().openDebugMenu(INTERSTITIAL_ID)}
-                    style={styles.debugButton}
-                >
-                    <Text style={styles.debugText}>Ad Inspector</Text>
-                </TouchableOpacity>
-            )} */}
             <Toast />
         </View>
     );
 }
 
 const styles = StyleSheet.create({
-  debugButton: { 
-    position: 'absolute', bottom: 100, right: 20, backgroundColor: '#E6F4FE', 
-    paddingHorizontal: 15, paddingVertical: 8, borderRadius: 20, borderWidth: 1, borderColor: '#2196F3', elevation: 5, zIndex: 999
-  },
-  debugText: { color: '#2196F3', fontSize: 12, fontWeight: 'bold' }
+    debugButton: {
+        position: 'absolute', bottom: 100, right: 20, backgroundColor: '#E6F4FE',
+        paddingHorizontal: 15, paddingVertical: 8, borderRadius: 20, borderWidth: 1, borderColor: '#2196F3', elevation: 5, zIndex: 999
+    },
+    debugText: { color: '#2196F3', fontSize: 12, fontWeight: 'bold' }
 });
 
 export default function RootLayout() {
