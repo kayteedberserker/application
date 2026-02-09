@@ -158,7 +158,6 @@ function RootLayoutContent() {
     const [isUpdating, setIsUpdating] = useState(false);
     const [appReady, setAppReady] = useState(false);
     const [isAdReady, setIsAdReady] = useState(false);
-    const [adStatusLog, setAdStatusLog] = useState("Initializing Ad Engine...");
     const [debugTapCount, setDebugTapCount] = useState(0);
 
     const appState = useRef(AppState.currentState);
@@ -205,9 +204,6 @@ function RootLayoutContent() {
                             console.log(`🧹 Janitor: Cleared expired cache: ${key}`);
                         }
                     } 
-                    // 2. If it's a "Legacy" or "Raw" cache (no timestamp, like raw points or war arrays)
-                    // We only delete these if they are very old or corrupted. 
-                    // For now, let's let raw caches live unless they fail to parse.
                     
                 } catch (e) {
                     // If JSON.parse fails, the data is corrupted. Wipe it.
@@ -231,13 +227,13 @@ function RootLayoutContent() {
         currentPathRef.current = pathname;
     }, [pathname]);
 
-    // --- 🔹 SMART ROUTING ENGINE ---
+    // --- 🔹 SMART ROUTING ENGINE (Optimized for Instant Execution) ---
     const processRouting = useCallback((data) => {
         if (!data) return;
 
         const targetPostId = data.postId || data.id || data.body?.postId;
         const targetType = data.type || data.body?.type;
-        const targetDiscussionId = data.discussion || data.commentId;
+        const targetDiscussionId = data.discussion || data.commentId || data.discussionId
 
         let targetPath = "";
         if (targetType === "open_diary" || targetType === "diary") {
@@ -262,16 +258,19 @@ function RootLayoutContent() {
 
         hasHandledRedirect.current = true;
         const finalUrl = targetDiscussionId ? `${targetPath}?discussionId=${targetDiscussionId}` : targetPath;
-        console.log(finalUrl);
 
-        router.push(finalUrl);
+        // ⚡️ SPEED OPTIMIZATION: Wrap in requestAnimationFrame to prioritize navigation over background tasks
+        requestAnimationFrame(() => {
+            router.push(finalUrl);
+        });
     }, [router]);
 
     // --- 1. GLOBAL NAVIGATION & BACK HANDLER ---
     useEffect(() => {
         const navSub = DeviceEventEmitter.addListener("navigateSafely", (targetPath) => {
             if (currentPathRef.current === targetPath) return;
-            router.push(targetPath);
+            // ⚡️ Speed: Immediate Push
+            requestAnimationFrame(() => router.push(targetPath));
         });
 
         const interstitialListener = DeviceEventEmitter.addListener("tryShowInterstitial", () => {
@@ -309,7 +308,7 @@ function RootLayoutContent() {
         };
     }, []);
 
-    // --- 2. AD INITIALIZATION (Updated with Adapter Logging) ---
+    // --- 2. AD INITIALIZATION ---
     useEffect(() => {
         if (Platform.OS === 'web') {
             setIsAdReady(true);
@@ -322,16 +321,13 @@ function RootLayoutContent() {
                     tagForChildDirectedTreatment: false,
                 });
 
-                // This initializes AdMob AND all included mediation adapters
-                const adapterStatuses = await mobileAds().initialize();
-                // console.log("AdMob Adapters Initialized:", adapterStatuses);
+                await mobileAds().initialize();
 
                 if (typeof loadAppOpenAd === 'function') loadAppOpenAd();
                 if (typeof loadInterstitial === 'function') loadInterstitial();
-                setTimeout(() => setIsAdReady(true), 1000);
+                setIsAdReady(true);
             } catch (e) {
-                console.error("AdMob Init Error:", e);
-                setTimeout(() => setIsAdReady(true), 2000);
+                setIsAdReady(true);
             }
         };
         runMediationInit();
@@ -346,10 +342,10 @@ function RootLayoutContent() {
         }
     }, [appReady, isAdReady]);
 
-    // --- 4. DEEP LINKING (Event Based - Fixes Duplicates & Warm Start Ghosting) ---
+    // --- 4. DEEP LINKING (Instant Response) ---
     useEffect(() => {
         const handleUrl = (url) => {
-            if (!url || isSyncing || isUpdating) return;
+            if (!url || isUpdating) return;
 
             const parsed = Linking.parse(url);
             const { path, queryParams } = parsed;
@@ -357,40 +353,30 @@ function RootLayoutContent() {
             if (path && path !== "/") {
                 const segments = path.split('/');
                 const pathId = segments.pop();
-                const type = segments.includes('post') ? 'post_detail' : null;
+                
                 if (path.includes('/post/')) {
                     processRouting({
                         postId: pathId,
-                        type: type,
+                        type: 'post_detail',
                         ...queryParams
                     });
                 } else {
-                    const currentPathBase = currentPathRef.current
-
-                    if (currentPathBase == `/${path}`) {
-                        console.log("Youre in the same page not pushing");
-                        return
-                    }
-                    router.push(path)
+                    if (currentPathRef.current === `/${path}`) return;
+                    requestAnimationFrame(() => router.push(path));
                 }
-
             }
         };
 
-        // Check if app was opened via a link (Initial Cold Start)
         Linking.getInitialURL().then((initialUrl) => {
-            if (initialUrl) {
-                handleUrl(initialUrl);
-            }
+            if (initialUrl) handleUrl(initialUrl);
         });
 
-        // Listen for new links while app is open (Handles Duplicates perfectly)
         const subscription = Linking.addEventListener('url', (event) => {
             handleUrl(event.url);
         });
 
         return () => subscription.remove();
-    }, [isSyncing, isUpdating, processRouting]);
+    }, [isUpdating, processRouting]);
 
     // --- 5. EAS UPDATES ---
     useEffect(() => {
@@ -401,7 +387,7 @@ function RootLayoutContent() {
                 if (update.isAvailable) {
                     setIsUpdating(true);
                     await Updates.fetchUpdateAsync();
-                    setTimeout(async () => { await Updates.reloadAsync(); }, 1500);
+                    await Updates.reloadAsync();
                 }
             } catch (error) { setIsUpdating(false); }
         }
@@ -413,7 +399,7 @@ function RootLayoutContent() {
         "SpaceGroteskBold": require("../assets/fonts/SpaceGrotesk.ttf"),
     });
 
-    useEffect(() => { refreshStreak(); }, [pathname, refreshStreak]);
+    useEffect(() => { refreshStreak(); }, [pathname]);
 
     // --- 6. SYNC ---
     useEffect(() => {
@@ -422,7 +408,7 @@ function RootLayoutContent() {
             const token = await registerForPushNotificationsAsync();
             if (token && user?.deviceId) {
                 try {
-                    await apiFetch("https://oreblogda.com/api/users/update-push-token", {
+                    apiFetch("https://oreblogda.com/api/users/update-push-token", {
                         method: 'POST',
                         headers: { 'Content-Type': 'application/json' },
                         body: JSON.stringify({ deviceId: user.deviceId, pushToken: token })
@@ -430,59 +416,42 @@ function RootLayoutContent() {
                 } catch (err) { }
             }
             setAppReady(true);
-            setTimeout(() => setIsSyncing(false), 1500);
+            setIsSyncing(false);
         }
         performSync();
     }, [fontsLoaded, user?.deviceId, isUpdating]);
 
     // --- 7. NOTIFICATIONS ---
-    const handleNotificationNavigation = (response) => {
+    const handleNotificationNavigation = useCallback((response) => {
         const notificationId = response?.notification?.request?.identifier;
         if (!notificationId || lastHandledNotificationId.current === notificationId) return;
         lastHandledNotificationId.current = notificationId;
         const data = response?.notification?.request?.content?.data || {};
-        console.log(data);
-
         processRouting(data);
-    };
-
-    const handleNotifeeInteraction = async (detail) => {
-        const { notification, pressAction } = detail;
-        if (pressAction?.id === 'default' && notification?.data) {
-            processRouting(notification.data);
-        }
-    };
+    }, [processRouting]);
 
     useEffect(() => {
-        if (isSyncing || isUpdating) return;
+        if (isUpdating) return;
 
         const unsubscribeNotifee = notifee.onForegroundEvent(({ type, detail }) => {
-            if (type === EventType.PRESS) {
-                handleNotifeeInteraction(detail);
+            if (type === EventType.PRESS && detail.notification?.data) {
+                processRouting(detail.notification.data);
             }
         });
 
         notifee.getInitialNotification().then(initialNotification => {
-            if (initialNotification) {
-                handleNotifeeInteraction(initialNotification);
+            if (initialNotification?.notification?.data) {
+                processRouting(initialNotification.notification.data);
             }
         });
 
-        Notifications.getLastNotificationResponseAsync().then(response => {
-            if (response && !hasHandledRedirect.current) {
-                handleNotificationNavigation(response);
-            }
-        });
-
-        const responseSub = Notifications.addNotificationResponseReceivedListener(response => {
-            handleNotificationNavigation(response);
-        });
+        const responseSub = Notifications.addNotificationResponseReceivedListener(handleNotificationNavigation);
 
         return () => {
             unsubscribeNotifee();
             responseSub.remove();
         };
-    }, [isSyncing, isUpdating]);
+    }, [isUpdating, processRouting, handleNotificationNavigation]);
 
     useEffect(() => { if (appReady || fontError) SplashScreen.hideAsync(); }, [appReady, fontError]);
 
@@ -513,7 +482,8 @@ function RootLayoutContent() {
             <Stack
                 screenOptions={{ headerShown: false, contentStyle: { backgroundColor: isDark ? "#0a0a0a" : "#ffffff" } }}
                 onStateChange={() => {
-                    setTimeout(() => { DeviceEventEmitter.emit("tryShowInterstitial"); }, 500);
+                    // ⚡️ Delay moved to very minimal to not block transition animations
+                    setTimeout(() => { DeviceEventEmitter.emit("tryShowInterstitial"); }, 50);
                 }}
             />
             <Toast />
