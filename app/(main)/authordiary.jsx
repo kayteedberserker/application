@@ -678,7 +678,13 @@ export default function AuthorDiaryDashboard() {
 
             await AsyncStorage.removeItem(`draft_${fingerprint}`);
             Alert.alert("Success", "Your entry has been submitted for approval!");
-
+            const sendStreak = await apiFetch(`/users/streak`, {
+                method: "POST", 
+                body: JSON.stringify({
+                     deviceId: fingerprint, // Mapping your fingerprint variable to deviceId
+                 }),
+            }) 
+                
             // Reset States
             setMediaList([]);
             setTitle("");
