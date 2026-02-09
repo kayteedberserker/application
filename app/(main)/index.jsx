@@ -1,12 +1,10 @@
 import { useColorScheme } from "nativewind";
-import { memo, useEffect, useRef, useState } from 'react';
-import { Animated, DeviceEventEmitter, Dimensions, FlatList, View } from 'react-native';
+import { memo, useCallback, useEffect, useRef, useState } from 'react';
+import { ActivityIndicator, Animated, DeviceEventEmitter, FlatList, View, useWindowDimensions } from 'react-native';
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import PostsViewer from "./../../components/PostViewer";
 import { Text } from "./../../components/Text";
 import CategoryPage from "./categories/[id]";
-
-const { width } = Dimensions.get('window');
 
 const CHANNELS = [
     { id: 'all', title: 'Global', type: 'feed' },
@@ -17,25 +15,31 @@ const CHANNELS = [
     { id: 'gaming', title: 'Gaming', type: 'category' },
 ];
 
-// 🔹 Optimization: Separate Component to prevent parent re-renders
-const Scene = memo(({ item, index, activeIndex }) => {
-    // Only render the component if it's the active one or the immediate neighbor (pre-loading)
-    const shouldRender = Math.abs(index - activeIndex) <= 1;
-
+// 🔹 Optimized Scene with Loading Animation
+const Scene = memo(({ item, pageWidth }) => {
     return (
-        <View style={{ width, flex: 1 }}>
-            {shouldRender ? (
-                item.type === 'feed' ? (
+        <View style={{ width: pageWidth, flex: 1 }}>
+            {/* Using a key based on item.id ensures the component mounts correctly */}
+            <View className="flex-1">
+                {item.type === 'feed' ? (
                     <PostsViewer />
                 ) : (
                     <CategoryPage forcedId={item.id} />
-                )
-            ) : (
-                // Placeholder to keep the list layout stable without heavy logic
-                <View className="flex-1 items-center justify-center">
-                    <View className="w-10 h-10 border-2 border-blue-600/20 rounded-full" />
-                </View>
-            )}
+                )}
+            </View>
+            
+            {/* Fallback Loading Overlay: If the JS thread is busy, 
+                this simple View is more likely to show than the heavy child */}
+            <View 
+                pointerEvents="none" 
+                style={{ position: 'absolute', top: 0, left: 0, right: 0, bottom: 0, zIndex: -1 }}
+                className="items-center justify-center"
+            >
+                <ActivityIndicator size="small" color="#2563eb" />
+                <Text className="text-[10px] text-blue-600/30 font-bold uppercase mt-2 tracking-widest">
+                    Loading Sector...
+                </Text>
+            </View>
         </View>
     );
 });
@@ -45,9 +49,12 @@ export default function HomePage() {
     const { colorScheme } = useColorScheme();
     const isDark = colorScheme === "dark";
     
+    // ⚡️ ROTATION FIX: useWindowDimensions updates automatically on rotate
+    const { width: windowWidth } = useWindowDimensions();
+    
     const flatListRef = useRef(null);
     const scrollX = useRef(new Animated.Value(0)).current;
-    const [activeIndex, setActiveIndex] = useState(0);
+    const [activeTitle, setActiveTitle] = useState(CHANNELS[0].title); 
 
     useEffect(() => {
         const sub = DeviceEventEmitter.addListener("scrollToIndex", (index) => {
@@ -56,12 +63,30 @@ export default function HomePage() {
         return () => sub.remove();
     }, []);
 
-    const renderItem = ({ item, index }) => (
-        <Scene item={item} index={index} activeIndex={activeIndex} />
-    );
+    // ⚡️ PERFORMANCE: Passing windowWidth to Scene ensures it resizes on rotation
+    const renderItem = useCallback(({ item }) => (
+        <Scene item={item} pageWidth={windowWidth} />
+    ), [windowWidth]);
+
+    const viewabilityConfig = useRef({
+        itemVisiblePercentThreshold: 51,
+        minimumViewTime: 0 
+    }).current;
+
+    const onViewableItemsChanged = useRef(({ viewableItems }) => {
+        if (viewableItems.length > 0) {
+            const newItem = viewableItems[0];
+            const newIndex = newItem.index;
+            if (newIndex !== null && newIndex !== undefined) {
+                setActiveTitle(CHANNELS[newIndex].title);
+                DeviceEventEmitter.emit("pageSwiped", newIndex);
+            }
+        }
+    }).current;
 
     return (
         <View className={`flex-1 ${isDark ? "bg-[#050505]" : "bg-white"}`}>
+            {/* Background Glow */}
             <View 
                 pointerEvents="none"
                 className="absolute -top-20 -left-20 w-64 h-64 bg-blue-600/10 rounded-full blur-3xl" 
@@ -75,29 +100,37 @@ export default function HomePage() {
                 horizontal
                 pagingEnabled
                 showsHorizontalScrollIndicator={false}
+                onViewableItemsChanged={onViewableItemsChanged}
+                viewabilityConfig={viewabilityConfig}
+                
                 onScroll={Animated.event(
                     [{ nativeEvent: { contentOffset: { x: scrollX } } }],
                     { useNativeDriver: false }
                 )}
-                onMomentumScrollEnd={(e) => {
-                    const index = Math.round(e.nativeEvent.contentOffset.x / width);
-                    setActiveIndex(index);
-                    DeviceEventEmitter.emit("pageSwiped", index);
-                }}
+
+                // ⚡️ ROTATION FIX: Recalculate layout based on dynamic width
                 getItemLayout={(_, index) => ({
-                    length: width,
-                    offset: width * index,
+                    length: windowWidth,
+                    offset: windowWidth * index,
                     index,
                 })}
-                // 🔹 Performance Settings
+
+                // 🔹 Optimized Rendering Window
+                // windowSize={5} is a bit heavier on memory but helps stop the blank pages 
+                // because it keeps 2 pages ahead and 2 pages behind in memory.
+                windowSize={5} 
+                initialNumToRender={2}
+                maxToRenderPerBatch={2}
                 removeClippedSubviews={true} 
-                initialNumToRender={1}
-                maxToRenderPerBatch={1}
-                windowSize={2} 
                 scrollEventThrottle={16}
                 decelerationRate="fast"
+                
+                // Helps with "stickiness" on swipe
+                snapToInterval={windowWidth}
+                snapToAlignment="start"
             />
 
+            {/* Neural Link Footer */}
             <View 
                 className="absolute left-6 flex-row items-center gap-2"
                 style={{ bottom: insets.bottom + 5, opacity: 0.3 }}
@@ -105,9 +138,9 @@ export default function HomePage() {
             >
                 <View className="h-1 w-1 rounded-full bg-blue-600" />
                 <Text className="text-[8px] font-[900] uppercase tracking-[0.5em] text-blue-600">
-                    Neural_Link // {CHANNELS[activeIndex].title.toUpperCase()}_SECTOR
+                    Neural_Link // {activeTitle.toUpperCase()}_SECTOR
                 </Text>
             </View>
         </View>
-    );
+    ); 
 }

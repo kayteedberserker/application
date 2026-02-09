@@ -1,61 +1,82 @@
-import { usePathname, useRouter } from "expo-router"; // Added these
-import { useEffect, useState } from "react";
+import { usePathname, useRouter } from "expo-router";
+import { useCallback, useEffect, useRef, useState } from "react";
 import { BackHandler, DeviceEventEmitter, FlatList, TouchableOpacity, View } from "react-native";
 import { Text } from "./Text";
 
-// Categories match the IDs in HomePage CHANNELS (excluding 'all')
 const categories = ["News", "Memes", "Polls", "Review", "Gaming"];
+
+// Pre-calculate item width for smoother scrolling (Estimate: Padding 16 + Text ~50 + Margin 8)
+const ESTIMATED_ITEM_WIDTH = 80; 
 
 export default function CategoryNav({ isDark }) {
     const [activeIndex, setActiveIndex] = useState(0);
+    const activeIndexRef = useRef(0); // ⚡️ Mutable ref for instant access without re-renders
+    
     const pathname = usePathname();
     const router = useRouter();
+    const navListRef = useRef(null);
 
     useEffect(() => {
         // 🔹 1. Listen for swipes from HomePage
         const sub = DeviceEventEmitter.addListener("pageSwiped", (index) => {
-            setActiveIndex(index);
+            // Only update if changed to prevent thrashing
+            if (activeIndexRef.current !== index) {
+                activeIndexRef.current = index;
+                setActiveIndex(index);
+                
+                // 🔹 Immediate Scroll Calculation
+                if (index > 0 && navListRef.current) {
+                    navListRef.current.scrollToIndex({ 
+                        index: index - 1, 
+                        animated: true, 
+                        viewPosition: 0.5 
+                    });
+                } else if (index === 0 && navListRef.current) {
+                     navListRef.current.scrollToOffset({ offset: 0, animated: true });
+                }
+            }
         });
 
         // 🔹 2. Handle Hardware Back Button
         const backAction = () => {
-            if (activeIndex !== 0) {
+            if (activeIndexRef.current !== 0) {
                 setActiveIndex(0);
+                activeIndexRef.current = 0;
                 DeviceEventEmitter.emit("scrollToIndex", 0);
                 return true; 
             }
             return false;
         };
 
-        const backHandler = BackHandler.addEventListener(
-            "hardwareBackPress",
-            backAction
-        );
+        const backHandler = BackHandler.addEventListener("hardwareBackPress", backAction);
 
         return () => {
             sub.remove();
             backHandler.remove();
         };
-    }, [activeIndex]);
+    }, []);
 
-    const handleCategoryPress = (actualSwiperIndex) => {
+    const handleCategoryPress = useCallback((actualSwiperIndex) => {
         setActiveIndex(actualSwiperIndex);
+        activeIndexRef.current = actualSwiperIndex;
 
-        // Check if we are actually on the home screen
         if (pathname === "/") {
-            // We are already home, just scroll
             DeviceEventEmitter.emit("scrollToIndex", actualSwiperIndex);
         } else {
-            // We are on Profile/Diary/etc. 
-            // 1. Navigate home first
             router.replace("/");
-            
-            // 2. Wait for the HomePage to mount, then scroll
+            // Reduced timeout for snappier feel
             setTimeout(() => {
                 DeviceEventEmitter.emit("scrollToIndex", actualSwiperIndex);
-            }, 100); 
+            }, 50); 
         }
-    };
+    }, [pathname]);
+
+    // ⚡️ Optimization: Define getItemLayout to avoid dynamic measurement lag
+    const getItemLayout = (data, index) => ({
+        length: ESTIMATED_ITEM_WIDTH,
+        offset: ESTIMATED_ITEM_WIDTH * index,
+        index,
+    });
 
     return (
         <View 
@@ -67,10 +88,16 @@ export default function CategoryNav({ isDark }) {
             }}
         >
             <FlatList
+                ref={navListRef}
                 horizontal
                 data={categories}
                 keyExtractor={(item) => item}
                 showsHorizontalScrollIndicator={false}
+                // ⚡️ Added getItemLayout for performance
+                // getItemLayout={getItemLayout} 
+                // Note: If your tab widths vary significantly, remove getItemLayout. 
+                // But for similar sized text tabs, it helps massively.
+                
                 contentContainerStyle={{ 
                     paddingHorizontal: 15, 
                     alignItems: 'center',

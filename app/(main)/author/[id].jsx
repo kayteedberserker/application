@@ -14,7 +14,7 @@ import {
   TouchableOpacity,
   View
 } from "react-native";
-import { useSafeAreaInsets } from "react-native-safe-area-context"; // 🔹 Added for bottom navbar padding
+import { useSafeAreaInsets } from "react-native-safe-area-context";
 import AnimeLoading from "../../../components/AnimeLoading";
 import { NativeAdPostStyle } from "../../../components/NativeAd";
 import PostCard from "../../../components/PostCard";
@@ -25,7 +25,10 @@ import apiFetch from "../../../utils/apiFetch";
 const API_BASE = "https://oreblogda.com/api"
 const { width } = Dimensions.get('window');
 
-// 🔹 AURA TIER LOGIC (Fully Synced)
+// 🧠 Tier 1: Memory Cache (Persistent while app is open)
+const AUTHOR_MEMORY_CACHE = {};
+const AUTHOR_POSTS_MEMORY_CACHE = {};
+
 const getAuraTier = (rank) => {
   const MONARCH_GOLD = '#fbbf24';
   const CRIMSON_RED = '#ef4444';
@@ -55,16 +58,22 @@ const getAuraTier = (rank) => {
 export default function AuthorPage() {
   const { id } = useLocalSearchParams()
   const router = useRouter();
-  const insets = useSafeAreaInsets(); // 🔹 Hook to detect navbar height
-  const [author, setAuthor] = useState(null)
-  const [posts, setPosts] = useState([]);
+  const insets = useSafeAreaInsets();
+  
+  const CACHE_KEY_AUTHOR = `author_data_${id}`;
+  const CACHE_KEY_POSTS = `author_posts_${id}`;
+
+  // 🔹 Init state from Memory Cache if available for instant UI
+  const [author, setAuthor] = useState(AUTHOR_MEMORY_CACHE[CACHE_KEY_AUTHOR] || null)
+  const [posts, setPosts] = useState(AUTHOR_POSTS_MEMORY_CACHE[CACHE_KEY_POSTS] || []);
+  
   const [totalPosts, setTotalPosts] = useState(0);
   const [page, setPage] = useState(1);
   const [hasMore, setHasMore] = useState(true);
   const [loading, setLoading] = useState(false);
   const [refreshing, setRefreshing] = useState(false);
   const [isOffline, setIsOffline] = useState(false);
-  const [isInitialMount, setIsInitialMount] = useState(true); // 🔹 To force loading animation on start
+  const [isInitialMount, setIsInitialMount] = useState(true); 
   const { colorScheme } = useColorScheme()
   const isDark = colorScheme === "dark";
 
@@ -72,9 +81,6 @@ export default function AuthorPage() {
   const pulseAnim = useRef(new Animated.Value(1)).current;
   const rotationAnim = useRef(new Animated.Value(0)).current;
   const skeletonFade = useRef(new Animated.Value(0.3)).current;
-
-  const CACHE_KEY_AUTHOR = `author_data_${id}`;
-  const CACHE_KEY_POSTS = `author_posts_${id}`;
 
   useEffect(() => {
     Animated.loop(
@@ -113,15 +119,17 @@ export default function AuthorPage() {
     return () => sub.remove();
   }, []);
 
-  const loadCache = async () => {
+  // 🛡️ UPDATED: Generic save for Janitor compatibility
+  const saveHeavyCache = async (key, data) => {
     try {
-      const [cAuth, cPosts] = await Promise.all([
-        AsyncStorage.getItem(CACHE_KEY_AUTHOR),
-        AsyncStorage.getItem(CACHE_KEY_POSTS)
-      ]);
-      if (cAuth) setAuthor(JSON.parse(cAuth));
-      if (cPosts) setPosts(JSON.parse(cPosts));
-    } catch (e) { console.log("Cache load error", e); }
+      const cacheEntry = {
+        data: data,
+        timestamp: Date.now(), 
+      };
+      await AsyncStorage.setItem(key, JSON.stringify(cacheEntry));
+    } catch (e) {
+      console.error("Cache Save Error", e);
+    }
   };
 
   const fetchInitialData = async () => {
@@ -138,20 +146,24 @@ export default function AuthorPage() {
 
       if (userRes.ok) {
         setAuthor(userData.user);
-        AsyncStorage.setItem(CACHE_KEY_AUTHOR, JSON.stringify(userData.user));
+        // Save to Memory & Storage
+        AUTHOR_MEMORY_CACHE[CACHE_KEY_AUTHOR] = userData.user;
+        saveHeavyCache(CACHE_KEY_AUTHOR, userData.user);
       }
       if (postRes.ok) {
         setPosts(postData.posts);
         setTotalPosts(postData.total || postData.posts.length);
         setHasMore(postData.posts.length >= 6);
-        AsyncStorage.setItem(CACHE_KEY_POSTS, JSON.stringify(postData.posts));
+        
+        // Save to Memory & Storage
+        AUTHOR_POSTS_MEMORY_CACHE[CACHE_KEY_POSTS] = postData.posts;
+        saveHeavyCache(CACHE_KEY_POSTS, postData.posts);
       }
     } catch (error) {
       console.error("Fetch error:", error);
       setIsOffline(true);
     } finally {
       setLoading(false);
-      // Give the loading animation a tiny bit of breathing room to ensure it shows
       setTimeout(() => setIsInitialMount(false), 800);
     }
   };
@@ -164,7 +176,11 @@ export default function AuthorPage() {
       const res = await apiFetch(`${API_BASE}/posts?author=${id}&page=${nextPage}&limit=10`);
       const data = await res.json();
       if (res.ok && data.posts.length > 0) {
-        setPosts((prev) => [...prev, ...data.posts]);
+        setPosts((prev) => {
+            const updated = [...prev, ...data.posts];
+            AUTHOR_POSTS_MEMORY_CACHE[CACHE_KEY_POSTS] = updated; // Update memory on pagination
+            return updated;
+        });
         setTotalPosts(data.total);
         setPage(nextPage);
         setHasMore(data.posts.length >= 6);
@@ -178,8 +194,45 @@ export default function AuthorPage() {
     }
   };
 
+  // ⚡ HYBRID LOGIC: Memory -> Storage -> API Revalidate
   useEffect(() => {
-    loadCache().then(() => fetchInitialData());
+    const init = async () => {
+      // 1. Check Memory first
+      if (AUTHOR_MEMORY_CACHE[CACHE_KEY_AUTHOR]) {
+        setIsInitialMount(false); // Memory exists, skip full screen loading
+        fetchInitialData(); // Revalidate background
+        return;
+      }
+
+      // 2. Check AsyncStorage
+      try {
+        const [cAuth, cPosts] = await Promise.all([
+          AsyncStorage.getItem(CACHE_KEY_AUTHOR),
+          AsyncStorage.getItem(CACHE_KEY_POSTS)
+        ]);
+
+        if (cAuth) {
+          const parsed = JSON.parse(cAuth);
+          const authorData = parsed?.data || parsed;
+          setAuthor(authorData);
+          AUTHOR_MEMORY_CACHE[CACHE_KEY_AUTHOR] = authorData;
+        }
+
+        if (cPosts) {
+          const parsed = JSON.parse(cPosts);
+          const postData = parsed?.data || parsed;
+          setPosts(postData);
+          AUTHOR_POSTS_MEMORY_CACHE[CACHE_KEY_POSTS] = postData;
+          setIsInitialMount(false); // We have content, don't show AnimeLoading
+        }
+
+        // 3. Revalidate from API regardless
+        fetchInitialData();
+      } catch (e) { 
+        fetchInitialData(); 
+      }
+    };
+    init();
   }, [id]);
 
   const AuthorSkeleton = () => (
@@ -377,7 +430,6 @@ export default function AuthorPage() {
     );
   };
 
-  // 🔹 Offline / No Author UI Overlay (Updated to ScrollView)
   if (!author && isOffline) {
     return (
       <ScrollView
@@ -406,7 +458,6 @@ export default function AuthorPage() {
     );
   }
 
-  // 🔹 Updated condition: Show loading animation until InitialMount is finished
   if (isInitialMount && posts.length === 0 && !author) {
     return <AnimeLoading message="Loading Author" subMessage="Decoding biological data..." />;
   }
@@ -435,7 +486,6 @@ export default function AuthorPage() {
       refreshing={refreshing}
       onScroll={(e) => { DeviceEventEmitter.emit("onScroll", e.nativeEvent.contentOffset.y); }}
       scrollEventThrottle={16}
-      // 🔹 Respect Safe Area Bottom Inset
       contentContainerStyle={{ paddingBottom: insets.bottom + 100 }}
       className="bg-white dark:bg-[#0a0a0a]"
     />

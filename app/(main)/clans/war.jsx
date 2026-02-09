@@ -1,5 +1,5 @@
 import { Ionicons, MaterialCommunityIcons } from '@expo/vector-icons';
-import AsyncStorage from '@react-native-async-storage/async-storage'; // Added for caching
+import AsyncStorage from '@react-native-async-storage/async-storage';
 import { useColorScheme as useNativeWind } from "nativewind";
 import { useEffect, useState } from 'react';
 import {
@@ -30,7 +30,10 @@ import apiFetch from '../../../utils/apiFetch';
 
 const { width } = Dimensions.get('window');
 
-// Updated to include ALL and fixed the singular selection logic
+// 🧠 Tier 1: Memory Cache (Persists while app is open, even when navigating away)
+let WARS_MEMORY_CACHE = {}; 
+let PROFILE_MEMORY_CACHE = {};
+
 const WAR_METRICS = [
     { id: 'POINTS', label: 'Points', icon: 'star-circle' },
     { id: 'LIKES', label: 'Likes', icon: 'heart' },
@@ -50,12 +53,16 @@ const ClanWarPage = () => {
     const isDark = colorScheme === "dark";
 
     const [activeTab, setActiveTab] = useState('ACTIVE');
-    const [loading, setLoading] = useState(true);
-    const [refreshing, setRefreshing] = useState(false);
-    const [clanPoints, setClanPoints] = useState(0);
-    const [wars, setWars] = useState([]);
+    
+    // Initialize state from Memory Cache if available
+    const cacheKeyWars = userClan?.tag ? `WARS_${userClan.tag}_${activeTab}` : null;
+    const cacheKeyProfile = userClan?.tag ? `CLAN_PROFILE_${userClan.tag}` : null;
 
-    // Offline State
+    const [wars, setWars] = useState(cacheKeyWars ? (WARS_MEMORY_CACHE[cacheKeyWars] || []) : []);
+    const [clanPoints, setClanPoints] = useState(cacheKeyProfile ? (PROFILE_MEMORY_CACHE[cacheKeyProfile] || 0) : 0);
+    
+    const [loading, setLoading] = useState(!wars.length); // Only full-screen load if memory is empty
+    const [refreshing, setRefreshing] = useState(false);
     const [isOffline, setIsOffline] = useState(false);
 
     const [pendingCount, setPendingCount] = useState(0);
@@ -72,21 +79,39 @@ const ClanWarPage = () => {
     const [stake, setStake] = useState('');
     const [duration, setDuration] = useState(3);
     const [winCondition, setWinCondition] = useState('FULL');
-
-    // Changed from array to string. Default is POINTS.
     const [selectedMetric, setSelectedMetric] = useState('POINTS');
 
-    useEffect(() => {
-        fetchInitialData();
-    }, [activeTab]);
+    // 🛡️ Tier 2 Save: To Disk
+    const saveHeavyCache = async (key, data) => {
+        try {
+            await AsyncStorage.setItem(key, JSON.stringify(data));
+        } catch (e) {
+            console.error("Disk Cache Error", e);
+        }
+    };
 
-    const fetchInitialData = async () => {
-        // Only show full screen loading if we don't have cached data to show immediately
-        // We attempt to load cache first
-        const hasCache = await loadFromCache();
-
-        if (!hasCache) {
-            setLoading(true);
+    const fetchInitialData = async (isBackground = false) => {
+        if (!isBackground && wars.length === 0) setLoading(true);
+        
+        // ⚡ Tiered Init: Attempt Disk load if Memory was empty
+        if (userClan?.tag && wars.length === 0) {
+            try {
+                const [cachedWars, cachedPoints] = await Promise.all([
+                    AsyncStorage.getItem(cacheKeyWars),
+                    AsyncStorage.getItem(cacheKeyProfile)
+                ]);
+                
+                if (cachedWars) {
+                    const parsed = JSON.parse(cachedWars);
+                    setWars(parsed);
+                    WARS_MEMORY_CACHE[cacheKeyWars] = parsed;
+                }
+                if (cachedPoints) {
+                    const parsed = JSON.parse(cachedPoints);
+                    setClanPoints(parsed);
+                    PROFILE_MEMORY_CACHE[cacheKeyProfile] = parsed;
+                }
+            } catch (e) { console.error("Init Cache Load Error", e); }
         }
 
         await Promise.all([
@@ -96,37 +121,12 @@ const ClanWarPage = () => {
         ]);
 
         setLoading(false);
+        setRefreshing(false);
     };
 
-    // New function to load data from storage immediately
-    const loadFromCache = async () => {
-        if (!userClan?.tag) return false;
-        try {
-            const cacheKeyWars = `WARS_${userClan.tag}_${activeTab}`;
-            const cacheKeyProfile = `CLAN_PROFILE_${userClan.tag}`;
-
-            const [cachedWars, cachedProfile] = await Promise.all([
-                AsyncStorage.getItem(cacheKeyWars),
-                AsyncStorage.getItem(cacheKeyProfile)
-            ]);
-
-            let hasData = false;
-
-            if (cachedWars) {
-                setWars(JSON.parse(cachedWars));
-                hasData = true;
-            }
-
-            if (cachedProfile) {
-                setClanPoints(JSON.parse(cachedProfile));
-            }
-
-            return hasData;
-        } catch (e) {
-            console.error("Cache load error", e);
-            return false;
-        }
-    };
+    useEffect(() => {
+        fetchInitialData(wars.length > 0);
+    }, [activeTab, userClan?.tag]);
 
     const updateIndicators = async () => {
         if (!userClan?.tag) return;
@@ -147,8 +147,9 @@ const ClanWarPage = () => {
     }
 
     const fetchWars = async (pageNum = 1) => {
+        if (!userClan?.tag) return;
         try {
-            const url = `/clans/wars?status=${activeTab}&tag=${userClan?.tag || ''}&page=${pageNum}&limit=10`;
+            const url = `/clans/wars?status=${activeTab}&tag=${userClan.tag}&page=${pageNum}&limit=10`;
             const res = await apiFetch(url);
 
             if (res.ok) {
@@ -158,14 +159,14 @@ const ClanWarPage = () => {
                 setWars(newWars);
                 setTotalPages(data.totalPages);
                 setPage(pageNum);
-                setIsOffline(false); // Network success
+                setIsOffline(false);
 
-                // Cache the first page of results
-                if (pageNum === 1 && userClan?.tag) {
-                    await AsyncStorage.setItem(`WARS_${userClan.tag}_${activeTab}`, JSON.stringify(data.wars));
+                // 💾 Update Memory (Tier 1) & Disk (Tier 2)
+                if (pageNum === 1) {
+                    WARS_MEMORY_CACHE[cacheKeyWars] = data.wars;
+                    saveHeavyCache(cacheKeyWars, data.wars);
                 }
             } else {
-                // If API fails, we rely on whatever was in cache (loaded in fetchInitialData)
                 setIsOffline(true);
             }
         } catch (e) {
@@ -182,15 +183,16 @@ const ClanWarPage = () => {
                 const data = await res.json();
                 const points = data.totalPoints || 0;
                 setClanPoints(points);
-
-                // Cache profile points
-                await AsyncStorage.setItem(`CLAN_PROFILE_${userClan.tag}`, JSON.stringify(points));
+                
+                // 💾 Update Memory & Disk
+                PROFILE_MEMORY_CACHE[cacheKeyProfile] = points;
+                saveHeavyCache(cacheKeyProfile, points);
             }
         } catch (e) { console.error(e); }
     };
 
     const handleLoadMore = () => {
-        if (page < totalPages && !isOffline) { // Don't load more if offline
+        if (page < totalPages && !isOffline) {
             fetchWars(page + 1);
         }
     };
@@ -201,7 +203,6 @@ const ClanWarPage = () => {
         setStake(war.prizePool?.toString() || '0');
         setDuration(war.durationDays || 3);
         setWinCondition(war.winCondition || 'FULL');
-        // Schema is string, so we pick the string value
         setSelectedMetric(war.warType || 'POINTS');
         setIsNegotiatingMode(true);
         setShowCreateModal(true);
@@ -219,7 +220,7 @@ const ClanWarPage = () => {
             if (response.ok) {
                 Alert.alert("Success", "War is now ACTIVE!");
                 setActiveTab('ACTIVE');
-                fetchInitialData();
+                fetchInitialData(true);
             } else {
                 const err = await response.json();
                 Alert.alert("Failed", err.message || "Could not accept war");
@@ -250,7 +251,7 @@ const ClanWarPage = () => {
 
                             if (response.ok) {
                                 Alert.alert("Declined", "Challenge has been dismissed.");
-                                fetchInitialData();
+                                fetchInitialData(true);
                             } else {
                                 const err = await response.json();
                                 Alert.alert("Error", err.message || "Could not decline war");
@@ -281,13 +282,13 @@ const ClanWarPage = () => {
                 method: 'POST',
                 body: JSON.stringify({
                     warId: editingWarId,
-                    senderTag: userClan.tag, // Matches the backend's expected logic
+                    senderTag: userClan.tag,
                     challengerTag: userClan.tag,
                     targetTag,
                     stake: parseInt(stake),
                     duration,
                     winCondition,
-                    metrics: selectedMetric, // Sending as a single string
+                    metrics: selectedMetric,
                 })
             });
 
@@ -297,7 +298,7 @@ const ClanWarPage = () => {
                 setStake('');
                 setIsNegotiatingMode(false);
                 Alert.alert("Success", isNegotiatingMode ? "Counter-offer sent!" : "Challenge Sent!");
-                fetchInitialData();
+                fetchInitialData(true);
             } else {
                 const err = await response.json();
                 Alert.alert("Error", err.message || "Action failed");
@@ -351,8 +352,6 @@ const ClanWarPage = () => {
         const isNegotiation = item.status === 'NEGOTIATING';
         const amIChallenger = item.challengerTag === userClan.tag;
         const opponent = amIChallenger ? item.defenderTag : item.challengerTag;
-
-        // Block button if I am the one who last updated it
         const isWaitingForOpponent = item.lastUpdatedByCustomTag === userClan?.tag;
 
         return (
@@ -369,7 +368,6 @@ const ClanWarPage = () => {
                             </Text>
                         </View>
                     </View>
-
                     <View className="bg-slate-100 dark:bg-slate-950 px-3 py-1 rounded-full border border-slate-200 dark:border-slate-800">
                         <Text className="text-slate-900 dark:text-white font-black text-[12px]">{item.prizePool?.toLocaleString()} PTS</Text>
                     </View>
@@ -401,7 +399,6 @@ const ClanWarPage = () => {
                             <Ionicons name="trash-outline" size={20} color="#ef4444" />
                         </TouchableOpacity>
                     )}
-
                     <TouchableOpacity
                         onPress={() => handleOpenNegotiation(item)}
                         className="flex-1 bg-slate-100 dark:bg-slate-800 h-12 items-center justify-center rounded-2xl border-b-4 border-slate-300 dark:border-slate-950 active:border-b-0"
@@ -410,7 +407,6 @@ const ClanWarPage = () => {
                             {isWaitingForOpponent ? 'Update Offer' : 'Negotiate'}
                         </Text>
                     </TouchableOpacity>
-
                     {!isWaitingForOpponent && (
                         <TouchableOpacity
                             onPress={() => handleAcceptWar(item.warId)}
@@ -488,7 +484,6 @@ const ClanWarPage = () => {
                 </TouchableOpacity>
             </View>
 
-            {/* Offline Mode Indicator */}
             {isOffline && (
                 <View className="mx-6 mb-2 bg-red-100 dark:bg-red-900/30 border border-red-300 dark:border-red-500/30 p-2 rounded-xl items-center flex-row justify-center gap-2">
                     <MaterialCommunityIcons name="wifi-off" size={14} color={isDark ? "#fca5a5" : "#ef4444"} />
@@ -511,7 +506,6 @@ const ClanWarPage = () => {
                         <Text className={`ml-2 font-black uppercase text-[10px] ${activeTab === tab.id ? 'text-slate-900 dark:text-white' : 'text-slate-400 dark:text-slate-500'}`}>
                             {tab.label}
                         </Text>
-
                         {tab.id === 'PENDING' && <TabIndicator count={pendingCount} color="bg-amber-500" />}
                         {tab.id === 'NEGOTIATING' && <TabIndicator count={negotiationCount} color="bg-blue-500" />}
                     </TouchableOpacity>
@@ -526,6 +520,8 @@ const ClanWarPage = () => {
                         ? <WarCard item={item} />
                         : <PendingRequestCard item={item} />
                 )}
+                onRefresh={() => fetchInitialData(true)}
+                refreshing={refreshing}
                 onEndReached={handleLoadMore}
                 onEndReachedThreshold={0.5}
                 contentContainerStyle={{ paddingBottom: 100 }}

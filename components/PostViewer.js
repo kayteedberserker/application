@@ -1,5 +1,5 @@
 import { MaterialCommunityIcons } from '@expo/vector-icons';
-import AsyncStorage from "@react-native-async-storage/async-storage"; // 👈 Added for caching
+import AsyncStorage from "@react-native-async-storage/async-storage";
 import { useColorScheme } from "nativewind";
 import { useEffect, useMemo, useRef, useState } from "react";
 import {
@@ -19,14 +19,28 @@ import { NativeAdPostStyle } from "./NativeAd";
 import PostCard from "./PostCard";
 import { SyncLoading } from "./SyncLoading";
 import { Text } from "./Text";
+
 const fetcher = (url) => apiFetch(url).then(res => res.json());
 
 const { width, height } = Dimensions.get('window');
 const LIMIT = 15;
-// const API_URL = "https://oreblogda.com/api/posts";
-const CACHE_KEY = "POSTS_CACHE_V1"; // 👈 Unique key for storage
+const CACHE_KEY = "POSTS_CACHE_V1";
 
-// Standard fetcher
+// 🧠 Tier 1: Memory Cache (Immediate UI restore across tab navigations)
+let POSTS_MEMORY_CACHE = null;
+
+const saveHeavyCache = async (key, data) => {
+    try {
+        const cacheEntry = {
+            data: data,
+            timestamp: Date.now(),
+        };
+        await AsyncStorage.setItem(key, JSON.stringify(cacheEntry));
+    } catch (e) {
+        console.error("Cache Save Error", e);
+    }
+};
+
 export default function PostsViewer() {
     const scrollRef = useRef(null);
     const insets = useSafeAreaInsets();
@@ -34,19 +48,24 @@ export default function PostsViewer() {
     const isDark = colorScheme === "dark";
 
     const [ready, setReady] = useState(false);
-    const [cachedData, setCachedData] = useState(null); // 👈 State for old data
-    const [isOfflineMode, setIsOfflineMode] = useState(false); // 👈 State for UI toggle
+    // Initialize from Memory Cache if it exists
+    const [cachedData, setCachedData] = useState(POSTS_MEMORY_CACHE); 
+    const [isOfflineMode, setIsOfflineMode] = useState(false);
 
     const pulseAnim = useRef(new Animated.Value(0)).current;
 
-    // 1. Initial Setup: Load Cache & Animation
+    // 1. Initial Setup: Load Tier 2 (Disk) Cache if Tier 1 is empty
     useEffect(() => {
         const prepare = async () => {
             try {
-                // Try to load saved data immediately
-                const local = await AsyncStorage.getItem(CACHE_KEY);
-                if (local) {
-                    setCachedData(JSON.parse(local));
+                if (!POSTS_MEMORY_CACHE) {
+                    const local = await AsyncStorage.getItem(CACHE_KEY);
+                    if (local) {
+                        const parsed = JSON.parse(local);
+                        // The saved cache is an object with {data: [...], timestamp: ...}
+                        setCachedData(parsed.data);
+                        POSTS_MEMORY_CACHE = parsed.data;
+                    }
                 }
             } catch (e) {
                 console.error("Cache load error", e);
@@ -86,27 +105,27 @@ export default function PostsViewer() {
         return `/posts?page=${pageIndex + 1}&limit=${LIMIT}`;
     };
 
-    // 2. SWR Implementation with Fallback & Error Handling
+    // 2. SWR Implementation with Fallback & Memory Sync
     const { data, size, setSize, isLoading, isValidating, mutate } = useSWRInfinite(getKey, fetcher, {
-        refreshInterval: isOfflineMode ? 0 : 15000, // Stop polling if offline
+        refreshInterval: isOfflineMode ? 0 : 15000,
         revalidateOnFocus: false,
         dedupingInterval: 5000,
-        fallbackData: cachedData, // 👈 Use cached data while loading
+        fallbackData: cachedData, 
         onSuccess: (newData) => {
-            setIsOfflineMode(false); // Connection is good!
-            AsyncStorage.setItem(CACHE_KEY, JSON.stringify(newData)); // Save fresh data
+            setIsOfflineMode(false);
+            POSTS_MEMORY_CACHE = newData; // Update Tier 1
+            saveHeavyCache(CACHE_KEY, newData); // Update Tier 2
         },
         onError: (err) => {
             console.log("Fetch failed, assuming offline mode");
-            setIsOfflineMode(true); // Connection failed, show cached UI
+            setIsOfflineMode(true);
         }
     });
 
     // OPTIMIZATION: Memoize the posts array
-    // We prioritize 'data' (live), but fallback to 'cachedData' if data is empty/null
     const posts = useMemo(() => {
         const sourceData = data || cachedData;
-        if (!sourceData) return [];
+        if (!sourceData || !Array.isArray(sourceData)) return [];
 
         const postMap = new Map();
         sourceData.forEach(page => {
@@ -130,7 +149,8 @@ export default function PostsViewer() {
         if (!hasMore || isValidating || !ready || isLoading || isOfflineMode) return;
         setSize(size + 1);
     };
-    if (!ready) {
+
+    if (!ready && !posts.length) {
         return <AnimeLoading message="Loading posts" subMessage="Prepping Otaku content" />
     }
 
@@ -147,12 +167,9 @@ export default function PostsViewer() {
         );
     };
 
-
-
     const ListHeader = () => (
         <View className="mb-10 pb-2">
             <View className="flex-row items-center gap-3 mb-1">
-                {/* Status Dot changes color based on Offline Mode */}
                 <View className={`h-2 w-2 rounded-full ${isOfflineMode ? 'bg-orange-500' : 'bg-blue-600'}`} />
                 <Text className={`text-[10px] font-[900] uppercase tracking-[0.4em] ${isOfflineMode ? 'text-orange-500' : 'text-blue-600'}`}>
                     {isOfflineMode ? "Archived Intel // Offline" : "Live Feed Active"}
@@ -194,13 +211,13 @@ export default function PostsViewer() {
                 renderItem={renderItem}
                 onEndReached={loadMore}
                 onEndReachedThreshold={0.5}
-
+                onRefresh={() => mutate()}
+                refreshing={isValidating && posts.length > 0}
                 removeClippedSubviews={true}
                 initialNumToRender={5}
                 maxToRenderPerBatch={5}
                 windowSize={5}
                 updateCellsBatchingPeriod={50}
-
                 onScroll={(e) => {
                     const offsetY = e.nativeEvent.contentOffset.y;
                     DeviceEventEmitter.emit("onScroll", offsetY);
@@ -208,7 +225,7 @@ export default function PostsViewer() {
                 scrollEventThrottle={32}
                 ListFooterComponent={
                     <View className="py-12 items-center justify-center min-h-[140px]">
-                        {isLoading || isValidating ? (
+                        {(isLoading || isValidating) ? (
                             <SyncLoading />
                         ) : !hasMore && posts.length > 0 ? (
                             <Text className="text-[10px] font-[900] uppercase tracking-[0.5em] text-gray-400">

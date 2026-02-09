@@ -14,6 +14,7 @@ import Toast from 'react-native-toast-message';
 // 🔹 NOTIFEE IMPORT
 import notifee, { AndroidGroupAlertBehavior, AndroidImportance, EventType } from '@notifee/react-native';
 
+import AsyncStorage from '@react-native-async-storage/async-storage';
 import AnimeLoading from "../components/AnimeLoading";
 import { loadAppOpenAd, showAppOpenAd } from "../components/appOpenAd";
 import { ClanProvider } from "../context/ClanContext";
@@ -165,6 +166,66 @@ function RootLayoutContent() {
     const hasHandledRedirect = useRef(false);
     const hasShownWelcomeAd = useRef(false);
 
+
+    useEffect(() => {
+    const runCacheJanitor = async () => {
+        try {
+            const allKeys = await AsyncStorage.getAllKeys();
+
+            // 🎯 TARGET LIST: Categories of cache we manage
+            const targetPrefixes = [
+                "POSTS_CACHE_",
+                "CATEGORY_CACHE_",
+                "clan_posts_",
+                "WARS_",
+                "CLAN_PROFILE_",
+                "auth_cache_" 
+            ];
+
+            const expiredTime = 48 * 60 * 60 * 1000; // 48 Hours
+            const now = Date.now();
+
+            const keysToReview = allKeys.filter(key =>
+                targetPrefixes.some(prefix => key.startsWith(prefix))
+            );
+
+            // Process in batches or chunks if you have hundreds of keys
+            for (const key of keysToReview) {
+                const value = await AsyncStorage.getItem(key);
+                if (!value) continue;
+
+                try {
+                    const parsed = JSON.parse(value);
+
+                    // 🛠️ LOGIC CHECK:
+                    // 1. If it has a timestamp, check if it's actually expired.
+                    if (parsed && typeof parsed === 'object' && parsed.timestamp) {
+                        if (now - parsed.timestamp > expiredTime) {
+                            await AsyncStorage.removeItem(key);
+                            console.log(`🧹 Janitor: Cleared expired cache: ${key}`);
+                        }
+                    } 
+                    // 2. If it's a "Legacy" or "Raw" cache (no timestamp, like raw points or war arrays)
+                    // We only delete these if they are very old or corrupted. 
+                    // For now, let's let raw caches live unless they fail to parse.
+                    
+                } catch (e) {
+                    // If JSON.parse fails, the data is corrupted. Wipe it.
+                    await AsyncStorage.removeItem(key);
+                    console.log(`🧹 Janitor: Cleared corrupted cache: ${key}`);
+                }
+            }
+        } catch (err) {
+            console.error("Janitor failed to clean storage:", err);
+        }
+    };
+
+    // Run the janitor shortly after mount so it doesn't compete with the initial UI render
+    const timeout = setTimeout(runCacheJanitor, 5000); 
+    return () => clearTimeout(timeout);
+}, []);
+
+
     const currentPathRef = useRef(pathname);
     useEffect(() => {
         currentPathRef.current = pathname;
@@ -183,7 +244,7 @@ function RootLayoutContent() {
             targetPath = "/authordiary";
         } else if (targetPostId) {
             targetPath = `/post/${targetPostId}`;
-        } else if(targetType === "version_update") {
+        } else if (targetType === "version_update") {
             targetPath = "/";
         }
 
@@ -260,7 +321,7 @@ function RootLayoutContent() {
                     maxAdContentRating: MaxAdContentRating.G,
                     tagForChildDirectedTreatment: false,
                 });
-                
+
                 // This initializes AdMob AND all included mediation adapters
                 const adapterStatuses = await mobileAds().initialize();
                 // console.log("AdMob Adapters Initialized:", adapterStatuses);
@@ -305,7 +366,7 @@ function RootLayoutContent() {
                     });
                 } else {
                     const currentPathBase = currentPathRef.current
-                    
+
                     if (currentPathBase == `/${path}`) {
                         console.log("Youre in the same page not pushing");
                         return
@@ -381,7 +442,7 @@ function RootLayoutContent() {
         lastHandledNotificationId.current = notificationId;
         const data = response?.notification?.request?.content?.data || {};
         console.log(data);
-        
+
         processRouting(data);
     };
 

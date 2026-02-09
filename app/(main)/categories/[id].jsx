@@ -16,9 +16,12 @@ import PostCard from "../../../components/PostCard";
 import { SyncLoading } from "../../../components/SyncLoading";
 import { Text } from "../../../components/Text";
 import apiFetch from "../../../utils/apiFetch";
-const { width } = Dimensions.get('window');
 
+const { width } = Dimensions.get('window');
 const LIMIT = 10;
+
+// 🧠 Tier 1: Memory Cache (Lives outside the component)
+const CATEGORY_MEMORY_CACHE = {};
 
 export default function CategoryPage({ forcedId }) {
     const id = forcedId;
@@ -36,7 +39,8 @@ export default function CategoryPage({ forcedId }) {
 
     const CACHE_KEY = `CATEGORY_CACHE_${categoryName.toUpperCase().replace(/[^A-Z0-9]/g, '_')}`;
 
-    const [posts, setPosts] = useState([]);
+    // Initialize state with Memory Cache if it exists for instant load
+    const [posts, setPosts] = useState(CATEGORY_MEMORY_CACHE[CACHE_KEY] || []);
     const [page, setPage] = useState(1);
     const [loading, setLoading] = useState(false);
     const [refreshing, setRefreshing] = useState(false);
@@ -62,6 +66,19 @@ export default function CategoryPage({ forcedId }) {
         return () => sub.remove();
     }, []);
 
+    // 🛡️ Save to AsyncStorage with timestamp for your Janitor
+    const saveHeavyCache = async (key, data) => {
+        try {
+            const cacheEntry = {
+                data: data, 
+                timestamp: Date.now(), 
+            };
+            await AsyncStorage.setItem(key, JSON.stringify(cacheEntry));
+        } catch (e) {
+            console.error("Cache Save Error", e);
+        }
+    };
+
     const fetchPosts = async (pageNum = 1, isRefresh = false) => {
         if (loading || (!hasMore && !isRefresh)) return;
 
@@ -74,12 +91,16 @@ export default function CategoryPage({ forcedId }) {
             const newPosts = data.posts || [];
 
             setPosts((prev) => {
-                const updatedList = isRefresh 
-                    ? newPosts 
+                const updatedList = isRefresh
+                    ? newPosts
                     : Array.from(new Map([...prev, ...newPosts].map(p => [p._id, p])).values());
-                
+
+                // 💾 Update Memory Cache (Tier 1)
+                CATEGORY_MEMORY_CACHE[CACHE_KEY] = updatedList;
+
+                // 💾 Update AsyncStorage (Tier 2)
                 if (updatedList.length > 0) {
-                    AsyncStorage.setItem(CACHE_KEY, JSON.stringify(updatedList));
+                    saveHeavyCache(CACHE_KEY, updatedList);
                 }
                 return updatedList;
             });
@@ -96,20 +117,34 @@ export default function CategoryPage({ forcedId }) {
         }
     };
 
-    // 🔹 Optimization: Load Cache and ONLY fetch if cache is empty
+    // ⚡ HYBRID INIT: Memory -> Storage -> API
     useEffect(() => {
         const init = async () => {
+            // 1. Check Memory first (Already handled in useState, but ensures sync)
+            if (CATEGORY_MEMORY_CACHE[CACHE_KEY]) {
+                setPosts(CATEGORY_MEMORY_CACHE[CACHE_KEY]);
+                setPage(2);
+                fetchPosts(1, true); // Revalidate in background
+                return;
+            }
+
             try {
+                // 2. Check AsyncStorage
                 const cached = await AsyncStorage.getItem(CACHE_KEY);
                 if (cached) {
-                    const parsed = JSON.parse(cached);
-                    if (parsed && parsed.length > 0) {
-                        setPosts(parsed);
-                        setPage(2); // Assume first page is loaded
-                        return; // ⚡ STOP HERE. Don't auto-fetch background if we have cache.
+                    const parsedEntry = JSON.parse(cached);
+                    const cachedData = parsedEntry?.data || parsedEntry; 
+
+                    if (cachedData && Array.isArray(cachedData) && cachedData.length > 0) {
+                        CATEGORY_MEMORY_CACHE[CACHE_KEY] = cachedData; // Fill memory
+                        setPosts(cachedData);
+                        setPage(2);
+                        fetchPosts(1, true); // Revalidate
+                        return;
                     }
                 }
-                // Only reach here if no cache exists
+                
+                // 3. Fallback to API
                 fetchPosts(1, true);
             } catch (e) {
                 fetchPosts(1, true);
@@ -147,10 +182,10 @@ export default function CategoryPage({ forcedId }) {
 
     return (
         <View style={{ flex: 1, backgroundColor: isDark ? "#050505" : "#ffffff" }}>
-            <View 
+            <View
                 pointerEvents="none"
                 className="absolute -top-20 -right-20 rounded-full opacity-[0.08]"
-                style={{ width: width * 0.7, height: width * 0.7, backgroundColor: isOfflineMode ? '#f97316' : (isDark ? '#2563eb' : '#3b82f6') }} 
+                style={{ width: width * 0.7, height: width * 0.7, backgroundColor: isOfflineMode ? '#f97316' : (isDark ? '#2563eb' : '#3b82f6') }}
             />
 
             <FlatList
@@ -162,7 +197,9 @@ export default function CategoryPage({ forcedId }) {
                 contentContainerStyle={{ paddingTop: insets.top + 20, paddingBottom: insets.bottom + 100 }}
                 ListFooterComponent={() => (
                     <View className="py-12 items-center justify-center min-h-[140px]">
-                        {loading ? <SyncLoading /> : !hasMore && posts.length > 0 ? (
+                        {loading && !refreshing ? (
+                            <SyncLoading /> 
+                        ) : !hasMore && posts.length > 0 ? (
                             <View className="items-center">
                                 <View className="h-[1px] w-12 bg-gray-200 dark:bg-gray-800 mb-4" />
                                 <Text className="text-[10px] font-[900] uppercase tracking-[0.5em] text-gray-400">End of {categoryName} Archive</Text>
@@ -176,7 +213,6 @@ export default function CategoryPage({ forcedId }) {
                 refreshing={refreshing}
                 onScroll={(e) => DeviceEventEmitter.emit("onScroll", e.nativeEvent.contentOffset.y)}
                 scrollEventThrottle={16}
-                // 🔹 List Optimization
                 removeClippedSubviews={true}
                 initialNumToRender={5}
                 maxToRenderPerBatch={5}
