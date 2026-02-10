@@ -209,8 +209,6 @@ export default function CategoryPage({ forcedId }) {
                 )}
                 onEndReached={() => !isOfflineMode && fetchPosts(page)}
                 onEndReachedThreshold={0.5}
-                onRefresh={() => fetchPosts(1, true)}
-                refreshing={refreshing}
                 onScroll={(e) => DeviceEventEmitter.emit("onScroll", e.nativeEvent.contentOffset.y)}
                 scrollEventThrottle={16}
                 removeClippedSubviews={true}
