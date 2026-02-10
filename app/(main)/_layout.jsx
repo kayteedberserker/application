@@ -54,17 +54,12 @@ export default function MainLayout() {
             tension: 40,
         }).start();
     }, [showClanMenu]);
-
+const userClanData = await AsyncStorage.getItem('userClan');
     const handleClanPress = async () => {
     try {
         const userClanData = await AsyncStorage.getItem('userClan');
-        // If user is in a clan, toggle the menu showing Profile, Discover, and War
-        if (userClanData) {
+        // If user is in a clan, toggle the menu showing Profile, Discover, and Wa   
             setShowClanMenu(!showClanMenu);
-        } else {
-            // If not in a clan, just take them to discovery
-            DeviceEventEmitter.emit("navigateSafely", "/clans/discover");
-        }
     } catch (e) {
         DeviceEventEmitter.emit("navigateSafely", "/clans/discover");
     }
@@ -242,7 +237,7 @@ export default function MainLayout() {
                     <Text style={{ fontSize: 9, fontWeight: '900', color: pathname === "/" || pathname.startsWith("/categories") ? "#60a5fa" : (isDark ? "#94a3b8" : "#64748b"), marginTop: 2 }}>HOME</Text>
                 </TouchableOpacity>
 
-                <TouchableOpacity onPress={() => navigateTo("/authordiary")} className="items-center justify-center">
+                <TouchableOpacity onPress={() => router.push("/authordiary")} className="items-center justify-center">
                     <Ionicons
                         name={pathname === "/authordiary" ? "add-circle" : "add-circle-outline"}
                         size={24}
@@ -251,7 +246,7 @@ export default function MainLayout() {
                     <Text style={{ fontSize: 9, fontWeight: '900', color: pathname === "/authordiary" ? "#60a5fa" : (isDark ? "#94a3b8" : "#64748b"), marginTop: 2 }}>ORE DIARY</Text>
                 </TouchableOpacity>
 
-                <TouchableOpacity onPress={() => navigateTo("/profile")} className="items-center justify-center">
+                <TouchableOpacity onPress={() => router.push("/profile")} className="items-center justify-center">
                     <Ionicons
                         name={pathname === "/profile" ? "person" : "person-outline"}
                         size={22}
@@ -289,8 +284,8 @@ export default function MainLayout() {
                     </TouchableOpacity>
                 </Animated.View>
 
-                <Animated.View style={{
-                    opacity,
+                { userClanData && <Animated.View style={{
+                   opacity,
                     transform: [{ translateY: translateY_2 }, { scale }],
                     marginBottom: 10
                 }}>
@@ -305,6 +300,7 @@ export default function MainLayout() {
                         <Ionicons name="shield" size={20} color="#fff" />
                     </TouchableOpacity>
                 </Animated.View>
+                }
 
                 <Animated.View style={{
                     opacity,
