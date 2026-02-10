@@ -1,5 +1,5 @@
 import { Ionicons, MaterialCommunityIcons } from "@expo/vector-icons";
-import { useEffect, useState } from "react";
+import { useEffect, useState, useRef } from "react";
 import { ActivityIndicator, Platform, Text as RNText, View } from "react-native";
 import {
   NativeAd,
@@ -15,11 +15,14 @@ export const NativeAdAuthorStyle = ({ isDark }) => {
   const [nativeAd, setNativeAd] = useState(null);
   const [loaded, setLoaded] = useState(false);
   const [error, setError] = useState(false);
+  const retryTimerRef = useRef(null); // 🚀 Track timer to clear on unmount
 
   useEffect(() => {
     let isMounted = true;
 
     const loadAd = () => {
+      if (!isMounted) return;
+      
       NativeAd.createForAdRequest(AD_UNIT_ID)
         .then((ad) => {
           if (isMounted) {
@@ -31,8 +34,10 @@ export const NativeAdAuthorStyle = ({ isDark }) => {
         .catch(() => {
           if (isMounted) {
             setError(true);
-            // retry after 10s as per logic intent
-            setTimeout(() => {
+            // 🚀 Clear existing timer before starting a new one
+            if (retryTimerRef.current) clearTimeout(retryTimerRef.current);
+            
+            retryTimerRef.current = setTimeout(() => {
               if (isMounted) loadAd();
             }, 10000); 
           }
@@ -43,6 +48,7 @@ export const NativeAdAuthorStyle = ({ isDark }) => {
 
     return () => {
       isMounted = false;
+      if (retryTimerRef.current) clearTimeout(retryTimerRef.current);
     };
   }, []);
 
@@ -55,7 +61,12 @@ export const NativeAdAuthorStyle = ({ isDark }) => {
         }`}
       >
         {!error && <ActivityIndicator color={isDark ? "white" : "#3b82f6"} />}
-        {error && <RNText className="text-zinc-500 text-[10px]">Ad unavailable</RNText>}
+        {error && (
+          <View className="items-center">
+            <MaterialCommunityIcons name="cloud-off-outline" size={16} color="#71717a" />
+            <RNText className="text-zinc-500 text-[10px] mt-1 uppercase font-bold">Relay Interrupted</RNText>
+          </View>
+        )}
       </View>
     );
   }
@@ -79,7 +90,6 @@ export const NativeAdAuthorStyle = ({ isDark }) => {
           }`}
           style={{ height: 140 }}
         >
-          {/* AD ICON */}
           <View style={{ borderColor: adColor }} className="w-16 h-16 rounded-full border-2 p-0.5 overflow-hidden">
             <NativeMediaView
               nativeID="adMediaView"
@@ -93,7 +103,7 @@ export const NativeAdAuthorStyle = ({ isDark }) => {
                 nativeID="adHeadlineView"
                 numberOfLines={1}
                 className={`font-black italic uppercase tracking-tighter text-lg ${isDark ? 'text-white' : 'text-black'}`}
-                style={{ flex: 1, marginRight: 8, fontFamily: Platform.OS === 'ios' ? 'System' : 'sans-serif-condensed' }}
+                style={{ flex: 1, marginRight: 8 }}
               >
                 {nativeAd.headline}
               </RNText>
@@ -140,11 +150,14 @@ export const NativeAdPostStyle = ({ isDark }) => {
   const [nativeAd, setNativeAd] = useState(null);
   const [loaded, setLoaded] = useState(false);
   const [error, setError] = useState(false);
+  const retryTimerRef = useRef(null);
 
   useEffect(() => {
     let isMounted = true;
 
     const loadAd = () => {
+      if (!isMounted) return;
+
       NativeAd.createForAdRequest(AD_UNIT_ID)
         .then((ad) => {
           if (isMounted) {
@@ -154,13 +167,11 @@ export const NativeAdPostStyle = ({ isDark }) => {
           }
         })
         .catch(() => {
-          console.log("failed");
           if (isMounted) {
             setError(true);
-            console.log("failed to load");
-            // retry after 10s
-            setTimeout(() => {
-              console.log("retrying to load native");
+            if (retryTimerRef.current) clearTimeout(retryTimerRef.current);
+            
+            retryTimerRef.current = setTimeout(() => {
               if (isMounted) loadAd();
             }, 10000);
           }
@@ -171,6 +182,7 @@ export const NativeAdPostStyle = ({ isDark }) => {
 
     return () => {
       isMounted = false;
+      if (retryTimerRef.current) clearTimeout(retryTimerRef.current);
     };
   }, []);
 
@@ -183,7 +195,12 @@ export const NativeAdPostStyle = ({ isDark }) => {
         }`}
       >
         {!error && <ActivityIndicator color={isDark ? "white" : "#3b82f6"} />}
-        {error && <RNText className="text-zinc-500 text-[10px]">Ad could not load</RNText>}
+        {error && (
+            <View className="items-center">
+                 <MaterialCommunityIcons name="alert-circle-outline" size={24} color="#71717a" />
+                 <RNText className="text-zinc-500 text-[10px] font-bold mt-2 uppercase tracking-widest">Ad Intel Offline</RNText>
+            </View>
+        )}
       </View>
     );
   }
@@ -207,7 +224,7 @@ export const NativeAdPostStyle = ({ isDark }) => {
         >
           <NativeMediaView
             nativeID="adMediaView"
-            style={{ width: "100%", height: 190, backgroundColor: isDark ? "#111" : "#eee", margin: "auto" }}
+            style={{ width: "100%", height: 190, backgroundColor: isDark ? "#111" : "#eee" }}
           />
 
           <View className="p-5">
