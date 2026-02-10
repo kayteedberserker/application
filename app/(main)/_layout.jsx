@@ -240,7 +240,7 @@ const [userInClan, setUserInClan] = useState(false);
                     <Text style={{ fontSize: 9, fontWeight: '900', color: pathname === "/" || pathname.startsWith("/categories") ? "#60a5fa" : (isDark ? "#94a3b8" : "#64748b"), marginTop: 2 }}>HOME</Text>
                 </TouchableOpacity>
 
-                <TouchableOpacity onPress={() => router.push("/authordiary")} className="items-center justify-center">
+                <TouchableOpacity onPress={() => navigateTo("/authordiary")} className="items-center justify-center">
                     <Ionicons
                         name={pathname === "/authordiary" ? "add-circle" : "add-circle-outline"}
                         size={24}
@@ -249,7 +249,7 @@ const [userInClan, setUserInClan] = useState(false);
                     <Text style={{ fontSize: 9, fontWeight: '900', color: pathname === "/authordiary" ? "#60a5fa" : (isDark ? "#94a3b8" : "#64748b"), marginTop: 2 }}>ORE DIARY</Text>
                 </TouchableOpacity>
 
-                <TouchableOpacity onPress={() => router.push("/profile")} className="items-center justify-center">
+                <TouchableOpacity onPress={() => navigateTo("/profile")} className="items-center justify-center">
                     <Ionicons
                         name={pathname === "/profile" ? "person" : "person-outline"}
                         size={22}
