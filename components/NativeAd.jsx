@@ -9,13 +9,15 @@ import {
 import Animated, { FadeIn, FadeInDown } from "react-native-reanimated";
 
 const AD_UNIT_ID = "ca-app-pub-8021671365048667/9973628010";
+const MAX_RETRIES = 3; // 🚀 Prevent infinite network spam
 
 /* ================== AUTHOR STYLE ================== */
 export const NativeAdAuthorStyle = ({ isDark }) => {
   const [nativeAd, setNativeAd] = useState(null);
   const [loaded, setLoaded] = useState(false);
   const [error, setError] = useState(false);
-  const retryTimerRef = useRef(null); // 🚀 Track timer to clear on unmount
+  const retryTimerRef = useRef(null);
+  const retryCountRef = useRef(0); // 🚀 Track attempts
 
   useEffect(() => {
     let isMounted = true;
@@ -29,17 +31,21 @@ export const NativeAdAuthorStyle = ({ isDark }) => {
             setNativeAd(ad);
             setLoaded(true);
             setError(false);
+            retryCountRef.current = 0; // Reset on success
           }
         })
         .catch(() => {
           if (isMounted) {
             setError(true);
-            // 🚀 Clear existing timer before starting a new one
             if (retryTimerRef.current) clearTimeout(retryTimerRef.current);
             
-            retryTimerRef.current = setTimeout(() => {
-              if (isMounted) loadAd();
-            }, 10000); 
+            // Only retry if we haven't hit the cap
+            if (retryCountRef.current < MAX_RETRIES) {
+                retryCountRef.current += 1;
+                retryTimerRef.current = setTimeout(() => {
+                  if (isMounted) loadAd();
+                }, 10000); 
+            }
           }
         });
     };
@@ -64,7 +70,7 @@ export const NativeAdAuthorStyle = ({ isDark }) => {
         {error && (
           <View className="items-center">
             <MaterialCommunityIcons name="cloud-off-outline" size={16} color="#71717a" />
-            <RNText className="text-zinc-500 text-[10px] mt-1 uppercase font-bold">Relay Interrupted</RNText>
+            <RNText className="text-zinc-500 text-[10px] mt-1 uppercase font-bold tracking-widest">Relay Interrupted</RNText>
           </View>
         )}
       </View>
@@ -151,6 +157,7 @@ export const NativeAdPostStyle = ({ isDark }) => {
   const [loaded, setLoaded] = useState(false);
   const [error, setError] = useState(false);
   const retryTimerRef = useRef(null);
+  const retryCountRef = useRef(0);
 
   useEffect(() => {
     let isMounted = true;
@@ -164,6 +171,7 @@ export const NativeAdPostStyle = ({ isDark }) => {
             setNativeAd(ad);
             setLoaded(true);
             setError(false);
+            retryCountRef.current = 0;
           }
         })
         .catch(() => {
@@ -171,9 +179,12 @@ export const NativeAdPostStyle = ({ isDark }) => {
             setError(true);
             if (retryTimerRef.current) clearTimeout(retryTimerRef.current);
             
-            retryTimerRef.current = setTimeout(() => {
-              if (isMounted) loadAd();
-            }, 10000);
+            if (retryCountRef.current < MAX_RETRIES) {
+                retryCountRef.current += 1;
+                retryTimerRef.current = setTimeout(() => {
+                  if (isMounted) loadAd();
+                }, 10000);
+            }
           }
         });
     };
@@ -194,6 +205,7 @@ export const NativeAdPostStyle = ({ isDark }) => {
           isDark ? "bg-zinc-900/40 border-zinc-800" : "bg-white border-zinc-100"
         }`}
       >
+        {/* 🚀 INSTRUCTION: Anything loading should have the loading animation */}
         {!error && <ActivityIndicator color={isDark ? "white" : "#3b82f6"} />}
         {error && (
             <View className="items-center">
