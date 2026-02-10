@@ -62,7 +62,6 @@ export default function PostsViewer() {
                     const local = await AsyncStorage.getItem(CACHE_KEY);
                     if (local) {
                         const parsed = JSON.parse(local);
-                        // The saved cache is an object with {data: [...], timestamp: ...}
                         setCachedData(parsed.data);
                         POSTS_MEMORY_CACHE = parsed.data;
                     }
@@ -107,7 +106,7 @@ export default function PostsViewer() {
 
     // 2. SWR Implementation with Fallback & Memory Sync
     const { data, size, setSize, isLoading, isValidating, mutate } = useSWRInfinite(getKey, fetcher, {
-        refreshInterval: isOfflineMode ? 0 : 15000,
+        refreshInterval: isOfflineMode ? 0 : 60000,
         revalidateOnFocus: false,
         dedupingInterval: 5000,
         fallbackData: cachedData, 
@@ -211,8 +210,9 @@ export default function PostsViewer() {
                 renderItem={renderItem}
                 onEndReached={loadMore}
                 onEndReachedThreshold={0.5}
-                onRefresh={() => mutate()}
-                refreshing={isValidating && posts.length > 0}
+                
+                // 🛑 REMOVED: onRefresh and refreshing to disable pull-to-refresh and loading spinners
+                
                 removeClippedSubviews={true}
                 initialNumToRender={5}
                 maxToRenderPerBatch={5}
@@ -225,7 +225,8 @@ export default function PostsViewer() {
                 scrollEventThrottle={32}
                 ListFooterComponent={
                     <View className="py-12 items-center justify-center min-h-[140px]">
-                        {(isLoading || isValidating) ? (
+                        {/* 🛑 MODIFIED: Only show loading at the bottom for INFINITE SCROLL, not background revalidation */}
+                        {(isLoading && posts.length === 0) || (isValidating && posts.length > 0 && size > 1) ? (
                             <SyncLoading />
                         ) : !hasMore && posts.length > 0 ? (
                             <Text className="text-[10px] font-[900] uppercase tracking-[0.5em] text-gray-400">
