@@ -9,7 +9,8 @@ import {
     Easing,
     FlatList,
     InteractionManager,
-    View
+    View,
+    Platform
 } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import useSWRInfinite from "swr/infinite";
@@ -22,11 +23,11 @@ import { Text } from "./Text";
 
 const fetcher = (url) => apiFetch(url).then(res => res.json());
 
-const { width, height } = Dimensions.get('window');
+const { width } = Dimensions.get('window');
 const LIMIT = 15;
 const CACHE_KEY = "POSTS_CACHE_V1";
 
-// 🧠 Tier 1: Memory Cache (Immediate UI restore across tab navigations)
+// 🧠 Tier 1: Memory Cache
 let POSTS_MEMORY_CACHE = null;
 
 const saveHeavyCache = async (key, data) => {
@@ -48,13 +49,12 @@ export default function PostsViewer() {
     const isDark = colorScheme === "dark";
 
     const [ready, setReady] = useState(false);
-    // Initialize from Memory Cache if it exists
+    const [canFetch, setCanFetch] = useState(false); // 🚀 New: Delay fetching until UI is idle
     const [cachedData, setCachedData] = useState(POSTS_MEMORY_CACHE); 
     const [isOfflineMode, setIsOfflineMode] = useState(false);
 
     const pulseAnim = useRef(new Animated.Value(0)).current;
 
-    // 1. Initial Setup: Load Tier 2 (Disk) Cache if Tier 1 is empty
     useEffect(() => {
         const prepare = async () => {
             try {
@@ -70,8 +70,11 @@ export default function PostsViewer() {
                 console.error("Cache load error", e);
             }
 
+            // 🚀 Wait for navigation to finish before marking ready and allowing fetch
             InteractionManager.runAfterInteractions(() => {
                 setReady(true);
+                // Extra 400ms buffer to ensure thread is completely free
+                setTimeout(() => setCanFetch(true), 400);
             });
         };
         prepare();
@@ -99,29 +102,27 @@ export default function PostsViewer() {
     }, [pulseAnim]);
 
     const getKey = (pageIndex, previousPageData) => {
-        if (!ready) return null;
+        // 🚀 CRITICAL: Do not fetch until the UI thread is free (canFetch)
+        if (!ready || !canFetch) return null;
         if (previousPageData && previousPageData.posts?.length < LIMIT) return null;
         return `/posts?page=${pageIndex + 1}&limit=${LIMIT}`;
     };
 
-    // 2. SWR Implementation with Fallback & Memory Sync
     const { data, size, setSize, isLoading, isValidating, mutate } = useSWRInfinite(getKey, fetcher, {
         refreshInterval: isOfflineMode ? 0 : 60000,
         revalidateOnFocus: false,
-        dedupingInterval: 5000,
+        dedupingInterval: 10000, // Increased to reduce thread noise
         fallbackData: cachedData, 
         onSuccess: (newData) => {
             setIsOfflineMode(false);
-            POSTS_MEMORY_CACHE = newData; // Update Tier 1
-            saveHeavyCache(CACHE_KEY, newData); // Update Tier 2
+            POSTS_MEMORY_CACHE = newData;
+            saveHeavyCache(CACHE_KEY, newData);
         },
-        onError: (err) => {
-            console.log("Fetch failed, assuming offline mode");
+        onError: () => {
             setIsOfflineMode(true);
         }
     });
 
-    // OPTIMIZATION: Memoize the posts array
     const posts = useMemo(() => {
         const sourceData = data || cachedData;
         if (!sourceData || !Array.isArray(sourceData)) return [];
@@ -129,7 +130,9 @@ export default function PostsViewer() {
         const postMap = new Map();
         sourceData.forEach(page => {
             if (page?.posts) {
-                page.posts.forEach(p => postMap.set(p._id, p));
+                page.posts.forEach(p => {
+                    if (p?._id) postMap.set(p._id, p);
+                });
             }
         });
         return Array.from(postMap.values());
@@ -149,7 +152,8 @@ export default function PostsViewer() {
         setSize(size + 1);
     };
 
-    if (!ready && !posts.length) {
+    // Show loading only if we have literally nothing to show
+    if (!ready && posts.length === 0) {
         return <AnimeLoading message="Loading posts" subMessage="Prepping Otaku content" />
     }
 
@@ -157,9 +161,9 @@ export default function PostsViewer() {
         const showAd = (index + 1) % 4 === 0;
 
         return (
-            <View>
+            <View key={item._id}>
                 <PostCard post={item} isFeed posts={posts} setPosts={mutate} />
-                {showAd && ready && (
+                {showAd && ready && canFetch && (
                     <NativeAdPostStyle isDark={isDark} />
                 )}
             </View>
@@ -175,9 +179,7 @@ export default function PostsViewer() {
                 </Text>
             </View>
             <View className="relative">
-                <Text
-                    className={`text-5xl font-[900] italic tracking-tighter uppercase ${isDark ? "text-white" : "text-gray-900"}`}
-                >
+                <Text className={`text-5xl font-[900] italic tracking-tighter uppercase ${isDark ? "text-white" : "text-gray-900"}`}>
                     Anime <Text className={isOfflineMode ? "text-orange-500" : "text-blue-600"}>Intel</Text>
                 </Text>
                 <View className={`h-[2px] w-24 mt-2 ${isOfflineMode ? 'bg-orange-500' : 'bg-blue-600'}`} />
@@ -187,16 +189,6 @@ export default function PostsViewer() {
 
     return (
         <View className={`flex-1 ${isDark ? "bg-[#050505]" : "bg-white"}`}>
-            <View
-                className="absolute left-0 right-0 z-50"
-                style={{
-                    top: insets.top,
-                    height: 1,
-                    opacity: 0.3,
-                    width: '100%'
-                }}
-            />
-
             <FlatList
                 ref={scrollRef}
                 data={posts}
@@ -205,19 +197,18 @@ export default function PostsViewer() {
                 contentContainerStyle={{
                     paddingHorizontal: 16,
                     paddingTop: insets.top + 20,
-                    paddingBottom: insets.bottom + 100,
+                    paddingBottom: insets.bottom + 120,
                 }}
                 renderItem={renderItem}
                 onEndReached={loadMore}
                 onEndReachedThreshold={0.5}
                 
-                // 🛑 REMOVED: onRefresh and refreshing to disable pull-to-refresh and loading spinners
-                
-                removeClippedSubviews={true}
-                initialNumToRender={5}
-                maxToRenderPerBatch={5}
-                windowSize={5}
-                updateCellsBatchingPeriod={50}
+                // ⚡️ PERFORMANCE OPTIONS
+                removeClippedSubviews={Platform.OS === 'android'}
+                initialNumToRender={5} 
+                maxToRenderPerBatch={4}
+                windowSize={3} // 🚀 Keeps memory lean for horizontal swiping
+                updateCellsBatchingPeriod={100} 
                 onScroll={(e) => {
                     const offsetY = e.nativeEvent.contentOffset.y;
                     DeviceEventEmitter.emit("onScroll", offsetY);
@@ -225,26 +216,13 @@ export default function PostsViewer() {
                 scrollEventThrottle={32}
                 ListFooterComponent={
                     <View className="py-12 items-center justify-center min-h-[140px]">
-                        {/* 🛑 MODIFIED: Only show loading at the bottom for INFINITE SCROLL, not background revalidation */}
                         {(isLoading && posts.length === 0) || (isValidating && posts.length > 0 && size > 1) ? (
                             <SyncLoading />
                         ) : !hasMore && posts.length > 0 ? (
                             <Text className="text-[10px] font-[900] uppercase tracking-[0.5em] text-gray-400">
                                 End of Transmission
                             </Text>
-                        ) : posts.length === 0 ? (
-                            <View className="py-20 px-10">
-                                <Text className="text-2xl font-[900] uppercase italic text-gray-400 text-center mb-2">
-                                    No Intel Found
-                                </Text>
-                                {isOfflineMode && (
-                                    <Text className="text-[10px] font-bold uppercase tracking-widest text-orange-500 text-center">
-                                        Check your connection
-                                    </Text>
-                                )}
-                            </View>
-                        ) : null
-                        }
+                        ) : null}
                     </View>
                 }
             />
