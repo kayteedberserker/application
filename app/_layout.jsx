@@ -7,7 +7,7 @@ import * as SplashScreen from "expo-splash-screen";
 import * as Updates from 'expo-updates';
 import { useColorScheme } from "nativewind";
 import { useCallback, useEffect, useRef, useState } from "react";
-import { AppState, BackHandler, DeviceEventEmitter, Platform, StatusBar, TouchableOpacity, View } from "react-native";
+import { AppState, BackHandler, DeviceEventEmitter, InteractionManager, Platform, StatusBar, TouchableOpacity, View } from "react-native";
 import mobileAds, { AdEventType, InterstitialAd, MaxAdContentRating } from 'react-native-google-mobile-ads';
 import { SafeAreaProvider } from "react-native-safe-area-context";
 import Toast from 'react-native-toast-message';
@@ -114,6 +114,17 @@ const loadInterstitial = () => {
     interstitial = ad;
 };
 
+// 🔹 OPTIMIZED: Helper to show ads without freezing UI
+const tryShowingInterstitial = () => {
+    const now = Date.now();
+    if (interstitialLoaded && interstitial && (now - lastShownTime > COOLDOWN_MS)) {
+        // Wait for next frame to ensure smooth transition
+        requestAnimationFrame(() => {
+            if (interstitial) interstitial.show();
+        });
+    }
+};
+
 async function registerForPushNotificationsAsync() {
     if (Platform.OS === 'web') return null;
     if (Platform.OS === 'android') {
@@ -123,11 +134,7 @@ async function registerForPushNotificationsAsync() {
             vibrationPattern: [0, 250, 250, 250],
             lightColor: '#FF231F7C',
         });
-        await notifee.createChannel({
-            id: 'default',
-            name: 'Default Channel',
-            importance: AndroidImportance.HIGH,
-        });
+        // Note: Notifee channel creation moved to useEffect for performance
     }
     const { status: existingStatus } = await Notifications.getPermissionsAsync();
     let finalStatus = existingStatus;
@@ -155,8 +162,6 @@ function RootLayoutContent() {
     const [isUpdating, setIsUpdating] = useState(false);
     const [appReady, setAppReady] = useState(false);
     const [isAdReady, setIsAdReady] = useState(false);
-    const [adStatusLog, setAdStatusLog] = useState("Initializing Ad Engine...");
-    const [debugTapCount, setDebugTapCount] = useState(0);
     
     // 🔹 FIX: Queue for notifications that arrive before app is ready
     const pendingNavigation = useRef(null);
@@ -176,8 +181,8 @@ function RootLayoutContent() {
         if (!data) return;
 
         // 🔹 FIX: If app isn't ready, queue this for later so it doesn't get lost
-        if (!isAdReady) {
-            console.log("App not ready, queuing navigation:", data);
+        if (!isAdReady || !appReady) {
+            // console.log("App not ready, queuing navigation:", data);
             pendingNavigation.current = data;
             return;
         }
@@ -211,23 +216,23 @@ function RootLayoutContent() {
 
         hasHandledRedirect.current = true;
         const finalUrl = targetDiscussionId ? `${targetPath}?discussionId=${targetDiscussionId}` : targetPath;
-        console.log(finalUrl);
+        // console.log(finalUrl);
 
         router.push(finalUrl);
-    }, [router, isAdReady]);
+    }, [router, isAdReady, appReady]);
 
-    // --- 1. GLOBAL NAVIGATION & BACK HANDLER ---
+    // --- 1. GLOBAL NAVIGATION & BACK HANDLER (OPTIMIZED) ---
     useEffect(() => {
         const navSub = DeviceEventEmitter.addListener("navigateSafely", (targetPath) => {
             if (currentPathRef.current === targetPath) return;
             router.push(targetPath);
         });
 
+        // 🔹 PERFORMANCE: Delay ad check until UI is idle
         const interstitialListener = DeviceEventEmitter.addListener("tryShowInterstitial", () => {
-            const now = Date.now();
-            if (interstitialLoaded && interstitial && (now - lastShownTime > COOLDOWN_MS)) {
-                interstitial.show();
-            }
+            InteractionManager.runAfterInteractions(() => {
+                tryShowingInterstitial();
+            });
         });
 
         const stateSub = AppState.addEventListener('change', nextState => {
@@ -238,15 +243,22 @@ function RootLayoutContent() {
         });
 
         const backHandler = BackHandler.addEventListener("hardwareBackPress", () => {
+            const currentPath = currentPathRef.current;
+            const isAtHome = currentPath === "/" || currentPath === "/(tabs)" || currentPath === "/index";
+
             if (router.canGoBack()) {
-                DeviceEventEmitter.emit("tryShowInterstitial");
                 router.back();
+                // 🔹 PERFORMANCE: Don't block navigation. Check ad later.
+                setTimeout(() => DeviceEventEmitter.emit("tryShowInterstitial"), 800);
                 return true;
             }
-            if (currentPathRef.current !== "/" && currentPathRef.current !== "/(tabs)") {
+            
+            // If we can't go back, but aren't at home, go home instead of closing
+            if (!isAtHome) {
                 router.replace("/");
                 return true;
             }
+            
             return false;
         });
 
@@ -258,7 +270,7 @@ function RootLayoutContent() {
         };
     }, []);
 
-    // --- 2. AD INITIALIZATION (Updated with Timeout Fix) ---
+    // --- 2. AD INITIALIZATION (Safe & Fast) ---
     useEffect(() => {
         if (Platform.OS === 'web') {
             setIsAdReady(true);
@@ -278,14 +290,13 @@ function RootLayoutContent() {
                     tagForChildDirectedTreatment: false,
                 });
                 
-                const adapterStatuses = await mobileAds().initialize();
+                await mobileAds().initialize();
                 
                 if (typeof loadAppOpenAd === 'function') loadAppOpenAd();
                 if (typeof loadInterstitial === 'function') loadInterstitial();
                 
-                // Clear timeout if successful
                 clearTimeout(safetyTimer);
-                setTimeout(() => setIsAdReady(true), 1000);
+                setIsAdReady(true);
             } catch (e) {
                 console.error("AdMob Init Error:", e);
                 // Safety timer will handle the fallback
@@ -297,13 +308,12 @@ function RootLayoutContent() {
 
     // 🔹 FIX: Process queued navigation once app is ready
     useEffect(() => {
-        if (isAdReady && pendingNavigation.current) {
+        if (isAdReady && appReady && pendingNavigation.current) {
             const data = pendingNavigation.current;
             pendingNavigation.current = null;
-            // Short delay to ensure stack is mounted
-            setTimeout(() => processRouting(data), 100);
+            setTimeout(() => processRouting(data), 500);
         }
-    }, [isAdReady, processRouting]);
+    }, [isAdReady, appReady, processRouting]);
 
     // --- 3. WELCOME AD ---
     useEffect(() => {
@@ -314,11 +324,10 @@ function RootLayoutContent() {
         }
     }, [appReady, isAdReady]);
 
-    // --- 4. DEEP LINKING (Event Based) ---
+    // --- 4. DEEP LINKING ---
     useEffect(() => {
         const handleUrl = (url) => {
             if (!url || isUpdating) return;
-
             const parsed = Linking.parse(url);
             const { path, queryParams } = parsed;
 
@@ -326,34 +335,19 @@ function RootLayoutContent() {
                 const segments = path.split('/');
                 const pathId = segments.pop();
                 const type = segments.includes('post') ? 'post_detail' : null;
+                
                 if (path.includes('/post/')) {
-                    processRouting({
-                        postId: pathId,
-                        type: type,
-                        ...queryParams
-                    });
+                    processRouting({ postId: pathId, type: type, ...queryParams });
                 } else {
-                    const currentPathBase = currentPathRef.current
-                    
-                    if (currentPathBase == `/${path}`) {
-                        console.log("Youre in the same page not pushing");
-                        return
+                    const currentPathBase = currentPathRef.current;
+                    if (currentPathBase !== `/${path}`) {
+                        router.push(path);
                     }
-                    router.push(path)
                 }
-
             }
         };
 
-        // 🔹 FIX: REMOVED `Linking.getInitialURL()` 
-        // Expo Router automatically handles the initial URL. 
-        // Keeping it here was causing the "Double Page" bug.
-
-        // Listen for new links while app is open (Handles Duplicates perfectly)
-        const subscription = Linking.addEventListener('url', (event) => {
-            handleUrl(event.url);
-        });
-
+        const subscription = Linking.addEventListener('url', (event) => handleUrl(event.url));
         return () => subscription.remove();
     }, [isUpdating, processRouting]);
 
@@ -378,11 +372,20 @@ function RootLayoutContent() {
         "SpaceGroteskBold": require("../assets/fonts/SpaceGrotesk.ttf"),
     });
 
-    
-    // --- 6. SYNC ---
+    // --- 6. SYNC (OPTIMIZED: BACKGROUND) ---
     useEffect(() => {
-        async function performSync() {
-            if (!fontsLoaded || isUpdating) return;
+        if (!fontsLoaded || isUpdating) return;
+
+        // 🔹 PERFORMANCE: Run this in background so it doesn't freeze the loading screen
+        const task = InteractionManager.runAfterInteractions(async () => {
+            if (Platform.OS === 'android') {
+                await notifee.createChannel({
+                    id: 'default',
+                    name: 'Default Channel',
+                    importance: AndroidImportance.HIGH,
+                });
+            }
+
             const token = await registerForPushNotificationsAsync();
             if (token && user?.deviceId) {
                 try {
@@ -395,8 +398,9 @@ function RootLayoutContent() {
             }
             setAppReady(true);
             setTimeout(() => setIsSyncing(false), 1500);
-        }
-        performSync();
+        });
+
+        return () => task.cancel();
     }, [fontsLoaded, user?.deviceId, isUpdating]);
 
     // --- 7. NOTIFICATIONS ---
@@ -405,8 +409,6 @@ function RootLayoutContent() {
         if (!notificationId || lastHandledNotificationId.current === notificationId) return;
         lastHandledNotificationId.current = notificationId;
         const data = response?.notification?.request?.content?.data || {};
-        console.log(data);
-        
         processRouting(data);
     };
 
@@ -448,16 +450,12 @@ function RootLayoutContent() {
         };
     }, [isUpdating]);
 
-  
-    // 🔹 FIX: Only block rendering if fonts/updates are pending.
-    // If ads are not ready but timeout passed, isAdReady will be true, allowing app to load.
     if (!fontsLoaded || isUpdating || !isAdReady) {
         return (
             <AnimeLoading
-                    message={isUpdating ? "UPDATING_CORE" : "LOADING_PAGE"}
-                    subMessage={isUpdating ? "Updating system configurations..." : "Fetching Otaku Archives"}
-                />
-            
+                message={isUpdating ? "UPDATING_CORE" : "LOADING_PAGE"}
+                subMessage={isUpdating ? "Updating system configurations..." : "Fetching Otaku Archives"}
+            />
         );
     }
 
@@ -467,7 +465,11 @@ function RootLayoutContent() {
             <Stack
                 screenOptions={{ headerShown: false, contentStyle: { backgroundColor: isDark ? "#0a0a0a" : "#ffffff" } }}
                 onStateChange={() => {
-                    setTimeout(() => { DeviceEventEmitter.emit("tryShowInterstitial"); }, 500);
+                    // 🔹 PERFORMANCE FIX: 
+                    // Don't emit event immediately. Wait for transition to finish.
+                    InteractionManager.runAfterInteractions(() => {
+                        setTimeout(() => DeviceEventEmitter.emit("tryShowInterstitial"), 1000);
+                    });
                 }}
             />
             <Toast />
@@ -487,4 +489,4 @@ export default function RootLayout() {
             </UserProvider>
         </SafeAreaProvider>
     );
-                    }
+                                                                    }
