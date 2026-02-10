@@ -118,7 +118,7 @@ const loadInterstitial = () => {
 const tryShowingInterstitial = () => {
     const now = Date.now();
     if (interstitialLoaded && interstitial && (now - lastShownTime > COOLDOWN_MS)) {
-        // Wait for next frame to ensure smooth transition
+        // Use requestAnimationFrame to ensure the UI transition is already underway/finished
         requestAnimationFrame(() => {
             if (interstitial) interstitial.show();
         });
@@ -170,6 +170,64 @@ function RootLayoutContent() {
     const lastHandledNotificationId = useRef(null);
     const hasHandledRedirect = useRef(false);
     const hasShownWelcomeAd = useRef(false);
+    useEffect(() => {
+    const runCacheJanitor = async () => {
+        try {
+            const allKeys = await AsyncStorage.getAllKeys();
+
+            // 🎯 TARGET LIST: Categories of cache we manage
+            const targetPrefixes = [
+                "POSTS_CACHE_",
+                "CATEGORY_CACHE_",
+                "clan_posts_",
+                "WARS_",
+                "CLAN_PROFILE_",
+                "auth_cache_" 
+            ];
+
+            const expiredTime = 48 * 60 * 60 * 1000; // 48 Hours
+            const now = Date.now();
+
+            const keysToReview = allKeys.filter(key =>
+                targetPrefixes.some(prefix => key.startsWith(prefix))
+            );
+
+            // Process in batches or chunks if you have hundreds of keys
+            for (const key of keysToReview) {
+                const value = await AsyncStorage.getItem(key);
+                if (!value) continue;
+
+                try {
+                    const parsed = JSON.parse(value);
+
+                    // 🛠️ LOGIC CHECK:
+                    // 1. If it has a timestamp, check if it's actually expired.
+                    if (parsed && typeof parsed === 'object' && parsed.timestamp) {
+                        if (now - parsed.timestamp > expiredTime) {
+                            await AsyncStorage.removeItem(key);
+                            console.log(`🧹 Janitor: Cleared expired cache: ${key}`);
+                        }
+                    } 
+                    // 2. If it's a "Legacy" or "Raw" cache (no timestamp, like raw points or war arrays)
+                    // We only delete these if they are very old or corrupted. 
+                    // For now, let's let raw caches live unless they fail to parse.
+                    
+                } catch (e) {
+                    // If JSON.parse fails, the data is corrupted. Wipe it.
+                    await AsyncStorage.removeItem(key);
+                    console.log(`🧹 Janitor: Cleared corrupted cache: ${key}`);
+                }
+            }
+        } catch (err) {
+            console.error("Janitor failed to clean storage:", err);
+        }
+    };
+
+    // Run the janitor shortly after mount so it doesn't compete with the initial UI render
+    const timeout = setTimeout(runCacheJanitor, 5000); 
+    return () => clearTimeout(timeout);
+}, []);
+
 
     const currentPathRef = useRef(pathname);
     useEffect(() => {
@@ -182,7 +240,6 @@ function RootLayoutContent() {
 
         // 🔹 FIX: If app isn't ready, queue this for later so it doesn't get lost
         if (!isAdReady || !appReady) {
-            // console.log("App not ready, queuing navigation:", data);
             pendingNavigation.current = data;
             return;
         }
@@ -202,7 +259,6 @@ function RootLayoutContent() {
 
         if (!targetPath) return;
 
-        // 🔹 FIX: Clean check to prevent double navigation
         const currentPathBase = currentPathRef.current.split('?')[0];
         const targetPathBase = targetPath.split('?')[0];
         const isOnSamePage = currentPathBase === targetPathBase;
@@ -216,20 +272,27 @@ function RootLayoutContent() {
 
         hasHandledRedirect.current = true;
         const finalUrl = targetDiscussionId ? `${targetPath}?discussionId=${targetDiscussionId}` : targetPath;
-        // console.log(finalUrl);
-
-        router.push(finalUrl);
+        
+        // Use requestAnimationFrame for snappy transition
+        requestAnimationFrame(() => {
+            router.push(finalUrl);
+        });
     }, [router, isAdReady, appReady]);
 
-    // --- 1. GLOBAL NAVIGATION & BACK HANDLER (OPTIMIZED) ---
+    // --- 1. GLOBAL NAVIGATION & BACK HANDLER (INSTANT) ---
     useEffect(() => {
         const navSub = DeviceEventEmitter.addListener("navigateSafely", (targetPath) => {
             if (currentPathRef.current === targetPath) return;
+            // 🚀 Navigation first!
             router.push(targetPath);
+            // 🚀 Ad check later
+            requestAnimationFrame(() => {
+                DeviceEventEmitter.emit("tryShowInterstitial");
+            });
         });
 
-        // 🔹 PERFORMANCE: Delay ad check until UI is idle
         const interstitialListener = DeviceEventEmitter.addListener("tryShowInterstitial", () => {
+            // Only try showing if the user is not actively interacting
             InteractionManager.runAfterInteractions(() => {
                 tryShowingInterstitial();
             });
@@ -248,12 +311,11 @@ function RootLayoutContent() {
 
             if (router.canGoBack()) {
                 router.back();
-                // 🔹 PERFORMANCE: Don't block navigation. Check ad later.
-                setTimeout(() => DeviceEventEmitter.emit("tryShowInterstitial"), 800);
+                // Check ad after the slide-back animation starts
+                requestAnimationFrame(() => DeviceEventEmitter.emit("tryShowInterstitial"));
                 return true;
             }
             
-            // If we can't go back, but aren't at home, go home instead of closing
             if (!isAtHome) {
                 router.replace("/");
                 return true;
@@ -277,11 +339,9 @@ function RootLayoutContent() {
             return;
         }
 
-        // 🔹 FIX: Safety Timeout - If ads fail/hang, load the app anyway after 2.5s
         const safetyTimer = setTimeout(() => {
-            console.log("Ad timeout reached, forcing app load");
             setIsAdReady(true);
-        }, 2500);
+        }, 2000);
 
         const runMediationInit = async () => {
             try {
@@ -291,27 +351,25 @@ function RootLayoutContent() {
                 });
                 
                 await mobileAds().initialize();
-                
-                if (typeof loadAppOpenAd === 'function') loadAppOpenAd();
-                if (typeof loadInterstitial === 'function') loadInterstitial();
+                loadAppOpenAd();
+                loadInterstitial();
                 
                 clearTimeout(safetyTimer);
                 setIsAdReady(true);
             } catch (e) {
-                console.error("AdMob Init Error:", e);
-                // Safety timer will handle the fallback
+                setIsAdReady(true);
             }
         };
         runMediationInit();
         return () => clearTimeout(safetyTimer);
     }, []);
 
-    // 🔹 FIX: Process queued navigation once app is ready
+    // 🔹 FIX: Process queued navigation
     useEffect(() => {
         if (isAdReady && appReady && pendingNavigation.current) {
             const data = pendingNavigation.current;
             pendingNavigation.current = null;
-            setTimeout(() => processRouting(data), 500);
+            processRouting(data);
         }
     }, [isAdReady, appReady, processRouting]);
 
@@ -360,23 +418,22 @@ function RootLayoutContent() {
                 if (update.isAvailable) {
                     setIsUpdating(true);
                     await Updates.fetchUpdateAsync();
-                    setTimeout(async () => { await Updates.reloadAsync(); }, 1500);
+                    await Updates.reloadAsync();
                 }
             } catch (error) { setIsUpdating(false); }
         }
         onFetchUpdateAsync();
     }, []);
 
-    const [fontsLoaded, fontError] = useFonts({
+    const [fontsLoaded] = useFonts({
         "SpaceGrotesk": require("../assets/fonts/SpaceGrotesk.ttf"),
         "SpaceGroteskBold": require("../assets/fonts/SpaceGrotesk.ttf"),
     });
 
-    // --- 6. SYNC (OPTIMIZED: BACKGROUND) ---
+    // --- 6. SYNC (OPTIMIZED) ---
     useEffect(() => {
         if (!fontsLoaded || isUpdating) return;
 
-        // 🔹 PERFORMANCE: Run this in background so it doesn't freeze the loading screen
         const task = InteractionManager.runAfterInteractions(async () => {
             if (Platform.OS === 'android') {
                 await notifee.createChannel({
@@ -388,16 +445,14 @@ function RootLayoutContent() {
 
             const token = await registerForPushNotificationsAsync();
             if (token && user?.deviceId) {
-                try {
-                    await apiFetch("https://oreblogda.com/api/users/update-push-token", {
-                        method: 'POST',
-                        headers: { 'Content-Type': 'application/json' },
-                        body: JSON.stringify({ deviceId: user.deviceId, pushToken: token })
-                    });
-                } catch (err) { }
+                apiFetch("https://oreblogda.com/api/users/update-push-token", {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ deviceId: user.deviceId, pushToken: token })
+                }).catch(() => {});
             }
             setAppReady(true);
-            setTimeout(() => setIsSyncing(false), 1500);
+            setIsSyncing(false);
         });
 
         return () => task.cancel();
@@ -463,13 +518,10 @@ function RootLayoutContent() {
         <View key={colorScheme} className="flex-1 bg-white dark:bg-gray-900">
             <StatusBar barStyle={isDark ? "light-content" : "dark-content"} backgroundColor={isDark ? "#0a0a0a" : "#ffffff"} />
             <Stack
-                screenOptions={{ headerShown: false, contentStyle: { backgroundColor: isDark ? "#0a0a0a" : "#ffffff" } }}
-                onStateChange={() => {
-                    // 🔹 PERFORMANCE FIX: 
-                    // Don't emit event immediately. Wait for transition to finish.
-                    InteractionManager.runAfterInteractions(() => {
-                        setTimeout(() => DeviceEventEmitter.emit("tryShowInterstitial"), 1000);
-                    });
+                screenOptions={{ 
+                    headerShown: false, 
+                    contentStyle: { backgroundColor: isDark ? "#0a0a0a" : "#ffffff" },
+                    animation: 'slide_from_right' // Force specific animation for speed
                 }}
             />
             <Toast />
@@ -489,4 +541,4 @@ export default function RootLayout() {
             </UserProvider>
         </SafeAreaProvider>
     );
-                                                                    }
+}
