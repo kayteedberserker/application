@@ -209,7 +209,7 @@ export default function PostsViewer() {
                 onEndReachedThreshold={0.5}
                 
                 // ⚡️ PERFORMANCE OPTIONS
-                removeClippedSubviews={Platform.OS === 'android'}
+                removeClippedSubviews={true}
                 initialNumToRender={5} 
                 maxToRenderPerBatch={4}
                 windowSize={3} 
