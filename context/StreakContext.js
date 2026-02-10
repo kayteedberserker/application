@@ -8,6 +8,9 @@ const StreakContext = createContext();
 const STREAK_CACHE_KEY = "streak_local_cache";
 const APP_SECRET = "thisismyrandomsuperlongsecretkey";
 
+// Surgical identifiers to avoid clearing non-streak notifications
+const STREAK_NOTIF_IDS = ["streak-24h", "streak-2h", "streak-lost"];
+
 // Set the handler so notifications show when the app is open
 Notifications.setNotificationHandler({
   handleNotification: async () => ({
@@ -34,18 +37,25 @@ const scheduleStreakReminders = async (expiresAt, setScheduledList = null) => {
     }
 
     // Create Channel for Android
+    const CHANNEL_ID = 'streak-reminders';
     if (Platform.OS === 'android') {
-      await Notifications.setNotificationChannelAsync('streak-reminders', {
+      await Notifications.setNotificationChannelAsync(CHANNEL_ID, {
         name: 'Streak Reminders',
         importance: Notifications.AndroidImportance.HIGH,
         sound: 'default',
       });
     }
 
+    // Surgical Strike: Only cancel existing streak notifications
+    // This ensures Clan Wars and other alerts are NOT deleted
+    await Promise.all(
+      STREAK_NOTIF_IDS.map(id => Notifications.cancelScheduledNotificationAsync(id))
+    );
+
     const expiryDate = new Date(expiresAt).getTime();
     const now = Date.now();
-    const GROUP_KEY = "com.oreblogda.STREAK_GROUP"
-    const CHANNEL_ID = "streak-reminders";
+    const GROUP_KEY = "com.oreblogda.STREAK_GROUP";
+    
     // 1. 24 Hour Reminder
     const trigger24h = expiryDate - (24 * 60 * 60 * 1000);
     if (trigger24h > now) {
@@ -61,10 +71,11 @@ const scheduleStreakReminders = async (expiresAt, setScheduledList = null) => {
         trigger: {
           type: Notifications.SchedulableTriggerInputTypes.DATE,
           date: new Date(trigger24h),
-          channelId: 'streak-reminders'
+          channelId: CHANNEL_ID // Fixed: Included back in trigger
         },
       });
     }
+
     // 2. 2 Hour Reminder
     const trigger2h = expiryDate - (2 * 60 * 60 * 1000);
     if (trigger2h > now) {
@@ -82,10 +93,11 @@ const scheduleStreakReminders = async (expiresAt, setScheduledList = null) => {
         trigger: {
           type: Notifications.SchedulableTriggerInputTypes.DATE,
           date: new Date(trigger2h),
-          channelId: 'streak-reminders'
+          channelId: CHANNEL_ID // Fixed: Included back in trigger
         },
       });
     }
+
     // 3. Expiration Notification
     if (expiryDate > now) {
       await Notifications.scheduleNotificationAsync({
@@ -99,7 +111,7 @@ const scheduleStreakReminders = async (expiresAt, setScheduledList = null) => {
         trigger: {
           type: Notifications.SchedulableTriggerInputTypes.DATE,
           date: new Date(expiryDate),
-          channelId: 'streak-reminders'
+          channelId: CHANNEL_ID // Fixed: Included back in trigger
         },
       });
     }
@@ -107,6 +119,7 @@ const scheduleStreakReminders = async (expiresAt, setScheduledList = null) => {
     // Update the list if the setter was provided
     if (setScheduledList) {
       const scheduled = await Notifications.getAllScheduledNotificationsAsync();
+      setScheduledList(scheduled);
     }
 
   } catch (e) {
@@ -128,6 +141,7 @@ export function StreakProvider({ children }) {
 
   const fetchStreak = useCallback(async () => {
     try {
+      setLoading(true);
       const userData = await AsyncStorage.getItem("mobileUser");
       if (!userData) return;
       const { deviceId } = JSON.parse(userData);
@@ -180,7 +194,7 @@ export function StreakProvider({ children }) {
     streak: streakData,
     loading,
     refreshStreak: fetchStreak,
-    scheduledList, // To see your notifications in UI
+    scheduledList, 
   }), [streakData, loading, fetchStreak, scheduledList]);
 
   return (
