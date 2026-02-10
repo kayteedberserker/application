@@ -19,7 +19,6 @@ const CHANNELS = [
 const Scene = memo(({ item, pageWidth }) => {
     return (
         <View style={{ width: pageWidth, flex: 1 }}>
-            {/* Using a key based on item.id ensures the component mounts correctly */}
             <View className="flex-1">
                 {item.type === 'feed' ? (
                     <PostsViewer />
@@ -28,8 +27,7 @@ const Scene = memo(({ item, pageWidth }) => {
                 )}
             </View>
             
-            {/* Fallback Loading Overlay: If the JS thread is busy, 
-                this simple View is more likely to show than the heavy child */}
+            {/* Fallback Loading Overlay */}
             <View 
                 pointerEvents="none" 
                 style={{ position: 'absolute', top: 0, left: 0, right: 0, bottom: 0, zIndex: -1 }}
@@ -49,7 +47,6 @@ export default function HomePage() {
     const { colorScheme } = useColorScheme();
     const isDark = colorScheme === "dark";
     
-    // ⚡️ ROTATION FIX: useWindowDimensions updates automatically on rotate
     const { width: windowWidth } = useWindowDimensions();
     
     const flatListRef = useRef(null);
@@ -63,7 +60,6 @@ export default function HomePage() {
         return () => sub.remove();
     }, []);
 
-    // ⚡️ PERFORMANCE: Passing windowWidth to Scene ensures it resizes on rotation
     const renderItem = useCallback(({ item }) => (
         <Scene item={item} pageWidth={windowWidth} />
     ), [windowWidth]);
@@ -74,7 +70,7 @@ export default function HomePage() {
     }).current;
 
     const onViewableItemsChanged = useRef(({ viewableItems }) => {
-        if (viewableItems.length > 0) {
+        if (viewableItems && viewableItems.length > 0) {
             const newItem = viewableItems[0];
             const newIndex = newItem.index;
             if (newIndex !== null && newIndex !== undefined) {
@@ -98,7 +94,14 @@ export default function HomePage() {
                 renderItem={renderItem}
                 keyExtractor={(item) => item.id}
                 horizontal
-                pagingEnabled
+                
+                // 🛠 FIX: Paging & Momentum
+                pagingEnabled={true} 
+                disableIntervalMomentum={true} // Prevents skipping multiple pages on fast swipe
+                decelerationRate="fast"
+                snapToAlignment="start"
+                scrollEventThrottle={16}
+                
                 showsHorizontalScrollIndicator={false}
                 onViewableItemsChanged={onViewableItemsChanged}
                 viewabilityConfig={viewabilityConfig}
@@ -108,7 +111,7 @@ export default function HomePage() {
                     { useNativeDriver: false }
                 )}
 
-                // ⚡️ ROTATION FIX: Recalculate layout based on dynamic width
+                // 🛠 FIX: Ensure alignment is perfect
                 getItemLayout={(_, index) => ({
                     length: windowWidth,
                     offset: windowWidth * index,
@@ -116,18 +119,13 @@ export default function HomePage() {
                 })}
 
                 // 🔹 Optimized Rendering Window
-                // windowSize={5} is a bit heavier on memory but helps stop the blank pages 
-                // because it keeps 2 pages ahead and 2 pages behind in memory.
-                windowSize={5} 
-                initialNumToRender={2}
-                maxToRenderPerBatch={2}
-                removeClippedSubviews={true} 
-                scrollEventThrottle={16}
-                decelerationRate="fast"
+                windowSize={3} // Reduced from 5 to 3 to keep it snappier and avoid memory leaks
+                initialNumToRender={1}
+                maxToRenderPerBatch={1}
+                removeClippedSubviews={Platform.OS === 'android'} // Usually safer on Android
                 
-                // Helps with "stickiness" on swipe
-                snapToInterval={windowWidth}
-                snapToAlignment="start"
+                // Remove snapToInterval when using pagingEnabled on standard horizontal lists
+                // to avoid conflicting "fighting" logic that causes partial page views.
             />
 
             {/* Neural Link Footer */}
