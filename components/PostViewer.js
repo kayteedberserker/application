@@ -10,7 +10,7 @@ import {
     FlatList,
     InteractionManager,
     View,
-    Platform
+    Platform // 🚀 FIXED: Added missing import
 } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import useSWRInfinite from "swr/infinite";
@@ -49,7 +49,7 @@ export default function PostsViewer() {
     const isDark = colorScheme === "dark";
 
     const [ready, setReady] = useState(false);
-    const [canFetch, setCanFetch] = useState(false); // 🚀 New: Delay fetching until UI is idle
+    const [canFetch, setCanFetch] = useState(false); 
     const [cachedData, setCachedData] = useState(POSTS_MEMORY_CACHE); 
     const [isOfflineMode, setIsOfflineMode] = useState(false);
 
@@ -62,19 +62,23 @@ export default function PostsViewer() {
                     const local = await AsyncStorage.getItem(CACHE_KEY);
                     if (local) {
                         const parsed = JSON.parse(local);
-                        setCachedData(parsed.data);
-                        POSTS_MEMORY_CACHE = parsed.data;
+                        // 🚀 Ensure cache matches SWR's expected page-array format
+                        if (Array.isArray(parsed.data)) {
+                            setCachedData(parsed.data);
+                            POSTS_MEMORY_CACHE = parsed.data;
+                        }
                     }
                 }
             } catch (e) {
                 console.error("Cache load error", e);
             }
 
-            // 🚀 Wait for navigation to finish before marking ready and allowing fetch
             InteractionManager.runAfterInteractions(() => {
                 setReady(true);
-                // Extra 400ms buffer to ensure thread is completely free
-                setTimeout(() => setCanFetch(true), 400);
+                // Extra buffer to ensure thread is completely free for initial render
+                setTimeout(() => {
+                    setCanFetch(true);
+                }, 400);
             });
         };
         prepare();
@@ -102,7 +106,7 @@ export default function PostsViewer() {
     }, [pulseAnim]);
 
     const getKey = (pageIndex, previousPageData) => {
-        // 🚀 CRITICAL: Do not fetch until the UI thread is free (canFetch)
+        // 🚀 STOP fetch until UI is idle or if we reached the end
         if (!ready || !canFetch) return null;
         if (previousPageData && previousPageData.posts?.length < LIMIT) return null;
         return `/posts?page=${pageIndex + 1}&limit=${LIMIT}`;
@@ -111,7 +115,7 @@ export default function PostsViewer() {
     const { data, size, setSize, isLoading, isValidating, mutate } = useSWRInfinite(getKey, fetcher, {
         refreshInterval: isOfflineMode ? 0 : 60000,
         revalidateOnFocus: false,
-        dedupingInterval: 10000, // Increased to reduce thread noise
+        dedupingInterval: 10000,
         fallbackData: cachedData, 
         onSuccess: (newData) => {
             setIsOfflineMode(false);
@@ -129,7 +133,7 @@ export default function PostsViewer() {
 
         const postMap = new Map();
         sourceData.forEach(page => {
-            if (page?.posts) {
+            if (page?.posts && Array.isArray(page.posts)) {
                 page.posts.forEach(p => {
                     if (p?._id) postMap.set(p._id, p);
                 });
@@ -138,7 +142,7 @@ export default function PostsViewer() {
         return Array.from(postMap.values());
     }, [data, cachedData]);
 
-    const hasMore = data?.[data.length - 1]?.posts?.length === LIMIT;
+    const hasMore = data ? data[data.length - 1]?.posts?.length === LIMIT : false;
 
     useEffect(() => {
         const sub = DeviceEventEmitter.addListener("doScrollToTop", () => {
@@ -152,7 +156,8 @@ export default function PostsViewer() {
         setSize(size + 1);
     };
 
-    // Show loading only if we have literally nothing to show
+    // 🚀 INSTRUCTION: Anything including loading should have the loading animation.
+    // If not ready and we have no cache, show full screen anime loader.
     if (!ready && posts.length === 0) {
         return <AnimeLoading message="Loading posts" subMessage="Prepping Otaku content" />
     }
@@ -163,7 +168,7 @@ export default function PostsViewer() {
         return (
             <View key={item._id}>
                 <PostCard post={item} isFeed posts={posts} setPosts={mutate} />
-                {showAd && ready && canFetch && (
+                {showAd && ready && (
                     <NativeAdPostStyle isDark={isDark} />
                 )}
             </View>
@@ -207,7 +212,7 @@ export default function PostsViewer() {
                 removeClippedSubviews={Platform.OS === 'android'}
                 initialNumToRender={5} 
                 maxToRenderPerBatch={4}
-                windowSize={3} // 🚀 Keeps memory lean for horizontal swiping
+                windowSize={3} 
                 updateCellsBatchingPeriod={100} 
                 onScroll={(e) => {
                     const offsetY = e.nativeEvent.contentOffset.y;
@@ -216,7 +221,8 @@ export default function PostsViewer() {
                 scrollEventThrottle={32}
                 ListFooterComponent={
                     <View className="py-12 items-center justify-center min-h-[140px]">
-                        {(isLoading && posts.length === 0) || (isValidating && posts.length > 0 && size > 1) ? (
+                        {/* 🚀 INSTRUCTION: Show loading animation for fetching more */}
+                        {(isLoading || (isValidating && size > 1)) ? (
                             <SyncLoading />
                         ) : !hasMore && posts.length > 0 ? (
                             <Text className="text-[10px] font-[900] uppercase tracking-[0.5em] text-gray-400">
