@@ -118,9 +118,9 @@ export default function HomePage() {
                 // 🔹 Optimized Rendering Window
                 // windowSize={5} is a bit heavier on memory but helps stop the blank pages 
                 // because it keeps 2 pages ahead and 2 pages behind in memory.
-                windowSize={1} 
-                initialNumToRender={1}
-                maxToRenderPerBatch={1}
+                windowSize={5} 
+                initialNumToRender={5}
+                maxToRenderPerBatch={5}
                 removeClippedSubviews={true} 
                 scrollEventThrottle={16}
                 decelerationRate="fast"
