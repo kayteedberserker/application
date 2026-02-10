@@ -157,6 +157,9 @@ function RootLayoutContent() {
     const [isAdReady, setIsAdReady] = useState(false);
     const [adStatusLog, setAdStatusLog] = useState("Initializing Ad Engine...");
     const [debugTapCount, setDebugTapCount] = useState(0);
+    
+    // 🔹 FIX: Queue for notifications that arrive before app is ready
+    const pendingNavigation = useRef(null);
 
     const appState = useRef(AppState.currentState);
     const lastHandledNotificationId = useRef(null);
@@ -171,6 +174,13 @@ function RootLayoutContent() {
     // --- 🔹 SMART ROUTING ENGINE ---
     const processRouting = useCallback((data) => {
         if (!data) return;
+
+        // 🔹 FIX: If app isn't ready, queue this for later so it doesn't get lost
+        if (!isAdReady) {
+            console.log("App not ready, queuing navigation:", data);
+            pendingNavigation.current = data;
+            return;
+        }
 
         const targetPostId = data.postId || data.id || data.body?.postId;
         const targetType = data.type || data.body?.type;
@@ -187,8 +197,10 @@ function RootLayoutContent() {
 
         if (!targetPath) return;
 
+        // 🔹 FIX: Clean check to prevent double navigation
         const currentPathBase = currentPathRef.current.split('?')[0];
-        const isOnSamePage = currentPathBase === targetPath;
+        const targetPathBase = targetPath.split('?')[0];
+        const isOnSamePage = currentPathBase === targetPathBase;
 
         if (isOnSamePage) {
             if (targetDiscussionId) {
@@ -202,7 +214,7 @@ function RootLayoutContent() {
         console.log(finalUrl);
 
         router.push(finalUrl);
-    }, [router]);
+    }, [router, isAdReady]);
 
     // --- 1. GLOBAL NAVIGATION & BACK HANDLER ---
     useEffect(() => {
@@ -246,12 +258,19 @@ function RootLayoutContent() {
         };
     }, []);
 
-    // --- 2. AD INITIALIZATION (Updated with Adapter Logging) ---
+    // --- 2. AD INITIALIZATION (Updated with Timeout Fix) ---
     useEffect(() => {
         if (Platform.OS === 'web') {
             setIsAdReady(true);
             return;
         }
+
+        // 🔹 FIX: Safety Timeout - If ads fail/hang, load the app anyway after 2.5s
+        const safetyTimer = setTimeout(() => {
+            console.log("Ad timeout reached, forcing app load");
+            setIsAdReady(true);
+        }, 2500);
+
         const runMediationInit = async () => {
             try {
                 await mobileAds().setRequestConfiguration({
@@ -259,20 +278,32 @@ function RootLayoutContent() {
                     tagForChildDirectedTreatment: false,
                 });
                 
-                // This initializes AdMob AND all included mediation adapters
                 const adapterStatuses = await mobileAds().initialize();
-                // console.log("AdMob Adapters Initialized:", adapterStatuses);
-
+                
                 if (typeof loadAppOpenAd === 'function') loadAppOpenAd();
                 if (typeof loadInterstitial === 'function') loadInterstitial();
+                
+                // Clear timeout if successful
+                clearTimeout(safetyTimer);
                 setTimeout(() => setIsAdReady(true), 1000);
             } catch (e) {
                 console.error("AdMob Init Error:", e);
-                setTimeout(() => setIsAdReady(true), 2000);
+                // Safety timer will handle the fallback
             }
         };
         runMediationInit();
+        return () => clearTimeout(safetyTimer);
     }, []);
+
+    // 🔹 FIX: Process queued navigation once app is ready
+    useEffect(() => {
+        if (isAdReady && pendingNavigation.current) {
+            const data = pendingNavigation.current;
+            pendingNavigation.current = null;
+            // Short delay to ensure stack is mounted
+            setTimeout(() => processRouting(data), 100);
+        }
+    }, [isAdReady, processRouting]);
 
     // --- 3. WELCOME AD ---
     useEffect(() => {
@@ -283,7 +314,7 @@ function RootLayoutContent() {
         }
     }, [appReady, isAdReady]);
 
-    // --- 4. DEEP LINKING (Event Based - Fixes Duplicates & Warm Start Ghosting) ---
+    // --- 4. DEEP LINKING (Event Based) ---
     useEffect(() => {
         const handleUrl = (url) => {
             if (!url || isUpdating) return;
@@ -314,12 +345,9 @@ function RootLayoutContent() {
             }
         };
 
-        // Check if app was opened via a link (Initial Cold Start)
-        Linking.getInitialURL().then((initialUrl) => {
-            if (initialUrl) {
-                handleUrl(initialUrl);
-            }
-        });
+        // 🔹 FIX: REMOVED `Linking.getInitialURL()` 
+        // Expo Router automatically handles the initial URL. 
+        // Keeping it here was causing the "Double Page" bug.
 
         // Listen for new links while app is open (Handles Duplicates perfectly)
         const subscription = Linking.addEventListener('url', (event) => {
@@ -421,8 +449,8 @@ function RootLayoutContent() {
     }, [isUpdating]);
 
   
-    
-
+    // 🔹 FIX: Only block rendering if fonts/updates are pending.
+    // If ads are not ready but timeout passed, isAdReady will be true, allowing app to load.
     if (!fontsLoaded || isUpdating || !isAdReady) {
         return (
             <AnimeLoading
@@ -459,4 +487,4 @@ export default function RootLayout() {
             </UserProvider>
         </SafeAreaProvider>
     );
-}
+                    }
