@@ -54,12 +54,15 @@ export default function MainLayout() {
             tension: 40,
         }).start();
     }, [showClanMenu]);
-const userClanData = await AsyncStorage.getItem('userClan');
+const [userInClan, setUserInClan] = useState(false);
     const handleClanPress = async () => {
     try {
         const userClanData = await AsyncStorage.getItem('userClan');
-        // If user is in a clan, toggle the menu showing Profile, Discover, and Wa   
-            setShowClanMenu(!showClanMenu);
+        // If user is in a clan, toggle the menu showing Profile, Discover, and Wa  
+        if(userClanData) {
+            setUserInClan(true) 
+        }
+        setShowClanMenu(!showClanMenu);
     } catch (e) {
         DeviceEventEmitter.emit("navigateSafely", "/clans/discover");
     }
@@ -284,7 +287,7 @@ const userClanData = await AsyncStorage.getItem('userClan');
                     </TouchableOpacity>
                 </Animated.View>
 
-                { userClanData && <Animated.View style={{
+                { userInClan && <Animated.View style={{
                    opacity,
                     transform: [{ translateY: translateY_2 }, { scale }],
                     marginBottom: 10
