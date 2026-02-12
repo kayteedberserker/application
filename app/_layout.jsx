@@ -267,15 +267,13 @@ function RootLayoutContent() {
         requestAnimationFrame(() => {
             router.push(finalUrl);
         });
-    }, [router, isAdReady, appReady]);
+    }, [router, appReady]);
 
     useEffect(() => {
         const navSub = DeviceEventEmitter.addListener("navigateSafely", (targetPath) => {
             if (currentPathRef.current === targetPath) return;
             router.push(targetPath);
-            requestAnimationFrame(() => {
-                DeviceEventEmitter.emit("tryShowInterstitial");
-            });
+            
         });
 
         const interstitialListener = DeviceEventEmitter.addListener("tryShowInterstitial", () => {
