@@ -11,7 +11,7 @@ import {
     View
 } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
-import { NativeAdPostStyle } from "../../../components/NativeAd";
+import AppBanner from '../../../components/AppBanner';
 import PostCard from "../../../components/PostCard";
 import { SyncLoading } from "../../../components/SyncLoading";
 import { Text } from "../../../components/Text";
@@ -70,8 +70,8 @@ export default function CategoryPage({ forcedId }) {
     const saveHeavyCache = async (key, data) => {
         try {
             const cacheEntry = {
-                data: data, 
-                timestamp: Date.now(), 
+                data: data,
+                timestamp: Date.now(),
             };
             await AsyncStorage.setItem(key, JSON.stringify(cacheEntry));
         } catch (e) {
@@ -133,7 +133,7 @@ export default function CategoryPage({ forcedId }) {
                 const cached = await AsyncStorage.getItem(CACHE_KEY);
                 if (cached) {
                     const parsedEntry = JSON.parse(cached);
-                    const cachedData = parsedEntry?.data || parsedEntry; 
+                    const cachedData = parsedEntry?.data || parsedEntry;
 
                     if (cachedData && Array.isArray(cachedData) && cachedData.length > 0) {
                         CATEGORY_MEMORY_CACHE[CACHE_KEY] = cachedData; // Fill memory
@@ -143,7 +143,7 @@ export default function CategoryPage({ forcedId }) {
                         return;
                     }
                 }
-                
+
                 // 3. Fallback to API
                 fetchPosts(1, true);
             } catch (e) {
@@ -158,7 +158,10 @@ export default function CategoryPage({ forcedId }) {
         return (
             <View className="px-4">
                 <PostCard post={item} isFeed />
-                {showAd && <NativeAdPostStyle isDark={isDark} />}
+                {showAd && <View className="mb-3 mt-3 w-full p-6 border border-dashed border-gray-300 dark:border-gray-800 rounded-[32px] bg-gray-50/50 dark:bg-white/5 items-center justify-center">
+                    <Text className="text-[10px] font-bold text-gray-400 uppercase tracking-[0.2em] italic text-center">Sponsored Transmission</Text>
+                    <AppBanner size="MEDIUM_RECTANGLE" />
+                </View>}
             </View>
         );
     };
@@ -198,7 +201,7 @@ export default function CategoryPage({ forcedId }) {
                 ListFooterComponent={() => (
                     <View className="py-12 items-center justify-center min-h-[140px]">
                         {loading && !refreshing ? (
-                            <SyncLoading /> 
+                            <SyncLoading />
                         ) : !hasMore && posts.length > 0 ? (
                             <View className="items-center">
                                 <View className="h-[1px] w-12 bg-gray-200 dark:bg-gray-800 mb-4" />

@@ -5,10 +5,10 @@ import { useColorScheme } from "nativewind";
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { ActivityIndicator, DeviceEventEmitter, FlatList, Modal, ScrollView, Text, TextInput, TouchableOpacity, View } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
-import { SyncLoading } from "../../../components/SyncLoading";
-import { useStreak } from "../../../context/StreakContext";
-import { useUser } from "../../../context/UserContext";
-import apiFetch from '../../../utils/apiFetch';
+import { SyncLoading } from "../../components/SyncLoading";
+import { useStreak } from "../../context/StreakContext";
+import { useUser } from "../../context/UserContext";
+import apiFetch from '../../utils/apiFetch';
 
 // 🧠 Tier 1: Memory Cache (Instant load when navigating back/forth)
 let CLANS_MEMORY_CACHE = [];

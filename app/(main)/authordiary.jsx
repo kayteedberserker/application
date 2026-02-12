@@ -14,9 +14,9 @@ import {
     Switch, TextInput, TouchableOpacity,
     View,
 } from "react-native";
-import { useRewardedAd } from 'react-native-google-mobile-ads';
 import Toast from "react-native-toast-message";
 import useSWR from "swr";
+import { LevelPlayRewardedAd } from 'unity-levelplay-mediation';
 import AnimeLoading from "../../components/AnimeLoading";
 import { Text } from "../../components/Text";
 import THEME from "../../components/useAppTheme";
@@ -100,10 +100,11 @@ export default function AuthorDiaryDashboard() {
     // 🔹 NEW: Ref for the message input to fix keyboard issue
     const messageInputRef = useRef(null);
 
-    // 1. Hook-based Ad Management
-    const { isLoaded, isEarnedReward, isClosed, load, show } = useRewardedAd(AdConfig.rewarded, {
-        requestNonPersonalizedAdsOnly: true,
-    });
+    // 🛠️ LEVELPLAY AD MANAGEMENT (Replaces useRewardedAd hook)
+    const rewardedAdRef = useRef(null);
+    const retryTimerRef = useRef(null);
+    const [isAdLoaded, setIsAdLoaded] = useState(false);
+    const [isAdLoading, setIsAdLoading] = useState(false); // For loading animation
 
     // Form & System States
     const [title, setTitle] = useState("");
@@ -111,7 +112,7 @@ export default function AuthorDiaryDashboard() {
 
     // 🔹 Category States
     const [category, setCategory] = useState("News");
-    const [clanSubCategory, setClanSubCategory] = useState("General"); // For Clan sub-selection
+    const [clanSubCategory, setClanSubCategory] = useState("General");
 
     const [mediaUrl, setMediaUrl] = useState("");
     const [mediaUrlLink, setMediaUrlLink] = useState("");
@@ -151,7 +152,79 @@ export default function AuthorDiaryDashboard() {
     const CACHE_KEY_RANK = `CACHE_RANK_${fingerprint}`;
 
     // =================================================================
-    // 1. INITIALIZATION: RESTORE DRAFTS AND CACHED DATA
+    // 1. LEVELPLAY REWARDED AD LOGIC (REPLACEMENT)
+    // =================================================================
+    const REWARDED_ID = String(AdConfig.rewarded || "pw746blifv59mqoq").trim();
+    useEffect(() => {
+        if (REWARDED_ID === "0" || !fingerprint) return;
+
+        const rewardedAd = new LevelPlayRewardedAd(REWARDED_ID);
+        rewardedAdRef.current = rewardedAd;
+
+        const listener = {
+            onAdLoaded: (adInfo) => {
+                setIsAdLoaded(true);
+                setIsAdLoading(false);
+                if (retryTimerRef.current) clearTimeout(retryTimerRef.current);
+            },
+            onAdLoadFailed: (error) => {
+                console.warn("LevelPlay Load Failed:", error?.errorMessage);
+                setIsAdLoaded(false);
+                setIsAdLoading(true); // Keep spinner if you want to show it's retrying
+
+                // Retry logic
+                if (retryTimerRef.current) clearTimeout(retryTimerRef.current);
+                retryTimerRef.current = setTimeout(() => {
+                    rewardedAd.loadAd();
+                }, 10000);
+            },
+            onAdAvailable: (adInfo) => {
+                setIsAdLoaded(true);
+                setIsAdLoading(false);
+                if (retryTimerRef.current) clearTimeout(retryTimerRef.current);
+            },
+            onAdUnavailable: () => setIsAdLoaded(false),
+            onAdRewarded: async (reward, adInfo) => {
+                // 🔹 PORTED FROM YOUR ADMOB LOGIC
+                console.log("Reward Earned via LevelPlay");
+                setRewardToken(`rewarded_${fingerprint}`);
+                setCanPostAgain(true);
+                try {
+                    await Notifications.cancelAllScheduledNotificationsAsync();
+                } catch (err) {
+                    console.error("Failed to cancel notifications:", err);
+                }
+            },
+            onAdClosed: (adInfo) => {
+                // Reload ad immediately for next time
+                rewardedAd.loadAd();
+            },
+            onAdShowFailed: (error, adInfo) => {
+                Alert.alert("Ad Error", "Failed to display reward video.");
+                rewardedAd.loadAd();
+            }
+        };
+
+        rewardedAd.setListener(listener);
+        rewardedAd.loadAd();
+
+        return () => {
+            if (retryTimerRef.current) clearTimeout(retryTimerRef.current);
+        };
+    }, [fingerprint]);
+
+    // Manual Show Function (To be called by your button)
+    const handleShowRewardAd = async () => {
+        if (rewardedAdRef.current && await rewardedAdRef.current.isAdReady()) {
+            rewardedAdRef.current.showAd("");
+        } else {
+            Toast.show({ type: 'error', text1: 'Ad not ready yet. Please wait.' });
+            rewardedAdRef.current?.loadAd();
+        }
+    };
+
+    // =================================================================
+    // 2. INITIALIZATION: RESTORE DRAFTS AND CACHED DATA
     // =================================================================
     useEffect(() => {
         const prepare = async () => {
@@ -165,24 +238,22 @@ export default function AuthorDiaryDashboard() {
                     if (data.title) setTitle(data.title);
                     if (data.message) setMessage(data.message);
                     if (data.category) setCategory(data.category);
-                    if (data.clanSubCategory) setClanSubCategory(data.clanSubCategory); // Restore sub cat
+                    if (data.clanSubCategory) setClanSubCategory(data.clanSubCategory);
                     if (data.hasPoll) setHasPoll(data.hasPoll);
                     if (data.pollOptions) setPollOptions(data.pollOptions);
                     if (data.timestamp) setLastSavedTime(data.timestamp);
                 }
 
-                // B. Restore Cached Posts (for Instant UI)
+                // B. Restore Cached Posts
                 const savedPosts = await AsyncStorage.getItem(CACHE_KEY_TODAY);
-                if (savedPosts) {
-                    setCachedTodayPosts(JSON.parse(savedPosts));
-                }
+                if (savedPosts) setCachedTodayPosts(JSON.parse(savedPosts));
 
                 // C. Restore Cached Rank
                 const savedRank = await AsyncStorage.getItem(CACHE_KEY_RANK);
                 if (savedRank) {
                     const rankData = JSON.parse(savedRank);
-                    setCachedRankData(rankData); // Save raw count
-                    setUserRank(resolveUserRank(rankData)); // Update UI
+                    setCachedRankData(rankData);
+                    setUserRank(resolveUserRank(rankData));
                 }
 
             } catch (err) {
@@ -194,63 +265,46 @@ export default function AuthorDiaryDashboard() {
         prepare();
     }, [fingerprint]);
 
-
     // =================================================================
-    // 2. DATA FETCHING (OPTIMIZED WITH SWR & CACHING)
+    // 3. DATA FETCHING (OPTIMIZED WITH SWR & CACHING)
     // =================================================================
-
-    // A. FETCH RANK (Manual Fetch + Cache)
     useEffect(() => {
         const fetchTotalPosts = async () => {
             if (!user?.deviceId) return;
-
             const total = await getUserTotalPosts(user?.deviceId);
-
             if (total !== null) {
-                // Online success
                 const rank = resolveUserRank(total);
                 setUserRank(rank);
                 AsyncStorage.setItem(CACHE_KEY_RANK, JSON.stringify(total));
-            } else {
-                // Offline or Error: We rely on the initial useEffect which loaded cache
-                console.log("Could not fetch new rank, using cache if available");
             }
         };
         fetchTotalPosts();
     }, [user?.deviceId]);
 
-    // B. FETCH TODAY'S POSTS (SWR + Cache + Offline Mode)
     const { data: todayPostsData, mutate: mutateTodayPosts, error: swrError } = useSWR(
         user?.deviceId ? `/posts?author=${user.deviceId}&last24Hours=true` : null,
         fetcher,
         {
-            refreshInterval: isOfflineMode ? 0 : 5000, // Stop polling if offline
-            fallbackData: cachedTodayPosts, // 👈 KEY: Use saved data first
+            refreshInterval: isOfflineMode ? 0 : 5000,
+            fallbackData: cachedTodayPosts,
             onSuccess: (data) => {
                 setIsOfflineMode(false);
                 AsyncStorage.setItem(CACHE_KEY_TODAY, JSON.stringify(data));
             },
-            onError: () => {
-                setIsOfflineMode(true);
-            }
+            onError: () => setIsOfflineMode(true)
         }
     );
 
-    // Merge Cache and Live Data for "Mission Log" and Status
-    // We prioritize Live Data, fallback to Cache, fallback to empty
     const todayPosts = useMemo(() => {
         return todayPostsData?.posts || cachedTodayPosts?.posts || [];
     }, [todayPostsData, cachedTodayPosts]);
+    const todayPost = todayPosts[0] || null;
 
     const postsLast24h = todayPosts.length;
-    const todayPost = todayPosts.length > 0 ? todayPosts[0] : null;
-
-    // 🔹 RANK LIMITS & CLAN BONUS LOGIC
-    // If user is in a clan, they get +1 to their rank limit
     const maxPostsToday = isInClan ? userRank.postLimit + 1 : userRank.postLimit;
 
     // =================================================================
-    // 3. DRAFT AUTO-SAVE LOGIC
+    // 4. DRAFT AUTO-SAVE LOGIC
     // =================================================================
     useEffect(() => {
         if (isDraftRestoring || !fingerprint) return;
@@ -260,13 +314,7 @@ export default function AuthorDiaryDashboard() {
             try {
                 const now = new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit', second: '2-digit' });
                 const draftData = {
-                    title,
-                    message,
-                    category,
-                    clanSubCategory,
-                    hasPoll,
-                    pollOptions,
-                    timestamp: now
+                    title, message, category, clanSubCategory, hasPoll, pollOptions, timestamp: now
                 };
                 await AsyncStorage.setItem(`draft_${fingerprint}`, JSON.stringify(draftData));
                 setLastSavedTime(now);
@@ -282,36 +330,27 @@ export default function AuthorDiaryDashboard() {
     const handleClearAll = () => {
         Alert.alert(
             "Wipe Local Intel?",
-            "This will permanently delete your current draft and clear the form.",
+            "This will permanently delete your current draft.",
             [
                 { text: "Cancel", style: "cancel" },
                 {
                     text: "Clear Everything",
                     style: "destructive",
                     onPress: async () => {
-                        setTitle("");
-                        setMessage("");
-                        setCategory("News");
-                        setHasPoll(false);
-                        setPollOptions(["", ""]);
-                        setMediaUrl("");
-                        setMediaUrlLink("");
-                        setPickedImage(false);
+                        setTitle(""); setMessage(""); setCategory("News"); setHasPoll(false);
+                        setPollOptions(["", ""]); setMediaUrl(""); setMediaUrlLink(""); setPickedImage(false);
                         try {
                             await AsyncStorage.removeItem(`draft_${fingerprint}`);
                             Toast.show({ type: 'info', text1: 'Intel cleared successfully.' });
-                        } catch (e) {
-                            console.error("Clear error", e);
-                        }
+                        } catch (e) { console.error("Clear error", e); }
                     }
                 }
             ]
         );
     };
 
-
     // =================================================================
-    // 4. NOTIFICATIONS, ADS, & TIMERS
+    // 5. NOTIFICATIONS & SYSTEM SETUP
     // =================================================================
     useEffect(() => {
         let isMounted = true;
@@ -332,21 +371,6 @@ export default function AuthorDiaryDashboard() {
         };
     }, []);
 
-    useEffect(() => { load(); }, [load]);
-
-    useEffect(() => {
-        if (isEarnedReward) {
-            const handleReward = async () => {
-                setRewardToken(`rewarded_${fingerprint}`);
-                setCanPostAgain(true);
-                try { await Notifications.cancelAllScheduledNotificationsAsync(); } catch (err) { console.error("Failed to cancel notifications:", err); }
-            };
-            handleReward();
-        }
-    }, [isEarnedReward, fingerprint]);
-
-    useEffect(() => { if (isClosed) { load(); } }, [isClosed, load]);
-    // Run this once when your component mounts or when the app starts
     useEffect(() => {
         if (Platform.OS === 'android') {
             Notifications.setNotificationChannelAsync('cooldown-timer', {
@@ -354,7 +378,6 @@ export default function AuthorDiaryDashboard() {
                 importance: Notifications.AndroidImportance.HIGH,
                 sound: 'default',
                 vibrationPattern: [0, 250, 250, 250],
-                lightColor: '#FF231F7C',
             });
         }
     }, []);
@@ -444,7 +467,7 @@ export default function AuthorDiaryDashboard() {
                             repeats: false,
                         },
                     });
-                    
+
                     await AsyncStorage.setItem(COOLDOWN_NOTIFICATION_KEY, notificationId);
                 } catch (error) {
                     console.error("Failed to schedule notification:", error);
@@ -678,13 +701,7 @@ export default function AuthorDiaryDashboard() {
 
             await AsyncStorage.removeItem(`draft_${fingerprint}`);
             Alert.alert("Success", "Your entry has been submitted for approval!");
-            const sendStreak = await apiFetch(`/users/streak`, {
-                method: "POST", 
-                body: JSON.stringify({
-                     deviceId: fingerprint, // Mapping your fingerprint variable to deviceId
-                 }),
-            }) 
-                
+
             // Reset States
             setMediaList([]);
             setTitle("");
@@ -963,10 +980,10 @@ export default function AuthorDiaryDashboard() {
                                     </View>
 
                                     <TouchableOpacity
-                                        onPress={() => isLoaded ? show() : load()}
-                                        className={`mt-8 w-full py-5 rounded-2xl flex-row justify-center items-center ${isLoaded ? 'bg-blue-600' : 'bg-gray-800'}`}
+                                        onPress={handleShowRewardAd}
+                                        className={`mt-8 w-full py-5 rounded-2xl flex-row justify-center items-center ${isAdLoaded ? 'bg-blue-600' : 'bg-gray-800'}`}
                                     >
-                                        {isLoaded ? <Ionicons name="play" size={20} color="white" /> : <ActivityIndicator size="small" color="#444" />}
+                                        {isAdLoaded ? <Ionicons name="play" size={20} color="white" /> : <ActivityIndicator size="small" color="#444" />}
                                         <Text className="text-white font-black uppercase tracking-widest ml-2">Override Limit (Watch Ad)</Text>
                                     </TouchableOpacity>
                                 </View>

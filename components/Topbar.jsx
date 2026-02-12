@@ -1,6 +1,6 @@
 import { Ionicons } from "@expo/vector-icons";
 import { useRouter } from "expo-router";
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import {
     ActivityIndicator,
     Alert,
@@ -10,7 +10,7 @@ import {
     TouchableOpacity,
     View,
 } from "react-native";
-import { useRewardedAd } from 'react-native-google-mobile-ads';
+// 🔹 Standard LevelPlay import
 import Animated, {
     FadeInRight,
     useAnimatedStyle,
@@ -19,17 +19,28 @@ import Animated, {
     withSequence,
     withTiming
 } from "react-native-reanimated";
+import { LevelPlayRewardedAd } from 'unity-levelplay-mediation';
 import { useStreak } from "../context/StreakContext";
 import { useUser } from "../context/UserContext";
 import { AdConfig } from "../utils/AdConfig";
 import apiFetch from "../utils/apiFetch";
 import { Text } from "./Text";
 
+const REWARDED_ID = String(AdConfig.rewarded || "0");
+
 const TopBar = ({ isDark }) => {
     const router = useRouter();
     const { streak, loading, refreshStreak } = useStreak();
     const { user } = useUser();
+    
+    // UI Logic states
     const [isRestoring, setIsRestoring] = useState(false);
+    const [isAdLoaded, setIsAdLoaded] = useState(false);
+    const [isAdShowing, setIsAdShowing] = useState(false);
+
+    // 🛠️ Refs to store the Ad Instance and Retry Timer
+    const rewardedAdRef = useRef(null);
+    const retryTimerRef = useRef(null);
 
     // Shared value for animations
     const pulse = useSharedValue(1);
@@ -45,70 +56,148 @@ const TopBar = ({ isDark }) => {
         );
     }, []);
 
-    // UI Logic states
+    // 🔹 LEVELPLAY REWARDED LOGIC - WITH RETRY MECHANISM
+    useEffect(() => {
+        if (REWARDED_ID === "0") return;
+
+        // 1. Create the instance
+        const rewardedAd = new LevelPlayRewardedAd(REWARDED_ID);
+        rewardedAdRef.current = rewardedAd;
+
+        const checkAvailability = async () => {
+            try {
+                // Use isAdReady() as defined in your library snippet
+                const available = await rewardedAd.isAdReady();
+                setIsAdLoaded(available);
+            } catch (e) {
+                console.log("Ad availability check failed:", e);
+            }
+        };
+
+        const listener = {
+            onAdLoaded: (adInfo) => {
+                console.log("Rewarded Ad Loaded (Internal Callback)");
+                setIsAdLoaded(true);
+                if (retryTimerRef.current) clearTimeout(retryTimerRef.current);
+            },
+            onAdLoadFailed: (error) => {
+                console.warn("Rewarded Ad Load Failed:", error?.errorMessage);
+                setIsAdLoaded(false);
+                
+                // 🔄 RETRY LOGIC: If "No Fill", try again in 10 seconds
+                if (retryTimerRef.current) clearTimeout(retryTimerRef.current);
+                retryTimerRef.current = setTimeout(() => {
+                    console.log("Retrying to load Rewarded Ad...");
+                    rewardedAd.loadAd();
+                }, 10000); 
+            },
+            onAdAvailable: (adInfo) => {
+                console.log("Rewarded Ad Available");
+                setIsAdLoaded(true);
+                if (retryTimerRef.current) clearTimeout(retryTimerRef.current);
+            },
+            onAdUnavailable: () => {
+                console.log("Rewarded Ad Unavailable");
+                setIsAdLoaded(false);
+            },
+            onAdRewarded: (reward, adInfo) => {
+                console.log("User earned reward");
+                handleRestoreStreak();
+            },
+            onAdClosed: (adInfo) => {
+                console.log("Rewarded Ad Closed");
+                setIsAdShowing(false);
+                // Reload ad for next time
+                rewardedAd.loadAd();
+            },
+            onAdShowFailed: (error, adInfo) => {
+                console.error("Rewarded Show Failed:", error?.errorMessage);
+                setIsAdShowing(false);
+                Alert.alert("Ad Error", "Could not play the video. Please try again.");
+                // Try to reload after show failure
+                rewardedAd.loadAd();
+            },
+            onAdClicked: (reward, adInfo) => console.log("Ad Clicked"),
+            onAdOpened: (adInfo) => setIsAdShowing(true),
+        };
+
+        // 2. Set listener on the instance
+        rewardedAd.setListener(listener);
+
+        // 3. Load the ad
+        rewardedAd.loadAd();
+
+        // Initial check
+        checkAvailability();
+
+        return () => {
+            if (retryTimerRef.current) clearTimeout(retryTimerRef.current);
+            // Cleanup if your library supports it
+            if (rewardedAd.remove) {
+                try {
+                    rewardedAd.remove();
+                } catch(e) {
+                    console.log("Cleanup error:", e);
+                }
+            }
+        };
+    }, []);
+
+    const handleRestoreStreak = async () => {
+        if (!user?.deviceId) return;
+        
+        try {
+            setIsRestoring(true);
+            const response = await apiFetch("/users/streak/restore", {
+                method: "POST",
+                headers: { "Content-Type": "application/json" },
+                body: JSON.stringify({ deviceId: user.deviceId }),
+            });
+
+            const result = await response.json();
+
+            if (!response.ok) {
+                Alert.alert("System Notification", result.message || "Unable to restore streak.");
+            } else {
+                Alert.alert("Streak Revived!", `Your ${result.streak} day streak is back from the dead.`);
+                refreshStreak();
+            }
+        } catch (err) {
+            console.log("Restore streak error:", err);
+            Alert.alert("Connection Error", "Failed to reach the server.");
+        } finally {
+            setIsRestoring(false);
+        }
+    };
+
+    const handleShowAd = async () => {
+        const adInstance = rewardedAdRef.current;
+        if (!adInstance) {
+            Alert.alert("Error", "Ad system not initialized.");
+            return;
+        }
+
+        const canShow = await adInstance.isAdReady();
+        if (canShow) {
+            adInstance.showAd("");
+        } else {
+            console.log("Ad not ready yet. Attempting reload.");
+            adInstance.loadAd();
+        }
+    };
+
+    // UI Logic helpers
     const hasActiveStreak = streak?.streak > 0;
     const showRestoreUI = streak?.canRestore;
     const isZeroStreak = !hasActiveStreak && !showRestoreUI;
 
-    // Animation Style for the WHOLE button (Warning/Urgent mode)
     const urgentButtonStyle = useAnimatedStyle(() => ({
         transform: [{ scale: showRestoreUI ? pulse.value : 1 }],
     }));
 
-    // Animation Style for ONLY the flame (Healthy/Active mode)
     const healthyFlameStyle = useAnimatedStyle(() => ({
         transform: [{ scale: !showRestoreUI && hasActiveStreak ? pulse.value : 1 }],
     }));
-
-    const {
-        isLoaded,
-        isEarnedReward,
-        isClosed,
-        load,
-        show,
-    } = useRewardedAd(AdConfig.rewarded, {
-        requestNonPersonalizedAdsOnly: true,
-    });
-
-    useEffect(() => {
-        load();
-    }, [load]);
-
-    // Handle the restoration logic
-    useEffect(() => {
-        const handleRestore = async () => {
-            if (isEarnedReward && isClosed && user?.deviceId) {
-                try {
-                    setIsRestoring(true);
-                    const response = await apiFetch("/users/streak/restore", {
-                        method: "POST",
-                        headers: { "Content-Type": "application/json" },
-                        body: JSON.stringify({ deviceId: user.deviceId }),
-                    });
-
-                    const result = await response.json();
-
-                    if (!response.ok) {
-                        Alert.alert("System Notification", result.message || "Unable to restore streak.");
-                    } else {
-                        Alert.alert("Streak Revived!", `Your ${result.streak} day streak is back from the dead.`);
-                        refreshStreak();
-                    }
-                } catch (err) {
-                    console.log("Restore streak error:", err);
-                    Alert.alert("Connection Error", "Failed to reach the server.");
-                } finally {
-                    setIsRestoring(false);
-                }
-            }
-        };
-
-        handleRestore();
-    }, [isEarnedReward, isClosed]);
-
-    useEffect(() => {
-        if (isClosed) load();
-    }, [isClosed, load]);
 
     const logoSrc = isDark
         ? require("../assets/images/logowhite.png")
@@ -125,13 +214,11 @@ const TopBar = ({ isDark }) => {
                     : "bg-white border-b border-gray-200"
                     }`}
             >
-                {/* LOGO - Adjusted width slightly to make space */}
                 <Image
                     source={logoSrc}
                     style={{ width: 110, height: 32, resizeMode: "contain" }}
                 />
 
-                {/* RIGHT SIDE TOOLS - Reduced gap to fit search */}
                 <View className="flex-row items-center gap-2">
                     
                     {/* 🏆 LEADERBOARD */}
@@ -146,7 +233,7 @@ const TopBar = ({ isDark }) => {
                         />
                     </TouchableOpacity>
 
-                    {/* 🔍 SEARCH - NEW ICON */}
+                    {/* 🔍 SEARCH */}
                     <TouchableOpacity
                         onPress={() => DeviceEventEmitter.emit("navigateSafely", "/screens/Search")}
                         className={`p-1.5 rounded-xl ${isDark ? "bg-blue-500/10 border border-blue-500/20" : "bg-gray-100"}`}
@@ -162,8 +249,8 @@ const TopBar = ({ isDark }) => {
                     {!loading && (
                         <Animated.View entering={FadeInRight}>
                             <TouchableOpacity
-                                disabled={!showRestoreUI || isRestoring}
-                                onPress={() => isLoaded ? show() : load()}
+                                disabled={!showRestoreUI || isRestoring || isAdShowing}
+                                onPress={handleShowAd}
                                 activeOpacity={showRestoreUI ? 0.7 : 1}
                             >
                                 <Animated.View 
@@ -176,7 +263,8 @@ const TopBar = ({ isDark }) => {
                                         : "bg-orange-500/10 border-orange-500/30"
                                     }`}
                                 >
-                                    {isRestoring || (showRestoreUI && !isLoaded) ? (
+                                    {/* 🔄 LOADING ANIMATION (Applied when ad or restoration is pending) */}
+                                    {isRestoring || (showRestoreUI && !isAdLoaded) ? (
                                         <ActivityIndicator size="small" color={showRestoreUI ? "#ef4444" : "#f97316"} />
                                     ) : (
                                         <View className="flex-row items-center">

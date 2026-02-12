@@ -53,7 +53,6 @@
     "react-native": "^0.81.5",
     "react-native-css-interop": "^0.2.1",
     "react-native-gesture-handler": "~2.28.0",
-    "react-native-google-mobile-ads": "^16.0.1",
     "react-native-image-pan-zoom": "^2.1.12",
     "react-native-image-viewing": "^0.2.2",
     "react-native-reanimated": "~4.1.1",
@@ -65,7 +64,8 @@
     "react-native-worklets": "0.5.1",
     "react-native-youtube-iframe": "^2.4.1",
     "swr": "^2.3.8",
-    "tailwindcss": "^3.4.17"
+    "tailwindcss": "^3.4.17",
+    "unity-levelplay-mediation": "^9.0.0"
   },
   "devDependencies": {
     "@types/react": "~19.1.10",

@@ -3,6 +3,7 @@ import * as Clipboard from 'expo-clipboard';
 import { useRouter } from 'expo-router';
 import { useEffect, useMemo, useRef, useState } from 'react';
 import {
+    ActivityIndicator,
     Alert,
     Animated,
     DeviceEventEmitter,
@@ -17,8 +18,8 @@ import {
     TouchableOpacity,
     View
 } from 'react-native';
-import { useRewardedAd } from 'react-native-google-mobile-ads';
 import { useSafeAreaInsets } from "react-native-safe-area-context";
+import { LevelPlayRewardedAd } from "unity-levelplay-mediation";
 import AnimeLoading from "../../components/AnimeLoading";
 import ClanCrest from "../../components/ClanCrest";
 import { SyncLoading } from "../../components/SyncLoading";
@@ -29,7 +30,7 @@ import { AdConfig } from '../../utils/AdConfig';
 import apiFetch from "../../utils/apiFetch";
 
 const { width } = Dimensions.get("window");
-
+const REWARDED_ID = String(AdConfig.rewarded || "0");
 const ClanProfile = () => {
     const { user } = useUser();
     const { userClan, isLoading: clanLoading, canManageClan, userRole } = useClan();
@@ -55,20 +56,73 @@ const ClanProfile = () => {
     const APP_BLUE = "#3b82f6";
 
     // --- Ads Logic ---
-    const { isLoaded, isEarnedReward, show, load } = useRewardedAd(AdConfig.rewarded, {
-        requestNonPersonalizedAdsOnly: true,
-    });
+    // 🛠️ LEVELPLAY AD STATES
+    const rewardedAdRef = useRef(null);
+    const retryTimerRef = useRef(null);
+    const [isAdLoaded, setIsAdLoaded] = useState(false);
+    const [isAdLoading, setIsAdLoading] = useState(true);
+    const [ritualReady, setRitualReady] = useState(false);
 
+    // =================================================================
+    // 🔹 LEVELPLAY REWARDED LOGIC
+    // =================================================================
     useEffect(() => {
-        load();
-    }, [load]);
+        if (REWARDED_ID === "0") return;
 
-    useEffect(() => {
-        if (isEarnedReward) {
-            triggerAction("BUY_SLOTS");
-            load(); 
-        }
-    }, [isEarnedReward]);
+        // 1. Create the instance
+        const rewardedAd = new LevelPlayRewardedAd(REWARDED_ID);
+        rewardedAdRef.current = rewardedAd;
+
+        const listener = {
+            onAdLoaded: (adInfo) => {
+                console.log("Ad Loaded");
+                setIsAdLoaded(true);
+                setIsAdLoading(false);
+                if (retryTimerRef.current) clearTimeout(retryTimerRef.current);
+            },
+            onAdLoadFailed: (error) => {
+                console.warn("Ad Load Failed:", error?.errorMessage);
+                setIsAdLoaded(false);
+                setIsAdLoading(true); // Keep loading state for retry feedback
+
+                // 🔄 RETRY LOGIC: Try again in 10 seconds if "No Fill"
+                if (retryTimerRef.current) clearTimeout(retryTimerRef.current);
+                retryTimerRef.current = setTimeout(() => {
+                    console.log("Retrying Ad Load...");
+                    rewardedAd.loadAd();
+                }, 10000);
+            },
+            onAdAvailable: (adInfo) => {
+                setIsAdLoaded(true);
+                setIsAdLoading(false);
+                if (retryTimerRef.current) clearTimeout(retryTimerRef.current);
+            },
+            onAdUnavailable: () => setIsAdLoaded(false),
+            onAdRewarded: (reward, adInfo) => {
+                console.log("Reward Earned: BUY_SLOTS");
+                
+                // 🔹 PORTED ACTION LOGIC
+                triggerAction("BUY_SLOTS");
+                
+                // Reload ad for the next use
+                rewardedAd.loadAd();
+            },
+            onAdClosed: (adInfo) => {
+                setIsAdLoaded(false);
+                rewardedAd.loadAd();
+            },
+            onAdShowFailed: (error, adInfo) => {
+                rewardedAd.loadAd();
+            }
+        };
+
+        rewardedAd.setListener(listener);
+        rewardedAd.loadAd();
+
+        return () => {
+            if (retryTimerRef.current) clearTimeout(retryTimerRef.current);
+        };
+    }, []);
 
     const scanAnim = useRef(new Animated.Value(0)).current;
     const pulseAnim = useRef(new Animated.Value(1)).current;
@@ -218,10 +272,9 @@ const ClanProfile = () => {
         await Clipboard.setStringAsync(shareUrl);
         Alert.alert("Link Sealed", "Clan link copied to clipboard!");
     };
-
-    const handleBuySlotsWithAd = () => {
-        if (isLoaded) {
-            show();
+    const handleBuySlotsWithAd = async () => {
+        if (rewardedAdRef.current && await rewardedAdRef.current.isAdReady()) {
+            rewardedAdRef.current.showAd("");
         } else {
             Alert.alert("Ritual Not Ready", "The spirits are not yet aligned. Try again in a moment.", [
                 { text: "OK", onPress: () => load() }
@@ -461,7 +514,7 @@ const ClanProfile = () => {
 
                             <View className="mt-8 w-full gap-y-4">
                                 <TouchableOpacity
-                                    disabled={!canManageClan || fullData?.maxSlots >= 13}
+                                    disabled={!canManageClan || fullData?.maxSlots >= 13 || isAdLoading}
                                     onPress={handleBuySlotsWithAd}
                                     className={`p-5 rounded-[20px] flex-row justify-between items-center border ${fullData?.maxSlots >= 13 ? 'bg-zinc-100 dark:bg-zinc-950 opacity-50 border-gray-200 dark:border-zinc-800' : 'bg-gray-100 dark:bg-zinc-900 border-gray-200 dark:border-zinc-800'}`}
                                 >
@@ -472,7 +525,11 @@ const ClanProfile = () => {
                                         </Text>
                                     </View>
                                     <View className="bg-blue-500/20 px-3 py-1.5 rounded-full">
-                                        <Text className="text-blue-500 font-black text-[10px]">1,000 Funds</Text>
+                                    {isAdLoading ? (
+                                        <ActivityIndicator size="small" color={APP_BLUE} />
+                                    ) : (
+                                        <Text className="text-blue-500 font-black text-[10px]">1K SP + Ad</Text>
+                                    )}
                                     </View>
                                 </TouchableOpacity>
                             </View>

@@ -1,21 +1,21 @@
+import notifee, { AndroidGroupAlertBehavior, AndroidImportance, EventType } from '@notifee/react-native';
+import AsyncStorage from '@react-native-async-storage/async-storage';
 import Constants from 'expo-constants';
 import { useFonts } from "expo-font";
 import * as Linking from 'expo-linking';
 import * as Notifications from "expo-notifications";
 import { Stack, usePathname, useRouter } from "expo-router";
-import * as SplashScreen from "expo-splash-screen";
 import * as Updates from 'expo-updates';
 import { useColorScheme } from "nativewind";
 import { useCallback, useEffect, useRef, useState } from "react";
-import { AppState, BackHandler, DeviceEventEmitter, InteractionManager, Platform, StatusBar, TouchableOpacity, View } from "react-native";
-import mobileAds, { AdEventType, InterstitialAd, MaxAdContentRating } from 'react-native-google-mobile-ads';
+import { AppState, BackHandler, DeviceEventEmitter, InteractionManager, Platform, StatusBar, View } from "react-native";
 import { SafeAreaProvider } from "react-native-safe-area-context";
 import Toast from 'react-native-toast-message';
-// 🔹 NOTIFEE IMPORT
-import notifee, { AndroidGroupAlertBehavior, AndroidImportance, EventType } from '@notifee/react-native';
+
+// 🔹 UNITY LEVELPLAY IMPORTS (Replaced AdMob)
+import { LevelPlay, LevelPlayInitRequest, LevelPlayInterstitialAd } from 'unity-levelplay-mediation';
 
 import AnimeLoading from "../components/AnimeLoading";
-import { loadAppOpenAd, showAppOpenAd } from "../components/appOpenAd";
 import { ClanProvider } from "../context/ClanContext";
 import { StreakProvider, useStreak } from "../context/StreakContext";
 import { UserProvider, useUser } from "../context/UserContext";
@@ -25,13 +25,13 @@ import "./globals.css";
 
 // 🔹 AD CONFIGURATION
 const FIRST_AD_DELAY_MS = 120000;
-const COOLDOWN_MS = 180000;
+const COOLDOWN_MS = 500000;
 
-const INTERSTITIAL_ID = AdConfig.interstitial;
+const INTERSTITIAL_ID = String(AdConfig.interstitial || "34wz6l0uzrpi6ce0").trim();
 
 let lastShownTime = Date.now() - (COOLDOWN_MS - FIRST_AD_DELAY_MS);
-let interstitial = null;
-let interstitialLoaded = false
+let interstitialAd = null;
+let interstitialLoaded = false;
 
 // 🔹 NOTIFICATION HANDLER
 Notifications.setNotificationHandler({
@@ -67,6 +67,7 @@ Notifications.setNotificationHandler({
                         channelId,
                         groupKey: groupId,
                         groupSummary: false,
+                        groupAlertBehavior: AndroidGroupAlertBehavior.CHILDREN,
                         pressAction: { id: 'default' },
                         smallIcon: 'ic_notification',
                         color: NOTIFICATION_COLOR,
@@ -91,36 +92,58 @@ Notifications.setNotificationHandler({
     },
 });
 
+// 🔹 LEVELPLAY INTERSTITIAL LOGIC
 const loadInterstitial = () => {
-    if (interstitial) return;
-    const ad = InterstitialAd.createForAdRequest(INTERSTITIAL_ID, {
-        requestNonPersonalizedAdsOnly: true,
-    });
-    ad.addAdEventListener(AdEventType.LOADED, () => {
-        interstitialLoaded = true;
-    });
-    ad.addAdEventListener(AdEventType.CLOSED, () => {
-        interstitialLoaded = false;
-        interstitial = null;
-        lastShownTime = Date.now();
-        loadInterstitial();
-    });
-    ad.addAdEventListener(AdEventType.ERROR, (err) => {
-        interstitial = null;
-        interstitialLoaded = false;
-        setTimeout(loadInterstitial, 30000);
-    });
-    ad.load();
-    interstitial = ad;
+    if (!LevelPlayInterstitialAd) {
+        console.warn("LevelPlayInterstitialAd module not found");
+        return;
+    }
+
+    try {
+        if (!interstitialAd) {
+            console.log("Creating Interstitial with ID:", INTERSTITIAL_ID);
+            interstitialAd = new LevelPlayInterstitialAd(INTERSTITIAL_ID);
+        }
+
+        const listener = {
+            onAdLoaded: (adInfo) => {
+                console.log("✅ Interstitial Loaded:", adInfo?.adNetwork);
+                interstitialLoaded = true;
+            },
+            onAdLoadFailed: (error) => {
+                console.error("❌ Interstitial Load Failed:", error);
+                interstitialLoaded = false;
+                // Retry logic based on reference
+                const retryDelay = error.errorCode === 626 ? 60000 : 30000;
+                setTimeout(loadInterstitial, retryDelay);
+            },
+            onAdClosed: (adInfo) => {
+                console.log("Ad closed");
+                interstitialLoaded = false;
+                lastShownTime = Date.now();
+                loadInterstitial();
+            },
+            onAdDisplayed: (adInfo) => console.log("Ad Displayed"),
+            onAdDisplayFailed: (error, adInfo) => {
+                console.error("Display Failed:", error, adInfo);
+                loadInterstitial();
+            },
+            onAdClicked: (adInfo) => console.log("User clicked the ad")
+        };
+
+        interstitialAd.setListener(listener);
+        interstitialAd.loadAd();
+    } catch (err) {
+        console.error("Error in loadInterstitial:", err);
+    }
 };
 
-// 🔹 OPTIMIZED: Helper to show ads without freezing UI
+// 🔹 OPTIMIZED: Helper to show ads without freezing UI (Adapted for LevelPlay)
 const tryShowingInterstitial = () => {
     const now = Date.now();
-    if (interstitialLoaded && interstitial && (now - lastShownTime > COOLDOWN_MS)) {
-        // Use requestAnimationFrame to ensure the UI transition is already underway/finished
+    if (interstitialAd && interstitialAd.isAdReady() && (now - lastShownTime > COOLDOWN_MS)) {
         requestAnimationFrame(() => {
-            if (interstitial) interstitial.show();
+            if (interstitialAd) interstitialAd.showAd();
         });
     }
 };
@@ -134,7 +157,6 @@ async function registerForPushNotificationsAsync() {
             vibrationPattern: [0, 250, 250, 250],
             lightColor: '#FF231F7C',
         });
-        // Note: Notifee channel creation moved to useEffect for performance
     }
     const { status: existingStatus } = await Notifications.getPermissionsAsync();
     let finalStatus = existingStatus;
@@ -163,82 +185,51 @@ function RootLayoutContent() {
     const [appReady, setAppReady] = useState(false);
     const [isAdReady, setIsAdReady] = useState(false);
     
-    // 🔹 FIX: Queue for notifications that arrive before app is ready
     const pendingNavigation = useRef(null);
-
     const appState = useRef(AppState.currentState);
     const lastHandledNotificationId = useRef(null);
     const hasHandledRedirect = useRef(false);
     const hasShownWelcomeAd = useRef(false);
+
     useEffect(() => {
-    const runCacheJanitor = async () => {
-        try {
-            const allKeys = await AsyncStorage.getAllKeys();
+        const runCacheJanitor = async () => {
+            try {
+                const allKeys = await AsyncStorage.getAllKeys();
+                const targetPrefixes = ["POSTS_CACHE_", "CATEGORY_CACHE_", "clan_posts_", "WARS_", "CLAN_PROFILE_", "auth_cache_"];
+                const expiredTime = 48 * 60 * 60 * 1000;
+                const now = Date.now();
+                const keysToReview = allKeys.filter(key => targetPrefixes.some(prefix => key.startsWith(prefix)));
 
-            // 🎯 TARGET LIST: Categories of cache we manage
-            const targetPrefixes = [
-                "POSTS_CACHE_",
-                "CATEGORY_CACHE_",
-                "clan_posts_",
-                "WARS_",
-                "CLAN_PROFILE_",
-                "auth_cache_" 
-            ];
-
-            const expiredTime = 48 * 60 * 60 * 1000; // 48 Hours
-            const now = Date.now();
-
-            const keysToReview = allKeys.filter(key =>
-                targetPrefixes.some(prefix => key.startsWith(prefix))
-            );
-
-            // Process in batches or chunks if you have hundreds of keys
-            for (const key of keysToReview) {
-                const value = await AsyncStorage.getItem(key);
-                if (!value) continue;
-
-                try {
-                    const parsed = JSON.parse(value);
-
-                    // 🛠️ LOGIC CHECK:
-                    // 1. If it has a timestamp, check if it's actually expired.
-                    if (parsed && typeof parsed === 'object' && parsed.timestamp) {
-                        if (now - parsed.timestamp > expiredTime) {
-                            await AsyncStorage.removeItem(key);
-                            console.log(`🧹 Janitor: Cleared expired cache: ${key}`);
+                for (const key of keysToReview) {
+                    const value = await AsyncStorage.getItem(key);
+                    if (!value) continue;
+                    try {
+                        const parsed = JSON.parse(value);
+                        if (parsed && typeof parsed === 'object' && parsed.timestamp) {
+                            if (now - parsed.timestamp > expiredTime) {
+                                await AsyncStorage.removeItem(key);
+                                console.log(`🧹 Janitor: Cleared expired cache: ${key}`);
+                            }
                         }
-                    } 
-                    // 2. If it's a "Legacy" or "Raw" cache (no timestamp, like raw points or war arrays)
-                    // We only delete these if they are very old or corrupted. 
-                    // For now, let's let raw caches live unless they fail to parse.
-                    
-                } catch (e) {
-                    // If JSON.parse fails, the data is corrupted. Wipe it.
-                    await AsyncStorage.removeItem(key);
-                    console.log(`🧹 Janitor: Cleared corrupted cache: ${key}`);
+                    } catch (e) {
+                        await AsyncStorage.removeItem(key);
+                    }
                 }
+            } catch (err) {
+                console.error("Janitor failed:", err);
             }
-        } catch (err) {
-            console.error("Janitor failed to clean storage:", err);
-        }
-    };
-
-    // Run the janitor shortly after mount so it doesn't compete with the initial UI render
-    const timeout = setTimeout(runCacheJanitor, 5000); 
-    return () => clearTimeout(timeout);
-}, []);
-
+        };
+        const timeout = setTimeout(runCacheJanitor, 5000); 
+        return () => clearTimeout(timeout);
+    }, []);
 
     const currentPathRef = useRef(pathname);
     useEffect(() => {
         currentPathRef.current = pathname;
     }, [pathname]);
 
-    // --- 🔹 SMART ROUTING ENGINE ---
     const processRouting = useCallback((data) => {
         if (!data) return;
-
-        // 🔹 FIX: If app isn't ready, queue this for later so it doesn't get lost
         if (!isAdReady || !appReady) {
             pendingNavigation.current = data;
             return;
@@ -273,36 +264,24 @@ function RootLayoutContent() {
         hasHandledRedirect.current = true;
         const finalUrl = targetDiscussionId ? `${targetPath}?discussionId=${targetDiscussionId}` : targetPath;
         
-        // Use requestAnimationFrame for snappy transition
         requestAnimationFrame(() => {
             router.push(finalUrl);
         });
     }, [router, isAdReady, appReady]);
 
-    // --- 1. GLOBAL NAVIGATION & BACK HANDLER (INSTANT) ---
     useEffect(() => {
         const navSub = DeviceEventEmitter.addListener("navigateSafely", (targetPath) => {
             if (currentPathRef.current === targetPath) return;
-            // 🚀 Navigation first!
             router.push(targetPath);
-            // 🚀 Ad check later
             requestAnimationFrame(() => {
                 DeviceEventEmitter.emit("tryShowInterstitial");
             });
         });
 
         const interstitialListener = DeviceEventEmitter.addListener("tryShowInterstitial", () => {
-            // Only try showing if the user is not actively interacting
             InteractionManager.runAfterInteractions(() => {
                 tryShowingInterstitial();
             });
-        });
-
-        const stateSub = AppState.addEventListener('change', nextState => {
-            if (appState.current.match(/inactive|background/) && nextState === 'active') {
-                showAppOpenAd();
-            }
-            appState.current = nextState;
         });
 
         const backHandler = BackHandler.addEventListener("hardwareBackPress", () => {
@@ -311,7 +290,6 @@ function RootLayoutContent() {
 
             if (router.canGoBack()) {
                 router.back();
-                // Check ad after the slide-back animation starts
                 requestAnimationFrame(() => DeviceEventEmitter.emit("tryShowInterstitial"));
                 return true;
             }
@@ -320,51 +298,65 @@ function RootLayoutContent() {
                 router.replace("/");
                 return true;
             }
-            
             return false;
         });
 
         return () => {
             navSub.remove();
             interstitialListener.remove();
-            stateSub.remove();
             backHandler.remove();
         };
     }, []);
 
-    // --- 2. AD INITIALIZATION (Safe & Fast) ---
+    // --- 🔹 LEVELPLAY INITIALIZATION (Replaced AdMob Init) ---
     useEffect(() => {
         if (Platform.OS === 'web') {
             setIsAdReady(true);
             return;
         }
 
-        const safetyTimer = setTimeout(() => {
-            setIsAdReady(true);
-        }, 2000);
-
         const runMediationInit = async () => {
             try {
-                await mobileAds().setRequestConfiguration({
-                    maxAdContentRating: MaxAdContentRating.G,
-                    tagForChildDirectedTreatment: false,
-                });
-                
-                await mobileAds().initialize();
-                loadAppOpenAd();
-                loadInterstitial();
-                
-                clearTimeout(safetyTimer);
-                setIsAdReady(true);
+                const appKey = '24b53732d';
+                const adFormats = ['INTERSTITIAL', 'REWARDED_VIDEO', 'BANNER'];
+
+                const initListener = {
+                    onInitSuccess: (config) => {
+                        console.log("✅ LevelPlay initialized successfully");
+                        setIsAdReady(true);
+                        loadInterstitial();
+                    },
+                    onInitFailed: (err) => {
+                        console.error("❌ LevelPlay failed to initialize:", err);
+                        setIsAdReady(true); 
+                    }
+                };
+
+                // Multi-strategy init from reference
+                if (LevelPlayInitRequest && (LevelPlayInitRequest.builder || LevelPlayInitRequest.Builder)) {
+                    const BuilderClass = LevelPlayInitRequest.builder || LevelPlayInitRequest.Builder;
+                    const requestBuilder = new BuilderClass(appKey);
+                    
+                    if (requestBuilder.withAdFormats) {
+                        requestBuilder.withAdFormats(adFormats);
+                    } else if (requestBuilder.withLegacyAdFormats) {
+                        requestBuilder.withLegacyAdFormats(adFormats);
+                    }
+
+                    const initRequest = requestBuilder.build();
+                    LevelPlay.init(initRequest, initListener);
+                } else {
+                    LevelPlay.init({ appKey, adFormats }, initListener);
+                }
             } catch (e) {
+                console.error("Fatal Init Error caught:", e);
                 setIsAdReady(true);
             }
         };
+
         runMediationInit();
-        return () => clearTimeout(safetyTimer);
     }, []);
 
-    // 🔹 FIX: Process queued navigation
     useEffect(() => {
         if (isAdReady && appReady && pendingNavigation.current) {
             const data = pendingNavigation.current;
@@ -373,16 +365,6 @@ function RootLayoutContent() {
         }
     }, [isAdReady, appReady, processRouting]);
 
-    // --- 3. WELCOME AD ---
-    useEffect(() => {
-        if (appReady && isAdReady && !hasShownWelcomeAd.current) {
-            if (showAppOpenAd()) {
-                hasShownWelcomeAd.current = true;
-            }
-        }
-    }, [appReady, isAdReady]);
-
-    // --- 4. DEEP LINKING ---
     useEffect(() => {
         const handleUrl = (url) => {
             if (!url || isUpdating) return;
@@ -409,7 +391,6 @@ function RootLayoutContent() {
         return () => subscription.remove();
     }, [isUpdating, processRouting]);
 
-    // --- 5. EAS UPDATES ---
     useEffect(() => {
         async function onFetchUpdateAsync() {
             if (__DEV__) return;
@@ -430,7 +411,6 @@ function RootLayoutContent() {
         "SpaceGroteskBold": require("../assets/fonts/SpaceGrotesk.ttf"),
     });
 
-    // --- 6. SYNC (OPTIMIZED) ---
     useEffect(() => {
         if (!fontsLoaded || isUpdating) return;
 
@@ -458,7 +438,6 @@ function RootLayoutContent() {
         return () => task.cancel();
     }, [fontsLoaded, user?.deviceId, isUpdating]);
 
-    // --- 7. NOTIFICATIONS ---
     const handleNotificationNavigation = (response) => {
         const notificationId = response?.notification?.request?.identifier;
         if (!notificationId || lastHandledNotificationId.current === notificationId) return;
@@ -521,7 +500,7 @@ function RootLayoutContent() {
                 screenOptions={{ 
                     headerShown: false, 
                     contentStyle: { backgroundColor: isDark ? "#0a0a0a" : "#ffffff" },
-                    animation: 'slide_from_right' // Force specific animation for speed
+                    animation: 'slide_from_right'
                 }}
             />
             <Toast />

@@ -22,7 +22,7 @@ import { Text } from "../../components/Text";
 import apiFetch from "../../utils/apiFetch";
 
 // 🔹 IMPORT YOUR AD COMPONENTS
-import { NativeAdAuthorStyle, NativeAdPostStyle } from "../../components/NativeAd";
+import AppBanner from "../../components/AppBanner";
 import { SyncLoading } from "../../components/SyncLoading";
 
 // --- HELPER: RESOLVE WRITER RANK ---
@@ -390,8 +390,14 @@ const SearchScreen = () => {
         // Handle Ads
         if (item.isAd) {
             return item.adType === 'author' 
-                ? <NativeAdAuthorStyle isDark={isDark} /> 
-                : <NativeAdPostStyle isDark={isDark} />;
+                ? <View className="mb-3 mt-3 w-full p-6 border border-dashed border-gray-300 dark:border-gray-800 rounded-[32px] bg-gray-50/50 dark:bg-white/5 items-center justify-center">
+							<Text className="text-[10px] font-bold text-gray-400 uppercase tracking-[0.2em] italic text-center">Sponsored Transmission</Text>
+							<AppBanner size="LARGE" />
+						</View>
+                : <View className="mb-3 mt-3 w-full p-6 border border-dashed border-gray-300 dark:border-gray-800 rounded-[32px] bg-gray-50/50 dark:bg-white/5 items-center justify-center">
+							<Text className="text-[10px] font-bold text-gray-400 uppercase tracking-[0.2em] italic text-center">Sponsored Transmission</Text>
+							<AppBanner size="MEDIUM_RECTANGLE" />
+						</View>;
         }
 
         // Handle Organic Content

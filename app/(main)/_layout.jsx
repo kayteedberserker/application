@@ -64,7 +64,7 @@ const [userInClan, setUserInClan] = useState(false);
         }
         setShowClanMenu(!showClanMenu);
     } catch (e) {
-        DeviceEventEmitter.emit("navigateSafely", "/clans/discover");
+        DeviceEventEmitter.emit("navigateSafely", "/screens/discover");
     }
 };
 
@@ -313,7 +313,7 @@ const [userInClan, setUserInClan] = useState(false);
                     <TouchableOpacity
                         onPress={() => {
                             setShowClanMenu(false);
-                            navigateTo("/clans/discover");
+                            navigateTo("/screens/discover");
                         }}
                         activeOpacity={0.8}
                         style={[styles.subFab, { backgroundColor: isDark ? "#1e293b" : "#475569" }]}

@@ -1,64 +1,98 @@
 import { Ionicons, MaterialCommunityIcons } from "@expo/vector-icons";
-import { useEffect, useState, useRef } from "react";
-import { ActivityIndicator, Platform, Text as RNText, View } from "react-native";
-import {
-  NativeAd,
-  NativeAdView,
-  NativeMediaView
-} from "react-native-google-mobile-ads";
+import { useCallback, useEffect, useRef, useState } from "react";
+import { ActivityIndicator, Image, Platform, Text as RNText, View } from "react-native";
 import Animated, { FadeIn, FadeInDown } from "react-native-reanimated";
+// 🔹 LevelPlay imports
+import { LevelPlayNativeAd, LevelPlayNativeAdView } from "unity-levelplay-mediation";
+import { AdConfig } from "../utils/AdConfig";
 
-const AD_UNIT_ID = "ca-app-pub-8021671365048667/9973628010";
-const MAX_RETRIES = 3; // 🚀 Prevent infinite network spam
+const NATIVE_AD_UNIT_ID = String(AdConfig.native || "0").trim();
+const MAX_RETRIES = 3;
+const RETRY_DELAY = 5000; // 5 seconds
 
 /* ================== AUTHOR STYLE ================== */
 export const NativeAdAuthorStyle = ({ isDark }) => {
-  const [nativeAd, setNativeAd] = useState(null);
+  const [adData, setAdData] = useState(null);
   const [loaded, setLoaded] = useState(false);
   const [error, setError] = useState(false);
-  const retryTimerRef = useRef(null);
-  const retryCountRef = useRef(0); // 🚀 Track attempts
+  const [adInstance, setAdInstance] = useState(null);
+  const timeoutRef = useRef(null);
+  const retryCountRef = useRef(0);
+  const isMountedRef = useRef(true);
 
-  useEffect(() => {
-    let isMounted = true;
+  const loadAd = useCallback(() => {
+    if (!isMountedRef.current) return;
+    if (NATIVE_AD_UNIT_ID === "0") {
+      setError(true);
+      return;
+    }
 
-    const loadAd = () => {
-      if (!isMounted) return;
-      
-      NativeAd.createForAdRequest(AD_UNIT_ID)
-        .then((ad) => {
-          if (isMounted) {
-            setNativeAd(ad);
-            setLoaded(true);
-            setError(false);
-            retryCountRef.current = 0; // Reset on success
-          }
-        })
-        .catch(() => {
-          if (isMounted) {
-            setError(true);
-            if (retryTimerRef.current) clearTimeout(retryTimerRef.current);
-            
-            // Only retry if we haven't hit the cap
-            if (retryCountRef.current < MAX_RETRIES) {
-                retryCountRef.current += 1;
-                retryTimerRef.current = setTimeout(() => {
-                  if (isMounted) loadAd();
-                }, 10000); 
-            }
-          }
-        });
+    // Reset states for fresh attempt
+    setError(false);
+    setLoaded(false);
+
+    const adListener = {
+      onAdLoaded: (adInfo, nativeAdData) => {
+        if (isMountedRef.current) {
+          console.log("✅ [Author Ad] Loaded:", adInfo?.adNetwork || "Unknown");
+          if (timeoutRef.current) clearTimeout(timeoutRef.current);
+          setAdData(nativeAdData);
+          setLoaded(true);
+          setError(false);
+          retryCountRef.current = 0; // Reset retries on success
+        }
+      },
+      onAdLoadFailed: (adUnitId, err) => {
+        if (isMountedRef.current) {
+          console.error("❌ [Author Ad] Failed:", adUnitId, err);
+          handleRetry();
+        }
+      },
+      onAdClicked: (adInfo) => console.log("Author Native Ad Clicked"),
     };
 
-    loadAd();
+    const handleRetry = () => {
+      if (timeoutRef.current) clearTimeout(timeoutRef.current);
+      
+      if (retryCountRef.current < MAX_RETRIES) {
+        retryCountRef.current += 1;
+        console.log(`🔄 [Author Ad] Retrying (${retryCountRef.current}/${MAX_RETRIES})...`);
+        setTimeout(() => loadAd(), RETRY_DELAY);
+      } else {
+        setError(true);
+      }
+    };
 
+    let nativeAd;
+    try {
+      nativeAd = new LevelPlayNativeAd(NATIVE_AD_UNIT_ID, null, null, null, null, adListener);
+      
+      timeoutRef.current = setTimeout(() => {
+        if (isMountedRef.current && !loaded) {
+          console.warn(`⚠️ [Author Ad] Timeout. Triggering retry...`);
+          handleRetry();
+        }
+      }, 15000);
+
+      nativeAd.loadAd();
+      setAdInstance(nativeAd);
+    } catch (e) {
+      console.error("💥 [Author Ad] Init Error:", e);
+      setError(true);
+    }
+  }, [loaded]);
+
+  useEffect(() => {
+    isMountedRef.current = true;
+    loadAd();
     return () => {
-      isMounted = false;
-      if (retryTimerRef.current) clearTimeout(retryTimerRef.current);
+      isMountedRef.current = false;
+      if (timeoutRef.current) clearTimeout(timeoutRef.current);
+      if (adInstance && adInstance.destroy) adInstance.destroy();
     };
   }, []);
 
-  if (error || !loaded || !nativeAd) {
+  if (error || !loaded || !adData) {
     return (
       <View
         style={{ height: 140 }}
@@ -69,8 +103,8 @@ export const NativeAdAuthorStyle = ({ isDark }) => {
         {!error && <ActivityIndicator color={isDark ? "white" : "#3b82f6"} />}
         {error && (
           <View className="items-center">
-            <MaterialCommunityIcons name="cloud-off-outline" size={16} color="#71717a" />
-            <RNText className="text-zinc-500 text-[10px] mt-1 uppercase font-bold tracking-widest">Relay Interrupted</RNText>
+            <Ionicons name="cloud-offline-outline" size={16} color="#71717a" />
+            <RNText className="text-zinc-500 text-[10px] mt-1">Ad unavailable</RNText>
           </View>
         )}
       </View>
@@ -80,16 +114,8 @@ export const NativeAdAuthorStyle = ({ isDark }) => {
   const adColor = "#3b82f6";
 
   return (
-    <Animated.View
-      key="author-ad-container"
-      entering={FadeInDown.duration(400)}
-      className="mb-3"
-    >
-      <NativeAdView 
-        nativeAd={nativeAd} 
-        style={{ width: "100%", height: 140 }}
-        adChoicesPlacement="topRight"
-      >
+    <Animated.View key="author-ad-container" entering={FadeInDown.duration(400)} className="mb-3">
+      <LevelPlayNativeAdView nativeAd={adInstance} style={{ width: "100%", height: 140 }}>
         <View
           className={`p-4 rounded-3xl border flex-row items-center ${
             isDark ? "bg-[#0f0f0f] border-zinc-800" : "bg-white border-zinc-100 shadow-sm"
@@ -97,21 +123,21 @@ export const NativeAdAuthorStyle = ({ isDark }) => {
           style={{ height: 140 }}
         >
           <View style={{ borderColor: adColor }} className="w-16 h-16 rounded-full border-2 p-0.5 overflow-hidden">
-            <NativeMediaView
-              nativeID="adMediaView"
-              style={{ width: "100%", height: "100%", borderRadius: 999, backgroundColor: isDark ? '#27272a' : '#f4f4f5' }}
-            />
+            {adData.icon ? (
+              <Image source={{ uri: adData.icon }} style={{ width: '100%', height: '100%', borderRadius: 999 }} />
+            ) : (
+              <View style={{ width: "100%", height: "100%", borderRadius: 999, backgroundColor: isDark ? '#27272a' : '#f4f4f5' }} />
+            )}
           </View>
 
           <View className="flex-1 ml-4 justify-center">
             <View className="flex-row items-center justify-between mb-1">
               <RNText
-                nativeID="adHeadlineView"
                 numberOfLines={1}
                 className={`font-black italic uppercase tracking-tighter text-lg ${isDark ? 'text-white' : 'text-black'}`}
-                style={{ flex: 1, marginRight: 8 }}
+                style={{ flex: 1, marginRight: 8, fontFamily: Platform.OS === 'ios' ? 'System' : 'sans-serif-condensed' }}
               >
-                {nativeAd.headline}
+                {adData.title || adData.headline}
               </RNText>
               <View style={{ backgroundColor: `${adColor}20`, borderColor: `${adColor}40` }} className="px-2 py-0.5 rounded-md border flex-row items-center gap-1">
                 <MaterialCommunityIcons name="shield-check" size={8} color={adColor} />
@@ -119,12 +145,8 @@ export const NativeAdAuthorStyle = ({ isDark }) => {
               </View>
             </View>
 
-            <RNText
-              nativeID="adTaglineView"
-              numberOfLines={1}
-              className={`text-[11px] font-medium italic mb-2 ${isDark ? 'text-zinc-500' : 'text-zinc-400'}`}
-            >
-              {nativeAd.tagline}
+            <RNText numberOfLines={1} className={`text-[11px] font-medium italic mb-2 ${isDark ? 'text-zinc-500' : 'text-zinc-400'}`}>
+              {adData.description || adData.body}
             </RNText>
 
             <View className="flex-row items-center justify-between mt-1">
@@ -134,70 +156,101 @@ export const NativeAdAuthorStyle = ({ isDark }) => {
                   <RNText className="text-[10px] font-bold ml-1 text-zinc-500">Verified</RNText>
                 </View>
               </View>
-
               <View className="bg-blue-600 px-4 py-1.5 rounded-full">
-                <RNText
-                  nativeID="adCallToActionView"
-                  style={{ color: "white", fontSize: 9, fontWeight: "900", textTransform: "uppercase" }}
-                >
-                  {nativeAd.callToAction}
+                <RNText style={{ color: "white", fontSize: 9, fontWeight: "900", textTransform: "uppercase" }}>
+                  {adData.callToAction}
                 </RNText>
               </View>
             </View>
           </View>
         </View>
-      </NativeAdView>
+      </LevelPlayNativeAdView>
     </Animated.View>
   );
 };
 
 /* ================== POST STYLE ================== */
 export const NativeAdPostStyle = ({ isDark }) => {
-  const [nativeAd, setNativeAd] = useState(null);
+  const [adData, setAdData] = useState(null);
   const [loaded, setLoaded] = useState(false);
   const [error, setError] = useState(false);
-  const retryTimerRef = useRef(null);
+  const [adInstance, setAdInstance] = useState(null);
+  const timeoutRef = useRef(null);
   const retryCountRef = useRef(0);
+  const isMountedRef = useRef(true);
 
-  useEffect(() => {
-    let isMounted = true;
+  const loadAd = useCallback(() => {
+    if (!isMountedRef.current) return;
+    if (NATIVE_AD_UNIT_ID === "0") {
+      setError(true);
+      return;
+    }
 
-    const loadAd = () => {
-      if (!isMounted) return;
+    setError(false);
+    setLoaded(false);
 
-      NativeAd.createForAdRequest(AD_UNIT_ID)
-        .then((ad) => {
-          if (isMounted) {
-            setNativeAd(ad);
-            setLoaded(true);
-            setError(false);
-            retryCountRef.current = 0;
-          }
-        })
-        .catch(() => {
-          if (isMounted) {
-            setError(true);
-            if (retryTimerRef.current) clearTimeout(retryTimerRef.current);
-            
-            if (retryCountRef.current < MAX_RETRIES) {
-                retryCountRef.current += 1;
-                retryTimerRef.current = setTimeout(() => {
-                  if (isMounted) loadAd();
-                }, 10000);
-            }
-          }
-        });
+    const adListener = {
+      onAdLoaded: (adInfo, nativeAdData) => {
+        if (isMountedRef.current) {
+          console.log("✅ [Post Ad] Loaded:", adInfo?.adNetwork || "Unknown");
+          if (timeoutRef.current) clearTimeout(timeoutRef.current);
+          setAdData(nativeAdData);
+          setLoaded(true);
+          setError(false);
+          retryCountRef.current = 0;
+        }
+      },
+      onAdLoadFailed: (adUnitId, err) => {
+        if (isMountedRef.current) {
+          console.error("❌ [Post Ad] Failed:", adUnitId, err);
+          handleRetry();
+        }
+      },
+      onAdClicked: (adInfo) => console.log("Post Native Ad Clicked"),
     };
 
-    loadAd();
+    const handleRetry = () => {
+      if (timeoutRef.current) clearTimeout(timeoutRef.current);
+      
+      if (retryCountRef.current < MAX_RETRIES) {
+        retryCountRef.current += 1;
+        console.log(`🔄 [Post Ad] Retrying (${retryCountRef.current}/${MAX_RETRIES})...`);
+        setTimeout(() => loadAd(), RETRY_DELAY);
+      } else {
+        setError(true);
+      }
+    };
 
+    let nativeAd;
+    try {
+      nativeAd = new LevelPlayNativeAd(NATIVE_AD_UNIT_ID, null, null, null, null, adListener);
+      
+      timeoutRef.current = setTimeout(() => {
+        if (isMountedRef.current && !loaded) {
+          console.warn(`⚠️ [Post Ad] Timeout. Retrying...`);
+          handleRetry();
+        }
+      }, 15000);
+
+      nativeAd.loadAd();
+      setAdInstance(nativeAd);
+    } catch (e) {
+      console.error("💥 [Post Ad] Init Error:", e);
+      setError(true);
+    }
+  }, [loaded]);
+
+  useEffect(() => {
+    isMountedRef.current = true;
+    loadAd();
     return () => {
-      isMounted = false;
-      if (retryTimerRef.current) clearTimeout(retryTimerRef.current);
+      isMountedRef.current = false;
+      if (timeoutRef.current) clearTimeout(timeoutRef.current);
+      if (adInstance && adInstance.destroy) adInstance.destroy();
     };
   }, []);
 
-  if (error || !loaded || !nativeAd) {
+  if (error || !loaded || !adData) {
     return (
       <View
         style={{ height: 350 }}
@@ -205,39 +258,31 @@ export const NativeAdPostStyle = ({ isDark }) => {
           isDark ? "bg-zinc-900/40 border-zinc-800" : "bg-white border-zinc-100"
         }`}
       >
-        {/* 🚀 INSTRUCTION: Anything loading should have the loading animation */}
         {!error && <ActivityIndicator color={isDark ? "white" : "#3b82f6"} />}
         {error && (
-            <View className="items-center">
-                 <MaterialCommunityIcons name="alert-circle-outline" size={24} color="#71717a" />
-                 <RNText className="text-zinc-500 text-[10px] font-bold mt-2 uppercase tracking-widest">Ad Intel Offline</RNText>
-            </View>
+          <View className="items-center">
+            <MaterialCommunityIcons name="alert-circle-outline" size={24} color="#71717a" />
+            <RNText className="text-zinc-500 text-[10px] mt-2">Ad could not load</RNText>
+          </View>
         )}
       </View>
     );
   }
 
   return (
-    <Animated.View
-      key="post-ad-container"
-      entering={FadeIn.duration(500)}
-      className="mb-5"
-    >
-      <NativeAdView 
-        nativeAd={nativeAd} 
-        style={{ width: "100%", height: 350 }}
-        adChoicesPlacement="topRight"
-      >
+    <Animated.View key="post-ad-container" entering={FadeIn.duration(500)} className="mb-5">
+      <LevelPlayNativeAdView nativeAd={adInstance} style={{ width: "100%", height: 350 }}>
         <View
           className={`rounded-[2.5rem] border overflow-hidden ${
             isDark ? "bg-zinc-900/40 border-zinc-800" : "bg-white border-zinc-100 shadow-sm"
           }`}
           style={{ height: 350 }}
         >
-          <NativeMediaView
-            nativeID="adMediaView"
-            style={{ width: "100%", height: 190, backgroundColor: isDark ? "#111" : "#eee" }}
-          />
+          {adData.media ? (
+             <Image source={{ uri: adData.media }} style={{ width: "100%", height: 190, backgroundColor: isDark ? "#111" : "#eee" }} />
+          ) : (
+            <View style={{ width: "100%", height: 190, backgroundColor: isDark ? "#111" : "#eee" }} />
+          )}
 
           <View className="p-5">
             <View className="flex-row justify-between items-center mb-3">
@@ -249,19 +294,12 @@ export const NativeAdPostStyle = ({ isDark }) => {
               </RNText>
             </View>
 
-            <RNText
-              nativeID="adHeadlineView"
-              className={`font-black text-xl mb-1 leading-tight tracking-tight ${isDark ? 'text-white' : 'text-black'}`}
-            >
-              {nativeAd.headline}
+            <RNText className={`font-black text-xl mb-1 leading-tight tracking-tight ${isDark ? 'text-white' : 'text-black'}`}>
+              {adData.title || adData.headline}
             </RNText>
 
-            <RNText
-              nativeID="adTaglineView"
-              className={`${isDark ? 'text-zinc-400' : 'text-zinc-500'} text-xs mb-4 italic`}
-              numberOfLines={2}
-            >
-              {nativeAd.tagline || nativeAd.body}
+            <RNText className={`${isDark ? 'text-zinc-400' : 'text-zinc-500'} text-xs mb-4 italic`} numberOfLines={2}>
+              {adData.description || adData.body}
             </RNText>
 
             <View className={`flex-row items-center justify-between pt-4 border-t ${isDark ? 'border-zinc-800' : 'border-zinc-100'}`}>
@@ -269,19 +307,15 @@ export const NativeAdPostStyle = ({ isDark }) => {
                 <Ionicons name="megaphone" size={14} color="#3b82f6" />
                 <RNText className="text-[11px] font-black text-zinc-500 ml-1.5 uppercase">Featured ad</RNText>
               </View>
-
               <View className="bg-blue-600 px-6 py-2 rounded-full">
-                <RNText
-                  nativeID="adCallToActionView"
-                  style={{ color: "white", fontSize: 10, fontWeight: "900", textTransform: "uppercase" }}
-                >
-                  {nativeAd.callToAction}
+                <RNText style={{ color: "white", fontSize: 10, fontWeight: "900", textTransform: "uppercase" }}>
+                  {adData.callToAction}
                 </RNText>
               </View>
             </View>
           </View>
         </View>
-      </NativeAdView>
+      </LevelPlayNativeAdView>
     </Animated.View>
   );
 };
