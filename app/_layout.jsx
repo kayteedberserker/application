@@ -25,7 +25,7 @@ import "./globals.css";
 
 // 🔹 AD CONFIGURATION
 const FIRST_AD_DELAY_MS = 120000;
-const COOLDOWN_MS = 500000;
+const COOLDOWN_MS = 360000;
 
 const INTERSTITIAL_ID = String(AdConfig.interstitial || "34wz6l0uzrpi6ce0").trim();
 
@@ -185,11 +185,19 @@ function RootLayoutContent() {
     const [appReady, setAppReady] = useState(false);
     const [isAdReady, setIsAdReady] = useState(false);
     
+    // Refs to track state inside listeners
+    const appReadyRef = useRef(false);
+    const isAdReadyRef = useRef(false);
+    
     const pendingNavigation = useRef(null);
     const appState = useRef(AppState.currentState);
     const lastHandledNotificationId = useRef(null);
     const hasHandledRedirect = useRef(false);
     const hasShownWelcomeAd = useRef(false);
+
+    // Sync refs with state
+    useEffect(() => { appReadyRef.current = appReady; }, [appReady]);
+    useEffect(() => { isAdReadyRef.current = isAdReady; }, [isAdReady]);
 
     useEffect(() => {
         const runCacheJanitor = async () => {
@@ -228,12 +236,18 @@ function RootLayoutContent() {
         currentPathRef.current = pathname;
     }, [pathname]);
 
+    // 🔹 ROUTING PROCESSOR
     const processRouting = useCallback((data) => {
         if (!data) return;
-        if (!isAdReady || !appReady) {
+        
+        // Use Refs for checking readiness to avoid stale closures in listeners
+        if (!isAdReadyRef.current || !appReadyRef.current) {
+            console.log("⏳ App not ready for routing, queuing...", data);
             pendingNavigation.current = data;
             return;
         }
+
+        console.log("🚀 Processing Notification Route:", data);
 
         const targetPostId = data.postId || data.id || data.body?.postId;
         const targetType = data.type || data.body?.type;
@@ -267,13 +281,12 @@ function RootLayoutContent() {
         requestAnimationFrame(() => {
             router.push(finalUrl);
         });
-    }, [router, appReady]);
+    }, [router]); // Dependencies reduced, logic relies on Refs for stability
 
     useEffect(() => {
         const navSub = DeviceEventEmitter.addListener("navigateSafely", (targetPath) => {
             if (currentPathRef.current === targetPath) return;
             router.push(targetPath);
-            
         });
 
         const interstitialListener = DeviceEventEmitter.addListener("tryShowInterstitial", () => {
@@ -306,7 +319,7 @@ function RootLayoutContent() {
         };
     }, []);
 
-    // --- 🔹 LEVELPLAY INITIALIZATION (Replaced AdMob Init) ---
+    // --- 🔹 LEVELPLAY INITIALIZATION ---
     useEffect(() => {
         if (Platform.OS === 'web') {
             setIsAdReady(true);
@@ -330,7 +343,6 @@ function RootLayoutContent() {
                     }
                 };
 
-                // Multi-strategy init from reference
                 if (LevelPlayInitRequest && (LevelPlayInitRequest.builder || LevelPlayInitRequest.Builder)) {
                     const BuilderClass = LevelPlayInitRequest.builder || LevelPlayInitRequest.Builder;
                     const requestBuilder = new BuilderClass(appKey);
@@ -355,8 +367,10 @@ function RootLayoutContent() {
         runMediationInit();
     }, []);
 
+    // 🔹 FLUSH PENDING NAVIGATION
     useEffect(() => {
         if (isAdReady && appReady && pendingNavigation.current) {
+            console.log("🔄 Flushing pending navigation...");
             const data = pendingNavigation.current;
             pendingNavigation.current = null;
             processRouting(data);
@@ -436,42 +450,48 @@ function RootLayoutContent() {
         return () => task.cancel();
     }, [fontsLoaded, user?.deviceId, isUpdating]);
 
-    const handleNotificationNavigation = (response) => {
+    // 🔹 NOTIFICATION LISTENER HELPERS
+    const handleNotificationNavigation = useCallback((response) => {
         const notificationId = response?.notification?.request?.identifier;
         if (!notificationId || lastHandledNotificationId.current === notificationId) return;
         lastHandledNotificationId.current = notificationId;
         const data = response?.notification?.request?.content?.data || {};
         processRouting(data);
-    };
+    }, [processRouting]);
 
-    const handleNotifeeInteraction = async (detail) => {
+    const handleNotifeeInteraction = useCallback(async (detail) => {
         const { notification, pressAction } = detail;
         if (pressAction?.id === 'default' && notification?.data) {
             processRouting(notification.data);
         }
-    };
+    }, [processRouting]);
 
+    // 🔹 MASTER NOTIFICATION LISTENER SETUP
     useEffect(() => {
         if (isUpdating) return;
 
+        // 1. Notifee Foreground/Background Interaction
         const unsubscribeNotifee = notifee.onForegroundEvent(({ type, detail }) => {
             if (type === EventType.PRESS) {
                 handleNotifeeInteraction(detail);
             }
         });
 
+        // 2. Notifee Initial Notification (Quit State)
         notifee.getInitialNotification().then(initialNotification => {
             if (initialNotification) {
                 handleNotifeeInteraction(initialNotification);
             }
         });
 
+        // 3. Expo Last Response (Quit State)
         Notifications.getLastNotificationResponseAsync().then(response => {
             if (response && !hasHandledRedirect.current) {
                 handleNotificationNavigation(response);
             }
         });
 
+        // 4. Expo Interaction Listener
         const responseSub = Notifications.addNotificationResponseReceivedListener(response => {
             handleNotificationNavigation(response);
         });
@@ -480,7 +500,7 @@ function RootLayoutContent() {
             unsubscribeNotifee();
             responseSub.remove();
         };
-    }, [isUpdating]);
+    }, [isUpdating, handleNotifeeInteraction, handleNotificationNavigation]); // Added dependencies to refresh listeners
 
     if (!fontsLoaded || isUpdating || !isAdReady) {
         return (
