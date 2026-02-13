@@ -70,7 +70,7 @@ export default function CategoryPage({ forcedId }) {
                     if (local) {
                         const parsed = JSON.parse(local);
                         if (Array.isArray(parsed.data)) {
-                            setCachedData([parsed]); // Wrap for SWR format
+                            setCachedData([{ posts: parsed.data }]); // Wrap for SWR format compatibility
                             CATEGORY_MEMORY_CACHE[CACHE_KEY] = parsed.data;
                         }
                     }
@@ -105,7 +105,8 @@ export default function CategoryPage({ forcedId }) {
         revalidateOnFocus: false,
         revalidateOnReconnect: false,
         revalidateIfStale: false,
-        revalidateOnMount: false, // 🛑 No auto-fetch on mount
+        // ✨ LOGIC CHANGE: Only revalidate on mount if this specific category cache is empty
+        revalidateOnMount: !CATEGORY_MEMORY_CACHE[CACHE_KEY], 
         dedupingInterval: 10000,
         fallbackData: cachedData,
         onSuccess: (newData) => {
@@ -122,15 +123,16 @@ export default function CategoryPage({ forcedId }) {
     });
 
     const posts = useMemo(() => {
-        if (!data) return [];
+        const sourceData = data || cachedData;
+        if (!sourceData) return [];
         const postMap = new Map();
-        data.forEach(page => {
+        sourceData.forEach(page => {
             if (page?.posts) {
                 page.posts.forEach(p => p?._id && postMap.set(p._id, p));
             }
         });
         return Array.from(postMap.values());
-    }, [data]);
+    }, [data, cachedData]);
 
     const handleRefresh = useCallback(async () => {
         setRefreshing(true);
@@ -205,6 +207,7 @@ export default function CategoryPage({ forcedId }) {
                         tintColor="#2563eb"
                         title={"Fetching Archives..."}
                         titleColor={isDark ? "#ffffff" : "#2563eb"}
+                        progressBackgroundColor={isDark ? "#1a1a1a" : "#ffffff"}
                     />
                 }
 

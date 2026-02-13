@@ -111,24 +111,25 @@ export default function PostsViewer() {
     };
 
     const { data, size, setSize, isLoading, isValidating, mutate } = useSWRInfinite(getKey, fetcher, {
-    refreshInterval: 0, 
-    revalidateOnFocus: false,
-    revalidateOnReconnect: false, // Don't fetch just because Wi-Fi came back
-    revalidateIfStale: false,      // Don't fetch just because data is "old"
-    revalidateOnMount: false,      // 👈 THIS ensures it stays quiet on startup
-    dedupingInterval: 10000,
-    fallbackData: cachedData, 
-    onSuccess: (newData) => {
-        setIsOfflineMode(false);
-        setRefreshing(false); 
-        POSTS_MEMORY_CACHE = newData;
-        saveHeavyCache(CACHE_KEY, newData);
-    },
-    onError: () => {
-        setIsOfflineMode(true);
-        setRefreshing(false); 
-    }
-});
+        refreshInterval: 0, 
+        revalidateOnFocus: false,
+        revalidateOnReconnect: false,
+        revalidateIfStale: false,
+        // ✨ LOGIC CHANGE: Only revalidate on mount if we have NO cached data
+        revalidateOnMount: !POSTS_MEMORY_CACHE, 
+        dedupingInterval: 10000,
+        fallbackData: cachedData, 
+        onSuccess: (newData) => {
+            setIsOfflineMode(false);
+            setRefreshing(false); 
+            POSTS_MEMORY_CACHE = newData;
+            saveHeavyCache(CACHE_KEY, newData);
+        },
+        onError: () => {
+            setIsOfflineMode(true);
+            setRefreshing(false); 
+        }
+    });
 
     const handleRefresh = useCallback(async () => {
         setRefreshing(true);
@@ -164,7 +165,8 @@ export default function PostsViewer() {
         setSize(size + 1);
     };
 
-    if (!ready && posts.length === 0) {
+    // Show loading screen only if we are ready and have zero posts
+    if (!ready || (isLoading && posts.length === 0)) {
         return <AnimeLoading message="Loading posts" subMessage="Prepping Otaku content" />
     }
 
@@ -217,16 +219,13 @@ export default function PostsViewer() {
                 onEndReached={loadMore}
                 onEndReachedThreshold={0.5}
                 
-                onRefresh={handleRefresh}
-                refreshing={refreshing} 
                 refreshControl={
                     <RefreshControl
                         refreshing={refreshing}
                         onRefresh={handleRefresh}
-                        // ✨ CUSTOMIZED NATIVE LOADER
-                        colors={["#2563eb"]} // Android spinner color
-                        tintColor="#2563eb"  // iOS spinner color
-                        title={"Updating Feed..."} // iOS title
+                        colors={["#2563eb"]}
+                        tintColor="#2563eb"
+                        title={"Updating Feed..."}
                         titleColor={isDark ? "#ffffff" : "#2563eb"}
                         progressBackgroundColor={isDark ? "#1a1a1a" : "#ffffff"}
                     />
