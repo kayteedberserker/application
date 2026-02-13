@@ -4,7 +4,7 @@ import { ActivityIndicator, Platform, Text, View } from 'react-native';
 import { LevelPlayAdSize, LevelPlayBannerAdView } from 'unity-levelplay-mediation';
 import { AdConfig } from '../utils/AdConfig';
 
-const BANNER_ID = AdConfig.banner || "97tambjxr88508m5"
+const BANNER_ID = AdConfig.banner || "97tambjxr88508m5";
 
 /**
  * @param {string} size - Prop to determine ad size: 'BANNER', 'LARGE', or 'MREC'
@@ -27,7 +27,7 @@ const AppBanner = ({ size = 'MREC' }) => {
   const loadAdInternal = useCallback(() => {
     // Check if component is still mounted and ref exists
     if (bannerAdViewRef.current) {
-      console.log(`📡 [${size}] Background load attempt...`);
+      console.log(`📡 [${size}] Background load attempt for ID: ${BANNER_ID}`);
       bannerAdViewRef.current.loadAd();
     }
   }, [size]);
@@ -40,20 +40,26 @@ const AppBanner = ({ size = 'MREC' }) => {
       setLoaded(true);
     },
     onAdLoadFailed: (error) => {
-      console.warn(`LevelPlay Banner [${size}] Load Failed (Retrying in 30s):`, error);
+      // ⚠️ ERROR 509 = Mediation No Fill. Usually a dashboard/consent issue, not code.
+      console.warn(`LevelPlay Banner [${size}] Load Failed (Code: ${error.code}): ${error.message}`);
+      setLoaded(false);
+      
       if (retryTimer.current) clearTimeout(retryTimer.current);
       retryTimer.current = setTimeout(() => {
         loadAdInternal();
       }, 30000); 
     },
-    onAdClicked: () => console.log("Banner Clicked"),
-    onAdDisplayed: () => console.log("Banner Displayed"),
-    onAdDisplayFailed: (_, error) => console.log("Banner Display Failed", error),
+    onAdClicked: (adInfo) => console.log("Banner Clicked", adInfo),
+    onAdDisplayed: (adInfo) => console.log("Banner Displayed", adInfo),
+    onAdDisplayFailed: (adInfo, error) => console.log("Banner Display Failed", error),
+    onAdExpanded: (adInfo) => console.log("Banner Expanded", adInfo),
+    onAdCollapsed: (adInfo) => console.log("Banner Collapsed", adInfo),
+    onAdLeftApplication: (adInfo) => console.log("User left app via Banner", adInfo),
   }), [size, loadAdInternal]);
 
   useEffect(() => {
-    // Delay mount to ensure native bridge is initialized
-    const timer = setTimeout(() => setShouldRender(true), 1000);
+    // Delay mount to ensure native bridge is initialized and SDK init is complete
+    const timer = setTimeout(() => setShouldRender(true), 1500);
     
     return () => {
       clearTimeout(timer);
@@ -77,7 +83,7 @@ const AppBanner = ({ size = 'MREC' }) => {
         backgroundColor: 'transparent',
       }}
     >
-      {/* 🔹 LOADING ANIMATION */}
+      {/* 🔹 LOADING ANIMATION - Always shown while 'loaded' is false */}
       {!loaded && (
         <View style={{ 
           position: 'absolute', 
@@ -92,9 +98,9 @@ const AppBanner = ({ size = 'MREC' }) => {
           zIndex: 1
         }}>
           <ActivityIndicator size="small" color="#3b82f6" />
-          {layout.height > 100 && (
+          {layout.height > 60 && (
             <Text style={{ fontSize: 10, color: '#3b82f6', marginTop: 10, fontWeight: '600' }}>
-              LOADING_AD_CONTENT
+              LOADING AD...
             </Text>
           )}
         </View>
@@ -104,14 +110,14 @@ const AppBanner = ({ size = 'MREC' }) => {
       <View style={{ width: layout.width, height: layout.height, opacity: loaded ? 1 : 0 }}>
         {shouldRender && (
           <LevelPlayBannerAdView
-            key={`banner_${size}`} // Force re-mount if size changes to prevent stale native views
+            key={`banner_${size}`} // Force re-mount if size changes
             ref={bannerAdViewRef}
             adUnitId={BANNER_ID}
             adSize={layout.sdkSize}
-            placementName={`Placement_${size}`} 
+            placementName={size === 'MREC' ? 'DefaultMREC' : 'DefaultBanner'} 
             listener={adListener}
             onLayout={() => {
-              // Ensure bridge is ready
+              // Standard way to trigger initial load in RN
               if (bannerAdViewRef.current) {
                 loadAdInternal();
               }
