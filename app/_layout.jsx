@@ -29,8 +29,8 @@ let LAST_PROCESSED_NOTIF_ID = null;
 let LAST_PROCESSED_URL = null;
 
 // 🔹 AD CONFIGURATION
-const FIRST_AD_DELAY_MS = 100000;
-const COOLDOWN_MS = 200000;
+const FIRST_AD_DELAY_MS = 60000;
+const COOLDOWN_MS = 150000;
 
 const INTERSTITIAL_ID = String(AdConfig.interstitial || "34wz6l0uzrpi6ce0").trim();
 
