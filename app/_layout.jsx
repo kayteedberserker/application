@@ -25,7 +25,7 @@ import "./globals.css";
 
 // 🔹 AD CONFIGURATION
 const FIRST_AD_DELAY_MS = 120000;
-const COOLDOWN_MS = 360000;
+const COOLDOWN_MS = 150000;
 
 const INTERSTITIAL_ID = String(AdConfig.interstitial || "34wz6l0uzrpi6ce0").trim();
 
@@ -194,6 +194,7 @@ function RootLayoutContent() {
     const lastHandledNotificationId = useRef(null);
     const hasHandledRedirect = useRef(false);
     const hasShownWelcomeAd = useRef(false);
+    const lastRoutingTime = useRef(0); // 🔹 PREVENTS DOUBLE NAVIGATION
 
     // Sync refs with state
     useEffect(() => { appReadyRef.current = appReady; }, [appReady]);
@@ -247,6 +248,13 @@ function RootLayoutContent() {
             return;
         }
 
+        // 🔹 DEBOUNCE: Prevent double navigation if clicked twice or event fired twice
+        const now = Date.now();
+        if (now - lastRoutingTime.current < 2000) { 
+            console.log("🚫 Debouncing duplicate navigation event");
+            return; 
+        }
+
         console.log("🚀 Processing Notification Route:", data);
 
         const targetPostId = data.postId || data.id || data.body?.postId;
@@ -275,13 +283,16 @@ function RootLayoutContent() {
             return;
         }
 
+        // Update timestamp only when we are actually navigating
+        lastRoutingTime.current = now;
         hasHandledRedirect.current = true;
+        
         const finalUrl = targetDiscussionId ? `${targetPath}?discussionId=${targetDiscussionId}` : targetPath;
         
         requestAnimationFrame(() => {
             router.push(finalUrl);
         });
-    }, [router]); // Dependencies reduced, logic relies on Refs for stability
+    }, [router]);
 
     useEffect(() => {
         const navSub = DeviceEventEmitter.addListener("navigateSafely", (targetPath) => {
@@ -500,7 +511,7 @@ function RootLayoutContent() {
             unsubscribeNotifee();
             responseSub.remove();
         };
-    }, [isUpdating, handleNotifeeInteraction, handleNotificationNavigation]); // Added dependencies to refresh listeners
+    }, [isUpdating, handleNotifeeInteraction, handleNotificationNavigation]);
 
     if (!fontsLoaded || isUpdating || !isAdReady) {
         return (
