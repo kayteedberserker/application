@@ -1,4 +1,4 @@
-import notifee, { AndroidGroupAlertBehavior, AndroidImportance, EventType } from '@notifee/react-native';
+import notifee, { AndroidImportance, EventType } from '@notifee/react-native';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import Constants from 'expo-constants';
 import { useFonts } from "expo-font";
@@ -23,9 +23,14 @@ import { AdConfig } from '../utils/AdConfig';
 import apiFetch from "../utils/apiFetch";
 import "./globals.css";
 
+// 🛑 GLOBAL LOCKS (Defined outside the component to prevent race conditions)
+let IS_NAVIGATING_GLOBAL = false;
+let LAST_PROCESSED_NOTIF_ID = null;
+let LAST_PROCESSED_URL = null;
+
 // 🔹 AD CONFIGURATION
-const FIRST_AD_DELAY_MS = 120000;
-const COOLDOWN_MS = 150000;
+const FIRST_AD_DELAY_MS = 100000;
+const COOLDOWN_MS = 200000;
 
 const INTERSTITIAL_ID = String(AdConfig.interstitial || "34wz6l0uzrpi6ce0").trim();
 
@@ -43,36 +48,6 @@ Notifications.setNotificationHandler({
             try {
                 const channelId = 'default';
                 const NOTIFICATION_COLOR = '#FF231F7C';
-
-                await notifee.displayNotification({
-                    id: groupId,
-                    title: "Recent Votes",
-                    subtitle: 'Activity',
-                    android: {
-                        channelId,
-                        groupKey: groupId,
-                        groupSummary: true,
-                        groupAlertBehavior: AndroidGroupAlertBehavior.CHILDREN,
-                        pressAction: { id: 'default' },
-                        smallIcon: 'ic_notification',
-                        color: NOTIFICATION_COLOR,
-                    },
-                });
-
-                await notifee.displayNotification({
-                    title: title,
-                    body: body,
-                    data: data,
-                    android: {
-                        channelId,
-                        groupKey: groupId,
-                        groupSummary: false,
-                        groupAlertBehavior: AndroidGroupAlertBehavior.CHILDREN,
-                        pressAction: { id: 'default' },
-                        smallIcon: 'ic_notification',
-                        color: NOTIFICATION_COLOR,
-                    },
-                });
 
                 return {
                     shouldShowBanner: false,
@@ -107,7 +82,7 @@ const loadInterstitial = () => {
 
         const listener = {
             onAdLoaded: (adInfo) => {
-                console.log("✅ Interstitial Loaded:", adInfo?.adNetwork);
+                console.log("✅ Interstitial Loaded:", adInfo);
                 interstitialLoaded = true;
             },
             onAdLoadFailed: (error) => {
@@ -123,7 +98,7 @@ const loadInterstitial = () => {
                 lastShownTime = Date.now();
                 loadInterstitial();
             },
-            onAdDisplayed: (adInfo) => console.log("Ad Displayed"),
+            onAdDisplayed: (adInfo) => console.log("Ad Displayed:"),
             onAdDisplayFailed: (error, adInfo) => {
                 console.error("Display Failed:", error, adInfo);
                 loadInterstitial();
@@ -191,10 +166,6 @@ function RootLayoutContent() {
     
     const pendingNavigation = useRef(null);
     const appState = useRef(AppState.currentState);
-    const lastHandledNotificationId = useRef(null);
-    const hasHandledRedirect = useRef(false);
-    const hasShownWelcomeAd = useRef(false);
-    const lastRoutingTime = useRef(0); // 🔹 PREVENTS DOUBLE NAVIGATION
 
     // Sync refs with state
     useEffect(() => { appReadyRef.current = appReady; }, [appReady]);
@@ -237,25 +208,24 @@ function RootLayoutContent() {
         currentPathRef.current = pathname;
     }, [pathname]);
 
-    // 🔹 ROUTING PROCESSOR
+    // 🔹 ROUTING PROCESSOR (REPAIRED)
     const processRouting = useCallback((data) => {
-        if (!data) return;
-        
-        // Use Refs for checking readiness to avoid stale closures in listeners
+        // 1. Log immediately so we know the function was called
+        console.log("📍 [processRouting] Incoming Data:", JSON.stringify(data));
+        if (!data?.notificationId) return;
+        // 2. Identify the unique notification ID to prevent double-firing
+        const currentNotifId = data.notificationId || data.id || JSON.stringify(data);
+        // 3. Check Global Locks
+        if (IS_NAVIGATING_GLOBAL || LAST_PROCESSED_NOTIF_ID === currentNotifId) {
+            console.log("🚫 [processRouting] Blocked: Navigation in progress or Duplicate ID detected.");
+            return;
+        }
+        // 4. Check Readiness (Queue if not ready)
         if (!isAdReadyRef.current || !appReadyRef.current) {
-            console.log("⏳ App not ready for routing, queuing...", data);
+            console.log("⏳ [processRouting] App/Ads not ready. Queuing request...");
             pendingNavigation.current = data;
             return;
         }
-
-        // 🔹 DEBOUNCE: Prevent double navigation if clicked twice or event fired twice
-        const now = Date.now();
-        if (now - lastRoutingTime.current < 2000) { 
-            console.log("🚫 Debouncing duplicate navigation event");
-            return; 
-        }
-
-        console.log("🚀 Processing Notification Route:", data);
 
         const targetPostId = data.postId || data.id || data.body?.postId;
         const targetType = data.type || data.body?.type;
@@ -269,28 +239,29 @@ function RootLayoutContent() {
         } else if(targetType === "version_update") {
             targetPath = "/";
         }
-
-        if (!targetPath) return;
+        
+        if (!targetPath) {
+            console.log("⚠️ [processRouting] No target path resolved.");
+            return;
+        }
 
         const currentPathBase = currentPathRef.current.split('?')[0];
         const targetPathBase = targetPath.split('?')[0];
         const isOnSamePage = currentPathBase === targetPathBase;
 
         if (isOnSamePage) {
+            console.log("📍 [processRouting] Already on target page. Emitting event.");
             if (targetDiscussionId) {
                 DeviceEventEmitter.emit("openCommentSection", { discussionId: targetDiscussionId });
             }
             return;
         }
 
-        // Update timestamp only when we are actually navigating
-        lastRoutingTime.current = now;
-        hasHandledRedirect.current = true;
-        
         const finalUrl = targetDiscussionId ? `${targetPath}?discussionId=${targetDiscussionId}` : targetPath;
         
         requestAnimationFrame(() => {
-            router.push(finalUrl);
+            console.log("🏃 [processRouting] Pushing router to:", finalUrl);
+            router.replace(finalUrl);
         });
     }, [router]);
 
@@ -334,6 +305,7 @@ function RootLayoutContent() {
     useEffect(() => {
         if (Platform.OS === 'web') {
             setIsAdReady(true);
+            setAppReady(true);
             return;
         }
 
@@ -372,6 +344,8 @@ function RootLayoutContent() {
             } catch (e) {
                 console.error("Fatal Init Error caught:", e);
                 setIsAdReady(true);
+            } finally {
+                setAppReady(true);
             }
         };
 
@@ -391,6 +365,16 @@ function RootLayoutContent() {
     useEffect(() => {
         const handleUrl = (url) => {
             if (!url || isUpdating) return;
+            
+            // 🔹 URL DEDUPLICATION
+            if (url === LAST_PROCESSED_URL) {
+                console.log("🚫 [Linking] Ignoring duplicate URL event");
+                return;
+            }
+            
+            LAST_PROCESSED_URL = url;
+            setTimeout(() => { LAST_PROCESSED_URL = null; }, 3000);
+
             const parsed = Linking.parse(url);
             const { path, queryParams } = parsed;
 
@@ -399,12 +383,14 @@ function RootLayoutContent() {
                 const pathId = segments.pop();
                 const type = segments.includes('post') ? 'post_detail' : null;
                 
-                if (path.includes('/post/')) {
+                if (path.includes('post/')) {
                     processRouting({ postId: pathId, type: type, ...queryParams });
                 } else {
                     const currentPathBase = currentPathRef.current;
                     if (currentPathBase !== `/${path}`) {
-                        router.push(path);
+                        router.replace(path);
+                    }else {
+                        console.log("Already on same page");
                     }
                 }
             }
@@ -454,7 +440,6 @@ function RootLayoutContent() {
                     body: JSON.stringify({ deviceId: user.deviceId, pushToken: token })
                 }).catch(() => {});
             }
-            setAppReady(true);
             setIsSyncing(false);
         });
 
@@ -463,17 +448,15 @@ function RootLayoutContent() {
 
     // 🔹 NOTIFICATION LISTENER HELPERS
     const handleNotificationNavigation = useCallback((response) => {
-        const notificationId = response?.notification?.request?.identifier;
-        if (!notificationId || lastHandledNotificationId.current === notificationId) return;
-        lastHandledNotificationId.current = notificationId;
         const data = response?.notification?.request?.content?.data || {};
-        processRouting(data);
+        const notificationId = response?.notification?.request?.identifier;
+        processRouting({ ...data, notificationId });
     }, [processRouting]);
 
     const handleNotifeeInteraction = useCallback(async (detail) => {
         const { notification, pressAction } = detail;
         if (pressAction?.id === 'default' && notification?.data) {
-            processRouting(notification.data);
+            processRouting({ ...notification.data, notificationId: notification.id });
         }
     }, [processRouting]);
 
@@ -481,28 +464,24 @@ function RootLayoutContent() {
     useEffect(() => {
         if (isUpdating) return;
 
-        // 1. Notifee Foreground/Background Interaction
         const unsubscribeNotifee = notifee.onForegroundEvent(({ type, detail }) => {
             if (type === EventType.PRESS) {
                 handleNotifeeInteraction(detail);
             }
         });
 
-        // 2. Notifee Initial Notification (Quit State)
         notifee.getInitialNotification().then(initialNotification => {
             if (initialNotification) {
                 handleNotifeeInteraction(initialNotification);
             }
         });
 
-        // 3. Expo Last Response (Quit State)
         Notifications.getLastNotificationResponseAsync().then(response => {
-            if (response && !hasHandledRedirect.current) {
+            if (response) {
                 handleNotificationNavigation(response);
             }
         });
 
-        // 4. Expo Interaction Listener
         const responseSub = Notifications.addNotificationResponseReceivedListener(response => {
             handleNotificationNavigation(response);
         });
@@ -513,6 +492,7 @@ function RootLayoutContent() {
         };
     }, [isUpdating, handleNotifeeInteraction, handleNotificationNavigation]);
 
+    // --- LOADING UI ---
     if (!fontsLoaded || isUpdating || !isAdReady) {
         return (
             <AnimeLoading

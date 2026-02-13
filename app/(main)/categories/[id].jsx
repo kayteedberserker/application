@@ -1,16 +1,18 @@
 import { MaterialCommunityIcons } from '@expo/vector-icons';
 import AsyncStorage from "@react-native-async-storage/async-storage";
 import { useColorScheme } from "nativewind";
-import { useEffect, useRef, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import {
     Animated,
     DeviceEventEmitter,
     Dimensions,
     Easing,
     FlatList,
+    RefreshControl,
     View
 } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
+import useSWRInfinite from "swr/infinite";
 import AppBanner from '../../../components/AppBanner';
 import PostCard from "../../../components/PostCard";
 import { SyncLoading } from "../../../components/SyncLoading";
@@ -20,8 +22,22 @@ import apiFetch from "../../../utils/apiFetch";
 const { width } = Dimensions.get('window');
 const LIMIT = 10;
 
-// 🧠 Tier 1: Memory Cache (Lives outside the component)
+const fetcher = (url) => apiFetch(url).then(res => res.json());
+
+// 🧠 Tier 1: Memory Cache
 const CATEGORY_MEMORY_CACHE = {};
+
+const saveHeavyCache = async (key, data) => {
+    try {
+        const cacheEntry = {
+            data: data,
+            timestamp: Date.now(),
+        };
+        await AsyncStorage.setItem(key, JSON.stringify(cacheEntry));
+    } catch (e) {
+        console.error("Cache Save Error", e);
+    }
+};
 
 export default function CategoryPage({ forcedId }) {
     const id = forcedId;
@@ -39,14 +55,33 @@ export default function CategoryPage({ forcedId }) {
 
     const CACHE_KEY = `CATEGORY_CACHE_${categoryName.toUpperCase().replace(/[^A-Z0-9]/g, '_')}`;
 
-    // Initialize state with Memory Cache if it exists for instant load
-    const [posts, setPosts] = useState(CATEGORY_MEMORY_CACHE[CACHE_KEY] || []);
-    const [page, setPage] = useState(1);
-    const [loading, setLoading] = useState(false);
-    const [refreshing, setRefreshing] = useState(false);
-    const [hasMore, setHasMore] = useState(true);
+    const [ready, setReady] = useState(false);
+    const [cachedData, setCachedData] = useState(CATEGORY_MEMORY_CACHE[CACHE_KEY]);
     const [isOfflineMode, setIsOfflineMode] = useState(false);
+    const [refreshing, setRefreshing] = useState(false);
     const scrollRef = useRef(null);
+
+    // Initial Cache Hydration
+    useEffect(() => {
+        const prepare = async () => {
+            try {
+                if (!CATEGORY_MEMORY_CACHE[CACHE_KEY]) {
+                    const local = await AsyncStorage.getItem(CACHE_KEY);
+                    if (local) {
+                        const parsed = JSON.parse(local);
+                        if (Array.isArray(parsed.data)) {
+                            setCachedData([parsed]); // Wrap for SWR format
+                            CATEGORY_MEMORY_CACHE[CACHE_KEY] = parsed.data;
+                        }
+                    }
+                }
+            } catch (e) {
+                console.error("Cache load error", e);
+            }
+            setReady(true);
+        };
+        prepare();
+    }, [id]);
 
     useEffect(() => {
         const animation = Animated.loop(
@@ -59,6 +94,56 @@ export default function CategoryPage({ forcedId }) {
         return () => animation.stop();
     }, [pulseAnim]);
 
+    const getKey = (pageIndex, previousPageData) => {
+        if (!ready) return null;
+        if (previousPageData && previousPageData.posts?.length < LIMIT) return null;
+        return `/posts?category=${categoryName}&page=${pageIndex + 1}&limit=${LIMIT}`;
+    };
+
+    const { data, size, setSize, isLoading, isValidating, mutate } = useSWRInfinite(getKey, fetcher, {
+        refreshInterval: 0,
+        revalidateOnFocus: false,
+        revalidateOnReconnect: false,
+        revalidateIfStale: false,
+        revalidateOnMount: false, // 🛑 No auto-fetch on mount
+        dedupingInterval: 10000,
+        fallbackData: cachedData,
+        onSuccess: (newData) => {
+            setIsOfflineMode(false);
+            setRefreshing(false);
+            const flatData = newData.flatMap(page => page.posts || []);
+            CATEGORY_MEMORY_CACHE[CACHE_KEY] = flatData;
+            saveHeavyCache(CACHE_KEY, flatData);
+        },
+        onError: () => {
+            setIsOfflineMode(true);
+            setRefreshing(false);
+        }
+    });
+
+    const posts = useMemo(() => {
+        if (!data) return [];
+        const postMap = new Map();
+        data.forEach(page => {
+            if (page?.posts) {
+                page.posts.forEach(p => p?._id && postMap.set(p._id, p));
+            }
+        });
+        return Array.from(postMap.values());
+    }, [data]);
+
+    const handleRefresh = useCallback(async () => {
+        setRefreshing(true);
+        await mutate();
+    }, [mutate]);
+
+    const loadMore = () => {
+        if (isLoading || isValidating || isOfflineMode) return;
+        setSize(size + 1);
+    };
+
+    const hasMore = data ? data[data.length - 1]?.posts?.length === LIMIT : false;
+
     useEffect(() => {
         const sub = DeviceEventEmitter.addListener("doScrollToTop", () => {
             scrollRef.current?.scrollToOffset({ offset: 0, animated: true });
@@ -66,98 +151,11 @@ export default function CategoryPage({ forcedId }) {
         return () => sub.remove();
     }, []);
 
-    // 🛡️ Save to AsyncStorage with timestamp for your Janitor
-    const saveHeavyCache = async (key, data) => {
-        try {
-            const cacheEntry = {
-                data: data,
-                timestamp: Date.now(),
-            };
-            await AsyncStorage.setItem(key, JSON.stringify(cacheEntry));
-        } catch (e) {
-            console.error("Cache Save Error", e);
-        }
-    };
-
-    const fetchPosts = async (pageNum = 1, isRefresh = false) => {
-        if (loading || (!hasMore && !isRefresh)) return;
-
-        if (isRefresh) setRefreshing(true);
-        else setLoading(true);
-
-        try {
-            const res = await apiFetch(`/posts?category=${categoryName}&page=${pageNum}&limit=${LIMIT}`);
-            const data = await res.json();
-            const newPosts = data.posts || [];
-
-            setPosts((prev) => {
-                const updatedList = isRefresh
-                    ? newPosts
-                    : Array.from(new Map([...prev, ...newPosts].map(p => [p._id, p])).values());
-
-                // 💾 Update Memory Cache (Tier 1)
-                CATEGORY_MEMORY_CACHE[CACHE_KEY] = updatedList;
-
-                // 💾 Update AsyncStorage (Tier 2)
-                if (updatedList.length > 0) {
-                    saveHeavyCache(CACHE_KEY, updatedList);
-                }
-                return updatedList;
-            });
-
-            setHasMore(newPosts.length === LIMIT);
-            setPage(pageNum + 1);
-            setIsOfflineMode(false);
-        } catch (e) {
-            console.error("Category Fetch Error:", e);
-            setIsOfflineMode(true);
-        } finally {
-            setLoading(false);
-            setRefreshing(false);
-        }
-    };
-
-    // ⚡ HYBRID INIT: Memory -> Storage -> API
-    useEffect(() => {
-        const init = async () => {
-            // 1. Check Memory first (Already handled in useState, but ensures sync)
-            if (CATEGORY_MEMORY_CACHE[CACHE_KEY]) {
-                setPosts(CATEGORY_MEMORY_CACHE[CACHE_KEY]);
-                setPage(2);
-                fetchPosts(1, true); // Revalidate in background
-                return;
-            }
-
-            try {
-                // 2. Check AsyncStorage
-                const cached = await AsyncStorage.getItem(CACHE_KEY);
-                if (cached) {
-                    const parsedEntry = JSON.parse(cached);
-                    const cachedData = parsedEntry?.data || parsedEntry;
-
-                    if (cachedData && Array.isArray(cachedData) && cachedData.length > 0) {
-                        CATEGORY_MEMORY_CACHE[CACHE_KEY] = cachedData; // Fill memory
-                        setPosts(cachedData);
-                        setPage(2);
-                        fetchPosts(1, true); // Revalidate
-                        return;
-                    }
-                }
-
-                // 3. Fallback to API
-                fetchPosts(1, true);
-            } catch (e) {
-                fetchPosts(1, true);
-            }
-        };
-        init();
-    }, [id]);
-
     const renderItem = ({ item, index }) => {
         const showAd = (index + 1) % 4 === 0;
         return (
             <View className="px-4">
-                <PostCard post={item} isFeed />
+                <PostCard post={item} isFeed posts={posts} setPosts={mutate} />
                 {showAd && <View className="mb-3 mt-3 w-full p-6 border border-dashed border-gray-300 dark:border-gray-800 rounded-[32px] bg-gray-50/50 dark:bg-white/5 items-center justify-center">
                     <Text className="text-[10px] font-bold text-gray-400 uppercase tracking-[0.2em] italic text-center">Sponsored Transmission</Text>
                     <AppBanner size="MEDIUM_RECTANGLE" />
@@ -198,9 +196,21 @@ export default function CategoryPage({ forcedId }) {
                 renderItem={renderItem}
                 ListHeaderComponent={ListHeader}
                 contentContainerStyle={{ paddingTop: insets.top + 20, paddingBottom: insets.bottom + 100 }}
+                
+                refreshControl={
+                    <RefreshControl
+                        refreshing={refreshing}
+                        onRefresh={handleRefresh}
+                        colors={["#2563eb"]}
+                        tintColor="#2563eb"
+                        title={"Fetching Archives..."}
+                        titleColor={isDark ? "#ffffff" : "#2563eb"}
+                    />
+                }
+
                 ListFooterComponent={() => (
                     <View className="py-12 items-center justify-center min-h-[140px]">
-                        {loading && !refreshing ? (
+                        {(isLoading || (isValidating && size > 1)) && !refreshing ? (
                             <SyncLoading />
                         ) : !hasMore && posts.length > 0 ? (
                             <View className="items-center">
@@ -210,7 +220,7 @@ export default function CategoryPage({ forcedId }) {
                         ) : null}
                     </View>
                 )}
-                onEndReached={() => !isOfflineMode && fetchPosts(page)}
+                onEndReached={loadMore}
                 onEndReachedThreshold={0.5}
                 onScroll={(e) => DeviceEventEmitter.emit("onScroll", e.nativeEvent.contentOffset.y)}
                 scrollEventThrottle={16}

@@ -1,7 +1,7 @@
 import { MaterialCommunityIcons } from '@expo/vector-icons';
 import AsyncStorage from "@react-native-async-storage/async-storage";
 import { useColorScheme } from "nativewind";
-import { useEffect, useMemo, useRef, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import {
     Animated,
     DeviceEventEmitter,
@@ -9,6 +9,7 @@ import {
     Easing,
     FlatList,
     InteractionManager,
+    RefreshControl,
     View
 } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
@@ -51,6 +52,7 @@ export default function PostsViewer() {
     const [canFetch, setCanFetch] = useState(false); 
     const [cachedData, setCachedData] = useState(POSTS_MEMORY_CACHE); 
     const [isOfflineMode, setIsOfflineMode] = useState(false);
+    const [refreshing, setRefreshing] = useState(false); 
 
     const pulseAnim = useRef(new Animated.Value(0)).current;
 
@@ -61,7 +63,6 @@ export default function PostsViewer() {
                     const local = await AsyncStorage.getItem(CACHE_KEY);
                     if (local) {
                         const parsed = JSON.parse(local);
-                        // 🚀 Ensure cache matches SWR's expected page-array format
                         if (Array.isArray(parsed.data)) {
                             setCachedData(parsed.data);
                             POSTS_MEMORY_CACHE = parsed.data;
@@ -74,7 +75,6 @@ export default function PostsViewer() {
 
             InteractionManager.runAfterInteractions(() => {
                 setReady(true);
-                // Extra buffer to ensure thread is completely free for initial render
                 setTimeout(() => {
                     setCanFetch(true);
                 }, 400);
@@ -105,26 +105,35 @@ export default function PostsViewer() {
     }, [pulseAnim]);
 
     const getKey = (pageIndex, previousPageData) => {
-        // 🚀 STOP fetch until UI is idle or if we reached the end
         if (!ready || !canFetch) return null;
         if (previousPageData && previousPageData.posts?.length < LIMIT) return null;
         return `/posts?page=${pageIndex + 1}&limit=${LIMIT}`;
     };
 
     const { data, size, setSize, isLoading, isValidating, mutate } = useSWRInfinite(getKey, fetcher, {
-        refreshInterval: isOfflineMode ? 0 : 60000,
-        revalidateOnFocus: false,
-        dedupingInterval: 10000,
-        fallbackData: cachedData, 
-        onSuccess: (newData) => {
-            setIsOfflineMode(false);
-            POSTS_MEMORY_CACHE = newData;
-            saveHeavyCache(CACHE_KEY, newData);
-        },
-        onError: () => {
-            setIsOfflineMode(true);
-        }
-    });
+    refreshInterval: 0, 
+    revalidateOnFocus: false,
+    revalidateOnReconnect: false, // Don't fetch just because Wi-Fi came back
+    revalidateIfStale: false,      // Don't fetch just because data is "old"
+    revalidateOnMount: false,      // 👈 THIS ensures it stays quiet on startup
+    dedupingInterval: 10000,
+    fallbackData: cachedData, 
+    onSuccess: (newData) => {
+        setIsOfflineMode(false);
+        setRefreshing(false); 
+        POSTS_MEMORY_CACHE = newData;
+        saveHeavyCache(CACHE_KEY, newData);
+    },
+    onError: () => {
+        setIsOfflineMode(true);
+        setRefreshing(false); 
+    }
+});
+
+    const handleRefresh = useCallback(async () => {
+        setRefreshing(true);
+        await mutate();
+    }, [mutate]);
 
     const posts = useMemo(() => {
         const sourceData = data || cachedData;
@@ -155,8 +164,6 @@ export default function PostsViewer() {
         setSize(size + 1);
     };
 
-    // 🚀 INSTRUCTION: Anything including loading should have the loading animation.
-    // If not ready and we have no cache, show full screen anime loader.
     if (!ready && posts.length === 0) {
         return <AnimeLoading message="Loading posts" subMessage="Prepping Otaku content" />
     }
@@ -169,9 +176,9 @@ export default function PostsViewer() {
                 <PostCard post={item} isFeed posts={posts} setPosts={mutate} />
                 {showAd && ready && (
                     <View className="mb-3 mt-3 w-full p-6 border border-dashed border-gray-300 dark:border-gray-800 rounded-[32px] bg-gray-50/50 dark:bg-white/5 items-center justify-center">
-							<Text className="text-[10px] font-bold text-gray-400 uppercase tracking-[0.2em] italic text-center">Sponsored Transmission</Text>
-							<AppBanner size="MEDIUM_RECTANGLE" />
-						</View>
+                        <Text className="text-[10px] font-bold text-gray-400 uppercase tracking-[0.2em] italic text-center">Sponsored Transmission</Text>
+                        <AppBanner size="MEDIUM_RECTANGLE" />
+                    </View>
                 )}
             </View>
         );
@@ -210,10 +217,24 @@ export default function PostsViewer() {
                 onEndReached={loadMore}
                 onEndReachedThreshold={0.5}
                 
-                // ⚡️ PERFORMANCE OPTIONS
+                onRefresh={handleRefresh}
+                refreshing={refreshing} 
+                refreshControl={
+                    <RefreshControl
+                        refreshing={refreshing}
+                        onRefresh={handleRefresh}
+                        // ✨ CUSTOMIZED NATIVE LOADER
+                        colors={["#2563eb"]} // Android spinner color
+                        tintColor="#2563eb"  // iOS spinner color
+                        title={"Updating Feed..."} // iOS title
+                        titleColor={isDark ? "#ffffff" : "#2563eb"}
+                        progressBackgroundColor={isDark ? "#1a1a1a" : "#ffffff"}
+                    />
+                }
+
                 removeClippedSubviews={true}
                 initialNumToRender={5} 
-                maxToRenderPerBatch={4}
+                maxToRenderPerBatch={5}
                 windowSize={3} 
                 updateCellsBatchingPeriod={100} 
                 onScroll={(e) => {
@@ -223,7 +244,6 @@ export default function PostsViewer() {
                 scrollEventThrottle={32}
                 ListFooterComponent={
                     <View className="py-12 items-center justify-center min-h-[140px]">
-                        {/* 🚀 INSTRUCTION: Show loading animation for fetching more */}
                         {(isLoading || (isValidating && size > 1)) ? (
                             <SyncLoading />
                         ) : !hasMore && posts.length > 0 ? (

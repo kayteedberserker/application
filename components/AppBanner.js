@@ -14,6 +14,7 @@ const AppBanner = ({ size = 'MREC' }) => {
   const [shouldRender, setShouldRender] = useState(false);
   
   const bannerAdViewRef = useRef(null);
+  const isInitialLoadTriggered = useRef(false); // 🚩 Prevents double loading
   const retryTimer = useRef(null);
 
   // 🛠️ Stable layout calculation
@@ -25,47 +26,51 @@ const AppBanner = ({ size = 'MREC' }) => {
   }, [size]);
 
   const loadAdInternal = useCallback(() => {
-    // Check if component is still mounted and ref exists
     if (bannerAdViewRef.current) {
-      console.log(`📡 [${size}] Background load attempt for ID: ${BANNER_ID}`);
       bannerAdViewRef.current.loadAd();
     }
   }, [size]);
 
-  // 🛠️ Stable listener object to prevent re-render loops and bridge crashes
+  // 🛠️ Stable listener object
   const adListener = useMemo(() => ({
     onAdLoaded: (adInfo) => {
-      console.log(`✅ Banner [${size}] successfully filled:`, adInfo.adNetwork);
-      if (retryTimer.current) clearTimeout(retryTimer.current);
+      // console.log(`✅ Banner [${size}] Loaded:`);
       setLoaded(true);
+      if (retryTimer.current) clearTimeout(retryTimer.current);
     },
     onAdLoadFailed: (error) => {
-      // ⚠️ ERROR 509 = Mediation No Fill. Usually a dashboard/consent issue, not code.
-      console.warn(`LevelPlay Banner [${size}] Load Failed (Code: ${error.code}): ${error.message}`);
+      console.warn(`LevelPlay Banner [${size}] Load Failed:`, error.message);
       setLoaded(false);
       
+      // Only retry manually if the SDK's auto-refresh isn't handling it
+      // Standard interval for failure retry is usually 30-60s
       if (retryTimer.current) clearTimeout(retryTimer.current);
       retryTimer.current = setTimeout(() => {
         loadAdInternal();
       }, 30000); 
     },
     onAdClicked: (adInfo) => console.log("Banner Clicked", adInfo),
-    onAdDisplayed: (adInfo) => console.log("Banner Displayed", adInfo),
+    onAdDisplayed: (adInfo) => {
+      console.log("Banner Displayed (Impression)");
+      // Logic for "Reload 5s after view" is usually handled by Dashboard auto-refresh.
+      // If you MUST do it manually (not recommended), you would call loadAdInternal() here 
+      // after a 5000ms delay. But LevelPlay prefers dashboard-managed refresh.
+    },
     onAdDisplayFailed: (adInfo, error) => console.log("Banner Display Failed", error),
     onAdExpanded: (adInfo) => console.log("Banner Expanded", adInfo),
     onAdCollapsed: (adInfo) => console.log("Banner Collapsed", adInfo),
-    onAdLeftApplication: (adInfo) => console.log("User left app via Banner", adInfo),
+    onAdLeftApplication: (adInfo) => console.log("Left App", adInfo),
   }), [size, loadAdInternal]);
 
   useEffect(() => {
-    // Delay mount to ensure native bridge is initialized and SDK init is complete
-    const timer = setTimeout(() => setShouldRender(true), 1500);
+    // 1. Set component as ready to render
+    const timer = setTimeout(() => setShouldRender(true), 1000);
     
     return () => {
       clearTimeout(timer);
       if (retryTimer.current) clearTimeout(retryTimer.current);
       if (bannerAdViewRef.current) {
-        bannerAdViewRef.current.destroy();
+        bannerAdViewRef.current.destroy(); // 🧹 Essential to prevent memory leaks
       }
     };
   }, []);
@@ -83,7 +88,7 @@ const AppBanner = ({ size = 'MREC' }) => {
         backgroundColor: 'transparent',
       }}
     >
-      {/* 🔹 LOADING ANIMATION - Always shown while 'loaded' is false */}
+      {/* 🔹 LOADING ANIMATION */}
       {!loaded && (
         <View style={{ 
           position: 'absolute', 
@@ -110,15 +115,16 @@ const AppBanner = ({ size = 'MREC' }) => {
       <View style={{ width: layout.width, height: layout.height, opacity: loaded ? 1 : 0 }}>
         {shouldRender && (
           <LevelPlayBannerAdView
-            key={`banner_${size}`} // Force re-mount if size changes
+            key={`banner_view_${size}`} 
             ref={bannerAdViewRef}
             adUnitId={BANNER_ID}
             adSize={layout.sdkSize}
             placementName={size === 'MREC' ? 'DefaultMREC' : 'DefaultBanner'} 
             listener={adListener}
             onLayout={() => {
-              // Standard way to trigger initial load in RN
-              if (bannerAdViewRef.current) {
+              // 🚩 Only trigger load once per component mount
+              if (!isInitialLoadTriggered.current && bannerAdViewRef.current) {
+                isInitialLoadTriggered.current = true;
                 loadAdInternal();
               }
             }}
