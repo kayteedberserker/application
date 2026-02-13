@@ -4,7 +4,7 @@ import { ActivityIndicator, Platform, Text, View } from 'react-native';
 import { LevelPlayAdSize, LevelPlayBannerAdView } from 'unity-levelplay-mediation';
 import { AdConfig } from '../utils/AdConfig';
 
-const BANNER_ID = String(AdConfig.banner || "8087965f97374668").trim();
+const BANNER_ID = AdConfig.banner || "97tambjxr88508m5"
 
 /**
  * @param {string} size - Prop to determine ad size: 'BANNER', 'LARGE', or 'MREC'
