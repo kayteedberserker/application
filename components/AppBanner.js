@@ -41,8 +41,7 @@ const AppBanner = ({ size = 'MREC' }) => {
   }, [size]);
 
   const loadAdInternal = useCallback(() => {
-    if (isInitialLoadTriggered.current) return;
-    
+    // Note: Removed the isInitialLoadTriggered check here so "Force Manual Load" always works
     if (bannerAdViewRef.current) {
       addLog(`🚀 Calling loadAd() for ${size}...`);
       isInitialLoadTriggered.current = true;
@@ -65,7 +64,8 @@ const AppBanner = ({ size = 'MREC' }) => {
 
   const adListener = useMemo(() => ({
     onAdLoaded: (adInfo) => {
-      addLog(`✅ LOADED: ${adInfo}`);
+      // ✨ stringify the object to see the details
+      addLog(`✅ LOADED: ${JSON.stringify(adInfo)}`);
       setLoaded(true);
       if (retryTimer.current) clearTimeout(retryTimer.current);
     },
@@ -74,11 +74,10 @@ const AppBanner = ({ size = 'MREC' }) => {
       setLoaded(false);
       if (retryTimer.current) clearTimeout(retryTimer.current);
       retryTimer.current = setTimeout(() => {
-        isInitialLoadTriggered.current = false;
         loadAdInternal();
       }, 30000); 
     },
-    onAdClicked: (adInfo) => addLog("🖱️ Ad Clicked"),
+    onAdClicked: (adInfo) => addLog(`🖱️ Ad Clicked: ${JSON.stringify(adInfo)}`),
     onAdDisplayed: (adInfo) => addLog("👁️ Impression Recorded"),
     onAdDisplayFailed: (adInfo, error) => addLog(`⚠️ Display Failed: ${error.message}`),
     onAdExpanded: (adInfo) => addLog("↕️ Expanded"),
@@ -90,29 +89,24 @@ const AppBanner = ({ size = 'MREC' }) => {
     addLog("--- New Session Start ---");
     addLog(`Target Size: ${size} | ID: ${BANNER_ID}`);
     
-    const renderTimer = setTimeout(() => {
-        setShouldRender(true);
-        addLog("shouldRender set to TRUE");
-    }, 500);
+    // 1. Render the native component immediately
+    setShouldRender(true);
 
-    // 🚩 FALLBACK: If onLayout fails to fire, try loading manually after a delay
-    const fallbackTimer = setTimeout(() => {
-        if (!isInitialLoadTriggered.current) {
-            addLog("⏰ onLayout timeout - forcing load...");
-            loadAdInternal();
-        }
-    }, 3000);
+    // 2. 🚩 Start loading immediately after a tiny delay to ensure the Ref is attached
+    const initLoadTimer = setTimeout(() => {
+        addLog("🎬 Initial load sequence starting...");
+        loadAdInternal();
+    }, 800);
     
     return () => {
-      clearTimeout(renderTimer);
-      clearTimeout(fallbackTimer);
+      clearTimeout(initLoadTimer);
       if (retryTimer.current) clearTimeout(retryTimer.current);
       if (bannerAdViewRef.current) {
         addLog("Destroying Banner Instance");
         bannerAdViewRef.current.destroy();
       }
     };
-  }, []);
+  }, [loadAdInternal]); // Added loadAdInternal to deps
 
   if (Platform.OS === 'web') return null;
 
@@ -123,7 +117,7 @@ const AppBanner = ({ size = 'MREC' }) => {
         alignItems: 'center', 
         justifyContent: 'center',
         marginVertical: 15,
-        minHeight: layout.height, // Ensure container has height
+        minHeight: layout.height, 
       }}
     >
       <TouchableOpacity 
@@ -142,10 +136,7 @@ const AppBanner = ({ size = 'MREC' }) => {
           </View>
           <ScrollView style={{ flex: 1, padding: 15 }}>
             <TouchableOpacity 
-                onPress={() => {
-                    isInitialLoadTriggered.current = false;
-                    loadAdInternal();
-                }}
+                onPress={() => loadAdInternal()}
                 style={{ backgroundColor: '#3b82f6', padding: 12, borderRadius: 8, marginBottom: 20 }}
             >
                 <Text style={{ color: '#fff', textAlign: 'center', fontWeight: 'bold' }}>FORCE MANUAL LOAD</Text>
@@ -188,8 +179,12 @@ const AppBanner = ({ size = 'MREC' }) => {
             placementName={size === 'MREC' ? 'DefaultMREC' : 'DefaultBanner'} 
             listener={adListener}
             onLayout={(e) => {
-              addLog(`📏 onLayout Fired: ${Math.round(e.nativeEvent.layout.width)}x${Math.round(e.nativeEvent.layout.height)}`);
-              loadAdInternal();
+              addLog(`📏 onLayout: ${Math.round(e.nativeEvent.layout.width)}x${Math.round(e.nativeEvent.layout.height)}`);
+              // We already trigger load in useEffect, but calling it here 
+              // again (if not already triggered) acts as a safety backup.
+              if (!isInitialLoadTriggered.current) {
+                 loadAdInternal();
+              }
             }}
             style={{ width: layout.width, height: layout.height }}
           />
