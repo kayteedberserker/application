@@ -1,6 +1,6 @@
 import AsyncStorage from "@react-native-async-storage/async-storage";
 
-const APP_SECRET = process.env.EXPO_PUBLIC_APP_SECRET 
+const APP_SECRET = process.env.EXPO_PUBLIC_APP_SECRET || "thisismyrandomsuperlongsecretkey" 
 
 export const apiFetch = async (endpoint, options = {}) => {
   // 1. Fix URL construction
