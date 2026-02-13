@@ -65,7 +65,7 @@ const AppBanner = ({ size = 'MREC' }) => {
 
   const adListener = useMemo(() => ({
     onAdLoaded: (adInfo) => {
-      addLog(`✅ LOADED: ${adInfo.adUnit} | Network: ${adInfo.networkName}`);
+      addLog(`✅ LOADED: ${adInfo}`);
       setLoaded(true);
       if (retryTimer.current) clearTimeout(retryTimer.current);
     },
