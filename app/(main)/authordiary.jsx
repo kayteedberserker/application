@@ -6,6 +6,7 @@ import { Link, useRouter } from "expo-router";
 import { useEffect, useMemo, useRef, useState } from "react";
 import {
     ActivityIndicator, Alert,
+    DeviceEventEmitter,
     Image,
     Linking,
     Platform,
@@ -301,7 +302,7 @@ export default function AuthorDiaryDashboard() {
     const todayPost = todayPosts[0] || null;
 
     const postsLast24h = todayPosts.length;
-    const maxPostsToday = isInClan ? userRank.postLimit + 1 : userRank.postLimit;
+    const maxPostsToday = isInClan ? userRank.postLimit + 2 : userRank.postLimit;
 
     // =================================================================
     // 4. DRAFT AUTO-SAVE LOGIC
@@ -1012,7 +1013,7 @@ export default function AuthorDiaryDashboard() {
                             </View>
                             <View className="items-end">
                                 <Text className="text-[9px] font-black text-gray-500 uppercase tracking-widest">Daily Quota</Text>
-                                <Text className="text-blue-500 font-black">{postsLast24h} / {maxPostsToday} {isInClan && <Text className="text-yellow-500 text-[8px]">(+1 CLAN BONUS)</Text>}</Text>
+                                <Text className="text-blue-500 font-black">{postsLast24h} / {maxPostsToday} {isInClan && <Text className="text-yellow-500 text-[8px]">(+2 CLAN BONUS)</Text>}</Text>
                             </View>
                         </View>
 

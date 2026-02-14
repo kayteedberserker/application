@@ -54,7 +54,7 @@ export default function MainLayout() {
             tension: 40,
         }).start();
     }, [showClanMenu]);
-const [userInClan, setUserInClan] = useState(false);
+    const [userInClan, setUserInClan] = useState(false);
     const handleClanPress = async () => {
     try {
         const userClanData = await AsyncStorage.getItem('userClan');

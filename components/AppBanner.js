@@ -1,12 +1,8 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import {
   ActivityIndicator,
-  Modal,
   Platform,
-  SafeAreaView,
-  ScrollView,
   Text,
-  TouchableOpacity,
   View
 } from 'react-native';
 import { LevelPlayAdSize, LevelPlayBannerAdView } from 'unity-levelplay-mediation';
@@ -17,21 +13,10 @@ const BANNER_ID = AdConfig.banner || "97tambjxr88508m5";
 const AppBanner = ({ size = 'MREC' }) => {
   const [loaded, setLoaded] = useState(false);
   const [shouldRender, setShouldRender] = useState(false);
-  
-  // Debug State
-  const [logs, setLogs] = useState([]);
-  const [showDebug, setShowDebug] = useState(false);
-  const [tapCount, setTapCount] = useState(0);
-  const tapTimer = useRef(null);
 
   const bannerAdViewRef = useRef(null);
   const isInitialLoadTriggered = useRef(false);
   const retryTimer = useRef(null);
-
-  const addLog = (msg) => {
-    const timestamp = new Date().toLocaleTimeString();
-    setLogs(prev => [`[${timestamp}] ${msg}`, ...prev].slice(0, 30));
-  };
 
   const layout = useMemo(() => {
     const s = size.toUpperCase();
@@ -41,60 +26,40 @@ const AppBanner = ({ size = 'MREC' }) => {
   }, [size]);
 
   const loadAdInternal = useCallback(() => {
-    // Note: Removed the isInitialLoadTriggered check here so "Force Manual Load" always works
     if (bannerAdViewRef.current) {
-      addLog(`🚀 Calling loadAd() for ${size}...`);
+      console.log(`[AppBanner] 🚀 Loading ${size} ad...`);
       isInitialLoadTriggered.current = true;
       bannerAdViewRef.current.loadAd();
-    } else {
-      addLog(`⚠️ Cannot load: bannerAdViewRef is NULL`);
     }
   }, [size]);
 
-  const handleDebugTap = () => {
-    const newCount = tapCount + 1;
-    setTapCount(newCount);
-    if (newCount >= 5) {
-      setShowDebug(true);
-      setTapCount(0);
-    }
-    if (tapTimer.current) clearTimeout(tapTimer.current);
-    tapTimer.current = setTimeout(() => setTapCount(0), 2000);
-  };
-
   const adListener = useMemo(() => ({
     onAdLoaded: (adInfo) => {
-      // ✨ stringify the object to see the details
-      addLog(`✅ LOADED: ${JSON.stringify(adInfo)}`);
+      console.log(`[AppBanner] ✅ LOADED: ${size}`);
       setLoaded(true);
       if (retryTimer.current) clearTimeout(retryTimer.current);
     },
     onAdLoadFailed: (error) => {
-      addLog(`❌ LOAD FAILED: ${error.message} (Code: ${error.code})`);
+      console.error(`[AppBanner] ❌ FAILED: ${error.message}`);
       setLoaded(false);
       if (retryTimer.current) clearTimeout(retryTimer.current);
+      // Auto-retry after 30 seconds
       retryTimer.current = setTimeout(() => {
         loadAdInternal();
       }, 30000); 
     },
-    onAdClicked: (adInfo) => addLog(`🖱️ Ad Clicked: ${JSON.stringify(adInfo)}`),
-    onAdDisplayed: (adInfo) => addLog("👁️ Impression Recorded"),
-    onAdDisplayFailed: (adInfo, error) => addLog(`⚠️ Display Failed: ${error.message}`),
-    onAdExpanded: (adInfo) => addLog("↕️ Expanded"),
-    onAdCollapsed: (adInfo) => addLog("↔️ Collapsed"),
-    onAdLeftApplication: (adInfo) => addLog("💨 Left Application"),
+    onAdClicked: (adInfo) => console.log(`[AppBanner] 🖱️ Ad Clicked`),
+    onAdDisplayed: (adInfo) => console.log("[AppBanner] 👁️ Impression Recorded"),
+    onAdDisplayFailed: (adInfo, error) => console.log(`[AppBanner] ⚠️ Display Failed: ${error.message}`),
+    onAdExpanded: (adInfo) => console.log("[AppBanner] ↕️ Expanded"),
+    onAdCollapsed: (adInfo) => console.log("[AppBanner] ↔️ Collapsed"),
+    onAdLeftApplication: (adInfo) => console.log("[AppBanner] 💨 Left Application"),
   }), [size, loadAdInternal]);
 
   useEffect(() => {
-    addLog("--- New Session Start ---");
-    addLog(`Target Size: ${size} | ID: ${BANNER_ID}`);
-    
-    // 1. Render the native component immediately
     setShouldRender(true);
 
-    // 2. 🚩 Start loading immediately after a tiny delay to ensure the Ref is attached
     const initLoadTimer = setTimeout(() => {
-        addLog("🎬 Initial load sequence starting...");
         loadAdInternal();
     }, 800);
     
@@ -102,11 +67,10 @@ const AppBanner = ({ size = 'MREC' }) => {
       clearTimeout(initLoadTimer);
       if (retryTimer.current) clearTimeout(retryTimer.current);
       if (bannerAdViewRef.current) {
-        addLog("Destroying Banner Instance");
         bannerAdViewRef.current.destroy();
       }
     };
-  }, [loadAdInternal]); // Added loadAdInternal to deps
+  }, [loadAdInternal]);
 
   if (Platform.OS === 'web') return null;
 
@@ -120,36 +84,7 @@ const AppBanner = ({ size = 'MREC' }) => {
         minHeight: layout.height, 
       }}
     >
-      <TouchableOpacity 
-        activeOpacity={1} 
-        onPress={handleDebugTap}
-        style={{ position: 'absolute', width: '100%', height: '100%', zIndex: 10 }}
-      />
-
-      <Modal visible={showDebug} animationType="slide">
-        <SafeAreaView style={{ flex: 1, backgroundColor: '#020617' }}>
-          <View style={{ padding: 20, borderBottomWidth: 1, borderBottomColor: '#1e293b', flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center' }}>
-            <Text style={{ color: '#fff', fontSize: 18, fontWeight: 'bold' }}>Ad Engine Diagnostics</Text>
-            <TouchableOpacity onPress={() => setShowDebug(false)} style={{ backgroundColor: '#ef4444', padding: 8, borderRadius: 8 }}>
-              <Text style={{ color: '#fff', fontWeight: 'bold' }}>CLOSE</Text>
-            </TouchableOpacity>
-          </View>
-          <ScrollView style={{ flex: 1, padding: 15 }}>
-            <TouchableOpacity 
-                onPress={() => loadAdInternal()}
-                style={{ backgroundColor: '#3b82f6', padding: 12, borderRadius: 8, marginBottom: 20 }}
-            >
-                <Text style={{ color: '#fff', textAlign: 'center', fontWeight: 'bold' }}>FORCE MANUAL LOAD</Text>
-            </TouchableOpacity>
-            {logs.map((log, i) => (
-              <Text key={i} style={{ color: log.includes('❌') ? '#f87171' : (log.includes('✅') ? '#4ade80' : '#e2e8f0'), fontFamily: 'monospace', fontSize: 11, marginBottom: 8, paddingBottom: 8, borderBottomWidth: 0.5, borderBottomColor: '#1e293b' }}>
-                {log}
-              </Text>
-            ))}
-          </ScrollView>
-        </SafeAreaView>
-      </Modal>
-
+      {/* LOADING STATE UI */}
       {!loaded && (
         <View style={{ 
           position: 'absolute', 
@@ -169,6 +104,7 @@ const AppBanner = ({ size = 'MREC' }) => {
         </View>
       )}
 
+      {/* AD VIEW CONTAINER */}
       <View style={{ width: layout.width, height: layout.height, opacity: loaded ? 1 : 0 }}>
         {shouldRender && (
           <LevelPlayBannerAdView
@@ -179,11 +115,8 @@ const AppBanner = ({ size = 'MREC' }) => {
             placementName={size === 'MREC' ? 'DefaultMREC' : 'DefaultBanner'} 
             listener={adListener}
             onLayout={(e) => {
-              addLog(`📏 onLayout: ${Math.round(e.nativeEvent.layout.width)}x${Math.round(e.nativeEvent.layout.height)}`);
-              // We already trigger load in useEffect, but calling it here 
-              // again (if not already triggered) acts as a safety backup.
               if (!isInitialLoadTriggered.current) {
-                 loadAdInternal();
+                  loadAdInternal();
               }
             }}
             style={{ width: layout.width, height: layout.height }}
