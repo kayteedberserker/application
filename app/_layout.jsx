@@ -16,6 +16,7 @@ import Toast from 'react-native-toast-message';
 import { LevelPlay, LevelPlayInitRequest, LevelPlayInterstitialAd } from 'unity-levelplay-mediation';
 
 import AnimeLoading from "../components/AnimeLoading";
+import ReviewGate from "../components/ReviewGate"; // 👈 Import your new component
 import { ClanProvider } from "../context/ClanContext";
 import { StreakProvider, useStreak } from "../context/StreakContext";
 import { UserProvider, useUser } from "../context/UserContext";
@@ -159,11 +160,11 @@ function RootLayoutContent() {
     const [isUpdating, setIsUpdating] = useState(false);
     const [appReady, setAppReady] = useState(false);
     const [isAdReady, setIsAdReady] = useState(false);
-    
+
     // Refs to track state inside listeners
     const appReadyRef = useRef(false);
     const isAdReadyRef = useRef(false);
-    
+
     const pendingNavigation = useRef(null);
     const appState = useRef(AppState.currentState);
 
@@ -199,7 +200,7 @@ function RootLayoutContent() {
                 console.error("Janitor failed:", err);
             }
         };
-        const timeout = setTimeout(runCacheJanitor, 5000); 
+        const timeout = setTimeout(runCacheJanitor, 5000);
         return () => clearTimeout(timeout);
     }, []);
 
@@ -236,10 +237,10 @@ function RootLayoutContent() {
             targetPath = "/authordiary";
         } else if (targetPostId) {
             targetPath = `/post/${targetPostId}`;
-        } else if(targetType === "version_update") {
+        } else if (targetType === "version_update") {
             targetPath = "/";
         }
-        
+
         if (!targetPath) {
             console.log("⚠️ [processRouting] No target path resolved.");
             return;
@@ -258,7 +259,7 @@ function RootLayoutContent() {
         }
 
         const finalUrl = targetDiscussionId ? `${targetPath}?discussionId=${targetDiscussionId}` : targetPath;
-        
+
         requestAnimationFrame(() => {
             console.log("🏃 [processRouting] Pushing router to:", finalUrl);
             router.replace(finalUrl);
@@ -286,7 +287,7 @@ function RootLayoutContent() {
                 requestAnimationFrame(() => DeviceEventEmitter.emit("tryShowInterstitial"));
                 return true;
             }
-            
+
             if (!isAtHome) {
                 router.replace("/");
                 return true;
@@ -322,14 +323,14 @@ function RootLayoutContent() {
                     },
                     onInitFailed: (err) => {
                         console.error("❌ LevelPlay failed to initialize:", err);
-                        setIsAdReady(true); 
+                        setIsAdReady(true);
                     }
                 };
 
                 if (LevelPlayInitRequest && (LevelPlayInitRequest.builder || LevelPlayInitRequest.Builder)) {
                     const BuilderClass = LevelPlayInitRequest.builder || LevelPlayInitRequest.Builder;
                     const requestBuilder = new BuilderClass(appKey);
-                    
+
                     if (requestBuilder.withAdFormats) {
                         requestBuilder.withAdFormats(adFormats);
                     } else if (requestBuilder.withLegacyAdFormats) {
@@ -365,13 +366,13 @@ function RootLayoutContent() {
     useEffect(() => {
         const handleUrl = (url) => {
             if (!url || isUpdating) return;
-            
+
             // 🔹 URL DEDUPLICATION
             if (url === LAST_PROCESSED_URL) {
                 console.log("🚫 [Linking] Ignoring duplicate URL event");
                 return;
             }
-            
+
             LAST_PROCESSED_URL = url;
             setTimeout(() => { LAST_PROCESSED_URL = null; }, 3000);
 
@@ -382,14 +383,14 @@ function RootLayoutContent() {
                 const segments = path.split('/');
                 const pathId = segments.pop();
                 const type = segments.includes('post') ? 'post_detail' : null;
-                
+
                 if (path.includes('post/')) {
                     processRouting({ postId: pathId, type: type, ...queryParams });
                 } else {
                     const currentPathBase = currentPathRef.current;
                     if (currentPathBase !== `/${path}`) {
                         router.replace(path);
-                    }else {
+                    } else {
                         console.log("Already on same page");
                     }
                 }
@@ -438,7 +439,7 @@ function RootLayoutContent() {
                     method: 'POST',
                     headers: { 'Content-Type': 'application/json' },
                     body: JSON.stringify({ deviceId: user.deviceId, pushToken: token })
-                }).catch(() => {});
+                }).catch(() => { });
             }
             setIsSyncing(false);
         });
@@ -506,12 +507,13 @@ function RootLayoutContent() {
         <View key={colorScheme} className="flex-1 bg-white dark:bg-gray-900">
             <StatusBar barStyle={isDark ? "light-content" : "dark-content"} backgroundColor={isDark ? "#0a0a0a" : "#ffffff"} />
             <Stack
-                screenOptions={{ 
-                    headerShown: false, 
+                screenOptions={{
+                    headerShown: false,
                     contentStyle: { backgroundColor: isDark ? "#0a0a0a" : "#ffffff" },
                     animation: 'slide_from_right'
                 }}
-            />
+            />{/* It sits here quietly, listening for the event */}
+            <ReviewGate />
             <Toast />
         </View>
     );

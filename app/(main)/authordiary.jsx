@@ -700,6 +700,8 @@ export default function AuthorDiaryDashboard() {
             if (!response.ok) throw new Error(data.message || "Failed to create post");
 
             await AsyncStorage.removeItem(`draft_${fingerprint}`);
+            // 🚀 TRIGGER THE REVIEW LOGIC HERE
+            DeviceEventEmitter.emit("POST_CREATED_SUCCESS");
             Alert.alert("Success", "Your entry has been submitted for approval!");
 
             // Reset States
