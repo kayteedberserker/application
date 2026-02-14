@@ -9,7 +9,8 @@ import {
     Easing,
     FlatList,
     RefreshControl,
-    View
+    View,
+    AppState // 👈 Added for foreground detection
 } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import useSWRInfinite from "swr/infinite";
@@ -46,6 +47,7 @@ export default function CategoryPage({ forcedId }) {
     const isDark = colorScheme === "dark";
 
     const pulseAnim = useRef(new Animated.Value(0)).current;
+    const appState = useRef(AppState.currentState); // 👈 Track current app state
 
     const categoryName = id
         ? id.includes("-")
@@ -102,10 +104,9 @@ export default function CategoryPage({ forcedId }) {
 
     const { data, size, setSize, isLoading, isValidating, mutate } = useSWRInfinite(getKey, fetcher, {
         refreshInterval: 0,
-        revalidateOnFocus: false,
-        revalidateOnReconnect: false,
-        revalidateIfStale: false,
-        // ✨ LOGIC CHANGE: Only revalidate on mount if this specific category cache is empty
+        revalidateOnFocus: true, // 👈 Set to true for internal consistency
+        revalidateOnReconnect: true,
+        revalidateIfStale: true,
         revalidateOnMount: !CATEGORY_MEMORY_CACHE[CACHE_KEY], 
         dedupingInterval: 10000,
         fallbackData: cachedData,
@@ -121,6 +122,24 @@ export default function CategoryPage({ forcedId }) {
             setRefreshing(false);
         }
     });
+
+    // 🚀 NEW: Foreground App Listener
+    useEffect(() => {
+        const subscription = AppState.addEventListener("change", nextAppState => {
+            if (
+                appState.current.match(/inactive|background/) && 
+                nextAppState === "active"
+            ) {
+                console.log(`Re-linking Neural Archives for: ${categoryName}`);
+                mutate(); // Refresh the category intel
+            }
+            appState.current = nextAppState;
+        });
+
+        return () => {
+            subscription.remove();
+        };
+    }, [mutate, categoryName]);
 
     const posts = useMemo(() => {
         const sourceData = data || cachedData;
