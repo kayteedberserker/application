@@ -30,16 +30,24 @@
       "edgeToEdgeEnabled": true,
       "predictiveBackGestureEnabled": false,
       "intentFilters": [
-        {
-          "action": "VIEW",
-          "autoVerify": true,
-          "data": [
-            { "scheme": "https", "host": "oreblogda.com", "pathPrefix": "/" },
-            { "scheme": "oreblogda" }
-          ],
-          "category": [ "BROWSABLE", "DEFAULT" ]
-        }
-      ],
+  {
+    "action": "VIEW",
+    "autoVerify": true,
+    "data": [
+      { "scheme": "https", "host": "oreblogda.com" },
+      { "scheme": "http", "host": "oreblogda.com" }
+    ],
+    "category": [ "BROWSABLE", "DEFAULT" ]
+  },
+  {
+    "action": "VIEW",
+    "data": [
+      { "scheme": "oreblogda" }
+    ],
+    "category": [ "BROWSABLE", "DEFAULT" ]
+  }
+]
+,
       "config": {
         "googleMobileAdsAppId": "ca-app-pub-8021671365048667~3586113443"
       }

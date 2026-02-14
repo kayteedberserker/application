@@ -10,7 +10,8 @@ import {
     FlatList,
     InteractionManager,
     RefreshControl,
-    View
+    View,
+    AppState // 👈 Added for foreground detection
 } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import useSWRInfinite from "swr/infinite";
@@ -47,6 +48,7 @@ export default function PostsViewer() {
     const insets = useSafeAreaInsets();
     const { colorScheme } = useColorScheme();
     const isDark = colorScheme === "dark";
+    const appState = useRef(AppState.currentState); // 👈 Track current app state
 
     const [ready, setReady] = useState(false);
     const [canFetch, setCanFetch] = useState(false); 
@@ -112,9 +114,9 @@ export default function PostsViewer() {
 
     const { data, size, setSize, isLoading, isValidating, mutate } = useSWRInfinite(getKey, fetcher, {
         refreshInterval: 0, 
-        revalidateOnFocus: false,
-        revalidateOnReconnect: false,
-        revalidateIfStale: false,
+        revalidateOnFocus: true, // 👈 Enabled for background consistency
+        revalidateOnReconnect: true,
+        revalidateIfStale: true,
         // ✨ LOGIC CHANGE: Only revalidate on mount if we have NO cached data
         revalidateOnMount: !POSTS_MEMORY_CACHE, 
         dedupingInterval: 10000,
@@ -130,6 +132,25 @@ export default function PostsViewer() {
             setRefreshing(false); 
         }
     });
+
+    // 🚀 NEW: Foreground Refetch Logic
+    useEffect(() => {
+        const subscription = AppState.addEventListener("change", nextAppState => {
+            if (
+                appState.current.match(/inactive|background/) && 
+                nextAppState === "active"
+            ) {
+                // If the app comes to foreground, pulse the neural link and refetch
+                console.log("App returned to active state - syncing Anime Intel...");
+                mutate();
+            }
+            appState.current = nextAppState;
+        });
+
+        return () => {
+            subscription.remove();
+        };
+    }, [mutate]);
 
     const handleRefresh = useCallback(async () => {
         setRefreshing(true);
