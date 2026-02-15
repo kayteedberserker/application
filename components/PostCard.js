@@ -30,6 +30,7 @@ import useSWR from "swr";
 // Components & Context
 import { useUser } from "../context/UserContext";
 import apiFetch from "../utils/apiFetch";
+import AppBanner from "./AppBanner";
 import ClanCrest from "./ClanCrest";
 import Poll from "./Poll";
 import { SyncLoading } from "./SyncLoading";
@@ -157,7 +158,8 @@ export default function PostCard({ post, setPosts, isFeed, hideMedia, similarPos
 		streak: null,
 		rank: null
 	});
-	const [clanInfo, setClanInfo] = useState(CLAN_CACHE[post.clanId || post.clanTag] || null)
+	const [clanInfo, setClanInfo] = useState(CLAN_CACHE[post.clanId || post.clanTag] || null);
+	const [isFollowingClan, setIsFollowingClan] = useState(false);
 	const [loadingClan, setLoadingClan] = useState(false);
 
 	const [loadMedia, setLoadMedia] = useState(false);
@@ -320,6 +322,22 @@ export default function PostCard({ post, setPosts, isFeed, hideMedia, similarPos
                     // Update Storage (Tier 2)
                     persistToStorage(`auth_cache_${authorId}`, authorData);
                 }
+
+                // Fetch Clan
+                if (clanTag) {
+                    const resClan = await apiFetch(`/clans/${clanTag}?deviceId=${user?.deviceId}`);
+                    if (resClan.ok) {
+                        const cData = await resClan.json();
+                        CLAN_CACHE[clanTag] = cData;
+                        setClanInfo(cData);
+                        persistToStorage(`clan_cache_${clanTag}`, cData);
+
+                        // Check follow status
+                        const followedClans = await AsyncStorage.getItem('followed_clans');
+                        const clanList = followedClans ? JSON.parse(followedClans) : [];
+                        if (clanList.includes(clanTag)) setIsFollowingClan(true);
+                    }
+                }
             } catch (err) {
                 console.error("Revalidation err", err);
             }
@@ -327,6 +345,45 @@ export default function PostCard({ post, setPosts, isFeed, hideMedia, similarPos
 
         fetchData();
     }, [post.authorUserId, post.clanId, post.clanTag, user?.deviceId]);
+
+	const handleFollowClan = async () => {
+
+		if (!user) {
+			Alert.alert("Authentication", "Please log in to follow clans.");
+			return;
+		}
+		setLoadingClan(true);
+		const clanTag = clanInfo?.tag || post.clanId || post.clanTag;
+		try {
+			const res = await apiFetch(`/clans/follow`, {
+				method: "POST",
+				body: JSON.stringify({ clanTag, deviceId: user.deviceId, action: "follow" })
+			});
+			console.log(res?.status);
+
+			if (res.ok) {
+				setIsFollowingClan(true);
+				const followedClans = await AsyncStorage.getItem('followed_clans');
+				const clanList = followedClans ? JSON.parse(followedClans) : [];
+				if (!clanList.includes(clanTag)) {
+					clanList.push(clanTag);
+					await AsyncStorage.setItem('followed_clans', JSON.stringify(clanList));
+				}
+			} else if (res?.status == 419) {
+				setIsFollowingClan(true);
+				const followedClans = await AsyncStorage.getItem('followed_clans');
+				const clanList = followedClans ? JSON.parse(followedClans) : [];
+				if (!clanList.includes(clanTag)) {
+					clanList.push(clanTag);
+					await AsyncStorage.setItem('followed_clans', JSON.stringify(clanList));
+				}
+			}
+		} catch (err) {
+			console.error("Follow Clan err", err);
+		} finally {
+			setLoadingClan(false);
+		}
+	};
 
 	useEffect(() => {
 		if (!post?._id || !user?.deviceId) return;
@@ -662,6 +719,8 @@ export default function PostCard({ post, setPosts, isFeed, hideMedia, similarPos
 										<Text className="text-[7px] text-red-500 font-black uppercase absolute -bottom-3">WAR</Text>
 									</View>
 								)}
+
+								
 							</View>
 						</View>
 					)}
@@ -761,12 +820,12 @@ export default function PostCard({ post, setPosts, isFeed, hideMedia, similarPos
 						{post?.title}
 					</Text>
 					<View className="opacity-90">{renderContent}</View>
-					{/* {!isFeed && !similarPosts && (
+					{!isFeed && !similarPosts && (
 						<View className="mb-3 mt-3 w-full p-6 border border-dashed border-gray-300 dark:border-gray-800 rounded-[32px] bg-gray-50/50 dark:bg-white/5 items-center justify-center">
 							<Text className="text-[10px] font-bold text-gray-400 uppercase tracking-[0.2em] italic text-center">Sponsored Transmission</Text>
 							<AppBanner size="BANNER" />
 						</View>
-					)} */}
+					)}
 				</Pressable>
 
 				<View className={`${similarPosts ? "mb-2" : "mb-4"} rounded-2xl overflow-hidden border border-gray-100 dark:border-gray-800`}>
@@ -910,11 +969,11 @@ export default function PostCard({ post, setPosts, isFeed, hideMedia, similarPos
 								<Text className="text-white font-black tracking-widest uppercase text-xs">
 									Asset {currentAssetIndex + 1} / {mediaItems.length}
 								</Text>
-							</View>
+							</View> 
 						</View>
 					)}
 				</GestureHandlerRootView>
 			</Modal>
 		</View>
 	);
-}
+		}
