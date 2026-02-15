@@ -36,6 +36,9 @@ export default function MainLayout() {
     const { user, contextLoading } = useUser();
     const animValue = useRef(new Animated.Value(0)).current;
 
+    // -- Authentication State --
+    const [isUserAuthenticated, setIsUserAuthenticated] = useState(null);
+
     // 1. Reset Nav Visibility whenever the route changes
     useEffect(() => {
         setIsNavVisible(true);
@@ -54,11 +57,26 @@ export default function MainLayout() {
             tension: 40,
         }).start();
     }, [showClanMenu]);
+
     const [userInClan, setUserInClan] = useState(false);
+
+    // -- Auth Check Logic --
+    const userAvailable = async () => {
+        const storedUser = await AsyncStorage.getItem("mobileUser") || null;
+        return storedUser;
+    };
+
+    useEffect(() => {
+        const checkUser = async () => {
+            const authStatus = await userAvailable();
+            setIsUserAuthenticated(!!authStatus);
+        };
+        checkUser();
+    }, []);
+
     const handleClanPress = async () => {
         try {
             const userClanData = await AsyncStorage.getItem('userClan');
-            // If user is in a clan, toggle the menu showing Profile, Discover, and Wa  
             if (userClanData) {
                 setUserInClan(true)
             }
@@ -150,48 +168,24 @@ export default function MainLayout() {
     const isDark = colorScheme === "dark";
     const handleBackToTop = () => DeviceEventEmitter.emit("doScrollToTop");
 
-    // 2. Smart Navigation Logic
     const navigateTo = (route) => {
-        // Close menus
         setShowClanMenu(false);
-
-        // If user clicks HOME while already on a feed page
         if (route === "/" && (pathname === "/" || pathname.startsWith("/categories"))) {
-            // First, scroll the feed to top
             DeviceEventEmitter.emit("doScrollToTop");
-            // Then, reset the Swiper in HomePage to index 0 (Global)
             DeviceEventEmitter.emit("scrollToIndex", 0);
             return;
         }
-
         DeviceEventEmitter.emit("navigateSafely", route);
     };
 
+    // -- Combined Loading & Redirect Logic --
     if (contextLoading || isUserAuthenticated === null) {
         return <AnimeLoading message="Loading Page" subMessage="Syncing Account" />;
     }
-        // -- State to hold the resolved value --
-    const [isUserAuthenticated, setIsUserAuthenticated] = useState(null);
 
-    const userAvailable = async () => {
-        const userAvailable = await AsyncStorage.getItem("mobileUser") || null
-        return userAvailable;
-    }
-
-    // -- Logic to resolve the async function --
-    useEffect(() => {
-        const checkUser = async () => {
-            const user = await userAvailable();
-            setIsUserAuthenticated(!!user);
-        };
-        checkUser();
-    }, []);
-
-    // -- Corrected Redirect Logic --
     if (!isUserAuthenticated) {
         return <Redirect href="/screens/FirstLaunchScreen" />;
     }
-
 
     const insets = useSafeAreaInsets();
 
@@ -287,10 +281,9 @@ export default function MainLayout() {
             )}
 
             <View style={[styles.container, { bottom: insets.bottom + 22 }]}>
-                {/* NEW: CLAN WAR BUTTON */}
                 <Animated.View style={{
                     opacity,
-                    transform: [{ translateY: translateY_3 || -180 }, { scale }], // Adjusting for 3rd position
+                    transform: [{ translateY: translateY_3 || -180 }, { scale }],
                     marginBottom: 10
                 }}>
                     <TouchableOpacity
@@ -299,7 +292,7 @@ export default function MainLayout() {
                             navigateTo("/clans/war");
                         }}
                         activeOpacity={0.8}
-                        style={[styles.subFab, { backgroundColor: "#ef4444" }]} // Red for War
+                        style={[styles.subFab, { backgroundColor: "#ef4444" }]}
                     >
                         <MaterialCommunityIcons name="sword-cross" size={20} color="#fff" />
                     </TouchableOpacity>
