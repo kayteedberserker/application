@@ -167,16 +167,31 @@ export default function MainLayout() {
         DeviceEventEmitter.emit("navigateSafely", route);
     };
 
-    if (contextLoading) {
+    if (contextLoading || isUserAuthenticated === null) {
         return <AnimeLoading message="Loading Page" subMessage="Syncing Account" />;
     }
+        // -- State to hold the resolved value --
+    const [isUserAuthenticated, setIsUserAuthenticated] = useState(null);
+
     const userAvailable = async () => {
         const userAvailable = await AsyncStorage.getItem("mobileUser") || null
         return userAvailable;
     }
-    if (!contextLoading && !userAvailable()) {
+
+    // -- Logic to resolve the async function --
+    useEffect(() => {
+        const checkUser = async () => {
+            const user = await userAvailable();
+            setIsUserAuthenticated(!!user);
+        };
+        checkUser();
+    }, []);
+
+    // -- Corrected Redirect Logic --
+    if (!isUserAuthenticated) {
         return <Redirect href="/screens/FirstLaunchScreen" />;
     }
+
 
     const insets = useSafeAreaInsets();
 
