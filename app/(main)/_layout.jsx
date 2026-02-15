@@ -171,8 +171,8 @@ export default function MainLayout() {
         return <AnimeLoading message="Loading Page" subMessage="Syncing Account" />;
     }
     const userAvailable = async () => {
-        const userAvailable = await AsyncStorage.getItem("mobileUser");
-        return userAvailable !== null;
+        const userAvailable = await AsyncStorage.getItem("mobileUser") || null
+        return userAvailable;
     }
     if (!contextLoading && !userAvailable()) {
         return <Redirect href="/screens/FirstLaunchScreen" />;
