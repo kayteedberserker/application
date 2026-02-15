@@ -1,10 +1,13 @@
 import { useColorScheme } from "nativewind";
 import { memo, useCallback, useEffect, useRef, useState } from 'react';
-import { ActivityIndicator, Animated, DeviceEventEmitter, FlatList, View, useWindowDimensions } from 'react-native';
+import { ActivityIndicator, Animated, DeviceEventEmitter, FlatList, Platform, View, useWindowDimensions } from 'react-native';
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import PostsViewer from "./../../components/PostViewer";
 import { Text } from "./../../components/Text";
 import CategoryPage from "./categories/[id]";
+
+// 🚀 FIX: Create the Animated version of FlatList
+const AnimatedFlatList = Animated.createAnimatedComponent(FlatList);
 
 const CHANNELS = [
     { id: 'all', title: 'Global', type: 'feed' },
@@ -15,11 +18,9 @@ const CHANNELS = [
     { id: 'gaming', title: 'Gaming', type: 'category' },
 ];
 
-// 🔹 Optimized Scene with Loading Animation
 const Scene = memo(({ item, pageWidth }) => {
     return (
         <View style={{ width: pageWidth, flex: 1 }}>
-            {/* Using a key based on item.id ensures the component mounts correctly */}
             <View className="flex-1">
                 {item.type === 'feed' ? (
                     <PostsViewer />
@@ -28,28 +29,26 @@ const Scene = memo(({ item, pageWidth }) => {
                 )}
             </View>
             
-            {/* Fallback Loading Overlay: If the JS thread is busy, 
-                this simple View is more likely to show than the heavy child */}
             <View 
                 pointerEvents="none" 
                 style={{ position: 'absolute', top: 0, left: 0, right: 0, bottom: 0, zIndex: -1 }}
-                className="items-center justify-center"
+                className="items-center justify-center bg-[#050505]"
             >
                 <ActivityIndicator size="small" color="#2563eb" />
                 <Text className="text-[10px] text-blue-600/30 font-bold uppercase mt-2 tracking-widest">
-                    Loading Sector...
+                    Initializing Sector...
                 </Text>
             </View>
         </View>
     );
+}, (prevProps, nextProps) => {
+    return prevProps.pageWidth === nextProps.pageWidth && prevProps.item.id === nextProps.item.id;
 });
 
 export default function HomePage() {
     const insets = useSafeAreaInsets();
     const { colorScheme } = useColorScheme();
     const isDark = colorScheme === "dark";
-    
-    // ⚡️ ROTATION FIX: useWindowDimensions updates automatically on rotate
     const { width: windowWidth } = useWindowDimensions();
     
     const flatListRef = useRef(null);
@@ -63,14 +62,13 @@ export default function HomePage() {
         return () => sub.remove();
     }, []);
 
-    // ⚡️ PERFORMANCE: Passing windowWidth to Scene ensures it resizes on rotation
     const renderItem = useCallback(({ item }) => (
-        <Scene item={item} pageWidth={windowWidth} />
+        <Scene key={item.id} item={item} pageWidth={windowWidth} />
     ), [windowWidth]);
 
     const viewabilityConfig = useRef({
-        itemVisiblePercentThreshold: 51,
-        minimumViewTime: 0 
+        itemVisiblePercentThreshold: 60,
+        minimumViewTime: 50 
     }).current;
 
     const onViewableItemsChanged = useRef(({ viewableItems }) => {
@@ -84,15 +82,20 @@ export default function HomePage() {
         }
     }).current;
 
+    const getItemLayout = useCallback((_, index) => ({
+        length: windowWidth,
+        offset: windowWidth * index,
+        index,
+    }), [windowWidth]);
+
     return (
         <View className={`flex-1 ${isDark ? "bg-[#050505]" : "bg-white"}`}>
-            {/* Background Glow */}
             <View 
                 pointerEvents="none"
                 className="absolute -top-20 -left-20 w-64 h-64 bg-blue-600/10 rounded-full blur-3xl" 
             />
 
-            <FlatList
+            <AnimatedFlatList
                 ref={flatListRef}
                 data={CHANNELS}
                 renderItem={renderItem}
@@ -102,32 +105,25 @@ export default function HomePage() {
                 showsHorizontalScrollIndicator={false}
                 onViewableItemsChanged={onViewableItemsChanged}
                 viewabilityConfig={viewabilityConfig}
+                getItemLayout={getItemLayout}
                 
-                onScroll={Animated.event(
-                    [{ nativeEvent: { contentOffset: { x: scrollX } } }],
-                    { useNativeDriver: false }
-                )}
-
-                // ⚡️ ROTATION FIX: Recalculate layout based on dynamic width
-                getItemLayout={(_, index) => ({
-                    length: windowWidth,
-                    offset: windowWidth * index,
-                    index,
-                })}
-
-                // 🔹 Optimized Rendering Window
-                // windowSize={5} is a bit heavier on memory but helps stop the blank pages 
-                // because it keeps 2 pages ahead and 2 pages behind in memory.
-                windowSize={3} 
+                // Optimized Props
+                windowSize={2}
                 initialNumToRender={1}
                 maxToRenderPerBatch={1}
-                removeClippedSubviews={true} 
+                removeClippedSubviews={Platform.OS === 'android'} 
                 scrollEventThrottle={16}
                 decelerationRate="fast"
                 
-                // Helps with "stickiness" on swipe
                 snapToInterval={windowWidth}
                 snapToAlignment="start"
+                disableIntervalMomentum={true}
+                
+                // 🚀 This now works because we use AnimatedFlatList
+                onScroll={Animated.event(
+                    [{ nativeEvent: { contentOffset: { x: scrollX } } }],
+                    { useNativeDriver: true }
+                )}
             />
 
             {/* Neural Link Footer */}

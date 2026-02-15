@@ -4,20 +4,22 @@ import { useColorScheme } from "nativewind";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import {
     Animated,
+    AppState // 👈 Added for foreground detection
+    ,
+
+
     DeviceEventEmitter,
     Dimensions,
     Easing,
     FlatList,
     InteractionManager,
     RefreshControl,
-    View,
-    AppState // 👈 Added for foreground detection
+    View
 } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import useSWRInfinite from "swr/infinite";
 import apiFetch from "../utils/apiFetch";
 import AnimeLoading from "./AnimeLoading";
-import AppBanner from './AppBanner';
 import PostCard from "./PostCard";
 import { SyncLoading } from "./SyncLoading";
 import { Text } from "./Text";
@@ -197,12 +199,12 @@ export default function PostsViewer() {
         return (
             <View key={item._id}>
                 <PostCard post={item} isFeed posts={posts} setPosts={mutate} />
-                {showAd && ready && (
+                {/* {showAd && ready && (
                     <View className="mb-3 mt-3 w-full p-6 border border-dashed border-gray-300 dark:border-gray-800 rounded-[32px] bg-gray-50/50 dark:bg-white/5 items-center justify-center">
                         <Text className="text-[10px] font-bold text-gray-400 uppercase tracking-[0.2em] italic text-center">Sponsored Transmission</Text>
                         <AppBanner size="MEDIUM_RECTANGLE" />
                     </View>
-                )}
+                )} */}
             </View>
         );
     };

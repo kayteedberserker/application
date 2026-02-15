@@ -99,7 +99,7 @@ const ClanProfile = () => {
             },
             onAdUnavailable: () => setIsAdLoaded(false),
             onAdRewarded: (reward, adInfo) => {
-                console.log("Reward Earned: BUY_SLOTS");
+                console.log("Reward Earned: BUY_SLOTS", adInfo);
                 
                 // 🔹 PORTED ACTION LOGIC
                 triggerAction("BUY_SLOTS");
@@ -108,6 +108,8 @@ const ClanProfile = () => {
                 rewardedAd.loadAd();
             },
             onAdClosed: (adInfo) => {
+                console.log(adInfo);
+                
                 setIsAdLoaded(false);
                 rewardedAd.loadAd();
             },
@@ -514,7 +516,7 @@ const ClanProfile = () => {
 
                             <View className="mt-8 w-full gap-y-4">
                                 <TouchableOpacity
-                                    disabled={!canManageClan || fullData?.maxSlots >= 13 || isAdLoading}
+                                    disabled={fullData?.maxSlots >= 13 || isAdLoading}
                                     onPress={handleBuySlotsWithAd}
                                     className={`p-5 rounded-[20px] flex-row justify-between items-center border ${fullData?.maxSlots >= 13 ? 'bg-zinc-100 dark:bg-zinc-950 opacity-50 border-gray-200 dark:border-zinc-800' : 'bg-gray-100 dark:bg-zinc-900 border-gray-200 dark:border-zinc-800'}`}
                                 >

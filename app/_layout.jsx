@@ -30,8 +30,8 @@ let LAST_PROCESSED_NOTIF_ID = null;
 let LAST_PROCESSED_URL = null;
 
 // 🔹 AD CONFIGURATION
-const FIRST_AD_DELAY_MS = 60000;
-const COOLDOWN_MS = 150000;
+const FIRST_AD_DELAY_MS = 120000;
+const COOLDOWN_MS = 180000;
 
 const INTERSTITIAL_ID = String(AdConfig.interstitial || "34wz6l0uzrpi6ce0").trim();
 
@@ -87,7 +87,7 @@ const loadInterstitial = () => {
                 interstitialLoaded = true;
             },
             onAdLoadFailed: (error) => {
-                console.error("❌ Interstitial Load Failed:", error);
+                console.warn("❌ Interstitial Load Failed:");
                 interstitialLoaded = false;
                 // Retry logic based on reference
                 const retryDelay = error.errorCode === 626 ? 60000 : 30000;
@@ -101,7 +101,7 @@ const loadInterstitial = () => {
             },
             onAdDisplayed: (adInfo) => console.log("Ad Displayed:"),
             onAdDisplayFailed: (error, adInfo) => {
-                console.error("Display Failed:", error, adInfo);
+                console.warn("Display Failed:", error, adInfo);
                 loadInterstitial();
             },
             onAdClicked: (adInfo) => console.log("User clicked the ad")
@@ -110,7 +110,7 @@ const loadInterstitial = () => {
         interstitialAd.setListener(listener);
         interstitialAd.loadAd();
     } catch (err) {
-        console.error("Error in loadInterstitial:", err);
+        console.warn("Error in loadInterstitial:", err);
     }
 };
 
@@ -322,7 +322,7 @@ function RootLayoutContent() {
                         loadInterstitial();
                     },
                     onInitFailed: (err) => {
-                        console.error("❌ LevelPlay failed to initialize:", err);
+                        console.warn("❌ LevelPlay failed to initialize:", err);
                         setIsAdReady(true);
                     }
                 };
@@ -343,7 +343,7 @@ function RootLayoutContent() {
                     LevelPlay.init({ appKey, adFormats }, initListener);
                 }
             } catch (e) {
-                console.error("Fatal Init Error caught:", e);
+                console.warn("Fatal Init Error caught:", e);
                 setIsAdReady(true);
             } finally {
                 setAppReady(true);

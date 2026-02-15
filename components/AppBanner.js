@@ -26,10 +26,18 @@ const AppBanner = ({ size = 'MREC' }) => {
   }, [size]);
 
   const loadAdInternal = useCallback(() => {
-    if (bannerAdViewRef.current) {
+    // 🛑 Optimization: Don't load if ref isn't ready or if we've already started a load
+    if (!bannerAdViewRef.current || isInitialLoadTriggered.current) {
+        return;
+    }
+
+    try {
       console.log(`[AppBanner] 🚀 Loading ${size} ad...`);
       isInitialLoadTriggered.current = true;
       bannerAdViewRef.current.loadAd();
+    } catch (error) {
+      console.error("[AppBanner] Load Error:", error);
+      isInitialLoadTriggered.current = false;
     }
   }, [size]);
 
@@ -40,17 +48,22 @@ const AppBanner = ({ size = 'MREC' }) => {
       if (retryTimer.current) clearTimeout(retryTimer.current);
     },
     onAdLoadFailed: (error) => {
-      console.error(`[AppBanner] ❌ FAILED: ${error.message}`);
+      console.error(`[AppBanner] ❌ FAILED: ${JSON.stringify(error)}`);
       setLoaded(false);
+      isInitialLoadTriggered.current = false; // Reset so retry can work
+      
       if (retryTimer.current) clearTimeout(retryTimer.current);
-      // Auto-retry after 30 seconds
+      // 📉 DATA SAVER: Wait 60 seconds before retrying to save user data/bandwidth
       retryTimer.current = setTimeout(() => {
         loadAdInternal();
-      }, 30000); 
+      }, 60000); 
     },
     onAdClicked: (adInfo) => console.log(`[AppBanner] 🖱️ Ad Clicked`),
     onAdDisplayed: (adInfo) => console.log("[AppBanner] 👁️ Impression Recorded"),
-    onAdDisplayFailed: (adInfo, error) => console.log(`[AppBanner] ⚠️ Display Failed: ${error.message}`),
+    onAdDisplayFailed: (adInfo, error) => {
+        console.log(`[AppBanner] ⚠️ Display Failed:`);
+        isInitialLoadTriggered.current = false;
+    },
     onAdExpanded: (adInfo) => console.log("[AppBanner] ↕️ Expanded"),
     onAdCollapsed: (adInfo) => console.log("[AppBanner] ↔️ Collapsed"),
     onAdLeftApplication: (adInfo) => console.log("[AppBanner] 💨 Left Application"),
@@ -59,18 +72,21 @@ const AppBanner = ({ size = 'MREC' }) => {
   useEffect(() => {
     setShouldRender(true);
 
+    // Initial load trigger with a slight delay to let UI threads breathe
     const initLoadTimer = setTimeout(() => {
         loadAdInternal();
-    }, 800);
+    }, 1000);
     
     return () => {
       clearTimeout(initLoadTimer);
       if (retryTimer.current) clearTimeout(retryTimer.current);
       if (bannerAdViewRef.current) {
+        // 🧹 MEMORY CLEANUP: Crucial to prevent lag when navigating away
         bannerAdViewRef.current.destroy();
+        bannerAdViewRef.current = null;
       }
     };
-  }, [loadAdInternal]);
+  }, []); // Removed loadAdInternal from deps to ensure useEffect only runs ONCE on mount
 
   if (Platform.OS === 'web') return null;
 
@@ -92,14 +108,14 @@ const AppBanner = ({ size = 'MREC' }) => {
           width: layout.width, 
           justifyContent: 'center', 
           alignItems: 'center',
-          backgroundColor: 'rgba(59, 130, 246, 0.05)',
+          backgroundColor: 'rgba(10, 10, 10, 0.8)', // Darker background saves OLED battery
           borderRadius: 12,
           borderWidth: 1,
-          borderColor: 'rgba(59, 130, 246, 0.1)',
+          borderColor: 'rgba(59, 130, 246, 0.2)',
         }}>
           <ActivityIndicator size="small" color="#3b82f6" />
-          <Text style={{ fontSize: 9, color: '#3b82f6', marginTop: 8, fontWeight: '900', letterSpacing: 1 }}>
-            INITIALIZING NEURAL LINK...
+          <Text style={{ fontSize: 8, color: '#3b82f6', marginTop: 8, fontWeight: '900', letterSpacing: 2 }}>
+            NEURAL_LINK_ESTABLISHING...
           </Text>
         </View>
       )}
@@ -115,6 +131,7 @@ const AppBanner = ({ size = 'MREC' }) => {
             placementName={size === 'MREC' ? 'DefaultMREC' : 'DefaultBanner'} 
             listener={adListener}
             onLayout={(e) => {
+              // Safety fallback only
               if (!isInitialLoadTriggered.current) {
                   loadAdInternal();
               }

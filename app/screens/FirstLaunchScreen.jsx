@@ -1,5 +1,6 @@
 import { Ionicons } from "@expo/vector-icons";
 import AsyncStorage from "@react-native-async-storage/async-storage";
+import * as Application from 'expo-application';
 import Constants from "expo-constants";
 import * as Notifications from "expo-notifications";
 import { useRouter } from "expo-router";
@@ -17,6 +18,7 @@ import {
 import AnimeLoading from "../../components/AnimeLoading";
 import { Text } from "../../components/Text";
 import THEME from "../../components/useAppTheme";
+import { useStreak } from "../../context/StreakContext";
 import { useUser } from "../../context/UserContext";
 import apiFetch from "../../utils/apiFetch";
 import { getFingerprint } from "../../utils/device";
@@ -29,12 +31,15 @@ const FORBIDDEN_NAMES = ["admin", "system", "the admin", "the system", "administ
 export default function FirstLaunchScreen() {
   const [username, setUsername] = useState("");
   const [recoverId, setRecoverId] = useState(""); 
+  const [referrerCode, setReferrerCode] = useState(""); // 🔹 Initialized as empty string
+  const [isAutoReferrer, setIsAutoReferrer] = useState(false); // 🔹 To lock the field
   const [isRecoveryMode, setIsRecoveryMode] = useState(false); 
   const [loading, setLoading] = useState(true);
   const [isProcessing, setIsProcessing] = useState(false);
   const router = useRouter();
   const isMounted = useRef(true);
   const { setUser } = useUser(); 
+  const { refreshStreak } = useStreak();
 
   const notify = (title, message) => {
     if (Platform.OS === "web") alert(`${title}\n${message}`);
@@ -45,6 +50,7 @@ export default function FirstLaunchScreen() {
     isMounted.current = true;
     (async () => {
       try {
+        // 1. Check for existing session
         const storedUser = await AsyncStorage.getItem("mobileUser");
         if (storedUser && isMounted.current) {
           const parsed = JSON.parse(storedUser);
@@ -52,6 +58,23 @@ export default function FirstLaunchScreen() {
           router.replace("/profile");
           return;
         }
+
+        // 2. 🔹 Check for Install Referrer (Only on Android)
+        if (Platform.OS === 'android') {
+          try {
+            const installReferrer = await Application.getInstallReferrerAsync();
+            
+            // Google Play returns a specific string for organic installs, we ignore that
+            if (installReferrer && !installReferrer.includes("utm_source=google-play")) {
+                console.log("Referral Code Detected:", installReferrer);
+                setReferrerCode(installReferrer);
+                setIsAutoReferrer(true); // 🔹 Mark as auto-detected to lock UI
+            }
+          } catch (refErr) {
+            console.log("Referrer not available:", refErr);
+          }
+        }
+
       } catch (e) {
         console.error("Storage error", e);
       }
@@ -81,6 +104,7 @@ export default function FirstLaunchScreen() {
 
     const cleanUsername = username.trim();
     const cleanRecoverId = recoverId.trim();
+    const cleanReferrer = referrerCode.trim();
 
     // Validation
     if (!isRecoveryMode) {
@@ -114,6 +138,7 @@ export default function FirstLaunchScreen() {
             deviceId: targetId,
             username: isRecoveryMode ? undefined : cleanUsername,
             pushToken,
+            referredBy: isRecoveryMode ? undefined : cleanReferrer, // 🔹 Pass the code (manual or auto)
           }),
         }
       );
@@ -121,19 +146,20 @@ export default function FirstLaunchScreen() {
       const data = await res.json();
       if (!res.ok) throw new Error(data.message || "Operation failed");
 
-      // 🔹 PERSONALIZATION: Extract country from the backend response
-      // Your backend returns { message, user: { country, username, ... } }
       const detectedCountry = data.user?.country || "Unknown";
 
       const userData = {
         deviceId: targetId,
         username: data.user?.username || cleanUsername, 
         pushToken,
-        country: detectedCountry, // 🔹 Added country to storage
+        country: detectedCountry,
+        referredBy: cleanReferrer,
       };
 
       await AsyncStorage.setItem("mobileUser", JSON.stringify(userData));
       setUser(userData);
+      
+      if (refreshStreak) refreshStreak();
 
       setTimeout(() => {
         router.replace("/profile");
@@ -196,18 +222,48 @@ export default function FirstLaunchScreen() {
                 editable={!isProcessing}
             />
         ) : (
-            <TextInput
-                style={{ backgroundColor: THEME.card, borderColor: THEME.border, color: THEME.text }}
-                className="w-full border-2 rounded-2xl px-5 py-5 mb-4 font-black italic"
-                placeholder="ENTER USERNAME..."
-                placeholderTextColor={THEME.textSecondary + '80'}
-                autoCapitalize="none" 
-                autoCorrect={false}
-                spellCheck={false}
-                value={username}
-                onChangeText={setUsername}
-                editable={!isProcessing}
-            />
+            <>
+                <TextInput
+                    style={{ backgroundColor: THEME.card, borderColor: THEME.border, color: THEME.text }}
+                    className="w-full border-2 rounded-2xl px-5 py-5 mb-4 font-black italic"
+                    placeholder="ENTER USERNAME..."
+                    placeholderTextColor={THEME.textSecondary + '80'}
+                    autoCapitalize="none" 
+                    autoCorrect={false}
+                    spellCheck={false}
+                    value={username}
+                    onChangeText={setUsername}
+                    editable={!isProcessing}
+                />
+
+                {/* 🔹 REFERRAL CODE FIELD */}
+                <Text style={{ color: THEME.textSecondary }} className="font-black uppercase text-[9px] tracking-[0.2em] mb-3 mt-2 ml-1">
+                    Uplink Referral Code {isAutoReferrer ? "(SECURED)" : "(OPTIONAL)"}
+                </Text>
+                <View className="relative">
+                    <TextInput
+                        style={{ 
+                            backgroundColor: isAutoReferrer ? THEME.bg : THEME.card, 
+                            borderColor: isAutoReferrer ? '#a855f760' : THEME.border, 
+                            color: isAutoReferrer ? '#a855f7' : THEME.text,
+                            opacity: isAutoReferrer ? 0.8 : 1
+                        }}
+                        className="w-full border-2 rounded-2xl px-5 py-5 mb-4 font-black italic"
+                        placeholder="ENTER CODE..."
+                        placeholderTextColor={THEME.textSecondary + '80'}
+                        autoCapitalize="characters" 
+                        autoCorrect={false}
+                        value={referrerCode}
+                        onChangeText={setReferrerCode}
+                        editable={!isProcessing && !isAutoReferrer} // 🔹 Locked if auto-detected
+                    />
+                    {isAutoReferrer && (
+                        <View className="absolute right-4 top-5">
+                            <Ionicons name="lock-closed" size={18} color="#a855f7" />
+                        </View>
+                    )}
+                </View>
+            </>
         )}
 
         {/* Toggle Mode Button */}

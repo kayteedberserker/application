@@ -56,17 +56,17 @@ export default function MainLayout() {
     }, [showClanMenu]);
     const [userInClan, setUserInClan] = useState(false);
     const handleClanPress = async () => {
-    try {
-        const userClanData = await AsyncStorage.getItem('userClan');
-        // If user is in a clan, toggle the menu showing Profile, Discover, and Wa  
-        if(userClanData) {
-            setUserInClan(true) 
+        try {
+            const userClanData = await AsyncStorage.getItem('userClan');
+            // If user is in a clan, toggle the menu showing Profile, Discover, and Wa  
+            if (userClanData) {
+                setUserInClan(true)
+            }
+            setShowClanMenu(!showClanMenu);
+        } catch (e) {
+            DeviceEventEmitter.emit("navigateSafely", "/screens/discover");
         }
-        setShowClanMenu(!showClanMenu);
-    } catch (e) {
-        DeviceEventEmitter.emit("navigateSafely", "/screens/discover");
-    }
-};
+    };
 
     const translateY_1 = animValue.interpolate({
         inputRange: [0, 1],
@@ -163,15 +163,18 @@ export default function MainLayout() {
             DeviceEventEmitter.emit("scrollToIndex", 0);
             return;
         }
-        
+
         DeviceEventEmitter.emit("navigateSafely", route);
     };
 
     if (contextLoading) {
         return <AnimeLoading message="Loading Page" subMessage="Syncing Account" />;
     }
-
-    if (!contextLoading && !user) {
+    const userAvailable = async () => {
+        const userAvailable = await AsyncStorage.getItem("mobileUser");
+        return userAvailable !== null;
+    }
+    if (!contextLoading && !userAvailable()) {
         return <Redirect href="/screens/FirstLaunchScreen" />;
     }
 
@@ -287,8 +290,8 @@ export default function MainLayout() {
                     </TouchableOpacity>
                 </Animated.View>
 
-                { userInClan && <Animated.View style={{
-                   opacity,
+                {userInClan && <Animated.View style={{
+                    opacity,
                     transform: [{ translateY: translateY_2 }, { scale }],
                     marginBottom: 10
                 }}>
@@ -327,9 +330,9 @@ export default function MainLayout() {
                         onPress={handleBackToTop}
                         activeOpacity={0.7}
                         style={[
-                            styles.mainFab, 
-                            { 
-                                marginBottom: 12, 
+                            styles.mainFab,
+                            {
+                                marginBottom: 12,
                                 backgroundColor: isDark ? "#111111" : "#f8fafc",
                                 borderColor: isDark ? "#1e293b" : "#e2e8f0",
                             }
@@ -347,8 +350,8 @@ export default function MainLayout() {
                         {
                             borderColor: showClanMenu ? (isDark ? "#fff" : "#3b82f6") : (isDark ? "#1e293b" : "#e2e8f0"),
                             borderWidth: 2,
-                            backgroundColor: showClanMenu 
-                                ? (isDark ? "#1e293b" : "#3b82f6") 
+                            backgroundColor: showClanMenu
+                                ? (isDark ? "#1e293b" : "#3b82f6")
                                 : (isDark ? "#111111" : "#f8fafc")
                         }
                     ]}

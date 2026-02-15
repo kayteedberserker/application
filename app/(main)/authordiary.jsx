@@ -51,7 +51,7 @@ async function getUserTotalPosts(deviceId) {
 
         return data?.total;
     } catch (err) {
-        console.error("Error fetching total posts:", err);
+        console.error("Error fetching total posts:");
         return null; // Return null on error to signal we should keep using cache
     }
 }
@@ -349,7 +349,16 @@ export default function AuthorDiaryDashboard() {
             ]
         );
     };
+//     const checkScheduledNotifications = async () => {
+//   const scheduled = await Notifications.getAllScheduledNotificationsAsync();
+//   console.log("Count:", scheduled.length);
+//   console.log("Scheduled Notifications:", JSON.stringify(scheduled, null, 2));
+// };
 
+//      // Call this function to log scheduled notifications
+//      useEffect(() => {
+//       checkScheduledNotifications();
+//     }, []);
     // =================================================================
     // 5. NOTIFICATIONS & SYSTEM SETUP
     // =================================================================
@@ -384,68 +393,63 @@ export default function AuthorDiaryDashboard() {
     }, []);
 
 
-    /* 🔹 UPDATED TIMER LOGIC */
+    /* 🔹 UPDATED TIMER LOGIC WITH SPAM PROTECTION */
     useEffect(() => {
         let interval;
 
-        // Helper: Find the soonest time a slot opens up
         const getNextUnlockTime = () => {
             if (!todayPosts || todayPosts.length === 0) return null;
-
             const now = new Date().getTime();
             let minEndTime = Infinity;
-            let hasBlockingPost = false;
 
             todayPosts.forEach(post => {
-                // Calculate when THIS specific post's cooldown ends
                 const referenceTime = new Date(post.statusChangedAt || post.updatedAt || post.createdAt).getTime();
-
                 let cooldownMs = 0;
+
                 if (post.status === 'approved') {
-                    cooldownMs = 24 * 60 * 60 * 1000; // 24 Hours
+                    cooldownMs = 24 * 60 * 60 * 1000;
                 } else if (post.status === 'rejected') {
-                    cooldownMs = 12 * 60 * 60 * 1000; // 12 Hours
+                    cooldownMs = 12 * 60 * 60 * 1000;
                 } else {
-                    // Pending posts don't have a cooldown timer yet, they just block.
                     return;
                 }
 
                 const endTime = referenceTime + cooldownMs;
-
-                // We only care about cooldowns that are in the future
-                if (endTime > now) {
-                    hasBlockingPost = true;
-                    if (endTime < minEndTime) {
-                        minEndTime = endTime;
-                    }
+                if (endTime > now && endTime < minEndTime) {
+                    minEndTime = endTime;
                 }
             });
 
-            // If minEndTime is still Infinity, it means no posts are currently triggering a cooldown
             return minEndTime === Infinity ? null : minEndTime;
         };
 
         const targetTime = getNextUnlockTime();
 
-        // Only run timer if we are actually blocked AND have a target time
-
         if ((postsLast24h >= 1) && targetTime) {
 
             const scheduleDoneNotification = async () => {
                 if (rewardToken) return;
+
                 const now = Date.now();
                 const triggerInSeconds = Math.floor((targetTime - now) / 1000);
 
-                if (triggerInSeconds <= 0) {
-                    console.log("Target time already passed");
+                if (triggerInSeconds <= 0) return;
+
+                // 🚀 SPAM PREVENTION: Check if we already scheduled a notification for THIS target time
+                const lastScheduledStr = await AsyncStorage.getItem("LAST_SCHEDULED_TARGET");
+                const lastScheduledTarget = lastScheduledStr ? parseInt(lastScheduledStr) : 0;
+
+                // If the targetTime is basically the same (within 5 seconds), don't reschedule
+                if (Math.abs(lastScheduledTarget - targetTime) < 5000) {
                     return;
                 }
+
                 const existingId = await AsyncStorage.getItem(COOLDOWN_NOTIFICATION_KEY);
                 if (existingId) {
                     try {
                         await Notifications.cancelScheduledNotificationAsync(existingId);
                     } catch (e) {
-                        console.log("Error cancelling notification:", e);
+                        console.log("Error cancelling:", e);
                     }
                 }
 
@@ -453,15 +457,19 @@ export default function AuthorDiaryDashboard() {
                     const notificationId = await Notifications.scheduleNotificationAsync({
                         content: {
                             title: "Cooldown Finished! 🎉",
-                            body: "New slot available. Post now!",
-                            sound: 'default', // Changed to string 'default'
-                            priority: 'high', // Ensure high priority for Android
+                            body: "A post slot has opened up. Share your intel now!",
+                            sound: 'default',
+                            priority: 'high',
                             data: { type: "open_diary" },
-                            android: { channelId: "cooldown-timer", groupKey: "com.oreblogda.COOLDOWN_GROUP" },
+                            // Grouping prevents the "4, 3, 2, 1" list effect on Android
+                            android: {
+                                channelId: "cooldown-timer",
+                                groupKey: "com.oreblogda.COOLDOWN_GROUP",
+                                summaryArgument: "New slots available",
+                            },
                             threadIdentifier: "com.oreblogda.COOLDOWN_GROUP"
                         },
                         trigger: {
-                            // Use the channelId we created above
                             channelId: 'cooldown-timer',
                             type: Notifications.SchedulableTriggerInputTypes.TIME_INTERVAL,
                             seconds: triggerInSeconds,
@@ -469,7 +477,11 @@ export default function AuthorDiaryDashboard() {
                         },
                     });
 
+                    // Store both the Notification ID AND the Target Time we scheduled for
                     await AsyncStorage.setItem(COOLDOWN_NOTIFICATION_KEY, notificationId);
+                    await AsyncStorage.setItem("LAST_SCHEDULED_TARGET", targetTime.toString());
+
+                    console.log(`📡 Notification scheduled for ${triggerInSeconds}s from now`);
                 } catch (error) {
                     console.error("Failed to schedule notification:", error);
                 }
@@ -477,10 +489,9 @@ export default function AuthorDiaryDashboard() {
 
             scheduleDoneNotification();
 
+            // Timer Interval for UI
             const calculateTime = () => {
-                // Clear existing interval if it exists before starting new one
                 if (interval) clearInterval(interval);
-
                 interval = setInterval(() => {
                     const now = new Date().getTime();
                     const distance = targetTime - now;
@@ -494,20 +505,18 @@ export default function AuthorDiaryDashboard() {
                         const m = Math.floor((distance % (1000 * 60 * 60)) / (1000 * 60));
                         const s = Math.floor((distance % (1000 * 60)) / 1000);
                         setTimeLeft(`${h}h ${m}m ${s}s`);
-
                         if (!rewardToken) setCanPostAgain(false);
                     }
                 }, 1000);
             };
             calculateTime();
         } else {
-            // No timer needed (either limit not reached, or no active cooldowns)
             setCanPostAgain(true);
             setTimeLeft("");
         }
 
         return () => { if (interval) clearInterval(interval); };
-    }, [todayPosts, postsLast24h, maxPostsToday, rewardToken]);
+    }, [todayPosts, postsLast24h, rewardToken]); // 👈 Removed maxPostsToday to reduce unnecessary triggers
 
 
 
@@ -704,7 +713,7 @@ export default function AuthorDiaryDashboard() {
             // 🚀 TRIGGER THE REVIEW LOGIC HERE
             DeviceEventEmitter.emit("POST_CREATED_SUCCESS");
             Alert.alert("Success", "Your entry has been submitted for approval!");
-
+            updateStreak(fingerprint)
             // Reset States
             setMediaList([]);
             setTitle("");

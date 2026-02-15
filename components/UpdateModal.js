@@ -1,22 +1,15 @@
 import { Feather, Ionicons } from "@expo/vector-icons";
 import Constants from 'expo-constants';
-import { useEffect, useState, useRef } from 'react';
-import apiFetch from "../utils/apiFetch"
+import { useEffect, useRef, useState } from 'react';
+import apiFetch from "../utils/apiFetch";
 
-import { Linking, Modal, Pressable, Text as RNText, useColorScheme, View, Animated, Easing } from 'react-native';
+import { Animated, Easing, Linking, Modal, Pressable, Text as RNText, useColorScheme, View } from 'react-native';
 
 const VERSION_CHECK_URL = 'https://oreblogda.com/api/version'; 
 const INSTALLED_VERSION = Constants.expoConfig?.version || Constants.manifest?.version || '1.0.0';
 
 const isUpdateRequired = (installed, latest) => {
-  if (!latest) return false;
-  const parse = v => v.split('.').map(n => parseInt(n, 10));
-  const [iMajor, iMinor, iPatch] = parse(installed);
-  const [lMajor, lMinor, lPatch] = parse(latest);
-  if (iMajor < lMajor) return true;
-  if (iMajor === lMajor && iMinor < lMinor) return true;
-  if (iMajor === lMajor && iMinor === lMinor && iPatch < lPatch) return true;
-  return false;
+  return null
 };
 
 export default function UpdateHandler() {

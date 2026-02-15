@@ -82,7 +82,7 @@ export default function MoreOptions() {
       <View className="w-10 h-10 rounded-xl items-center justify-center" style={{ backgroundColor: `${color}15` }}>
         <Ionicons name={icon} size={20} color={color} />
       </View>
-      <Text style={{color: THEME.text}} className='flex-1 ml-4 text-sm font-black uppercase italic text-gray-900 dark:text-white tracking-tight'>{title}</Text>
+      <Text style={{color: THEME.text}} className='flex-1 ml-4 text-sm font-black uppercase italic tracking-tight'>{title}</Text>
       <Ionicons name="chevron-forward" size={16} color={THEME.border} />
     </TouchableOpacity>
   );
@@ -90,8 +90,8 @@ export default function MoreOptions() {
   return (
     <SafeAreaView style={{ flex: 1, backgroundColor: THEME.bg }}>
       {/* --- Ambient Background Glows --- */}
-      <View style={{ position: 'absolute', top: -50, right: -50, width: 300, height: 300, borderRadius: 150, backgroundColor: THEME.glowBlue }} />
-      <View style={{ position: 'absolute', bottom: 100, left: -100, width: 400, height: 400, borderRadius: 200, backgroundColor: THEME.glowPurple }} />
+      <View style={{ position: 'absolute', top: -50, right: -50, width: 300, height: 300, borderRadius: 150, backgroundColor: THEME.glowBlue, opacity: 0.2 }} />
+      <View style={{ position: 'absolute', bottom: 100, left: -100, width: 400, height: 400, borderRadius: 200, backgroundColor: THEME.glowPurple, opacity: 0.2 }} />
 
       <ScrollView className="flex-1 px-6" showsVerticalScrollIndicator={false}>
         
@@ -106,7 +106,7 @@ export default function MoreOptions() {
           </TouchableOpacity>
           <View className="ml-5">
             <Text className="text-[10px] font-black uppercase tracking-[0.3em] text-blue-600 mb-1">System Core</Text>
-            <Text className="text-3xl font-black italic uppercase text-white">Directory</Text>
+            <Text style={{ color: THEME.text }} className="text-3xl font-black italic uppercase">Directory</Text>
           </View>
         </View>
 
@@ -122,7 +122,7 @@ export default function MoreOptions() {
             <Ionicons name="notifications-outline" size={20} color={THEME.accent} />
           </View>
           <View className="flex-1 ml-4">
-            <Text style={{color: THEME.text}} className="text-sm font-black italic uppercase text-white">Push Notifications</Text>
+            <Text style={{color: THEME.text}} className="text-sm font-black italic uppercase">Push Notifications</Text>
             <Text className="text-[10px] font-bold text-gray-500 uppercase tracking-tighter">
                 Status: {isNotificationsEnabled ? "Active Uplink" : "Signal Blocked"}
             </Text>
@@ -139,7 +139,26 @@ export default function MoreOptions() {
           )}
         </View>
 
-        {/* --- Section: Progression (NEW) --- */}
+        {/* --- Section: Social & Rewards (NEW) --- */}
+        <Text className="text-gray-600 font-black uppercase text-[9px] tracking-[0.2em] mb-4 ml-1">
+          Social & Rewards
+        </Text>
+        <MenuRow 
+            title="Affiliate Uplink (Referrals)" 
+            icon="gift-outline" 
+            route="/screens/Referral" 
+            color="#a855f7" 
+        />
+        <MenuRow 
+            title="Clan Intelligence" 
+            icon="shield-outline" 
+            route="/screens/ClanInfoScreen" 
+            color="#ec4899" 
+        />
+
+        <View className="h-6" />
+
+        {/* --- Section: Progression --- */}
         <Text className="text-gray-600 font-black uppercase text-[9px] tracking-[0.2em] mb-4 ml-1">
           Author Progression
         </Text>

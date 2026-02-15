@@ -1,20 +1,21 @@
 import { MaterialCommunityIcons } from '@expo/vector-icons';
 import AsyncStorage from "@react-native-async-storage/async-storage";
 import { useColorScheme } from "nativewind";
-import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { memo, useCallback, useEffect, useMemo, useRef, useState } from "react"; // 👈 Added React.memo
 import {
     Animated,
+    AppState,
     DeviceEventEmitter,
     Dimensions,
     Easing,
     FlatList,
+    Platform,
     RefreshControl,
-    View,
-    AppState // 👈 Added for foreground detection
+    View
 } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import useSWRInfinite from "swr/infinite";
-import AppBanner from '../../../components/AppBanner';
+import AnimeLoading from "../../../components/AnimeLoading"; // 👈 Added for full loading experience
 import PostCard from "../../../components/PostCard";
 import { SyncLoading } from "../../../components/SyncLoading";
 import { Text } from "../../../components/Text";
@@ -40,6 +41,24 @@ const saveHeavyCache = async (key, data) => {
     }
 };
 
+// 🚀 PERFORMANCE FIX: Memoized Item Renderer for Categories
+const CategoryItemRow = memo(({ item, index, posts, mutate }) => {
+    const showAd = (index + 1) % 4 === 0;
+    return (
+        <View className="px-4">
+            <PostCard post={item} isFeed posts={posts} setPosts={mutate} />
+            {/* {showAd && (
+                <View className="mb-3 mt-3 w-full p-6 border border-dashed border-gray-300 dark:border-gray-800 rounded-[32px] bg-gray-50/50 dark:bg-white/5 items-center justify-center">
+                    <Text className="text-[10px] font-bold text-gray-400 uppercase tracking-[0.2em] italic text-center mb-2">
+                        Sponsored Transmission
+                    </Text>
+                    <AppBanner size="MEDIUM_RECTANGLE" />
+                </View>
+            )} */}
+        </View>
+    );
+});
+
 export default function CategoryPage({ forcedId }) {
     const id = forcedId;
     const insets = useSafeAreaInsets();
@@ -47,43 +66,48 @@ export default function CategoryPage({ forcedId }) {
     const isDark = colorScheme === "dark";
 
     const pulseAnim = useRef(new Animated.Value(0)).current;
-    const appState = useRef(AppState.currentState); // 👈 Track current app state
+    const appState = useRef(AppState.currentState);
 
-    const categoryName = id
-        ? id.includes("-")
+    const categoryName = useMemo(() => {
+        if (!id) return "";
+        return id.includes("-")
             ? id.split("-").map((w) => w.charAt(0).toUpperCase() + w.slice(1)).join("/")
-            : id.charAt(0).toUpperCase() + id.slice(1).toLowerCase()
-        : "";
+            : id.charAt(0).toUpperCase() + id.slice(1).toLowerCase();
+    }, [id]);
 
     const CACHE_KEY = `CATEGORY_CACHE_${categoryName.toUpperCase().replace(/[^A-Z0-9]/g, '_')}`;
 
     const [ready, setReady] = useState(false);
-    const [cachedData, setCachedData] = useState(CATEGORY_MEMORY_CACHE[CACHE_KEY]);
+    const [cachedData, setCachedData] = useState(CATEGORY_MEMORY_CACHE[CACHE_KEY] ? [{ posts: CATEGORY_MEMORY_CACHE[CACHE_KEY] }] : null);
     const [isOfflineMode, setIsOfflineMode] = useState(false);
     const [refreshing, setRefreshing] = useState(false);
     const scrollRef = useRef(null);
 
     // Initial Cache Hydration
     useEffect(() => {
+        let isMounted = true;
         const prepare = async () => {
             try {
                 if (!CATEGORY_MEMORY_CACHE[CACHE_KEY]) {
                     const local = await AsyncStorage.getItem(CACHE_KEY);
-                    if (local) {
+                    if (local && isMounted) {
                         const parsed = JSON.parse(local);
-                        if (Array.isArray(parsed.data)) {
-                            setCachedData([{ posts: parsed.data }]); // Wrap for SWR format compatibility
+                        if (parsed?.data && Array.isArray(parsed.data)) {
+                            const formattedData = [{ posts: parsed.data }];
+                            setCachedData(formattedData);
                             CATEGORY_MEMORY_CACHE[CACHE_KEY] = parsed.data;
                         }
                     }
                 }
             } catch (e) {
                 console.error("Cache load error", e);
+            } finally {
+                if (isMounted) setReady(true);
             }
-            setReady(true);
         };
         prepare();
-    }, [id]);
+        return () => { isMounted = false; };
+    }, [id, CACHE_KEY]);
 
     useEffect(() => {
         const animation = Animated.loop(
@@ -103,8 +127,7 @@ export default function CategoryPage({ forcedId }) {
     };
 
     const { data, size, setSize, isLoading, isValidating, mutate } = useSWRInfinite(getKey, fetcher, {
-        refreshInterval: 0,
-        revalidateOnFocus: true, // 👈 Set to true for internal consistency
+        revalidateOnFocus: true,
         revalidateOnReconnect: true,
         revalidateIfStale: true,
         revalidateOnMount: !CATEGORY_MEMORY_CACHE[CACHE_KEY], 
@@ -123,23 +146,15 @@ export default function CategoryPage({ forcedId }) {
         }
     });
 
-    // 🚀 NEW: Foreground App Listener
     useEffect(() => {
         const subscription = AppState.addEventListener("change", nextAppState => {
-            if (
-                appState.current.match(/inactive|background/) && 
-                nextAppState === "active"
-            ) {
-                console.log(`Re-linking Neural Archives for: ${categoryName}`);
-                mutate(); // Refresh the category intel
+            if (appState.current.match(/inactive|background/) && nextAppState === "active") {
+                mutate();
             }
             appState.current = nextAppState;
         });
-
-        return () => {
-            subscription.remove();
-        };
-    }, [mutate, categoryName]);
+        return () => subscription.remove();
+    }, [mutate]);
 
     const posts = useMemo(() => {
         const sourceData = data || cachedData;
@@ -158,10 +173,10 @@ export default function CategoryPage({ forcedId }) {
         await mutate();
     }, [mutate]);
 
-    const loadMore = () => {
+    const loadMore = useCallback(() => {
         if (isLoading || isValidating || isOfflineMode) return;
         setSize(size + 1);
-    };
+    }, [isLoading, isValidating, isOfflineMode, size]);
 
     const hasMore = data ? data[data.length - 1]?.posts?.length === LIMIT : false;
 
@@ -172,20 +187,12 @@ export default function CategoryPage({ forcedId }) {
         return () => sub.remove();
     }, []);
 
-    const renderItem = ({ item, index }) => {
-        const showAd = (index + 1) % 4 === 0;
-        return (
-            <View className="px-4">
-                <PostCard post={item} isFeed posts={posts} setPosts={mutate} />
-                {showAd && <View className="mb-3 mt-3 w-full p-6 border border-dashed border-gray-300 dark:border-gray-800 rounded-[32px] bg-gray-50/50 dark:bg-white/5 items-center justify-center">
-                    <Text className="text-[10px] font-bold text-gray-400 uppercase tracking-[0.2em] italic text-center">Sponsored Transmission</Text>
-                    <AppBanner size="MEDIUM_RECTANGLE" />
-                </View>}
-            </View>
-        );
-    };
+    // 🚀 PERFORMANCE: Memoized renderItem
+    const renderItem = useCallback(({ item, index }) => (
+        <CategoryItemRow item={item} index={index} posts={posts} mutate={mutate} />
+    ), [posts, mutate]);
 
-    const ListHeader = () => (
+    const ListHeader = useMemo(() => (
         <View className="px-5 mb-10 pb-6 border-b-2 border-gray-100 dark:border-gray-800">
             <View className="flex-row items-center gap-3 mb-2">
                 <View className={`h-2 w-2 rounded-full ${isOfflineMode ? 'bg-orange-500' : 'bg-blue-600'}`} />
@@ -200,7 +207,12 @@ export default function CategoryPage({ forcedId }) {
                 <View className={`absolute -bottom-2 left-0 h-[2px] w-20 ${isOfflineMode ? 'bg-orange-500' : 'bg-blue-600'}`} />
             </View>
         </View>
-    );
+    ), [isOfflineMode, isDark, categoryName]);
+
+    // ✨ UI Requirement: Loading Animation when empty
+    if (!ready || (isLoading && posts.length === 0)) {
+        return <AnimeLoading message={`Decoding ${categoryName}`} subMessage="Accessing encrypted anime archives..." />
+    }
 
     return (
         <View style={{ flex: 1, backgroundColor: isDark ? "#050505" : "#ffffff" }}>
@@ -224,9 +236,6 @@ export default function CategoryPage({ forcedId }) {
                         onRefresh={handleRefresh}
                         colors={["#2563eb"]}
                         tintColor="#2563eb"
-                        title={"Fetching Archives..."}
-                        titleColor={isDark ? "#ffffff" : "#2563eb"}
-                        progressBackgroundColor={isDark ? "#1a1a1a" : "#ffffff"}
                     />
                 }
 
@@ -245,11 +254,13 @@ export default function CategoryPage({ forcedId }) {
                 onEndReached={loadMore}
                 onEndReachedThreshold={0.5}
                 onScroll={(e) => DeviceEventEmitter.emit("onScroll", e.nativeEvent.contentOffset.y)}
-                scrollEventThrottle={16}
-                removeClippedSubviews={true}
-                initialNumToRender={5}
-                maxToRenderPerBatch={5}
-                windowSize={5}
+                scrollEventThrottle={32}
+                
+                // 🚀 PERFORMANCE PROPS
+                removeClippedSubviews={Platform.OS === 'android'}
+                initialNumToRender={4}
+                maxToRenderPerBatch={3}
+                windowSize={3}
             />
 
             <View
