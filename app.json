@@ -1,8 +1,8 @@
 {
   "expo": {
-    "name": "Oreblogda",
+    "name": "Oreblogda(DEV)",
     "slug": "oreblogda",
-    "version": "1.9.2",
+    "version": "1.8.0",
     "orientation": "default",
     "icon": "./assets/images/myicon.png",
     "scheme": "oreblogda",
@@ -10,7 +10,7 @@
     "newArchEnabled": true,
     "ios": {
       "supportsTablet": true,
-      "bundleIdentifier": "com.kaytee.oreblogda",
+      "bundleIdentifier": "com.kaytee.oreblogda.dev",
       "associatedDomains": [
         "applinks:oreblogda.com"
       ]
@@ -25,29 +25,20 @@
         "foregroundImage": "./assets/images/myicon.png",
         "backgroundImage": "./assets/images/myicon.png"
       },
-      "package": "com.kaytee.oreblogda",
+      "package": "com.kaytee.oreblogda.dev",
       "googleServicesFile": "./google-services.json",
       "edgeToEdgeEnabled": true,
       "predictiveBackGestureEnabled": false,
       "intentFilters": [
-  {
-    "action": "VIEW",
-    "autoVerify": true,
-    "data": [
-      { "scheme": "https", "host": "oreblogda.com" },
-      { "scheme": "http", "host": "oreblogda.com" }
-    ],
-    "category": [ "BROWSABLE", "DEFAULT" ]
-  },
-  {
-    "action": "VIEW",
-    "data": [
-      { "scheme": "oreblogda" }
-    ],
-    "category": [ "BROWSABLE", "DEFAULT" ]
-  }
-]
-,
+        {
+          "action": "VIEW",
+          "autoVerify": true,
+          "data": [
+            { "scheme": "https", "host": "oreblogda.com", "pathPrefix": "/" }
+          ],
+          "category": [ "BROWSABLE", "DEFAULT" ]
+        }
+      ],
       "config": {
         "googleMobileAdsAppId": "ca-app-pub-8021671365048667~3586113443"
       }
@@ -89,15 +80,15 @@
     },
     "extra": {
       "router": {},
-      "eas": { "projectId": "b6b7afd1-028a-425e-a84e-6a2af706a736" }
+      "eas": { "projectId": "b22841d4-0736-4aa0-89d2-d9a48af0defc" }
     },
     "runtimeVersion": "v2_global",
     "updates": {
-      "url": "https://u.expo.dev/b6b7afd1-028a-425e-a84e-6a2af706a736",
+      "url": "https://u.expo.dev/b22841d4-0736-4aa0-89d2-d9a48af0defc",
       "enabled": true,
       "checkAutomatically": "ON_LOAD",
       "fallbackToCacheTimeout": 0
     },
-    "owner": "oreblogda"
+    "owner": "oreblog"
   }
 }
