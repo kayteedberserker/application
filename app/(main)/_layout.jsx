@@ -179,10 +179,7 @@ export default function MainLayout() {
     };
 
     // -- Combined Loading & Redirect Logic --
-    if (contextLoading || isUserAuthenticated === null) {
-        return <AnimeLoading message="Loading Page" subMessage="Syncing Account" />;
-    }
-
+   
     if (!isUserAuthenticated) {
         return <Redirect href="/screens/FirstLaunchScreen" />;
     }
