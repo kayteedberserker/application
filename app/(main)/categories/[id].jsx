@@ -118,19 +118,19 @@ export default function CategoryPage({ forcedId }) {
     };
 
     const { data, size, setSize, isLoading, isValidating, mutate } = useSWRInfinite(getKey, fetcher, {
-        revalidateOnFocus: false, // 👈 Disabled to prevent re-fetching when returning from background
+        revalidateOnFocus: false, 
         revalidateOnReconnect: true,
-        revalidateIfStale: false, // 👈 Disabled to prevent re-fetching when returning to this page
-        // ✨ LOGIC: Only revalidate on mount if this specific category hasn't synced this session
+        revalidateIfStale: false, 
+        // ✨ Only revalidate on mount if this specific category hasn't synced this session
         revalidateOnMount: !CATEGORIES_SYNCED_THIS_SESSION.has(CACHE_KEY), 
         dedupingInterval: 10000,
-        fallbackData: cachedData,
+        fallbackData: cachedData || undefined,
         onSuccess: (newData) => {
             setIsOfflineMode(false);
             setRefreshing(false);
             const flatData = newData.flatMap(page => page.posts || []);
             CATEGORY_MEMORY_CACHE[CACHE_KEY] = flatData;
-            CATEGORIES_SYNCED_THIS_SESSION.add(CACHE_KEY); // 👈 Mark this category as "Session Synced"
+            CATEGORIES_SYNCED_THIS_SESSION.add(CACHE_KEY); 
             saveHeavyCache(CACHE_KEY, flatData);
         },
         onError: () => {
@@ -186,7 +186,8 @@ export default function CategoryPage({ forcedId }) {
                 <Text className={`text-4xl font-[900] italic tracking-tighter uppercase ${isDark ? "text-white" : "text-gray-900"}`}>
                     Folder: <Text className={isOfflineMode ? "text-orange-500" : "text-blue-600"}>{categoryName}</Text>
                 </Text>
-                <div className={`absolute -bottom-2 left-0 h-[2px] w-20 ${isOfflineMode ? 'bg-orange-500' : 'bg-blue-600'}`} />
+                {/* 🛠 FIXED: Changed <div> to <View> */}
+                <View className={`absolute -bottom-2 left-0 h-[2px] w-20 ${isOfflineMode ? 'bg-orange-500' : 'bg-blue-600'}`} />
             </View>
         </View>
     ), [isOfflineMode, isDark, categoryName]);
