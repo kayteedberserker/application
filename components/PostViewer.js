@@ -4,10 +4,7 @@ import { useColorScheme } from "nativewind";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import {
     Animated,
-    AppState // 👈 Added for foreground detection
-    ,
-
-
+    AppState,
     DeviceEventEmitter,
     Dimensions,
     Easing,
@@ -30,8 +27,9 @@ const { width } = Dimensions.get('window');
 const LIMIT = 15;
 const CACHE_KEY = "POSTS_CACHE_V1";
 
-// 🧠 Tier 1: Memory Cache
+// 🧠 Tier 1: Memory & Session Cache
 let POSTS_MEMORY_CACHE = null;
+let HAS_FETCHED_THIS_SESSION = false; // 👈 Tracks if we've synced since app launch
 
 const saveHeavyCache = async (key, data) => {
     try {
@@ -50,7 +48,7 @@ export default function PostsViewer() {
     const insets = useSafeAreaInsets();
     const { colorScheme } = useColorScheme();
     const isDark = colorScheme === "dark";
-    const appState = useRef(AppState.currentState); // 👈 Track current app state
+    const appState = useRef(AppState.currentState);
 
     const [ready, setReady] = useState(false);
     const [canFetch, setCanFetch] = useState(false); 
@@ -116,17 +114,18 @@ export default function PostsViewer() {
 
     const { data, size, setSize, isLoading, isValidating, mutate } = useSWRInfinite(getKey, fetcher, {
         refreshInterval: 0, 
-        revalidateOnFocus: true, // 👈 Enabled for background consistency
+        revalidateOnFocus: false, // 👈 Stop refetching when returning to app
         revalidateOnReconnect: true,
-        revalidateIfStale: true,
-        // ✨ LOGIC CHANGE: Only revalidate on mount if we have NO cached data
-        revalidateOnMount: !POSTS_MEMORY_CACHE, 
+        revalidateIfStale: false, // 👈 Don't refetch just because data is old
+        // ✨ LOGIC: Fetch on mount ONLY if we haven't done it this session yet
+        revalidateOnMount: !HAS_FETCHED_THIS_SESSION, 
         dedupingInterval: 10000,
         fallbackData: cachedData, 
         onSuccess: (newData) => {
             setIsOfflineMode(false);
             setRefreshing(false); 
             POSTS_MEMORY_CACHE = newData;
+            HAS_FETCHED_THIS_SESSION = true; // 👈 Mark session as synchronized
             saveHeavyCache(CACHE_KEY, newData);
         },
         onError: () => {
@@ -135,24 +134,17 @@ export default function PostsViewer() {
         }
     });
 
-    // 🚀 NEW: Foreground Refetch Logic
-    useEffect(() => {
+    // 🚀 Background logic removed/commented out to respect "Only fetch once" rule
+    /* useEffect(() => {
         const subscription = AppState.addEventListener("change", nextAppState => {
-            if (
-                appState.current.match(/inactive|background/) && 
-                nextAppState === "active"
-            ) {
-                // If the app comes to foreground, pulse the neural link and refetch
-                console.log("App returned to active state - syncing Anime Intel...");
-                mutate();
+            if (appState.current.match(/inactive|background/) && nextAppState === "active") {
+                // mutate(); // Optional: remove this if you truly only want ONE fetch per session
             }
             appState.current = nextAppState;
         });
-
-        return () => {
-            subscription.remove();
-        };
-    }, [mutate]);
+        return () => subscription.remove();
+    }, [mutate]); 
+    */
 
     const handleRefresh = useCallback(async () => {
         setRefreshing(true);
@@ -188,23 +180,14 @@ export default function PostsViewer() {
         setSize(size + 1);
     };
 
-    // Show loading screen only if we are ready and have zero posts
     if (!ready || (isLoading && posts.length === 0)) {
         return <AnimeLoading message="Loading posts" subMessage="Prepping Otaku content" />
     }
 
     const renderItem = ({ item, index }) => {
-        const showAd = (index + 1) % 4 === 0;
-
         return (
             <View key={item._id}>
                 <PostCard post={item} isFeed posts={posts} setPosts={mutate} />
-                {/* {showAd && ready && (
-                    <View className="mb-3 mt-3 w-full p-6 border border-dashed border-gray-300 dark:border-gray-800 rounded-[32px] bg-gray-50/50 dark:bg-white/5 items-center justify-center">
-                        <Text className="text-[10px] font-bold text-gray-400 uppercase tracking-[0.2em] italic text-center">Sponsored Transmission</Text>
-                        <AppBanner size="MEDIUM_RECTANGLE" />
-                    </View>
-                )} */}
             </View>
         );
     };
