@@ -1,7 +1,7 @@
 import { MaterialCommunityIcons } from '@expo/vector-icons';
 import AsyncStorage from "@react-native-async-storage/async-storage";
 import { useColorScheme } from "nativewind";
-import { memo, useCallback, useEffect, useMemo, useRef, useState } from "react"; // 👈 Added React.memo
+import { memo, useCallback, useEffect, useMemo, useRef, useState } from "react"; 
 import {
     Animated,
     AppState,
@@ -15,7 +15,7 @@ import {
 } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import useSWRInfinite from "swr/infinite";
-import AnimeLoading from "../../../components/AnimeLoading"; // 👈 Added for full loading experience
+import AnimeLoading from "../../../components/AnimeLoading"; 
 import PostCard from "../../../components/PostCard";
 import { SyncLoading } from "../../../components/SyncLoading";
 import { Text } from "../../../components/Text";
@@ -26,8 +26,9 @@ const LIMIT = 10;
 
 const fetcher = (url) => apiFetch(url).then(res => res.json());
 
-// 🧠 Tier 1: Memory Cache
+// 🧠 Tier 1: Memory Cache & Session Tracking
 const CATEGORY_MEMORY_CACHE = {};
+const CATEGORIES_SYNCED_THIS_SESSION = new Set(); // 👈 Tracks which folders have been updated since app launch
 
 const saveHeavyCache = async (key, data) => {
     try {
@@ -41,20 +42,10 @@ const saveHeavyCache = async (key, data) => {
     }
 };
 
-// 🚀 PERFORMANCE FIX: Memoized Item Renderer for Categories
 const CategoryItemRow = memo(({ item, index, posts, mutate }) => {
-    const showAd = (index + 1) % 4 === 0;
     return (
         <View className="px-4">
             <PostCard post={item} isFeed posts={posts} setPosts={mutate} />
-            {/* {showAd && (
-                <View className="mb-3 mt-3 w-full p-6 border border-dashed border-gray-300 dark:border-gray-800 rounded-[32px] bg-gray-50/50 dark:bg-white/5 items-center justify-center">
-                    <Text className="text-[10px] font-bold text-gray-400 uppercase tracking-[0.2em] italic text-center mb-2">
-                        Sponsored Transmission
-                    </Text>
-                    <AppBanner size="MEDIUM_RECTANGLE" />
-                </View>
-            )} */}
         </View>
     );
 });
@@ -127,10 +118,11 @@ export default function CategoryPage({ forcedId }) {
     };
 
     const { data, size, setSize, isLoading, isValidating, mutate } = useSWRInfinite(getKey, fetcher, {
-        revalidateOnFocus: true,
+        revalidateOnFocus: false, // 👈 Disabled to prevent re-fetching when returning from background
         revalidateOnReconnect: true,
-        revalidateIfStale: true,
-        revalidateOnMount: !CATEGORY_MEMORY_CACHE[CACHE_KEY], 
+        revalidateIfStale: false, // 👈 Disabled to prevent re-fetching when returning to this page
+        // ✨ LOGIC: Only revalidate on mount if this specific category hasn't synced this session
+        revalidateOnMount: !CATEGORIES_SYNCED_THIS_SESSION.has(CACHE_KEY), 
         dedupingInterval: 10000,
         fallbackData: cachedData,
         onSuccess: (newData) => {
@@ -138,6 +130,7 @@ export default function CategoryPage({ forcedId }) {
             setRefreshing(false);
             const flatData = newData.flatMap(page => page.posts || []);
             CATEGORY_MEMORY_CACHE[CACHE_KEY] = flatData;
+            CATEGORIES_SYNCED_THIS_SESSION.add(CACHE_KEY); // 👈 Mark this category as "Session Synced"
             saveHeavyCache(CACHE_KEY, flatData);
         },
         onError: () => {
@@ -145,16 +138,6 @@ export default function CategoryPage({ forcedId }) {
             setRefreshing(false);
         }
     });
-
-    useEffect(() => {
-        const subscription = AppState.addEventListener("change", nextAppState => {
-            if (appState.current.match(/inactive|background/) && nextAppState === "active") {
-                mutate();
-            }
-            appState.current = nextAppState;
-        });
-        return () => subscription.remove();
-    }, [mutate]);
 
     const posts = useMemo(() => {
         const sourceData = data || cachedData;
@@ -187,7 +170,6 @@ export default function CategoryPage({ forcedId }) {
         return () => sub.remove();
     }, []);
 
-    // 🚀 PERFORMANCE: Memoized renderItem
     const renderItem = useCallback(({ item, index }) => (
         <CategoryItemRow item={item} index={index} posts={posts} mutate={mutate} />
     ), [posts, mutate]);
@@ -204,12 +186,11 @@ export default function CategoryPage({ forcedId }) {
                 <Text className={`text-4xl font-[900] italic tracking-tighter uppercase ${isDark ? "text-white" : "text-gray-900"}`}>
                     Folder: <Text className={isOfflineMode ? "text-orange-500" : "text-blue-600"}>{categoryName}</Text>
                 </Text>
-                <View className={`absolute -bottom-2 left-0 h-[2px] w-20 ${isOfflineMode ? 'bg-orange-500' : 'bg-blue-600'}`} />
+                <div className={`absolute -bottom-2 left-0 h-[2px] w-20 ${isOfflineMode ? 'bg-orange-500' : 'bg-blue-600'}`} />
             </View>
         </View>
     ), [isOfflineMode, isDark, categoryName]);
 
-    // ✨ UI Requirement: Loading Animation when empty
     if (!ready || (isLoading && posts.length === 0)) {
         return <AnimeLoading message={`Decoding ${categoryName}`} subMessage="Accessing encrypted anime archives..." />
     }
@@ -256,7 +237,6 @@ export default function CategoryPage({ forcedId }) {
                 onScroll={(e) => DeviceEventEmitter.emit("onScroll", e.nativeEvent.contentOffset.y)}
                 scrollEventThrottle={32}
                 
-                // 🚀 PERFORMANCE PROPS
                 removeClippedSubviews={Platform.OS === 'android'}
                 initialNumToRender={4}
                 maxToRenderPerBatch={3}
