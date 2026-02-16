@@ -31,8 +31,8 @@ const FORBIDDEN_NAMES = ["admin", "system", "the admin", "the system", "administ
 export default function FirstLaunchScreen() {
   const [username, setUsername] = useState("");
   const [recoverId, setRecoverId] = useState(""); 
-  const [referrerCode, setReferrerCode] = useState(""); // 🔹 Initialized as empty string
-  const [isAutoReferrer, setIsAutoReferrer] = useState(false); // 🔹 To lock the field
+  const [referrerCode, setReferrerCode] = useState(""); 
+  const [isAutoReferrer, setIsAutoReferrer] = useState(false); 
   const [isRecoveryMode, setIsRecoveryMode] = useState(false); 
   const [loading, setLoading] = useState(true);
   const [isProcessing, setIsProcessing] = useState(false);
@@ -59,16 +59,30 @@ export default function FirstLaunchScreen() {
           return;
         }
 
-        // 2. 🔹 Check for Install Referrer (Only on Android)
+        // 2. 🔹 Robust Install Referrer Check
         if (Platform.OS === 'android') {
           try {
             const installReferrer = await Application.getInstallReferrerAsync();
+            console.log("Raw Referrer Raw Data:", installReferrer);
             
-            // Google Play returns a specific string for organic installs, we ignore that
-            if (installReferrer && !installReferrer.includes("utm_source=google-play")) {
-                console.log("Referral Code Detected:", installReferrer);
+            /**
+             * 🔹 LOGIC UPDATE:
+             * We only lock the field if the referrer exists AND it's not a default "(not set)" string.
+             * Usually, Google Play returns "utm_source=(not%20set)&utm_medium=(not%20set)" for organic installs.
+             */
+            const isInvalid = !installReferrer || 
+                              installReferrer.includes("google-play") || 
+                              installReferrer.includes("(not%20set)") || 
+                              installReferrer.includes("not%20set");
+
+            if (!isInvalid && isMounted.current) {
+                // If it looks like a real referral string, we set it and lock it
                 setReferrerCode(installReferrer);
-                setIsAutoReferrer(true); // 🔹 Mark as auto-detected to lock UI
+                setIsAutoReferrer(true); 
+            } else {
+                console.log("No valid referral detected. Manual entry enabled.");
+                setReferrerCode("");
+                setIsAutoReferrer(false);
             }
           } catch (refErr) {
             console.log("Referrer not available:", refErr);
@@ -138,7 +152,7 @@ export default function FirstLaunchScreen() {
             deviceId: targetId,
             username: isRecoveryMode ? undefined : cleanUsername,
             pushToken,
-            referredBy: isRecoveryMode ? undefined : cleanReferrer, // 🔹 Pass the code (manual or auto)
+            referredBy: isRecoveryMode ? undefined : cleanReferrer, 
           }),
         }
       );
@@ -255,7 +269,7 @@ export default function FirstLaunchScreen() {
                         autoCorrect={false}
                         value={referrerCode}
                         onChangeText={setReferrerCode}
-                        editable={!isProcessing && !isAutoReferrer} // 🔹 Locked if auto-detected
+                        editable={!isProcessing && !isAutoReferrer} 
                     />
                     {isAutoReferrer && (
                         <View className="absolute right-4 top-5">
