@@ -27,9 +27,11 @@ const { width } = Dimensions.get('window');
 const LIMIT = 15;
 const CACHE_KEY = "POSTS_CACHE_V1";
 
-// 🧠 Tier 1: Memory & Session Cache
-let POSTS_MEMORY_CACHE = null;
-let HAS_FETCHED_THIS_SESSION = false; // 👈 Tracks if we've synced since app launch
+// 🧠 Global Session Tracker (Safe Object)
+const SESSION_STATE = {
+    memoryCache: null,
+    hasFetched: false
+};
 
 const saveHeavyCache = async (key, data) => {
     try {
@@ -52,22 +54,23 @@ export default function PostsViewer() {
 
     const [ready, setReady] = useState(false);
     const [canFetch, setCanFetch] = useState(false); 
-    const [cachedData, setCachedData] = useState(POSTS_MEMORY_CACHE); 
+    const [cachedData, setCachedData] = useState(SESSION_STATE.memoryCache); 
     const [isOfflineMode, setIsOfflineMode] = useState(false);
     const [refreshing, setRefreshing] = useState(false); 
 
     const pulseAnim = useRef(new Animated.Value(0)).current;
 
     useEffect(() => {
+        let isMounted = true;
         const prepare = async () => {
             try {
-                if (!POSTS_MEMORY_CACHE) {
+                if (!SESSION_STATE.memoryCache) {
                     const local = await AsyncStorage.getItem(CACHE_KEY);
-                    if (local) {
+                    if (local && isMounted) {
                         const parsed = JSON.parse(local);
-                        if (Array.isArray(parsed.data)) {
+                        if (parsed && Array.isArray(parsed.data)) {
                             setCachedData(parsed.data);
-                            POSTS_MEMORY_CACHE = parsed.data;
+                            SESSION_STATE.memoryCache = parsed.data;
                         }
                     }
                 }
@@ -76,13 +79,16 @@ export default function PostsViewer() {
             }
 
             InteractionManager.runAfterInteractions(() => {
-                setReady(true);
-                setTimeout(() => {
-                    setCanFetch(true);
-                }, 400);
+                if (isMounted) {
+                    setReady(true);
+                    setTimeout(() => {
+                        if (isMounted) setCanFetch(true);
+                    }, 400);
+                }
             });
         };
         prepare();
+        return () => { isMounted = false; };
     }, []);
 
     useEffect(() => {
@@ -114,18 +120,17 @@ export default function PostsViewer() {
 
     const { data, size, setSize, isLoading, isValidating, mutate } = useSWRInfinite(getKey, fetcher, {
         refreshInterval: 0, 
-        revalidateOnFocus: false, // 👈 Stop refetching when returning to app
+        revalidateOnFocus: false, 
         revalidateOnReconnect: true,
-        revalidateIfStale: false, // 👈 Don't refetch just because data is old
-        // ✨ LOGIC: Fetch on mount ONLY if we haven't done it this session yet
-        revalidateOnMount: !HAS_FETCHED_THIS_SESSION, 
+        revalidateIfStale: false, 
+        revalidateOnMount: !SESSION_STATE.hasFetched, 
         dedupingInterval: 10000,
-        fallbackData: cachedData, 
+        fallbackData: cachedData || undefined, // 👈 Safety: use undefined instead of null
         onSuccess: (newData) => {
             setIsOfflineMode(false);
             setRefreshing(false); 
-            POSTS_MEMORY_CACHE = newData;
-            HAS_FETCHED_THIS_SESSION = true; // 👈 Mark session as synchronized
+            SESSION_STATE.memoryCache = newData;
+            SESSION_STATE.hasFetched = true; 
             saveHeavyCache(CACHE_KEY, newData);
         },
         onError: () => {
@@ -133,18 +138,6 @@ export default function PostsViewer() {
             setRefreshing(false); 
         }
     });
-
-    // 🚀 Background logic removed/commented out to respect "Only fetch once" rule
-    /* useEffect(() => {
-        const subscription = AppState.addEventListener("change", nextAppState => {
-            if (appState.current.match(/inactive|background/) && nextAppState === "active") {
-                // mutate(); // Optional: remove this if you truly only want ONE fetch per session
-            }
-            appState.current = nextAppState;
-        });
-        return () => subscription.remove();
-    }, [mutate]); 
-    */
 
     const handleRefresh = useCallback(async () => {
         setRefreshing(true);
