@@ -5,6 +5,8 @@ import { useCallback, useEffect, useState } from "react";
 import {
     ActivityIndicator,
     Clipboard,
+    DeviceEventEmitter,
+    Pressable,
     RefreshControl,
     ScrollView,
     Share,
@@ -25,7 +27,7 @@ export default function ReferralScreen() {
     const { user } = useUser();
     const [copied, setCopied] = useState(false);
 
-    const [loading, setLoading] = useState(false); 
+    const [loading, setLoading] = useState(false);
     const [refreshing, setRefreshing] = useState(false);
     const [data, setData] = useState({
         round: 1,
@@ -34,7 +36,7 @@ export default function ReferralScreen() {
         currentMilestone: { goal: 500, reward: "$10", winners: 1 },
         progress: 0
     });
-    
+
     const referralCode = user?.referralCode?.toUpperCase() || "RECRUIT_01";
     const referralLink = `https://oreblogda.com/register?ref=${referralCode}`;
 
@@ -47,15 +49,15 @@ export default function ReferralScreen() {
     const fetchReferralData = async (isBackground = false) => {
         // Show loading if it's the first time or not a background refresh
         if (!isBackground && data.leaderboard.length === 0) setLoading(true);
-        
+
         try {
             const response = await apiFetch("/referrals/stats", {
                 method: "GET"
             });
-            
+
             // Since apiFetch returns the raw fetch response, we MUST parse it
             const result = await response.json();
-            
+
             if (response.ok && result.success) {
                 const updatedData = {
                     round: result.round,
@@ -130,24 +132,26 @@ export default function ReferralScreen() {
         const progressClamped = Math.min(data.progress || 0, 100);
 
         return (
-            <View 
-                style={{ 
-                    borderColor: isActive ? roundItem.color : THEME.border, 
-                    backgroundColor: isActive ? `${roundItem.color}10` : THEME.card 
+            <View
+                style={{
+                    borderColor: isActive ? roundItem.color : THEME.border,
+                    backgroundColor: isActive ? `${roundItem.color}10` : THEME.card
                 }}
                 className={`flex-row items-center justify-between p-5 rounded-[25px] border-2 mb-4 relative overflow-hidden`}
             >
                 {isLocked && <View className="absolute inset-0 bg-black/60 z-10 items-center justify-center rounded-2xl" />}
-                
-                <View className="flex-row items-center flex-1">
-                    <View 
+
+                <Pressable className="flex-row items-center flex-1" onPress={() => {
+                    DeviceEventEmitter.emit("navigateSafely", "/screens/Referral");
+                }}>
+                    <View
                         style={{ backgroundColor: `${roundItem.color}20`, borderColor: `${roundItem.color}40` }}
                         className="w-12 h-12 rounded-2xl items-center justify-center border mr-4"
                     >
-                        <MaterialCommunityIcons 
-                            name={roundItem.icon} 
-                            size={24} 
-                            color={roundItem.color} 
+                        <MaterialCommunityIcons
+                            name={roundItem.icon}
+                            size={24}
+                            color={roundItem.color}
                         />
                     </View>
 
@@ -157,11 +161,11 @@ export default function ReferralScreen() {
                             {isActive && <View className="w-1.5 h-1.5 bg-green-500 rounded-full ml-2" />}
                         </View>
                         <Text style={{ color: THEME.text }} className="text-[16px] font-black uppercase mb-1">REWARD: {roundItem.reward}</Text>
-                        
+
                         {isActive && (
                             <View className="mt-3 mr-4 relative">
-                                <View 
-                                    style={{ left: `${progressClamped}%`, marginLeft: -10 }} 
+                                <View
+                                    style={{ left: `${progressClamped}%`, marginLeft: -10 }}
                                     className="absolute -top-5 items-center"
                                 >
                                     <View style={{ backgroundColor: roundItem.color }} className="px-1.5 py-0.5 rounded-md shadow-sm">
@@ -170,9 +174,9 @@ export default function ReferralScreen() {
                                 </View>
 
                                 <View className="h-1.5 w-full bg-black/20 rounded-full overflow-hidden">
-                                    <View 
-                                        style={{ width: `${progressClamped}%`, backgroundColor: roundItem.color }} 
-                                        className="h-full" 
+                                    <View
+                                        style={{ width: `${progressClamped}%`, backgroundColor: roundItem.color }}
+                                        className="h-full"
                                     />
                                 </View>
                                 <View className="flex-row justify-between mt-1">
@@ -186,29 +190,29 @@ export default function ReferralScreen() {
                             </View>
                         )}
                     </View>
-                </View>
 
                 <View className="items-center justify-center ml-2">
                     {isCompleted ? (
                         <View className="bg-green-500/20 p-2 rounded-full border border-green-500/40">
-                             <Ionicons name="checkmark-done" size={20} color="#10b981" />
+                            <Ionicons name="checkmark-done" size={20} color="#10b981" />
                         </View>
                     ) : (
-                        <MaterialCommunityIcons 
-                            name={isLocked ? "lock" : "chevron-right"} 
-                            size={24} 
-                            color={isActive ? roundItem.color : THEME.textSecondary} 
+                        <MaterialCommunityIcons
+                            name={isLocked ? "lock" : "chevron-right"}
+                            size={24}
+                            color={isActive ? roundItem.color : THEME.textSecondary}
                         />
                     )}
                 </View>
+                </Pressable>
             </View>
         );
     };
 
     return (
         <SafeAreaView style={{ flex: 1, backgroundColor: THEME.bg }}>
-            <ScrollView 
-                showsVerticalScrollIndicator={false} 
+            <ScrollView
+                showsVerticalScrollIndicator={false}
                 className="px-6"
                 refreshControl={<RefreshControl refreshing={refreshing} onRefresh={onRefresh} tintColor={THEME.accent} />}
             >
@@ -216,8 +220,8 @@ export default function ReferralScreen() {
                 <View className="mt-8 mb-6 flex-row justify-between items-center">
                     <View>
                         <View className="flex-row items-center mb-1">
-                             <View style={{ backgroundColor: THEME.accent }} className="w-2 h-2 rounded-sm rotate-45 mr-2" />
-                             <Text style={{ color: THEME.accent }} className="text-[10px] font-black uppercase tracking-[0.3em]">Special Event</Text>
+                            <View style={{ backgroundColor: THEME.accent }} className="w-2 h-2 rounded-sm rotate-45 mr-2" />
+                            <Text style={{ color: THEME.accent }} className="text-[10px] font-black uppercase tracking-[0.3em]">Special Event</Text>
                         </View>
                         <Text style={{ color: THEME.text }} className="text-3xl font-black uppercase tracking-tighter italic">Grand Summoning</Text>
                     </View>
@@ -232,21 +236,21 @@ export default function ReferralScreen() {
                         <MaterialCommunityIcons name="seal" size={14} color="#ef4444" className="mr-2" />
                         <Text style={{ color: THEME.textSecondary }} className="text-[9px] font-bold uppercase tracking-widest">Your Spirit Sigil</Text>
                     </View>
-                    
+
                     <View className="flex-row items-center justify-between bg-black/20 p-4 rounded-2xl border border-white/5 mb-5">
                         <View>
                             <Text style={{ color: THEME.textSecondary }} className="text-[8px] font-bold uppercase mb-1">SIGIL CODE</Text>
                             <Text style={{ color: THEME.text }} className="text-xl font-black tracking-widest italic">{referralCode}</Text>
                         </View>
-                        <TouchableOpacity 
-                            onPress={copyToClipboard} 
+                        <TouchableOpacity
+                            onPress={copyToClipboard}
                             className={`p-3 rounded-xl border ${copied ? 'bg-green-500/20 border-green-500' : 'bg-white/5 border-white/10'}`}
                         >
                             <Ionicons name={copied ? "checkmark-circle" : "copy-outline"} size={20} color={copied ? "#22c55e" : THEME.accent} />
                         </TouchableOpacity>
                     </View>
 
-                    <TouchableOpacity 
+                    <TouchableOpacity
                         onPress={onShare}
                         activeOpacity={0.8}
                         style={{ backgroundColor: THEME.accent }}
@@ -262,7 +266,7 @@ export default function ReferralScreen() {
                     <MaterialCommunityIcons name="medal-outline" size={16} color={THEME.accent} />
                     <Text className="text-gray-500 font-black uppercase text-[11px] tracking-widest ml-2">Clan Progression</Text>
                 </View>
-                
+
                 <View className="mb-8">
                     {rounds.map((round) => (
                         <QuestRow key={round.id} roundItem={round} />
@@ -274,15 +278,15 @@ export default function ReferralScreen() {
                     <View className="flex-row justify-between items-center mb-6 px-1">
                         <Text style={{ color: THEME.text }} className="text-xl font-black uppercase italic">Top Recruiter</Text>
                         <View style={{ backgroundColor: `${THEME.accent}20`, borderColor: THEME.accent }} className="px-3 py-1 rounded-full border">
-                             <Text style={{ color: THEME.accent }} className="text-[9px] font-bold uppercase">Real-Time</Text>
+                            <Text style={{ color: THEME.accent }} className="text-[9px] font-bold uppercase">Real-Time</Text>
                         </View>
                     </View>
 
                     {data.leaderboard.length > 0 ? (
                         data.leaderboard.map((item, index) => (
-                            <View 
-                                key={index} 
-                                style={{ backgroundColor: THEME.card, borderColor: THEME.border }} 
+                            <View
+                                key={index}
+                                style={{ backgroundColor: THEME.card, borderColor: THEME.border }}
                                 className="w-full p-4 rounded-[22px] border-2 mb-3 flex-row items-center justify-between"
                             >
                                 <View className="flex-row items-center">

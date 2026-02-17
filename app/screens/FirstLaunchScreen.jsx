@@ -6,16 +6,16 @@ import * as Notifications from "expo-notifications";
 import { useRouter } from "expo-router";
 import { useEffect, useRef, useState } from "react";
 import {
-  ActivityIndicator,
-  Dimensions,
-  LayoutAnimation,
-  Platform,
-  Pressable,
-  Text as RNText,
-  ScrollView,
-  TextInput,
-  TouchableOpacity,
-  View
+    ActivityIndicator,
+    Dimensions,
+    LayoutAnimation,
+    Platform,
+    Pressable,
+    Text as RNText,
+    ScrollView,
+    TextInput,
+    TouchableOpacity,
+    View
 } from "react-native";
 import AnimeLoading from "../../components/AnimeLoading";
 import { Text } from "../../components/Text";
@@ -29,9 +29,17 @@ import { getFingerprint } from "../../utils/device";
 const { width } = Dimensions.get('window');
 const FORBIDDEN_NAMES = ["admin", "system", "the admin", "the system", "administrator", "moderator"];
 
-// Preset options for better UX
-const ANIME_LIST = ["Naruto", "One Piece", "Bleach", "JJK", "Solo Leveling", "Demon Slayer", "AOT", "Haikyuu"];
-const GENRE_LIST = ["Shonen", "Seinen", "Romance", "Isekai", "Psychological", "Action", "Slice of Life"];
+// 🔹 Top 25 Curated Anime (Shonen, Seinen, Shojo, New & Old Gen)
+const ANIME_LIST = [
+  "Naruto", "One Piece", "Bleach", "Dragon Ball Z", "Hunter x Hunter", // The Titans
+  "JJK", "Solo Leveling", "Demon Slayer", "AOT", "Chainsaw Man",      // New Gen Hits
+  "Death Note", "Fullmetal Alchemist", "Code Geass", "Steins;Gate",    // Masterpieces
+  "Berserk", "Vinland Saga", "Monster", "Vagabond",                   // Peak Seinen
+  "Baki", "Nana", "Fruits Basket", "Ouran High",               // Iconic Shojo
+  "Haikyuu", "Blue Lock", "One Punch Man"                             // Hype/Sports
+];
+
+const GENRE_LIST = ["Shonen", "Seinen", "Romance", "Isekai", "Psychological", "Ecchi", "Action", "Slice of Life", "Manga", "Fantasy", "Sci-Fi", "Comedy", "Manhwa"];
 
 export default function FirstLaunchScreen() {
   const CustomAlert = useAlert();
@@ -43,7 +51,7 @@ export default function FirstLaunchScreen() {
   // Logic States
   const [loading, setLoading] = useState(true);
   const [isProcessing, setIsProcessing] = useState(false);
-  const [step, setStep] = useState(1); // 1: Identity, 2: Affinities, 3: Character/Final
+  const [step, setStep] = useState(1);
 
   // Data States
   const [username, setUsername] = useState("");
@@ -52,10 +60,11 @@ export default function FirstLaunchScreen() {
   const [isAutoReferrer, setIsAutoReferrer] = useState(false); 
   const [isRecoveryMode, setIsRecoveryMode] = useState(false); 
 
-  // 🔹 Dynamic Preference States
+  // Selection States
   const [selectedAnimes, setSelectedAnimes] = useState([]);
   const [selectedGenres, setSelectedGenres] = useState([]);
   const [favCharacter, setFavCharacter] = useState("");
+  const [searchQuery, setSearchQuery] = useState("");
 
   const notify = (title, message) => {
     if (Platform.OS === "web") alert(`${title}\n${message}`);
@@ -148,7 +157,6 @@ export default function FirstLaunchScreen() {
             username: isRecoveryMode ? undefined : username.trim(),
             pushToken,
             referredBy: isRecoveryMode ? undefined : referrerCode.trim(), 
-            // 🔹 Send preference data to backend
             preferences: {
                 favAnimes: selectedAnimes,
                 favGenres: selectedGenres,
@@ -167,7 +175,6 @@ export default function FirstLaunchScreen() {
         pushToken,
         country: data.user?.country || "Unknown",
         referredBy: referrerCode.trim(),
-        // 🔹 Store locally for apiFetch headers
         preferences: {
             favAnimes: selectedAnimes,
             favGenres: selectedGenres,
@@ -186,6 +193,11 @@ export default function FirstLaunchScreen() {
     }
   };
 
+  // Filter the list based on search query
+  const filteredAnimes = ANIME_LIST.filter(anime => 
+    anime.toLowerCase().includes(searchQuery.toLowerCase())
+  );
+
   if (loading) return <AnimeLoading message="Checking Session" subMessage="Initializing Neural Link" />;
 
   return (
@@ -198,7 +210,7 @@ export default function FirstLaunchScreen() {
         ))}
       </View>
 
-      <ScrollView showsVerticalScrollIndicator={false}>
+      <ScrollView showsVerticalScrollIndicator={false} keyboardShouldPersistTaps="handled">
         {/* Dynamic Header */}
         <View className="items-center mb-10">
           <View style={{ backgroundColor: THEME.card, borderColor: THEME.border }} className="w-16 h-16 rounded-2xl items-center justify-center mb-4 border-2 shadow-xl">
@@ -264,9 +276,26 @@ export default function FirstLaunchScreen() {
         {/* --- STEP 2: AFFINITIES --- */}
         {step === 2 && (
             <View>
-                <Text style={{ color: THEME.textSecondary }} className="font-black uppercase text-[10px] mb-4 tracking-widest">Favorite Anime (Pick 2+)</Text>
+                <Text style={{ color: THEME.textSecondary }} className="font-black uppercase text-[10px] mb-4 tracking-widest">Local Database Filter</Text>
+                
+                {/* 🔹 Local Search Input */}
+                <View className="mb-6 relative">
+                  <TextInput
+                    style={{ backgroundColor: THEME.card, borderColor: THEME.border, color: THEME.text }}
+                    className="w-full border-2 rounded-2xl px-6 py-4 font-black italic pr-12"
+                    placeholder="FILTER POPULAR..."
+                    placeholderTextColor={THEME.textSecondary + '40'}
+                    value={searchQuery}
+                    onChangeText={setSearchQuery}
+                  />
+                  <View className="absolute right-4 top-4">
+                    <Ionicons name="filter" size={20} color={THEME.textSecondary} />
+                  </View>
+                </View>
+
+                <Text style={{ color: THEME.textSecondary }} className="font-black uppercase text-[10px] mb-4 tracking-widest">Popular Series (Pick 2+)</Text>
                 <View className="flex-row flex-wrap mb-8">
-                    {ANIME_LIST.map((anime) => {
+                    {filteredAnimes.map((anime) => {
                         const active = selectedAnimes.includes(anime);
                         return (
                             <TouchableOpacity 
@@ -279,6 +308,9 @@ export default function FirstLaunchScreen() {
                             </TouchableOpacity>
                         );
                     })}
+                    {filteredAnimes.length === 0 && (
+                      <RNText style={{ color: THEME.textSecondary }} className="italic text-xs py-4 opacity-50">No matches found in standard database...</RNText>
+                    )}
                 </View>
 
                 <Text style={{ color: THEME.textSecondary }} className="font-black uppercase text-[10px] mb-4 tracking-widest">Preferred Genres</Text>
