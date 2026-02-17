@@ -6,6 +6,7 @@ import { useEffect, useRef, useState } from "react";
 import {
   ActivityIndicator,
   Animated,
+  Clipboard,
   DeviceEventEmitter,
   Dimensions,
   Easing,
@@ -18,6 +19,7 @@ import {
 } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import AnimeLoading from "../../../components/AnimeLoading";
+import AppBanner from "../../../components/AppBanner";
 import ClanCrest from "../../../components/ClanCrest";
 import PostCard from "../../../components/PostCard";
 import { SyncLoading } from "../../../components/SyncLoading";
@@ -411,12 +413,24 @@ export default function ClanPage() {
               </TouchableOpacity>
             </View>
 
-            <Text className="text-[10px] font-bold text-blue-500 tracking-widest uppercase mt-0.5">#{clan.tag}</Text>
+            {/* 🏷️ COPIABLE CLAN TAG */}
+            <TouchableOpacity
+              onPress={() => {
+                Clipboard.setString(clan.tag);
+                if (typeof showAlert === 'function') showAlert("COPIED", "Clan tag copied to clipboard", "success");
+              }}
+              activeOpacity={0.7}
+              className="flex-row items-center mt-1 bg-blue-500/5 px-2.5 py-1 rounded-full border border-blue-500/10"
+            >
+              <Text className="text-[10px] font-bold text-blue-500 tracking-widest uppercase">#{clan.tag}</Text>
+              <Feather name="copy" size={10} color="#3b82f6" style={{ marginLeft: 5, opacity: 0.7 }} />
+            </TouchableOpacity>
 
             <Text className="text-xs text-gray-500 dark:text-gray-400 text-center italic mt-2 px-6" numberOfLines={2}>
               "{clan.description || "A gathering of warriors with no code..."}"
             </Text>
 
+            {/* 🔹 STATS ROW */}
             {/* 🔹 STATS ROW */}
             <View className="flex-row gap-6 mt-4 w-full justify-center border-y border-gray-50 dark:border-gray-900/50 py-3">
               <View className="items-center">
@@ -505,9 +519,9 @@ export default function ClanPage() {
       <View className={'px-3'}>
         <PostCard post={item} isFeed />
         {showAd && <View className="mb-3 mt-3 w-full p-6 border border-dashed border-gray-300 dark:border-gray-800 rounded-[32px] bg-gray-50/50 dark:bg-white/5 items-center justify-center">
-							<Text className="text-[10px] font-bold text-gray-400 uppercase tracking-[0.2em] italic text-center">Sponsored Transmission</Text>
-							{/* <AppBanner size="MEDIUM_RECTANGLE" /> */}
-						</View>}
+          <Text className="text-[10px] font-bold text-gray-400 uppercase tracking-[0.2em] italic text-center">Sponsored Transmission</Text>
+          <AppBanner size="MEDIUM_RECTANGLE" />
+        </View>}
       </View>
     );
   };

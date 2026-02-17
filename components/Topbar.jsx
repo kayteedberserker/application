@@ -3,12 +3,11 @@ import { useRouter } from "expo-router";
 import { useEffect, useRef, useState } from "react";
 import {
     ActivityIndicator,
-    Alert,
     DeviceEventEmitter,
     Image,
     SafeAreaView,
     TouchableOpacity,
-    View,
+    View
 } from "react-native";
 // 🔹 Standard LevelPlay import
 import Animated, {
@@ -20,6 +19,7 @@ import Animated, {
     withTiming
 } from "react-native-reanimated";
 import { LevelPlayRewardedAd } from 'unity-levelplay-mediation';
+import { useAlert } from "../context/AlertContext";
 import { useStreak } from "../context/StreakContext";
 import { useUser } from "../context/UserContext";
 import { AdConfig } from "../utils/AdConfig";
@@ -29,6 +29,7 @@ import { Text } from "./Text";
 const REWARDED_ID = String(AdConfig.rewarded || "0");
 
 const TopBar = ({ isDark }) => {
+    const CustomAlert = useAlert()
     const router = useRouter();
     const { streak, loading, refreshStreak } = useStreak();
     const { user } = useUser();
@@ -113,7 +114,7 @@ const TopBar = ({ isDark }) => {
             onAdShowFailed: (error, adInfo) => {
                 console.error("Rewarded Show Failed:", error?.errorMessage);
                 setIsAdShowing(false);
-                Alert.alert("Ad Error", "Could not play the video. Please try again.");
+                CustomAlert("Ad Error", "Could not play the video. Please try again.");
                 // Try to reload after show failure
                 rewardedAd.loadAd();
             },
@@ -157,14 +158,14 @@ const TopBar = ({ isDark }) => {
             const result = await response.json();
 
             if (!response.ok) {
-                Alert.alert("System Notification", result.message || "Unable to restore streak.");
+                CustomAlert("System Notification", result.message || "Unable to restore streak.");
             } else {
-                Alert.alert("Streak Revived!", `Your ${result.streak} day streak is back from the dead.`);
+                CustomAlert("Streak Revived!", `Your ${result.streak} day streak is back from the dead.`);
                 refreshStreak();
             }
         } catch (err) {
             console.log("Restore streak error:", err);
-            Alert.alert("Connection Error", "Failed to reach the server.");
+            CustomAlert("Connection Error", "Failed to reach the server.");
         } finally {
             setIsRestoring(false);
         }
@@ -173,7 +174,7 @@ const TopBar = ({ isDark }) => {
     const handleShowAd = async () => {
         const adInstance = rewardedAdRef.current;
         if (!adInstance) {
-            Alert.alert("Error", "Ad system not initialized.");
+            CustomAlert("Error", "Ad system not initialized.");
             return;
         }
 

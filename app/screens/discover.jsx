@@ -3,7 +3,7 @@ import AsyncStorage from '@react-native-async-storage/async-storage';
 import { useRouter } from 'expo-router';
 import { useColorScheme } from "nativewind";
 import { useCallback, useEffect, useRef, useState } from 'react';
-import { ActivityIndicator, DeviceEventEmitter, FlatList, Modal, ScrollView, Text, TextInput, TouchableOpacity, View } from 'react-native';
+import { ActivityIndicator, Clipboard, DeviceEventEmitter, FlatList, Modal, ScrollView, Text, TextInput, TouchableOpacity, View } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { SyncLoading } from "../../components/SyncLoading";
 import { useStreak } from "../../context/StreakContext";
@@ -334,6 +334,7 @@ const RequirementModal = ({ visible, onClose, stats, isDark }) => {
 const ClanCard = ({ clan, lbRank, isDark, refreshClans, showAlert }) => {
     const { user } = useUser();
     const [actionLoading, setActionLoading] = useState(false);
+    const [copied, setCopied] = useState(false);
 
     const getRankInfo = (rank) => {
         const ranks = {
@@ -348,6 +349,12 @@ const ClanCard = ({ clan, lbRank, isDark, refreshClans, showAlert }) => {
     };
     
     const rankInfo = getRankInfo(clan.rank);
+
+    const copyToClipboard = () => {
+        Clipboard.setString(clan.tag);
+        setCopied(true);
+        setTimeout(() => setCopied(false), 2000);
+    };
 
     const handleFollow = async () => {
         if (!user) return;
@@ -395,54 +402,68 @@ const ClanCard = ({ clan, lbRank, isDark, refreshClans, showAlert }) => {
         <TouchableOpacity
             activeOpacity={0.9}
             onPress={() => DeviceEventEmitter.emit("navigateSafely", `/clans/${clan.tag}`)}
-            className={`w-full rounded-[50px] border mb-8 overflow-hidden ${isDark ? "bg-zinc-900 border-zinc-800" : "bg-white border-zinc-200 shadow-2xl shadow-zinc-300"}`}
-            style={{ height: 400 }}
+            className={`w-full rounded-[40px] border mb-6 overflow-hidden ${isDark ? "bg-zinc-900 border-zinc-800" : "bg-white border-zinc-200 shadow-xl shadow-zinc-200"}`}
+            style={{ height: 380 }}
         >
-            <View className="flex-row justify-between items-center p-8 pb-4">
-                <View className="bg-blue-600 px-4 py-2 rounded-2xl flex-row items-center">
-                    <Ionicons name="trophy" size={12} color="white" />
-                    <Text className="text-white text-[11px] font-black ml-2 uppercase">Rank #{lbRank}</Text>
+            {/* Top Stats Row */}
+            <View className="flex-row justify-between items-center p-6 pb-2">
+                <View className="bg-blue-600/10 border border-blue-600/20 px-3 py-1.5 rounded-xl flex-row items-center">
+                    <Ionicons name="trophy" size={10} color="#2563eb" />
+                    <Text className="text-blue-600 text-[10px] font-black ml-1.5 uppercase">Rank #{lbRank}</Text>
                 </View>
-                <View className="flex-row items-center bg-blue-500/10 border border-blue-500/20 px-3 py-2 rounded-2xl">
-                    <Ionicons name="shield-checkmark" size={14} color="#3b82f6" />
-                    <Text className="text-blue-500 text-[11px] font-black ml-2">{clan.badges?.length || 0} Badges</Text>
-                </View>
-            </View>
-
-            <View className="items-center px-8 mt-4">
-                <View className={`w-28 h-28 rounded-[40px] items-center justify-center mb-6 ${isDark ? 'bg-black border border-zinc-800 shadow-2xl' : 'bg-zinc-50 border border-zinc-200 shadow-sm'}`}>
-                    <Text className={`font-black text-5xl ${isDark ? 'text-white' : 'text-zinc-900'}`}>{clan.name.charAt(0).toUpperCase()}</Text>
-                </View>
-                <Text numberOfLines={1} className={`text-3xl font-black text-center tracking-tighter ${isDark ? "text-white" : "text-zinc-900"}`}>{clan.name}</Text>
-                <View className="flex-row items-center mt-2">
-                    <View className="h-[1px] w-3 bg-zinc-500/30 mr-2" />
-                    <Text style={{ color: rankInfo.color }} className="text-[10px] font-black tracking-[4px] uppercase">{rankInfo.title}</Text>
-                    <View className="h-[1px] w-3 bg-zinc-500/30 ml-2" />
-                </View>
-                <View className="mt-6 items-center flex-row bg-zinc-500/10 px-5 py-2.5 rounded-2xl">
-                    <Ionicons name="people" size={16} color={isDark ? "#a1a1aa" : "#71717a"} />
-                    <Text className={`text-sm font-black ml-2 ${isDark ? "text-zinc-100" : "text-zinc-800"}`}>{clan.followerCount || 0}</Text>
-                    <Text className="text-[10px] text-zinc-500 uppercase font-black ml-1.5 tracking-wider">Followers</Text>
+                <View className="flex-row items-center bg-zinc-500/10 px-3 py-1.5 rounded-xl">
+                    <Ionicons name="shield-checkmark" size={12} color={isDark ? "#a1a1aa" : "#71717a"} />
+                    <Text className={`text-[10px] font-black ml-1.5 ${isDark ? "text-zinc-400" : "text-zinc-500"}`}>{clan.badges?.length || 0} Badges</Text>
                 </View>
             </View>
 
-            <View className="mt-auto flex-row p-6 gap-3 border-t border-zinc-500/10 bg-zinc-500/5">
+            {/* Avatar & Info Section */}
+            <View className="items-center px-6 mt-2">
+                <View className={`w-24 h-24 rounded-[32px] items-center justify-center mb-4 ${isDark ? 'bg-black border border-zinc-800' : 'bg-zinc-50 border border-zinc-100'}`}>
+                    <Text className={`font-black text-4xl ${isDark ? 'text-white' : 'text-zinc-900'}`}>{clan.name.charAt(0).toUpperCase()}</Text>
+                </View>
+
+                <Text numberOfLines={1} className={`text-2xl font-black text-center tracking-tight ${isDark ? "text-white" : "text-zinc-900"}`}>{clan.name}</Text>
+                
+                {/* 🏷️ Styled Clan Tag + Copy Button */}
+                <TouchableOpacity 
+                    onPress={copyToClipboard}
+                    className="flex-row items-center mt-1 bg-zinc-500/5 px-3 py-1 rounded-full active:opacity-50"
+                >
+                    <Text className="text-zinc-500 text-[10px] font-bold tracking-widest uppercase">#{clan.tag}</Text>
+                    <Ionicons name={copied ? "checkmark" : "copy-outline"} size={10} color={copied ? "#10b981" : "#71717a"} style={{ marginLeft: 6 }} />
+                </TouchableOpacity>
+
+                <View className="flex-row items-center mt-4">
+                    <Text style={{ color: rankInfo.color }} className="text-[9px] font-black tracking-[3px] uppercase">{rankInfo.title}</Text>
+                </View>
+
+                <View className="mt-5 items-center flex-row bg-blue-500/5 px-4 py-2 rounded-xl">
+                    <Ionicons name="people" size={14} color="#3b82f6" />
+                    <Text className={`text-xs font-black ml-2 ${isDark ? "text-blue-400" : "text-blue-600"}`}>{clan.followerCount || 0}</Text>
+                    <Text className="text-[9px] text-blue-500/60 uppercase font-black ml-1 tracking-wider">Followers</Text>
+                </View>
+            </View>
+
+            {/* Actions Section - Sleeker Buttons */}
+            <View className="mt-auto flex-row p-5 gap-3 border-t border-zinc-500/10 bg-zinc-500/5">
                 <TouchableOpacity 
                     onPress={handleFollow} 
                     disabled={actionLoading} 
-                    className="flex-1 h-16 bg-blue-600 rounded-[28px] flex-row items-center justify-center shadow-lg shadow-blue-600/40"
+                    className="flex-1 h-12 bg-blue-600 rounded-2xl flex-row items-center justify-center shadow-md shadow-blue-600/20"
                 >
                     {actionLoading ? <ActivityIndicator size="small" color="white" /> : (
-                        <><Ionicons name="heart" size={18} color="white" /><Text className="text-white font-black text-[13px] ml-2 uppercase tracking-tight">Follow</Text></>
+                        <><Ionicons name="heart" size={16} color="white" /><Text className="text-white font-bold text-[12px] ml-2 uppercase">Follow</Text></>
                     )}
                 </TouchableOpacity>
+                
                 <TouchableOpacity 
                     onPress={handleAuthorRequest} 
                     disabled={actionLoading} 
-                    className={`flex-1 h-16 rounded-[28px] flex-row items-center justify-center border ${isDark ? "bg-zinc-800 border-zinc-700" : "bg-white border-zinc-200"}`}
+                    className={`flex-1 h-12 rounded-2xl flex-row items-center justify-center border ${isDark ? "bg-zinc-800 border-zinc-700" : "bg-white border-zinc-200"}`}
                 >
                     {actionLoading ? <ActivityIndicator size="small" color={isDark ? "white" : "black"} /> : (
-                        <><Ionicons name="create-outline" size={18} color={isDark ? "#fff" : "#000"} /><Text className={`font-black text-[13px] ml-2 uppercase tracking-tight ${isDark ? "text-white" : "text-zinc-900"}`}>Apply</Text></>
+                        <><Ionicons name="add-circle-outline" size={16} color={isDark ? "#fff" : "#000"} /><Text className={`font-bold text-[12px] ml-2 uppercase ${isDark ? "text-white" : "text-zinc-900"}`}>Apply</Text></>
                     )}
                 </TouchableOpacity>
             </View>

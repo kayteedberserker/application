@@ -23,10 +23,12 @@ import CategoryNav from "./../../components/CategoryNav";
 import TopBar from "./../../components/Topbar";
 
 export default function MainLayout() {
+    // 1. ALL HOOKS MUST BE AT THE TOP
     const { colorScheme, setColorScheme } = useNativeWind();
     const systemScheme = useSystemScheme();
     const router = useRouter();
     const pathname = usePathname();
+    const insets = useSafeAreaInsets(); // Moved up from the bottom
 
     const [lastOffset, setLastOffset] = useState(0);
     const [isNavVisible, setIsNavVisible] = useState(true);
@@ -35,11 +37,12 @@ export default function MainLayout() {
     const navY = useRef(new Animated.Value(0)).current;
     const { user, contextLoading } = useUser();
     const animValue = useRef(new Animated.Value(0)).current;
+    const eventPulse = useRef(new Animated.Value(1)).current;
 
-    // -- Authentication State --
     const [isUserAuthenticated, setIsUserAuthenticated] = useState(null);
+    const [userInClan, setUserInClan] = useState(false);
 
-    // 1. Reset Nav Visibility whenever the route changes
+    // 2. ALL USEEFFECTS & MEMOIZED VALUES
     useEffect(() => {
         setIsNavVisible(true);
         Animated.timing(navY, {
@@ -58,63 +61,30 @@ export default function MainLayout() {
         }).start();
     }, [showClanMenu]);
 
-    const [userInClan, setUserInClan] = useState(false);
-
-    // -- Auth Check Logic --
-    const userAvailable = async () => {
-        const storedUser = await AsyncStorage.getItem("mobileUser") || null;
-        return storedUser;
-    };
+    useEffect(() => {
+        Animated.loop(
+            Animated.sequence([
+                Animated.timing(eventPulse, {
+                    toValue: 1.08,
+                    duration: 1200,
+                    useNativeDriver: true,
+                }),
+                Animated.timing(eventPulse, {
+                    toValue: 1,
+                    duration: 1200,
+                    useNativeDriver: true,
+                })
+            ])
+        ).start();
+    }, [eventPulse]);
 
     useEffect(() => {
         const checkUser = async () => {
-            const authStatus = await userAvailable();
-            setIsUserAuthenticated(!!authStatus);
+            const storedUser = await AsyncStorage.getItem("mobileUser") || null;
+            setIsUserAuthenticated(!!storedUser);
         };
         checkUser();
     }, []);
-
-    const handleClanPress = async () => {
-        try {
-            const userClanData = await AsyncStorage.getItem('userClan');
-            if (userClanData) {
-                setUserInClan(true)
-            }
-            setShowClanMenu(!showClanMenu);
-        } catch (e) {
-            DeviceEventEmitter.emit("navigateSafely", "/screens/discover");
-        }
-    };
-
-    const translateY_1 = animValue.interpolate({
-        inputRange: [0, 1],
-        outputRange: [20, 0],
-    });
-
-    const translateY_2 = animValue.interpolate({
-        inputRange: [0, 1],
-        outputRange: [40, 0],
-    });
-
-    const translateY_3 = animValue.interpolate({
-        inputRange: [0, 1],
-        outputRange: [60, 0],
-    });
-
-    const scale = animValue.interpolate({
-        inputRange: [0, 1],
-        outputRange: [0, 1],
-    });
-
-    const opacity = animValue.interpolate({
-        inputRange: [0, 0.5, 1],
-        outputRange: [0, 0, 1],
-    });
-
-    const rotation = animValue.interpolate({
-        inputRange: [0, 1],
-        outputRange: ['0deg', '90deg'],
-    });
 
     useEffect(() => {
         if (user?.deviceId) {
@@ -139,7 +109,6 @@ export default function MainLayout() {
     useEffect(() => {
         const subscription = DeviceEventEmitter.addListener("onScroll", (offsetY) => {
             setShowTop(offsetY > 400);
-
             if (offsetY < lastOffset || offsetY < 50) {
                 if (!isNavVisible) {
                     setIsNavVisible(true);
@@ -161,9 +130,28 @@ export default function MainLayout() {
             }
             setLastOffset(offsetY);
         });
-
         return () => subscription.remove();
     }, [lastOffset, isNavVisible]);
+
+    // 3. LOGIC & HANDLERS
+    const handleClanPress = async () => {
+        try {
+            const userClanData = await AsyncStorage.getItem('userClan');
+            if (userClanData) {
+                setUserInClan(true);
+            }
+            setShowClanMenu(!showClanMenu);
+        } catch (e) {
+            DeviceEventEmitter.emit("navigateSafely", "/screens/discover");
+        }
+    };
+
+    const translateY_1 = animValue.interpolate({ inputRange: [0, 1], outputRange: [20, 0] });
+    const translateY_2 = animValue.interpolate({ inputRange: [0, 1], outputRange: [40, 0] });
+    const translateY_3 = animValue.interpolate({ inputRange: [0, 1], outputRange: [60, 0] });
+    const scale = animValue.interpolate({ inputRange: [0, 1], outputRange: [0, 1] });
+    const opacity = animValue.interpolate({ inputRange: [0, 0.5, 1], outputRange: [0, 0, 1] });
+    const rotation = animValue.interpolate({ inputRange: [0, 1], outputRange: ['0deg', '90deg'] });
 
     const isDark = colorScheme === "dark";
     const handleBackToTop = () => DeviceEventEmitter.emit("doScrollToTop");
@@ -178,16 +166,18 @@ export default function MainLayout() {
         DeviceEventEmitter.emit("navigateSafely", route);
     };
 
-    // -- Combined Loading & Redirect Logic --
-    if (contextLoading || isUserAuthenticated === null) {
-        return <AnimeLoading message="Loading Page" subMessage="Syncing Account" />;
+    // 4. NOW IT IS SAFE TO DO EARLY RETURNS
+    if (isUserAuthenticated === null) {
+        return <AnimeLoading message="LOADING_PAGE" subMessage="Fetching Otaku Archives" />;
+    };
+    
+    if (contextLoading) {
+        return <AnimeLoading message="LOADING_PAGE" subMessage="Syncing Account" />;
     }
 
     if (!isUserAuthenticated) {
         return <Redirect href="/screens/FirstLaunchScreen" />;
     }
-
-    const insets = useSafeAreaInsets();
 
     return (
         <View style={{ flex: 1, backgroundColor: isDark ? "#000" : "#fff" }}>
@@ -219,6 +209,33 @@ export default function MainLayout() {
                 <Stack.Screen name="author/[id]" />
                 <Stack.Screen name="categories/[id]" />
             </Stack>
+
+            {/* 🏆 THEMED GLOBAL EVENT BUTTON */}
+            <Animated.View style={[styles.eventButtonContainer, { transform: [{ scale: eventPulse }] }]}>
+                <TouchableOpacity
+                    onPress={() => navigateTo("/screens/referralevent")}
+                    activeOpacity={0.8}
+                    style={[
+                        styles.eventButton, 
+                        { 
+                            backgroundColor: isDark ? "#111111" : "#ffffff",
+                            borderColor: isDark ? "#3b82f6" : "#60a5fa",
+                            shadowColor: isDark ? "#60a5fa" : "#3b82f6",
+                        }
+                    ]}
+                >
+                    <Ionicons name="trophy" size={24} color={isDark ? "#60a5fa" : "#3b82f6"} />
+                    <View style={[
+                        styles.eventBadge, 
+                        { 
+                            backgroundColor: "#3b82f6", 
+                            borderColor: isDark ? "#111111" : "#ffffff" 
+                        }
+                    ]}>
+                        <Text style={styles.eventBadgeText}>WIN!</Text>
+                    </View>
+                </TouchableOpacity>
+            </Animated.View>
 
             {/* CUSTOM FLOATING TAB BAR */}
             <View
@@ -271,7 +288,7 @@ export default function MainLayout() {
                 </TouchableOpacity>
             </View>
 
-            {/* FLOATING ACTION BUTTONS */}
+            {/* CLAN OVERLAY */}
             {showClanMenu && (
                 <TouchableOpacity
                     style={[styles.overlay, { backgroundColor: isDark ? 'rgba(0,0,0,0.6)' : 'rgba(0,0,0,0.3)' }]}
@@ -289,7 +306,7 @@ export default function MainLayout() {
                     <TouchableOpacity
                         onPress={() => {
                             setShowClanMenu(false);
-                            navigateTo("/clans/war");
+                            navigateTo("/screens/war");
                         }}
                         activeOpacity={0.8}
                         style={[styles.subFab, { backgroundColor: "#ef4444" }]}
@@ -374,7 +391,7 @@ export default function MainLayout() {
                 </TouchableOpacity>
             </View>
         </View>
-    )
+    );
 }
 
 const styles = StyleSheet.create({
@@ -415,5 +432,37 @@ const styles = StyleSheet.create({
         shadowOffset: { width: 0, height: 2 },
         shadowOpacity: 0.25,
         shadowRadius: 3.84,
+    },
+    eventButtonContainer: {
+        position: 'absolute',
+        right: 12,
+        top: '45%',
+        zIndex: 998,
+    },
+    eventButton: {
+        width: 50,
+        height: 50,
+        borderRadius: 25,
+        justifyContent: 'center',
+        alignItems: 'center',
+        elevation: 10,
+        shadowOffset: { width: 0, height: 4 },
+        shadowOpacity: 0.4,
+        shadowRadius: 5,
+        borderWidth: 2,
+    },
+    eventBadge: {
+        position: 'absolute',
+        top: -6,
+        left: -8,
+        borderRadius: 12,
+        paddingHorizontal: 6,
+        paddingVertical: 2,
+        borderWidth: 1.5,
+    },
+    eventBadgeText: {
+        fontSize: 8,
+        color: '#ffffff',
+        fontWeight: '900',
     }
 });

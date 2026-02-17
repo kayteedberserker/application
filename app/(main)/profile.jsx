@@ -6,19 +6,18 @@ import { useRouter } from "expo-router";
 import { useColorScheme as useNativeWind } from "nativewind";
 import { useEffect, useMemo, useRef, useState } from "react";
 import {
-    ActivityIndicator,
-    Alert,
-    Animated,
-    Dimensions,
-    Easing,
-    FlatList,
-    Image,
-    Modal,
-    Platform,
-    Pressable,
-    TextInput,
-    TouchableOpacity,
-    View
+  ActivityIndicator,
+  Animated,
+  Dimensions,
+  Easing,
+  FlatList,
+  Image,
+  Modal,
+  Platform,
+  Pressable,
+  TextInput,
+  TouchableOpacity,
+  View
 } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import Toast from "react-native-toast-message";
@@ -27,6 +26,7 @@ import AnimeLoading from "../../components/AnimeLoading";
 import AppOnboarding from "../../components/AppOnboarding";
 import { SyncLoading } from "../../components/SyncLoading";
 import { Text } from "../../components/Text";
+import { useAlert } from "../../context/AlertContext";
 import { useUser } from "../../context/UserContext";
 import apiFetch from "../../utils/apiFetch";
 
@@ -102,6 +102,7 @@ const getAuraVisuals = (rank) => {
 };
 
 export default function MobileProfilePage() {
+  const CustomAlert = useAlert();
   const { user, setUser, contextLoading } = useUser();
   const { colorScheme } = useNativeWind(); 
   const isDark = colorScheme === "dark"; 
@@ -229,6 +230,8 @@ export default function MobileProfilePage() {
       try {
         const res = await apiFetch(`${API_BASE}/users/me?fingerprint=${user.deviceId}`);
         const dbUser = await res.json();
+        console.log(dbUser);
+        
         if (res.ok) {
           setUser(dbUser);
           setDescription(dbUser.description || "");
@@ -301,7 +304,7 @@ export default function MobileProfilePage() {
 
   const handleUpdate = async () => {
     if (!username.trim()) {
-      Alert.alert("Error", "Username cannot be empty.");
+      CustomAlert("Error", "Username cannot be empty.");
       return;
     }
 
@@ -339,19 +342,19 @@ export default function MobileProfilePage() {
           totalPosts: totalPosts
         }));
 
-        Alert.alert("Success", "Character Data Updated.");
+        CustomAlert("Success", "Character Data Updated.");
       } else {
-        Alert.alert("Error", result.message || "Failed to update.");
+        CustomAlert("Error", result.message || "Failed to update.");
       }
     } catch (err) {
-      Alert.alert("Error", "Failed to sync changes.");
+      CustomAlert("Error", "Failed to sync changes.");
     } finally {
       setIsUpdating(false);
     }
   };
 
   const handleDelete = (postId) => {
-    Alert.alert("Confirm Deletion", "Erase this transmission log?", [
+    CustomAlert("Confirm Deletion", "Erase this transmission log?", [
       { text: "Cancel", style: "cancel" },
       {
         text: "Delete",

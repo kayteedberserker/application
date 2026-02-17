@@ -3,32 +3,32 @@ import * as Haptics from "expo-haptics";
 import { useLocalSearchParams } from "expo-router";
 import { useEffect, useMemo, useRef, useState } from "react";
 import {
-	ActivityIndicator,
-	Alert,
-	Dimensions,
-	Keyboard,
-	KeyboardAvoidingView,
-	Modal,
-	PanResponder,
-	Platform,
-	Pressable,
-	Animated as RNAnimated,
-	ScrollView,
-	Share,
-	TextInput,
-	View
+    ActivityIndicator,
+    Dimensions,
+    Keyboard,
+    KeyboardAvoidingView,
+    Modal,
+    PanResponder,
+    Platform,
+    Pressable,
+    Animated as RNAnimated,
+    ScrollView,
+    Share,
+    TextInput,
+    View
 } from "react-native";
 import Animated, {
-	Easing,
-	FadeIn,
-	FadeOut,
-	useAnimatedStyle,
-	useSharedValue,
-	withRepeat,
-	withSequence,
-	withTiming,
+    Easing,
+    FadeIn,
+    FadeOut,
+    useAnimatedStyle,
+    useSharedValue,
+    withRepeat,
+    withSequence,
+    withTiming,
 } from "react-native-reanimated";
 import useSWR from "swr";
+import { useAlert } from "../context/AlertContext";
 import { useUser } from "../context/UserContext";
 import apiFetch from "../utils/apiFetch";
 import { Text } from "./Text";
@@ -311,6 +311,7 @@ const HighlightableComment = ({ reply, isHighlighted }) => {
 
 // --- Main Comment Section ---
 export default function CommentSection({ postId, slug, discussionIdfromPage }) {
+    const CustomAlert = useAlert()
     const { user } = useUser();
     // 🔔 Get both potential sources of deep-linking IDs
     const { discussion, commentId, discussionId } = useLocalSearchParams(); 
@@ -425,7 +426,7 @@ export default function CommentSection({ postId, slug, discussionIdfromPage }) {
                 }
             }
         } catch (err) {
-            Alert.alert("Link Failure", "Connection lost.");
+            CustomAlert("Link Failure", "Connection lost.");
         } finally {
             setIsPosting(false);
         }

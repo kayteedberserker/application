@@ -7,7 +7,6 @@ import { useVideoPlayer, VideoView } from "expo-video";
 import { useEffect, useMemo, useRef, useState } from "react";
 import {
 	ActivityIndicator,
-	Alert,
 	Animated,
 	BackHandler,
 	DeviceEventEmitter,
@@ -28,6 +27,7 @@ import YoutubePlayer from "react-native-youtube-iframe";
 import useSWR from "swr";
 
 // Components & Context
+import { useAlert } from "../context/AlertContext";
 import { useUser } from "../context/UserContext";
 import apiFetch from "../utils/apiFetch";
 import AppBanner from "./AppBanner";
@@ -35,6 +35,7 @@ import ClanCrest from "./ClanCrest";
 import Poll from "./Poll";
 import { SyncLoading } from "./SyncLoading";
 import { Text } from "./Text";
+import THEME from "./useAppTheme";
 
 const { width: SCREEN_WIDTH, height: SCREEN_HEIGHT } = Dimensions.get('window');
 const fetcher = (url) => apiFetch(url).then((res) => res.json());
@@ -129,15 +130,16 @@ const AUTHOR_CACHE = {};
 const CLAN_CACHE = {};
 // Helper to save to Tier 2: AsyncStorage
 const persistToStorage = async (key, data) => {
-    try {
-        await AsyncStorage.setItem(key, JSON.stringify(data));
-    } catch (e) {
-        console.error("Storage Error", e);
-    }
+	try {
+		await AsyncStorage.setItem(key, JSON.stringify(data));
+	} catch (e) {
+		console.error("Storage Error", e);
+	}
 };
 
 
 export default function PostCard({ post, setPosts, isFeed, hideMedia, similarPosts }) {
+	const CustomAlert = useAlert()
 	const { user } = useUser();
 	const router = useRouter();
 	const pathname = usePathname();
@@ -281,75 +283,75 @@ export default function PostCard({ post, setPosts, isFeed, hideMedia, similarPos
 	const userRank = useMemo(() => resolveUserRank(totalAuthorPost), [totalAuthorPost]);
 
 	useEffect(() => {
-        const fetchData = async () => {
-            const authorId = post.authorUserId;
-            const clanTag = post.clanId || post.clanTag;
+		const fetchData = async () => {
+			const authorId = post.authorUserId;
+			const clanTag = post.clanId || post.clanTag;
 
-            // --- STEP A: Check AsyncStorage if Memory is empty ---
-            if (!AUTHOR_CACHE[authorId]) {
-                const storedAuthor = await AsyncStorage.getItem(`auth_cache_${authorId}`);
-                if (storedAuthor) {
-                    const parsed = JSON.parse(storedAuthor);
-                    AUTHOR_CACHE[authorId] = parsed;
-                    setAuthor(parsed);
-                }
-            }
+			// --- STEP A: Check AsyncStorage if Memory is empty ---
+			if (!AUTHOR_CACHE[authorId]) {
+				const storedAuthor = await AsyncStorage.getItem(`auth_cache_${authorId}`);
+				if (storedAuthor) {
+					const parsed = JSON.parse(storedAuthor);
+					AUTHOR_CACHE[authorId] = parsed;
+					setAuthor(parsed);
+				}
+			}
 
-            if (clanTag && !CLAN_CACHE[clanTag]) {
-                const storedClan = await AsyncStorage.getItem(`clan_cache_${clanTag}`);
-                if (storedClan) {
-                    const parsed = JSON.parse(storedClan);
-                    CLAN_CACHE[clanTag] = parsed;
-                    setClanInfo(parsed);
-                }
-            }
+			if (clanTag && !CLAN_CACHE[clanTag]) {
+				const storedClan = await AsyncStorage.getItem(`clan_cache_${clanTag}`);
+				if (storedClan) {
+					const parsed = JSON.parse(storedClan);
+					CLAN_CACHE[clanTag] = parsed;
+					setClanInfo(parsed);
+				}
+			}
 
-            // --- STEP B: Background Fetch (Revalidation) ---
-            try {
-                // Fetch Author
-                const resAuthor = await apiFetch(`/users/${authorId}`);
-                if (resAuthor.ok) {
-                    const data = await resAuthor.json();
-                    const authorData = {
-                        name: data.user?.username || post.authorName,
-                        image: data.user?.profilePic?.url,
-                        streak: data.user?.lastStreak || null,
-                        rank: data.user?.previousRank || 0
-                    };
-                    // Update Memory & State
-                    AUTHOR_CACHE[authorId] = authorData;
-                    setAuthor(authorData);
-                    // Update Storage (Tier 2)
-                    persistToStorage(`auth_cache_${authorId}`, authorData);
-                }
+			// --- STEP B: Background Fetch (Revalidation) ---
+			try {
+				// Fetch Author
+				const resAuthor = await apiFetch(`/users/${authorId}`);
+				if (resAuthor.ok) {
+					const data = await resAuthor.json();
+					const authorData = {
+						name: data.user?.username || post.authorName,
+						image: data.user?.profilePic?.url,
+						streak: data.user?.lastStreak || null,
+						rank: data.user?.previousRank || 0
+					};
+					// Update Memory & State
+					AUTHOR_CACHE[authorId] = authorData;
+					setAuthor(authorData);
+					// Update Storage (Tier 2)
+					persistToStorage(`auth_cache_${authorId}`, authorData);
+				}
 
-                // Fetch Clan
-                if (clanTag) {
-                    const resClan = await apiFetch(`/clans/${clanTag}?deviceId=${user?.deviceId}`);
-                    if (resClan.ok) {
-                        const cData = await resClan.json();
-                        CLAN_CACHE[clanTag] = cData;
-                        setClanInfo(cData);
-                        persistToStorage(`clan_cache_${clanTag}`, cData);
+				// Fetch Clan
+				if (clanTag) {
+					const resClan = await apiFetch(`/clans/${clanTag}?deviceId=${user?.deviceId}`);
+					if (resClan.ok) {
+						const cData = await resClan.json();
+						CLAN_CACHE[clanTag] = cData;
+						setClanInfo(cData);
+						persistToStorage(`clan_cache_${clanTag}`, cData);
 
-                        // Check follow status
-                        const followedClans = await AsyncStorage.getItem('followed_clans');
-                        const clanList = followedClans ? JSON.parse(followedClans) : [];
-                        if (clanList.includes(clanTag)) setIsFollowingClan(true);
-                    }
-                }
-            } catch (err) {
-                console.error("Revalidation err", err);
-            }
-        };
+						// Check follow status
+						const followedClans = await AsyncStorage.getItem('followed_clans');
+						const clanList = followedClans ? JSON.parse(followedClans) : [];
+						if (clanList.includes(clanTag)) setIsFollowingClan(true);
+					}
+				}
+			} catch (err) {
+				console.error("Revalidation err", err);
+			}
+		};
 
-        fetchData();
-    }, [post.authorUserId, post.clanId, post.clanTag, user?.deviceId]);
+		fetchData();
+	}, [post.authorUserId, post.clanId, post.clanTag, user?.deviceId]);
 
 	const handleFollowClan = async () => {
 
 		if (!user) {
-			Alert.alert("Authentication", "Please log in to follow clans.");
+			CustomAlert("Authentication", "Please log in to follow clans.");
 			return;
 		}
 		setLoadingClan(true);
@@ -422,7 +424,7 @@ export default function PostCard({ post, setPosts, isFeed, hideMedia, similarPos
 
 		if (liked || !user) {
 			if (!user) {
-				Alert.alert("Hold on", "Please register to interact with posts.");
+				CustomAlert("Hold on", "Please register to interact with posts.");
 				router.replace("screens/FirstLaunchScreen");
 			}
 			return;
@@ -465,7 +467,7 @@ export default function PostCard({ post, setPosts, isFeed, hideMedia, similarPos
 			const { status } = await MediaLibrary.requestPermissionsAsync();
 
 			if (status !== 'granted') {
-				Alert.alert("Permission Denied", "We need gallery permissions to save media.");
+				CustomAlert("Permission Denied", "We need gallery permissions to save media.");
 				setIsDownloading(false);
 				return;
 			}
@@ -489,7 +491,7 @@ export default function PostCard({ post, setPosts, isFeed, hideMedia, similarPos
 
 		} catch (error) {
 			console.error("Download error:", error);
-			Alert.alert("System Failure", "Unable to download media at this time.");
+			CustomAlert("System Failure", "Unable to download media at this time.");
 		} finally {
 			setIsDownloading(false);
 		}
@@ -681,46 +683,81 @@ export default function PostCard({ post, setPosts, isFeed, hideMedia, similarPos
 				<View className="mb-5">
 					{/* 🛡️ FULL-WIDTH CLAN BANNER */}
 					{isClanPost && clanInfo && (
-						<View className="flex-row items-center justify-between bg-blue-50/50 dark:bg-blue-900/10 px-2 py-3 rounded-2xl border border-blue-100/50 dark:border-blue-800/20 mb-4">
+						<View
+							style={{ backgroundColor: THEME.card, borderColor: THEME.border }}
+							className="flex-row items-center justify-between px-4 py-4 rounded-[24px] border-2 mb-4 relative overflow-hidden"
+						>
+							{/* Background Decorative Icon - Fills the "Blank" space visually */}
+							<View className="absolute -right-4 -bottom-2 opacity-[0.05]">
+								<MaterialCommunityIcons name="seal" size={100} color={THEME.accent} />
+							</View>
+
 							<Pressable
 								onPress={() => DeviceEventEmitter.emit("navigateSafely", `/clans/${clanInfo.tag || post.clanId}`)}
-								className="flex-row items-center flex-1"
+								className="flex-row items-center flex-1 z-10"
 							>
-								{/* Integrated your ClanCrest here */}
-								<View className="mr-3">
-									<ClanCrest isFeed={true} rank={clanInfo.rank} size={40} />
+								{/* Integrated ClanCrest */}
+								<View className="mr-4">
+									<View className="shadow-lg">
+										<ClanCrest isFeed={true} rank={clanInfo.rank} size={48} />
+									</View>
 								</View>
 
-								<View className="ml-1">
+								<View>
 									<View className="flex-row items-center">
-										<Text className="text-[14px] font-[900] text-blue-600 dark:text-blue-400 uppercase tracking-tight">
+										<Text
+											style={{ color: THEME.text }}
+											className="text-[16px] font-black uppercase tracking-tighter italic"
+										>
 											{clanInfo.name}
 										</Text>
 										<MaterialCommunityIcons
 											name="check-decagram"
 											size={14}
-											color="#3b82f6"
-											style={{ marginLeft: 4 }}
+											color={THEME.accent}
+											style={{ marginLeft: 6 }}
 										/>
 									</View>
-									<Text className="text-[10px] text-blue-500/70 dark:text-blue-400/60 font-black uppercase italic tracking-widest">
-										{getClanRankTitle(clanInfo.rank)}
-									</Text>
+
+									<View className="flex-row items-center mt-0.5">
+										<View style={{ backgroundColor: THEME.accent }} className="w-1 h-3 mr-2 rounded-full" />
+										<Text
+											style={{ color: THEME.textSecondary }}
+											className="text-[10px] font-bold uppercase tracking-[0.15em] opacity-70"
+										>
+											{getClanRankTitle(clanInfo.rank)}
+										</Text>
+									</View>
 								</View>
 							</Pressable>
 
-							{/* ⚔️ WAR STATUS INDICATOR */}
-							<View className="flex-row items-center">
-								{clanInfo.isInWar && (
-									<View className="mr-1 items-center justify-center">
-										<View className="bg-red-500/10 dark:bg-red-500/20 p-1.5 rounded-full border border-red-500/30">
-											<MaterialCommunityIcons name="sword-cross" size={16} color="#ef4444" />
+							{/* ⚔️ STATUS AREA - Dynamically fills space */}
+							<View className="items-end z-10">
+								{clanInfo.isInWar ? (
+									<View className="items-center">
+										<View className="bg-red-500 p-2 rounded-xl rotate-45 shadow-sm shadow-red-500/50">
+											<View className="-rotate-45">
+												<MaterialCommunityIcons name="sword-cross" size={18} color="white" />
+											</View>
 										</View>
-										<Text className="text-[7px] text-red-500 font-black uppercase absolute -bottom-3">WAR</Text>
+										<Text className="text-[8px] text-red-500 font-black uppercase mt-2 tracking-widest">In Battle</Text>
+									</View>
+								) : (
+									<View className="items-end">
+										<View className="flex-row items-center">
+											<Text style={{ color: THEME.text }} className="text-[14px] font-black italic">
+												{clanInfo.followerCount || "12"}
+											</Text>
+											<MaterialCommunityIcons name="account-group" size={14} color={THEME.textSecondary} style={{ marginLeft: 4, opacity: 0.5 }} />
+										</View>
+										<Text
+											style={{ color: THEME.textSecondary }}
+											className="text-[8px] font-black uppercase tracking-tighter opacity-50"
+										>
+											Active Souls
+										</Text>
 									</View>
 								)}
-
-								
 							</View>
 						</View>
 					)}
@@ -969,11 +1006,11 @@ export default function PostCard({ post, setPosts, isFeed, hideMedia, similarPos
 								<Text className="text-white font-black tracking-widest uppercase text-xs">
 									Asset {currentAssetIndex + 1} / {mediaItems.length}
 								</Text>
-							</View> 
+							</View>
 						</View>
 					)}
 				</GestureHandlerRootView>
 			</Modal>
 		</View>
 	);
-		}
+}

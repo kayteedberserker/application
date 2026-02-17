@@ -4,7 +4,6 @@ import { useRouter } from 'expo-router';
 import { useEffect, useMemo, useRef, useState } from 'react';
 import {
     ActivityIndicator,
-    Alert,
     Animated,
     DeviceEventEmitter,
     Dimensions,
@@ -24,6 +23,7 @@ import AnimeLoading from "../../components/AnimeLoading";
 import ClanCrest from "../../components/ClanCrest";
 import { SyncLoading } from "../../components/SyncLoading";
 import { Text } from "../../components/Text";
+import { useAlert } from "../../context/AlertContext";
 import { useClan } from '../../context/ClanContext';
 import { useUser } from '../../context/UserContext';
 import { AdConfig } from '../../utils/AdConfig';
@@ -32,6 +32,7 @@ import apiFetch from "../../utils/apiFetch";
 const { width } = Dimensions.get("window");
 const REWARDED_ID = String(AdConfig.rewarded || "0");
 const ClanProfile = () => {
+    const CustomAlert = useAlert();
     const { user } = useUser();
     const { userClan, isLoading: clanLoading, canManageClan, userRole } = useClan();
     const insets = useSafeAreaInsets();
@@ -238,17 +239,17 @@ const ClanProfile = () => {
                 if (action === "EDIT_CLAN") setIsEditing(false);
                 fetchFullDetails();
                 if (action === "DELETE_POST") fetchPosts(1);
-                Alert.alert("Success", "Jutsu successfully cast!");
+                CustomAlert("Success", "Jutsu successfully cast!");
             } else {
-                Alert.alert("Action Failed", data.message || "Jutsu failed to activate");
+                CustomAlert("Action Failed", data.message || "Jutsu failed to activate");
             }
         } catch (err) {
-            Alert.alert("Scroll Error", "Connection to the village lost.");
+            CustomAlert("Scroll Error", "Connection to the village lost.");
         }
     };
 
     const handleDeletePost = (postId) => {
-        Alert.alert("Banish Post", "Destroy this scroll from the village archives?", [
+        CustomAlert("Banish Post", "Destroy this scroll from the village archives?", [
             { text: "Cancel", style: "cancel" },
             {
                 text: "Destroy",
@@ -265,20 +266,20 @@ const ClanProfile = () => {
                 message: `Join my clan ${fullData?.name} on the app! Local Tag: #${fullData?.tag}\nLink: ${shareUrl}`,
             });
         } catch (error) {
-            Alert.alert("Error", "Could not manifest the share scroll.");
+            CustomAlert("Error", "Could not manifest the share scroll.");
         }
     };
 
     const copyLinkToClipboard = async () => {
         const shareUrl = `clans/${fullData?.tag}`;
         await Clipboard.setStringAsync(shareUrl);
-        Alert.alert("Link Sealed", "Clan link copied to clipboard!");
+        CustomAlert("Link Sealed", "Clan link copied to clipboard!");
     };
     const handleBuySlotsWithAd = async () => {
         if (rewardedAdRef.current && await rewardedAdRef.current.isAdReady()) {
             rewardedAdRef.current.showAd("");
         } else {
-            Alert.alert("Ritual Not Ready", "The spirits are not yet aligned. Try again in a moment.", [
+            CustomAlert("Ritual Not Ready", "The spirits are not yet aligned. Try again in a moment.", [
                 { text: "OK", onPress: () => load() }
             ]);
         }

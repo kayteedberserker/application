@@ -7,50 +7,65 @@ import { useRouter } from "expo-router";
 import { useEffect, useRef, useState } from "react";
 import {
   ActivityIndicator,
-  Alert,
   Dimensions,
+  LayoutAnimation,
   Platform,
   Pressable,
   Text as RNText,
+  ScrollView,
   TextInput,
-  View,
+  TouchableOpacity,
+  View
 } from "react-native";
 import AnimeLoading from "../../components/AnimeLoading";
 import { Text } from "../../components/Text";
 import THEME from "../../components/useAppTheme";
+import { useAlert } from "../../context/AlertContext";
 import { useStreak } from "../../context/StreakContext";
 import { useUser } from "../../context/UserContext";
 import apiFetch from "../../utils/apiFetch";
 import { getFingerprint } from "../../utils/device";
 
 const { width } = Dimensions.get('window');
-
-// 🔹 Blacklisted names that cannot be used
 const FORBIDDEN_NAMES = ["admin", "system", "the admin", "the system", "administrator", "moderator"];
 
+// Preset options for better UX
+const ANIME_LIST = ["Naruto", "One Piece", "Bleach", "JJK", "Solo Leveling", "Demon Slayer", "AOT", "Haikyuu"];
+const GENRE_LIST = ["Shonen", "Seinen", "Romance", "Isekai", "Psychological", "Action", "Slice of Life"];
+
 export default function FirstLaunchScreen() {
-  const [username, setUsername] = useState("");
-  const [recoverId, setRecoverId] = useState(""); 
-  const [referrerCode, setReferrerCode] = useState(""); 
-  const [isAutoReferrer, setIsAutoReferrer] = useState(false); 
-  const [isRecoveryMode, setIsRecoveryMode] = useState(false); 
-  const [loading, setLoading] = useState(true);
-  const [isProcessing, setIsProcessing] = useState(false);
+  const CustomAlert = useAlert();
   const router = useRouter();
   const isMounted = useRef(true);
   const { setUser } = useUser(); 
   const { refreshStreak } = useStreak();
 
+  // Logic States
+  const [loading, setLoading] = useState(true);
+  const [isProcessing, setIsProcessing] = useState(false);
+  const [step, setStep] = useState(1); // 1: Identity, 2: Affinities, 3: Character/Final
+
+  // Data States
+  const [username, setUsername] = useState("");
+  const [recoverId, setRecoverId] = useState(""); 
+  const [referrerCode, setReferrerCode] = useState(""); 
+  const [isAutoReferrer, setIsAutoReferrer] = useState(false); 
+  const [isRecoveryMode, setIsRecoveryMode] = useState(false); 
+
+  // 🔹 Dynamic Preference States
+  const [selectedAnimes, setSelectedAnimes] = useState([]);
+  const [selectedGenres, setSelectedGenres] = useState([]);
+  const [favCharacter, setFavCharacter] = useState("");
+
   const notify = (title, message) => {
     if (Platform.OS === "web") alert(`${title}\n${message}`);
-    else Alert.alert(title, message);
+    else CustomAlert(title, message);
   };
 
   useEffect(() => {
     isMounted.current = true;
     (async () => {
       try {
-        // 1. Check for existing session
         const storedUser = await AsyncStorage.getItem("mobileUser");
         if (storedUser && isMounted.current) {
           const parsed = JSON.parse(storedUser);
@@ -59,39 +74,17 @@ export default function FirstLaunchScreen() {
           return;
         }
 
-        // 2. 🔹 Robust Install Referrer Check
         if (Platform.OS === 'android') {
           try {
             const installReferrer = await Application.getInstallReferrerAsync();
-            console.log("Raw Referrer Raw Data:", installReferrer);
-            
-            /**
-             * 🔹 LOGIC UPDATE:
-             * We only lock the field if the referrer exists AND it's not a default "(not set)" string.
-             * Usually, Google Play returns "utm_source=(not%20set)&utm_medium=(not%20set)" for organic installs.
-             */
-            const isInvalid = !installReferrer || 
-                              installReferrer.includes("google-play") || 
-                              installReferrer.includes("(not%20set)") || 
-                              installReferrer.includes("not%20set");
-
+            const isInvalid = !installReferrer || installReferrer.includes("google-play") || installReferrer.includes("(not%20set)");
             if (!isInvalid && isMounted.current) {
-                // If it looks like a real referral string, we set it and lock it
                 setReferrerCode(installReferrer);
                 setIsAutoReferrer(true); 
-            } else {
-                console.log("No valid referral detected. Manual entry enabled.");
-                setReferrerCode("");
-                setIsAutoReferrer(false);
             }
-          } catch (refErr) {
-            console.log("Referrer not available:", refErr);
-          }
+          } catch (refErr) { console.log("Referrer not available:", refErr); }
         }
-
-      } catch (e) {
-        console.error("Storage error", e);
-      }
+      } catch (e) { console.error("Storage error", e); }
       setLoading(false);
     })();
     return () => { isMounted.current = false; };
@@ -113,46 +106,54 @@ export default function FirstLaunchScreen() {
     } catch { return null; }
   }
 
+  const toggleItem = (item, list, setList) => {
+    LayoutAnimation.configureNext(LayoutAnimation.Presets.easeInEaseOut);
+    if (list.includes(item)) setList(list.filter(i => i !== item));
+    else setList([...list, item]);
+  };
+
+  const handleNextStep = () => {
+    if (step === 1) {
+        if (isRecoveryMode) {
+            if (!recoverId.trim()) return notify("Required", "Please enter your Recovery ID.");
+            handleAction();
+            return;
+        }
+        if (username.trim().length < 3) return notify("Identity Weak", "Callsign must be 3+ characters.");
+        if (FORBIDDEN_NAMES.includes(username.toLowerCase())) return notify("Access Denied", "This callsign is restricted.");
+        setStep(2);
+    } else if (step === 2) {
+        if (selectedAnimes.length === 0 || selectedGenres.length === 0) {
+            return notify("Input Required", "Select your interests to synchronize.");
+        }
+        setStep(3);
+    }
+  };
+
   const handleAction = async () => {
     if (isProcessing) return;
-
-    const cleanUsername = username.trim();
-    const cleanRecoverId = recoverId.trim();
-    const cleanReferrer = referrerCode.trim();
-
-    // Validation
-    if (!isRecoveryMode) {
-        if (!cleanUsername || cleanUsername.length < 3) {
-            return notify("Invalid Username", "Username must be at least 3 characters.");
-        }
-        
-        if (FORBIDDEN_NAMES.includes(cleanUsername.toLowerCase())) {
-            return notify("Restricted Alias", "This callsign is reserved for system authority.");
-        }
-    } else {
-        if (!cleanRecoverId) {
-            return notify("Missing ID", "Please enter your previous Device ID to synchronize.");
-        }
-    }
-
     setIsProcessing(true);
+
     try {
       const currentDeviceId = await getFingerprint();
       const pushToken = await registerForPushNotificationsAsync();
-
-      const targetId = isRecoveryMode ? cleanRecoverId : (currentDeviceId || "device-id");
+      const targetId = isRecoveryMode ? recoverId.trim() : (currentDeviceId || "device-id");
       
-      const endpoint = isRecoveryMode 
-        ? "https://oreblogda.com/api/mobile/recover" 
-        : "https://oreblogda.com/api/mobile/register";
+      const endpoint = isRecoveryMode ? "/mobile/recover" : "/mobile/register";
 
       const res = await apiFetch(endpoint, {
           method: "POST",
           body: JSON.stringify({
             deviceId: targetId,
-            username: isRecoveryMode ? undefined : cleanUsername,
+            username: isRecoveryMode ? undefined : username.trim(),
             pushToken,
-            referredBy: isRecoveryMode ? undefined : cleanReferrer, 
+            referredBy: isRecoveryMode ? undefined : referrerCode.trim(), 
+            // 🔹 Send preference data to backend
+            preferences: {
+                favAnimes: selectedAnimes,
+                favGenres: selectedGenres,
+                favCharacter: favCharacter.trim()
+            }
           }),
         }
       );
@@ -160,168 +161,205 @@ export default function FirstLaunchScreen() {
       const data = await res.json();
       if (!res.ok) throw new Error(data.message || "Operation failed");
 
-      const detectedCountry = data.user?.country || "Unknown";
-
       const userData = {
         deviceId: targetId,
-        username: data.user?.username || cleanUsername, 
+        username: data.user?.username || username.trim(), 
         pushToken,
-        country: detectedCountry,
-        referredBy: cleanReferrer,
+        country: data.user?.country || "Unknown",
+        referredBy: referrerCode.trim(),
+        // 🔹 Store locally for apiFetch headers
+        preferences: {
+            favAnimes: selectedAnimes,
+            favGenres: selectedGenres,
+            favCharacter: favCharacter.trim()
+        }
       };
 
       await AsyncStorage.setItem("mobileUser", JSON.stringify(userData));
       setUser(userData);
-      
       if (refreshStreak) refreshStreak();
-
-      setTimeout(() => {
-        router.replace("/profile");
-      }, 100);
+      setTimeout(() => router.replace("/profile"), 100);
 
     } catch (err) {
-      console.error("Action Catch:", err);
       notify("Authentication Error", err.message);
-      if (isMounted.current) setIsProcessing(false);
+      setIsProcessing(false);
     }
   };
 
-  if (loading) {
-    return <AnimeLoading message="Checking Session" subMessage="Initializing Neural Link" />
-  }
+  if (loading) return <AnimeLoading message="Checking Session" subMessage="Initializing Neural Link" />;
 
   return (
-    <View style={{ flex: 1, backgroundColor: THEME.bg }} className="justify-center items-center px-8">
+    <View style={{ flex: 1, backgroundColor: THEME.bg }} className="px-8 pt-20">
       
-      {/* Ambient Background Glows */}
-      <View style={{ position: 'absolute', top: 100, right: -100, width: 300, height: 300, borderRadius: 150, backgroundColor: THEME.glowBlue, opacity: THEME.isDark ? 0.3 : 0.1 }} />
-      <View style={{ position: 'absolute', bottom: 100, left: -100, width: 400, height: 400, borderRadius: 200, backgroundColor: THEME.glowIndigo, opacity: THEME.isDark ? 0.3 : 0.1 }} />
-
-      {/* Terminal Icon */}
-      <View 
-        style={{ 
-          backgroundColor: THEME.card, 
-          borderColor: isRecoveryMode ? '#a855f7' : THEME.border 
-        }}
-        className="w-20 h-20 rounded-[30px] items-center justify-center mb-8 border-2 shadow-2xl"
-      >
-        <Ionicons name={isRecoveryMode ? "key-outline" : "finger-print"} size={40} color={isRecoveryMode ? '#a855f7' : THEME.accent} />
+      {/* Step Indicator */}
+      <View className="flex-row justify-between mb-12 px-2">
+        {[1, 2, 3].map((s) => (
+           <View key={s} style={{ height: 4, width: (width - 100) / 3, borderRadius: 2, backgroundColor: step >= s ? THEME.accent : THEME.border }} />
+        ))}
       </View>
 
-      <View className="items-center mb-10">
-        <Text style={{ color: THEME.accent }} className="text-[10px] font-black uppercase tracking-[0.4em] mb-2 text-center">
-            {isRecoveryMode ? "Data Restoration" : "Identity Initialization"}
-        </Text>
-        <Text style={{ color: THEME.text }} className="text-4xl font-black italic uppercase text-center">
-            {isRecoveryMode ? "Link Account" : "Welcome"}
-        </Text>
-      </View>
+      <ScrollView showsVerticalScrollIndicator={false}>
+        {/* Dynamic Header */}
+        <View className="items-center mb-10">
+          <View style={{ backgroundColor: THEME.card, borderColor: THEME.border }} className="w-16 h-16 rounded-2xl items-center justify-center mb-4 border-2 shadow-xl">
+             <Ionicons 
+                name={step === 1 ? (isRecoveryMode ? "key-outline" : "finger-print") : step === 2 ? "flame-outline" : "heart-outline"} 
+                size={32} 
+                color={THEME.accent} 
+             />
+          </View>
+          <Text style={{ color: THEME.accent }} className="text-[10px] font-black uppercase tracking-[0.4em] mb-1">
+             Phase 0{step}
+          </Text>
+          <Text style={{ color: THEME.text }} className="text-3xl font-black italic uppercase text-center">
+             {step === 1 ? (isRecoveryMode ? "Link Account" : "Identity") : step === 2 ? "Affinities" : "Soul Link"}
+          </Text>
+        </View>
 
-      {/* Form Section */}
-      <View className="w-full">
-        <Text style={{ color: THEME.textSecondary }} className="font-black uppercase text-[9px] tracking-[0.2em] mb-3 ml-1">
-            {isRecoveryMode ? "Enter Previous Device ID" : "Callsign Assignment - Enter Username"}
-        </Text>
-        
-        {isRecoveryMode ? (
-            <TextInput
-                style={{ backgroundColor: THEME.card, borderColor: '#a855f7', color: THEME.text}}
-                className="w-full border-2 rounded-2xl px-5 py-5 mb-4 font-black italic"
-                placeholder="PASTE DEVICE ID HERE"
-                placeholderTextColor={THEME.textSecondary + '80'}
-                autoCapitalize="none"
-                autoCorrect={false}
-                value={recoverId}
-                onChangeText={setRecoverId}
-                editable={!isProcessing}
-            />
-        ) : (
-            <>
-                <TextInput
-                    style={{ backgroundColor: THEME.card, borderColor: THEME.border, color: THEME.text }}
-                    className="w-full border-2 rounded-2xl px-5 py-5 mb-4 font-black italic"
-                    placeholder="ENTER USERNAME..."
-                    placeholderTextColor={THEME.textSecondary + '80'}
-                    autoCapitalize="none" 
-                    autoCorrect={false}
-                    spellCheck={false}
-                    value={username}
-                    onChangeText={setUsername}
-                    editable={!isProcessing}
-                />
-
-                {/* 🔹 REFERRAL CODE FIELD */}
-                <Text style={{ color: THEME.textSecondary }} className="font-black uppercase text-[9px] tracking-[0.2em] mb-3 mt-2 ml-1">
-                    Uplink Referral Code {isAutoReferrer ? "(SECURED)" : "(OPTIONAL)"}
-                </Text>
-                <View className="relative">
+        {/* --- STEP 1: IDENTITY --- */}
+        {step === 1 && (
+            <View>
+                {isRecoveryMode ? (
                     <TextInput
-                        style={{ 
-                            backgroundColor: isAutoReferrer ? THEME.bg : THEME.card, 
-                            borderColor: isAutoReferrer ? '#a855f760' : THEME.border, 
-                            color: isAutoReferrer ? '#a855f7' : THEME.text,
-                            opacity: isAutoReferrer ? 0.8 : 1
-                        }}
-                        className="w-full border-2 rounded-2xl px-5 py-5 mb-4 font-black italic"
-                        placeholder="ENTER CODE..."
+                        style={{ backgroundColor: THEME.card, borderColor: '#a855f7', color: THEME.text}}
+                        className="w-full border-2 rounded-2xl px-6 py-5 mb-4 font-black italic"
+                        placeholder="ENTER RECOVERY ID..."
                         placeholderTextColor={THEME.textSecondary + '80'}
-                        autoCapitalize="characters" 
-                        autoCorrect={false}
-                        value={referrerCode}
-                        onChangeText={setReferrerCode}
-                        editable={!isProcessing && !isAutoReferrer} 
+                        value={recoverId}
+                        onChangeText={setRecoverId}
                     />
-                    {isAutoReferrer && (
-                        <View className="absolute right-4 top-5">
-                            <Ionicons name="lock-closed" size={18} color="#a855f7" />
-                        </View>
-                    )}
-                </View>
-            </>
+                ) : (
+                    <>
+                        <TextInput
+                            style={{ backgroundColor: THEME.card, borderColor: THEME.border, color: THEME.text }}
+                            className="w-full border-2 rounded-2xl px-6 py-5 mb-6 font-black italic"
+                            placeholder="CHOOSE CALLSIGN..."
+                            placeholderTextColor={THEME.textSecondary + '80'}
+                            value={username}
+                            onChangeText={setUsername}
+                        />
+                        <Text style={{ color: THEME.textSecondary }} className="font-black uppercase text-[9px] mb-3 ml-2 tracking-widest">Referral Link (Optional)</Text>
+                        <TextInput
+                            style={{ 
+                                backgroundColor: isAutoReferrer ? THEME.bg : THEME.card, 
+                                borderColor: isAutoReferrer ? '#a855f760' : THEME.border, 
+                                color: isAutoReferrer ? '#a855f7' : THEME.text 
+                            }}
+                            className="w-full border-2 rounded-2xl px-6 py-5 mb-4 font-black italic"
+                            placeholder="UPLINK CODE..."
+                            value={referrerCode}
+                            onChangeText={setReferrerCode}
+                            editable={!isAutoReferrer}
+                        />
+                    </>
+                )}
+                <TouchableOpacity onPress={() => setIsRecoveryMode(!isRecoveryMode)} className="mt-2 items-center">
+                    <RNText style={{ color: THEME.accent }} className="text-[10px] font-bold uppercase tracking-widest">
+                        {isRecoveryMode ? "Create New Instead" : "Switch to Recovery Mode"}
+                    </RNText>
+                </TouchableOpacity>
+            </View>
         )}
 
-        {/* Toggle Mode Button */}
-        <Pressable 
-            onPress={() => setIsRecoveryMode(!isRecoveryMode)} 
-            className="mb-8 items-center"
-        >
-            <RNText style={{ color: THEME.accent }} className="text-[10px] font-bold uppercase tracking-widest">
-                {isRecoveryMode ? "Create New Identity instead" : "Have a previous Device ID? Link here"}
-            </RNText>
-        </Pressable>
+        {/* --- STEP 2: AFFINITIES --- */}
+        {step === 2 && (
+            <View>
+                <Text style={{ color: THEME.textSecondary }} className="font-black uppercase text-[10px] mb-4 tracking-widest">Favorite Anime (Pick 2+)</Text>
+                <View className="flex-row flex-wrap mb-8">
+                    {ANIME_LIST.map((anime) => {
+                        const active = selectedAnimes.includes(anime);
+                        return (
+                            <TouchableOpacity 
+                                key={anime} 
+                                onPress={() => toggleItem(anime, selectedAnimes, setSelectedAnimes)}
+                                style={{ backgroundColor: active ? THEME.accent : THEME.card, borderColor: active ? THEME.accent : THEME.border }}
+                                className="px-5 py-2.5 rounded-full border-2 mr-2 mb-3"
+                            >
+                                <RNText style={{ color: active ? 'white' : THEME.textSecondary }} className="font-black text-[11px] uppercase">{anime}</RNText>
+                            </TouchableOpacity>
+                        );
+                    })}
+                </View>
 
-        <Pressable
-          onPress={handleAction}
-          disabled={isProcessing}
-          style={({ pressed }) => [
-            {
-              backgroundColor: isProcessing ? "#1e3a8a" : (isRecoveryMode ? '#a855f7' : THEME.accent),
-              transform: [{ scale: pressed ? 0.98 : 1 }],
-              opacity: isProcessing ? 0.7 : 1
-            }
-          ]}
-          className="w-full py-5 rounded-[24px] flex-row justify-center items-center shadow-2xl"
-        >
-          {isProcessing ? (
-            <>
-              <ActivityIndicator size="small" color="#ffffff" style={{ marginRight: 12 }} />
-              <RNText style={{ color: THEME.text, fontSize: 16, fontWeight: "900", fontStyle: 'italic', textTransform: 'uppercase', letterSpacing: 2 }}>
-                Synchronizing...
-              </RNText>
-            </>
-          ) : (
-            <>
-              <Ionicons name={isRecoveryMode ? "git-network-outline" : "power"} size={18} color="white" style={{ marginRight: 10 }} />
-              <RNText style={{ color: THEME.text, fontSize: 16, fontWeight: "900", fontStyle: 'italic', textTransform: 'uppercase', letterSpacing: 2 }}>
-                {isRecoveryMode ? "Sync Account" : "Establish Link"}
-              </RNText>
-            </>
-          )}
-        </Pressable>
-      </View>
+                <Text style={{ color: THEME.textSecondary }} className="font-black uppercase text-[10px] mb-4 tracking-widest">Preferred Genres</Text>
+                <View className="flex-row flex-wrap mb-8">
+                    {GENRE_LIST.map((genre) => {
+                        const active = selectedGenres.includes(genre);
+                        return (
+                            <TouchableOpacity 
+                                key={genre} 
+                                onPress={() => toggleItem(genre, selectedGenres, setSelectedGenres)}
+                                style={{ backgroundColor: active ? '#a855f7' : THEME.card, borderColor: active ? '#a855f7' : THEME.border }}
+                                className="px-5 py-2.5 rounded-full border-2 mr-2 mb-3"
+                            >
+                                <RNText style={{ color: active ? 'white' : THEME.textSecondary }} className="font-black text-[11px] uppercase">{genre}</RNText>
+                            </TouchableOpacity>
+                        );
+                    })}
+                </View>
+            </View>
+        )}
 
-      <View className="absolute bottom-12 items-center">
-        <Text style={{ color: THEME.textSecondary }} className="font-black text-[8px] uppercase tracking-[0.5em]">Secure Auth Sector 7</Text>
+        {/* --- STEP 3: CHARACTER & FINAL --- */}
+        {step === 3 && (
+            <View className="items-center">
+                <Text style={{ color: THEME.textSecondary }} className="font-black uppercase text-[10px] mb-6 tracking-widest text-center">
+                    Who is your absolute GOAT character?
+                </Text>
+                <TextInput
+                    style={{ backgroundColor: THEME.card, borderColor: THEME.accent, color: THEME.text }}
+                    className="w-full border-2 rounded-[30px] px-6 py-8 mb-10 font-black italic text-2xl text-center"
+                    placeholder="E.G. MADARA"
+                    placeholderTextColor={THEME.textSecondary + '40'}
+                    autoFocus
+                    value={favCharacter}
+                    onChangeText={setFavCharacter}
+                />
+                <View style={{ backgroundColor: THEME.accent + '10' }} className="p-6 rounded-3xl border border-dashed border-sky-500/30">
+                    <Text style={{ color: THEME.textSecondary }} className="text-[11px] text-center leading-5 italic">
+                        "Your path is set. Establishing this link will synchronize your preferences across the Great Library."
+                    </Text>
+                </View>
+            </View>
+        )}
+
+        {/* --- ACTION BUTTON --- */}
+        <View className="mt-12 mb-20">
+            <Pressable
+                onPress={step === 3 ? handleAction : handleNextStep}
+                disabled={isProcessing}
+                style={({ pressed }) => [
+                    {
+                        backgroundColor: isProcessing ? THEME.border : THEME.accent,
+                        transform: [{ scale: pressed ? 0.96 : 1 }],
+                        opacity: isProcessing ? 0.6 : 1
+                    }
+                ]}
+                className="w-full py-6 rounded-[28px] flex-row justify-center items-center shadow-2xl"
+            >
+                {isProcessing ? (
+                    <ActivityIndicator size="small" color="white" />
+                ) : (
+                    <>
+                        <RNText style={{ color: 'white' }} className="font-black italic uppercase tracking-[0.2em] text-lg mr-2">
+                            {step === 3 ? "Establish Link" : "Next Phase"}
+                        </RNText>
+                        <Ionicons name="arrow-forward" size={20} color="white" />
+                    </>
+                )}
+            </Pressable>
+            
+            {step > 1 && (
+                <TouchableOpacity onPress={() => setStep(step - 1)} className="mt-6 self-center">
+                    <RNText style={{ color: THEME.textSecondary }} className="text-[10px] font-black uppercase tracking-widest opacity-50">Go Back</RNText>
+                </TouchableOpacity>
+            )}
+        </View>
+      </ScrollView>
+
+      {/* Footer Branding */}
+      <View className="absolute bottom-10 self-center">
+        <Text style={{ color: THEME.textSecondary }} className="font-black text-[8px] uppercase tracking-[0.5em] opacity-30">Secure Protocol v2.0</Text>
       </View>
     </View>
   );

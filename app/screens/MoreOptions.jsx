@@ -5,7 +5,6 @@ import { useRouter } from 'expo-router';
 import { useEffect, useState } from 'react';
 import {
   ActivityIndicator,
-  Alert,
   DeviceEventEmitter,
   Dimensions,
   Platform,
@@ -17,9 +16,11 @@ import {
 } from 'react-native';
 import { Text } from '../../components/Text';
 import THEME from '../../components/useAppTheme';
+import { useAlert } from '../../context/AlertContext';
 const { width } = Dimensions.get('window');
 
 export default function MoreOptions() {
+  const CustomAlert = useAlert();
   const router = useRouter();
   const [isNotificationsEnabled, setIsNotificationsEnabled] = useState(false);
   const [loading, setLoading] = useState(true);
@@ -41,7 +42,7 @@ export default function MoreOptions() {
     const { status: existingStatus } = await Notifications.getPermissionsAsync();
     
     if (existingStatus === 'denied' && !isNotificationsEnabled) {
-      Alert.alert(
+      CustomAlert(
         "Permissions Required",
         "Notifications are disabled in your system settings. Would you like to enable them now?",
         [
@@ -60,7 +61,7 @@ export default function MoreOptions() {
       const { status } = await Notifications.requestPermissionsAsync();
       setIsNotificationsEnabled(status === 'granted');
     } else {
-      Alert.alert(
+      CustomAlert(
         "Disable Notifications",
         "To fully stop notifications, please disable them in your device system settings.",
         [

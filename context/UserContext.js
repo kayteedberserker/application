@@ -27,7 +27,6 @@ export const UserProvider = ({ children }) => {
               const res = await apiFetch(`https://oreblogda.com/api/users/me?fingerprint=${parsedUser.deviceId}`);
               if (res.ok) {
                 const dbUser = await res.json();
-                
                 const updatedUser = {
                   ...parsedUser,
                   country: dbUser.country || "Unknown",

@@ -5,7 +5,7 @@ import * as Notifications from 'expo-notifications';
 import { Link, useRouter } from "expo-router";
 import { useEffect, useMemo, useRef, useState } from "react";
 import {
-    ActivityIndicator, Alert,
+    ActivityIndicator,
     DeviceEventEmitter,
     Image,
     Linking,
@@ -13,7 +13,7 @@ import {
     ScrollView,
     StatusBar,
     Switch, TextInput, TouchableOpacity,
-    View,
+    View
 } from "react-native";
 import Toast from "react-native-toast-message";
 import useSWR from "swr";
@@ -21,6 +21,7 @@ import { LevelPlayRewardedAd } from 'unity-levelplay-mediation';
 import AnimeLoading from "../../components/AnimeLoading";
 import { Text } from "../../components/Text";
 import THEME from "../../components/useAppTheme";
+import { useAlert } from "../../context/AlertContext"; // 🔹 ALERT CONTEXT IMPORT
 import { useClan } from "../../context/ClanContext"; // 🔹 CLAN CONTEXT IMPORTED
 import { useStreak } from "../../context/StreakContext";
 import { useUser } from "../../context/UserContext";
@@ -87,8 +88,8 @@ const resolveUserRank = (totalPosts) => {
 
     return { rankTitle, rankIcon, postLimit };
 };
-
 export default function AuthorDiaryDashboard() {
+    const CustomAlert = useAlert();
     const { user, loading: contextLoading } = useUser();
     const { userClan, isInClan } = useClan(); // 🔹 GET CLAN INFO
     const { streak } = useStreak();
@@ -201,7 +202,7 @@ export default function AuthorDiaryDashboard() {
                 rewardedAd.loadAd();
             },
             onAdShowFailed: (error, adInfo) => {
-                Alert.alert("Ad Error", "Failed to display reward video.");
+                CustomAlert("Ad Error", "Failed to display reward video.");
                 rewardedAd.loadAd();
             }
         };
@@ -329,7 +330,7 @@ export default function AuthorDiaryDashboard() {
     }, [title, message, category, clanSubCategory, hasPoll, pollOptions, fingerprint, isDraftRestoring]);
 
     const handleClearAll = () => {
-        Alert.alert(
+        CustomAlert(
             "Wipe Local Intel?",
             "This will permanently delete your current draft.",
             [
@@ -585,7 +586,7 @@ export default function AuthorDiaryDashboard() {
     const pickImage = async () => {
         const remainingSlots = 5 - mediaList.length;
         if (remainingSlots <= 0) {
-            Alert.alert("Limit Reached", "You can only upload a maximum of 5 media files.");
+            CustomAlert("Limit Reached", "You can only upload a maximum of 5 media files.");
             return;
         }
 
@@ -611,7 +612,7 @@ export default function AuthorDiaryDashboard() {
                     const currentLimit = isVideo ? 15 * 1024 * 1024 : 5 * 1024 * 1024;
 
                     if (selected.fileSize > currentLimit) {
-                        Alert.alert("File Too Large", `Skipping ${selected.type}. Max: ${isVideo ? '15MB' : '5MB'}.`);
+                        CustomAlert("File Too Large", `Skipping ${selected.type}. Max: ${isVideo ? '15MB' : '5MB'}.`);
                         continue;
                     }
 
@@ -646,7 +647,7 @@ export default function AuthorDiaryDashboard() {
                 Toast.show({ type: 'success', text1: `${uploadedAssets.length} asset(s) linked!` });
             } catch (err) {
                 console.error(err);
-                Alert.alert("Error", "Upload failed: " + err.message);
+                CustomAlert("Error", "Upload failed: " + err.message);
             } finally {
                 setUploading(false);
             }
@@ -673,8 +674,8 @@ export default function AuthorDiaryDashboard() {
 
     // 🔹 UPDATED: SUBMIT HANDLER
     const handleSubmit = async () => {
-        if (!title.trim() || !message.trim()) { Alert.alert("Error", "Title and Message are required."); return; }
-        if (isOfflineMode) { Alert.alert("Offline", "Cannot transmit data while offline."); return; }
+        if (!title.trim() || !message.trim()) { CustomAlert("Error", "Title and Message are required."); return; }
+        if (isOfflineMode) { CustomAlert("Offline", "Cannot transmit data while offline."); return; }
 
         setSubmitting(true);
         try {
@@ -712,7 +713,7 @@ export default function AuthorDiaryDashboard() {
             await AsyncStorage.removeItem(`draft_${fingerprint}`);
             // 🚀 TRIGGER THE REVIEW LOGIC HERE
             DeviceEventEmitter.emit("POST_CREATED_SUCCESS");
-            Alert.alert("Success", "Your entry has been submitted for approval!");
+            CustomAlert("Success", "Your entry has been submitted for approval!");
             updateStreak(fingerprint)
             // Reset States
             setMediaList([]);
@@ -721,7 +722,7 @@ export default function AuthorDiaryDashboard() {
             setMediaUrlLink("");
             setPickedImage(false);
             mutateTodayPosts();
-        } catch (err) { Alert.alert("Error", err.message); }
+        } catch (err) { CustomAlert("Error", err.message); }
         finally { setSubmitting(false); }
     };
 
@@ -768,7 +769,7 @@ export default function AuthorDiaryDashboard() {
         const handlePress = async (url) => {
             const supported = await Linking.canOpenURL(url);
             if (supported) await Linking.openURL(url);
-            else Alert.alert("Invalid Link", "Cannot open this URL");
+            else CustomAlert("Invalid Link", "Cannot open this URL");
         };
 
         const rawParts = parseMessageSections(normalizePostContent(message));
