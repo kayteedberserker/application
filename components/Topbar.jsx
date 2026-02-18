@@ -77,7 +77,7 @@ const TopBar = ({ isDark }) => {
 
         const listener = {
             onAdLoaded: (adInfo) => {
-                console.log("Rewarded Ad Loaded (Internal Callback)");
+                console.log("Rewarded Ad Loaded (Internal Callback)", adInfo);
                 setIsAdLoaded(true);
                 if (retryTimerRef.current) clearTimeout(retryTimerRef.current);
             },

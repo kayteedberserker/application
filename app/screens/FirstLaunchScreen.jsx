@@ -6,16 +6,16 @@ import * as Notifications from "expo-notifications";
 import { useRouter } from "expo-router";
 import { useEffect, useRef, useState } from "react";
 import {
-    ActivityIndicator,
-    Dimensions,
-    LayoutAnimation,
-    Platform,
-    Pressable,
-    Text as RNText,
-    ScrollView,
-    TextInput,
-    TouchableOpacity,
-    View
+  ActivityIndicator,
+  Dimensions,
+  LayoutAnimation,
+  Platform,
+  Pressable,
+  Text as RNText,
+  ScrollView,
+  TextInput,
+  TouchableOpacity,
+  View
 } from "react-native";
 import AnimeLoading from "../../components/AnimeLoading";
 import { Text } from "../../components/Text";
@@ -32,10 +32,10 @@ const FORBIDDEN_NAMES = ["admin", "system", "the admin", "the system", "administ
 // 🔹 Top 25 Curated Anime (Shonen, Seinen, Shojo, New & Old Gen)
 const ANIME_LIST = [
   "Naruto", "One Piece", "Bleach", "Dragon Ball Z", "Hunter x Hunter", // The Titans
-  "JJK", "Solo Leveling", "Demon Slayer", "AOT", "Chainsaw Man",      // New Gen Hits
+  "JJK", "Solo Leveling", "My Hero Academia", "Hell's Paradise", "Demon Slayer", "AOT", "Chainsaw Man",      // New Gen Hits
   "Death Note", "Fullmetal Alchemist", "Code Geass", "Steins;Gate",    // Masterpieces
   "Berserk", "Vinland Saga", "Monster", "Vagabond",                   // Peak Seinen
-  "Baki", "Nana", "Fruits Basket", "Ouran High",               // Iconic Shojo
+  "Baki", "Nana", "Horimiya", "Fruits Basket", "Ouran High",               // Iconic Shojo
   "Haikyuu", "Blue Lock", "One Punch Man"                             // Hype/Sports
 ];
 
@@ -125,7 +125,8 @@ export default function FirstLaunchScreen() {
     if (step === 1) {
         if (isRecoveryMode) {
             if (!recoverId.trim()) return notify("Required", "Please enter your Recovery ID.");
-            handleAction();
+            // 🔹 Instead of calling handleAction, we now move to Step 2 to collect fresh preferences
+            setStep(2);
             return;
         }
         if (username.trim().length < 3) return notify("Identity Weak", "Callsign must be 3+ characters.");
@@ -169,6 +170,7 @@ export default function FirstLaunchScreen() {
       const data = await res.json();
       if (!res.ok) throw new Error(data.message || "Operation failed");
 
+      // 🔹 Construct the user object with the newly selected preferences
       const userData = {
         deviceId: targetId,
         username: data.user?.username || username.trim(), 
@@ -374,7 +376,7 @@ export default function FirstLaunchScreen() {
                 ) : (
                     <>
                         <RNText style={{ color: 'white' }} className="font-black italic uppercase tracking-[0.2em] text-lg mr-2">
-                            {step === 3 ? "Establish Link" : "Next Phase"}
+                            {step === 3 ? (isRecoveryMode ? "Recover Link" : "Establish Link") : "Next Phase"}
                         </RNText>
                         <Ionicons name="arrow-forward" size={20} color="white" />
                     </>

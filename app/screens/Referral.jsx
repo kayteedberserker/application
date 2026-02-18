@@ -2,13 +2,13 @@ import { Ionicons, MaterialCommunityIcons } from "@expo/vector-icons";
 import AsyncStorage from "@react-native-async-storage/async-storage";
 import { useCallback, useEffect, useState } from "react";
 import {
-    Clipboard,
-    RefreshControl,
-    SafeAreaView,
-    ScrollView,
-    Share,
-    TouchableOpacity,
-    View
+  Clipboard,
+  RefreshControl,
+  SafeAreaView,
+  ScrollView,
+  Share,
+  TouchableOpacity,
+  View
 } from "react-native";
 import { Text } from "../../components/Text";
 import THEME from "../../components/useAppTheme";

@@ -3,13 +3,14 @@ import AsyncStorage from "@react-native-async-storage/async-storage";
 const APP_SECRET = process.env.EXPO_PUBLIC_APP_SECRET || "thisismyrandomsuperlongsecretkey";
 
 export const apiFetch = async (endpoint, options = {}) => {
-  const baseUrl = "https://oreblogda.com/api";
+  const baseUrl = "http://172.26.209.121:3000/api";
   const cleanEndpoint = endpoint.startsWith('/') ? endpoint : `/${endpoint}`;
   const url = endpoint.startsWith('http') ? endpoint : `${baseUrl}${cleanEndpoint}`;
   
   let userCountry = "Unknown";
   let userAnimes = ""; // Comma-separated list for backend $in check
   let userGenres = ""; // Comma-separated list for backend $in check
+  let userCharacter = ""; // 🔹 Added for character-specific targeting
 
   try {
     const stored = await AsyncStorage.getItem("mobileUser");
@@ -19,11 +20,16 @@ export const apiFetch = async (endpoint, options = {}) => {
       
       // 🔹 Extract and format preferences for the backend algorithm
       if (parsed.preferences) {
+        
         if (Array.isArray(parsed.preferences.favAnimes)) {
           userAnimes = parsed.preferences.favAnimes.join(",");
         }
         if (Array.isArray(parsed.preferences.favGenres)) {
           userGenres = parsed.preferences.favGenres.join(",");
+        }
+        // 🔹 Capture the favorite character
+        if (parsed.preferences.favCharacter) {
+          userCharacter = parsed.preferences.favCharacter;
         }
       }
     }
@@ -38,6 +44,7 @@ export const apiFetch = async (endpoint, options = {}) => {
     // 🔹 Specific headers the backend algorithm is now looking for
     "x-user-animes": userAnimes,
     "x-user-genres": userGenres,
+    "x-user-character": userCharacter, // 🔹 Sent to backend
     ...options.headers,
   };
 
