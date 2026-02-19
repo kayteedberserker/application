@@ -98,19 +98,22 @@ const ClanProfile = () => {
                 setIsAdLoading(false);
                 if (retryTimerRef.current) clearTimeout(retryTimerRef.current);
             },
-            onAdUnavailable: () => setIsAdLoaded(false),
+            onAdUnavailable: () => {
+                setIsAdLoaded(false)
+                setIsAdLoading(true);
+            },
             onAdRewarded: (reward, adInfo) => {
                 console.log("Reward Earned: BUY_SLOTS", adInfo);
-                
+
                 // 🔹 PORTED ACTION LOGIC
                 triggerAction("BUY_SLOTS");
-                
+
                 // Reload ad for the next use
                 rewardedAd.loadAd();
             },
             onAdClosed: (adInfo) => {
                 console.log(adInfo);
-                
+
                 setIsAdLoaded(false);
                 rewardedAd.loadAd();
             },
@@ -192,7 +195,7 @@ const ClanProfile = () => {
         try {
             const res = await apiFetch(`/clans/wars?clanTag=${userClan.tag}&status=COMPLETED`);
             const data = await res.json();
-            
+
             // FIX: If data is an object with a 'wars' property use it, otherwise use the array itself
             const history = Array.isArray(data) ? data : (data.wars || []);
             setWarHistory(history);
@@ -440,7 +443,7 @@ const ClanProfile = () => {
 
                             <Text className="text-black dark:text-white font-black text-xs mt-6 mb-4 uppercase tracking-widest">Village Expansion</Text>
                             <View className="flex-row gap-x-2 mb-6">
-                                <TouchableOpacity 
+                                <TouchableOpacity
                                     onPress={handleShareClan}
                                     className="flex-1 bg-blue-500 p-4 rounded-3xl flex-row items-center justify-center gap-x-2 shadow-lg shadow-blue-500/40"
                                 >
@@ -448,7 +451,7 @@ const ClanProfile = () => {
                                     <Text className="text-white font-black text-[10px] uppercase italic">Summon Allies</Text>
                                 </TouchableOpacity>
 
-                                <TouchableOpacity 
+                                <TouchableOpacity
                                     onPress={copyLinkToClipboard}
                                     className="bg-gray-100 dark:bg-zinc-900 p-4 rounded-3xl border border-gray-200 dark:border-zinc-800"
                                 >
@@ -457,14 +460,14 @@ const ClanProfile = () => {
                             </View>
 
                             <View className="gap-y-3 mb-6">
-                                <ExpansionRow 
-                                    icon="heart-plus-outline" 
-                                    label="Follow our Village" 
+                                <ExpansionRow
+                                    icon="heart-plus-outline"
+                                    label="Follow our Village"
                                     subLabel="Stay updated on our progress"
                                 />
-                                <ExpansionRow 
-                                    icon="feather" 
-                                    label="Join as an Author" 
+                                <ExpansionRow
+                                    icon="feather"
+                                    label="Join as an Author"
                                     subLabel="Write scrolls for the clan"
                                 />
                             </View>
@@ -528,11 +531,11 @@ const ClanProfile = () => {
                                         </Text>
                                     </View>
                                     <View className="bg-blue-500/20 px-3 py-1.5 rounded-full">
-                                    {isAdLoading ? (
-                                        <ActivityIndicator size="small" color={APP_BLUE} />
-                                    ) : (
-                                        <Text className="text-blue-500 font-black text-[10px]">1K SP + Ad</Text>
-                                    )}
+                                        {isAdLoading ? (
+                                            <ActivityIndicator size="small" color={APP_BLUE} />
+                                        ) : (
+                                            <Text className="text-blue-500 font-black text-[10px]">1K SP + Ad</Text>
+                                        )}
                                     </View>
                                 </TouchableOpacity>
                             </View>
@@ -619,7 +622,7 @@ const WarHistoryItem = ({ war, clanTag }) => {
     const isWinner = war.winner === clanTag;
     const isDraw = war.winner === "DRAW";
     const opponent = war.challengerTag === clanTag ? war.defenderTag : war.challengerTag;
-    
+
     // FIX: Use currentProgress as finalSnapshot is not in the response
     const challengerScore = war.currentProgress?.challengerScore || 0;
     const defenderScore = war.currentProgress?.defenderScore || 0;
@@ -629,10 +632,10 @@ const WarHistoryItem = ({ war, clanTag }) => {
             <View className="bg-white dark:bg-zinc-900 border border-gray-100 dark:border-zinc-800 p-5 rounded-3xl">
                 <View className="flex-row justify-between items-center mb-4">
                     <View className="flex-row items-center gap-x-2">
-                        <MaterialCommunityIcons 
-                            name={isDraw ? "scale-balance" : (isWinner ? "trophy-outline" : "skull-outline")} 
-                            size={20} 
-                            color={isDraw ? "#9ca3af" : (isWinner ? "#eab308" : "#ef4444")} 
+                        <MaterialCommunityIcons
+                            name={isDraw ? "scale-balance" : (isWinner ? "trophy-outline" : "skull-outline")}
+                            size={20}
+                            color={isDraw ? "#9ca3af" : (isWinner ? "#eab308" : "#ef4444")}
                         />
                         <Text className={`font-black uppercase text-[10px] ${isDraw ? 'text-gray-400' : (isWinner ? 'text-yellow-500' : 'text-red-500')}`}>
                             {isDraw ? "Stalemate" : (isWinner ? "Victory" : "Defeated")}
@@ -658,7 +661,7 @@ const WarHistoryItem = ({ war, clanTag }) => {
                         </Text>
                     </View>
                 </View>
-                
+
                 <View className="mt-4 flex-row justify-between items-center">
                     <View className="flex-row items-center gap-x-1">
                         <MaterialCommunityIcons name="sword-cross" size={12} color="#6b7280" />
@@ -676,7 +679,7 @@ const WarHistoryItem = ({ war, clanTag }) => {
 };
 
 const ExpansionRow = ({ icon, label, subLabel, onPress }) => (
-    <TouchableOpacity 
+    <TouchableOpacity
         onPress={onPress}
         className="flex-row items-center p-4 bg-gray-50 dark:bg-zinc-900/40 rounded-2xl border border-gray-100 dark:border-zinc-800"
     >
