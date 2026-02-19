@@ -81,7 +81,6 @@ export default function PostsViewer() {
             InteractionManager.runAfterInteractions(() => {
                 if (isMounted) {
                     setReady(true);
-                    // ⏱️ Wait for the UI to settle before allowing the network to open
                     setTimeout(() => {
                         if (isMounted) setCanFetch(true);
                     }, 600); 
@@ -126,7 +125,7 @@ export default function PostsViewer() {
         revalidateIfStale: false, 
         revalidateOnMount: !SESSION_STATE.hasFetched, 
         dedupingInterval: 10000,
-        fallbackData: cachedData || undefined, // 👈 Safety: use undefined instead of null
+        fallbackData: cachedData || undefined,
         onSuccess: (newData) => {
             setIsOfflineMode(false);
             setRefreshing(false); 
@@ -142,22 +141,33 @@ export default function PostsViewer() {
 
     const handleRefresh = useCallback(async () => {
         setRefreshing(true);
+        // Clear session fetched status to allow a full fresh re-render
+        SESSION_STATE.hasFetched = false;
         await mutate();
     }, [mutate]);
 
+    // 🛠️ FIXED: Stable Post Logic
+    // This logic ensures that once a post is placed in a specific index, 
+    // it stays there even if SWR re-fetches and the backend shuffles the order.
     const posts = useMemo(() => {
         const sourceData = data || cachedData;
         if (!sourceData || !Array.isArray(sourceData)) return [];
 
-        const postMap = new Map();
-        sourceData.forEach(page => {
+        const orderedList = [];
+        const seenIds = new Set();
+
+        sourceData.forEach((page) => {
             if (page?.posts && Array.isArray(page.posts)) {
-                page.posts.forEach(p => {
-                    if (p?._id) postMap.set(p._id, p);
+                page.posts.forEach((p) => {
+                    if (p?._id && !seenIds.has(p._id)) {
+                        seenIds.add(p._id);
+                        orderedList.push(p);
+                    }
                 });
             }
         });
-        return Array.from(postMap.values());
+        
+        return orderedList;
     }, [data, cachedData]);
 
     const hasMore = data ? data[data.length - 1]?.posts?.length === LIMIT : false;
@@ -174,18 +184,13 @@ export default function PostsViewer() {
         setSize(size + 1);
     };
 
-    // Show initial AnimeLoading until we at least have cache or the first fetch triggers
     if (!ready || (isLoading && posts.length === 0)) {
         return <AnimeLoading message="Loading Posts" subMessage="Prepping Otaku content" />
     }
 
-    const renderItem = ({ item, index }) => {
+    const renderItem = ({ item }) => {
         return (
             <View key={item._id}>
-                {/* 🚀 OPTIMIZATION: 
-                  We pass 'syncing'. If true, the PostCard should NOT fetch author info.
-                  It stays true until the background revalidation is finished for the first time.
-                */}
                 <PostCard 
                     post={item} 
                     isFeed 
@@ -229,7 +234,6 @@ export default function PostsViewer() {
                 renderItem={renderItem}
                 onEndReached={loadMore}
                 onEndReachedThreshold={0.5}
-                
                 refreshControl={
                     <RefreshControl
                         refreshing={refreshing}
@@ -241,7 +245,6 @@ export default function PostsViewer() {
                         progressBackgroundColor={isDark ? "#1a1a1a" : "#ffffff"}
                     />
                 }
-
                 removeClippedSubviews={true}
                 initialNumToRender={5} 
                 maxToRenderPerBatch={5}
