@@ -138,7 +138,7 @@ const persistToStorage = async (key, data) => {
 };
 
 
-export default function PostCard({ post, setPosts, isFeed, hideMedia, similarPosts }) {
+export default function PostCard({ post, setPosts, isFeed, hideMedia, syncing, similarPosts }) {
 	const CustomAlert = useAlert()
 	const { user } = useUser();
 	const router = useRouter();
@@ -270,7 +270,7 @@ export default function PostCard({ post, setPosts, isFeed, hideMedia, similarPos
 		return () => backHandler.remove();
 	}, [lightbox.open]);
 
-	const { data: postData, mutate } = useSWR(
+	const { data: postData, mutate } = useSWR( syncing ? null :
 		post?._id ? `https://oreblogda.com/api/posts/${post._id}` : null,
 		fetcher,
 		{ refreshInterval: 10000 }
@@ -296,7 +296,6 @@ export default function PostCard({ post, setPosts, isFeed, hideMedia, similarPos
 					setAuthor(parsed);
 				}
 			}
-
 			if (clanTag && !CLAN_CACHE[clanTag]) {
 				const storedClan = await AsyncStorage.getItem(`clan_cache_${clanTag}`);
 				if (storedClan) {
@@ -306,6 +305,10 @@ export default function PostCard({ post, setPosts, isFeed, hideMedia, similarPos
 				}
 			}
 
+			// 2. STOP if we are currently syncing or don't have authorId
+            if (syncing || !authorId) {
+				return;
+			};
 			// --- STEP B: Background Fetch (Revalidation) ---
 			try {
 				// Fetch Author
@@ -346,49 +349,10 @@ export default function PostCard({ post, setPosts, isFeed, hideMedia, similarPos
 		};
 
 		fetchData();
-	}, [post.authorUserId, post.clanId, post.clanTag, user?.deviceId]);
-
-	const handleFollowClan = async () => {
-
-		if (!user) {
-			CustomAlert("Authentication", "Please log in to follow clans.");
-			return;
-		}
-		setLoadingClan(true);
-		const clanTag = clanInfo?.tag || post.clanId || post.clanTag;
-		try {
-			const res = await apiFetch(`/clans/follow`, {
-				method: "POST",
-				body: JSON.stringify({ clanTag, deviceId: user.deviceId, action: "follow" })
-			});
-			console.log(res?.status);
-
-			if (res.ok) {
-				setIsFollowingClan(true);
-				const followedClans = await AsyncStorage.getItem('followed_clans');
-				const clanList = followedClans ? JSON.parse(followedClans) : [];
-				if (!clanList.includes(clanTag)) {
-					clanList.push(clanTag);
-					await AsyncStorage.setItem('followed_clans', JSON.stringify(clanList));
-				}
-			} else if (res?.status == 419) {
-				setIsFollowingClan(true);
-				const followedClans = await AsyncStorage.getItem('followed_clans');
-				const clanList = followedClans ? JSON.parse(followedClans) : [];
-				if (!clanList.includes(clanTag)) {
-					clanList.push(clanTag);
-					await AsyncStorage.setItem('followed_clans', JSON.stringify(clanList));
-				}
-			}
-		} catch (err) {
-			console.error("Follow Clan err", err);
-		} finally {
-			setLoadingClan(false);
-		}
-	};
+	}, [post.authorUserId, post.clanId, post.clanTag, user?.deviceId, syncing]);
 
 	useEffect(() => {
-		if (!post?._id || !user?.deviceId) return;
+		if (!post?._id || !user?.deviceId || syncing) return;
 		const handleView = async () => {
 			try {
 				const viewedKey = "viewedPosts";
@@ -407,7 +371,7 @@ export default function PostCard({ post, setPosts, isFeed, hideMedia, similarPos
 			} catch (err) { console.error("View track err:", err); }
 		};
 		handleView();
-	}, [post?._id, user?.deviceId]);
+	}, [post?._id, user?.deviceId, syncing]);
 
 	useEffect(() => {
 		const checkLocalLikes = async () => {

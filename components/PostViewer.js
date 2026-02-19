@@ -81,9 +81,10 @@ export default function PostsViewer() {
             InteractionManager.runAfterInteractions(() => {
                 if (isMounted) {
                     setReady(true);
+                    // ⏱️ Wait for the UI to settle before allowing the network to open
                     setTimeout(() => {
                         if (isMounted) setCanFetch(true);
-                    }, 400);
+                    }, 600); 
                 }
             });
         };
@@ -173,14 +174,25 @@ export default function PostsViewer() {
         setSize(size + 1);
     };
 
+    // Show initial AnimeLoading until we at least have cache or the first fetch triggers
     if (!ready || (isLoading && posts.length === 0)) {
-        return <AnimeLoading message="Loading posts" subMessage="Prepping Otaku content" />
+        return <AnimeLoading message="Loading Posts" subMessage="Prepping Otaku content" />
     }
 
     const renderItem = ({ item, index }) => {
         return (
             <View key={item._id}>
-                <PostCard post={item} isFeed posts={posts} setPosts={mutate} />
+                {/* 🚀 OPTIMIZATION: 
+                  We pass 'syncing'. If true, the PostCard should NOT fetch author info.
+                  It stays true until the background revalidation is finished for the first time.
+                */}
+                <PostCard 
+                    post={item} 
+                    isFeed 
+                    posts={posts} 
+                    setPosts={mutate} 
+                    syncing={!SESSION_STATE.hasFetched || isValidating} 
+                />
             </View>
         );
     };
