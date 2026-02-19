@@ -33,6 +33,16 @@ const SESSION_STATE = {
     hasFetched: false
 };
 
+// 🔹 Helper: Fisher-Yates Shuffle
+const shuffleArray = (array) => {
+    const newArr = [...array];
+    for (let i = newArr.length - 1; i > 0; i--) {
+        const j = Math.floor(Math.random() * (i + 1));
+        [newArr[i], newArr[j]] = [newArr[j], newArr[i]];
+    }
+    return newArr;
+};
+
 const saveHeavyCache = async (key, data) => {
     try {
         const cacheEntry = {
@@ -57,6 +67,9 @@ export default function PostsViewer() {
     const [cachedData, setCachedData] = useState(SESSION_STATE.memoryCache); 
     const [isOfflineMode, setIsOfflineMode] = useState(false);
     const [refreshing, setRefreshing] = useState(false); 
+
+    // 🔹 Ref to store shuffled batches so they don't re-shuffle on every render
+    const shuffledPagesRef = useRef({});
 
     const pulseAnim = useRef(new Animated.Value(0)).current;
 
@@ -141,14 +154,13 @@ export default function PostsViewer() {
 
     const handleRefresh = useCallback(async () => {
         setRefreshing(true);
-        // Clear session fetched status to allow a full fresh re-render
+        // Clear shuffle cache on refresh
+        shuffledPagesRef.current = {};
         SESSION_STATE.hasFetched = false;
         await mutate();
     }, [mutate]);
 
-    // 🛠️ FIXED: Stable Post Logic
-    // This logic ensures that once a post is placed in a specific index, 
-    // it stays there even if SWR re-fetches and the backend shuffles the order.
+    // 🛠️ UPDATED: Stable Frontend Shuffle Logic
     const posts = useMemo(() => {
         const sourceData = data || cachedData;
         if (!sourceData || !Array.isArray(sourceData)) return [];
@@ -156,9 +168,19 @@ export default function PostsViewer() {
         const orderedList = [];
         const seenIds = new Set();
 
-        sourceData.forEach((page) => {
+        sourceData.forEach((page, index) => {
             if (page?.posts && Array.isArray(page.posts)) {
-                page.posts.forEach((p) => {
+                // Use the ID of the first post as a key to cache the shuffle for this page
+                const pageKey = page.posts[0]?._id || `page-${index}`;
+                
+                // If we haven't shuffled this batch yet, shuffle it and save it
+                if (!shuffledPagesRef.current[pageKey]) {
+                    shuffledPagesRef.current[pageKey] = shuffleArray(page.posts);
+                }
+
+                const shuffledBatch = shuffledPagesRef.current[pageKey];
+
+                shuffledBatch.forEach((p) => {
                     if (p?._id && !seenIds.has(p._id)) {
                         seenIds.add(p._id);
                         orderedList.push(p);
@@ -184,6 +206,7 @@ export default function PostsViewer() {
         setSize(size + 1);
     };
 
+    // 🔹 Loading Animation maintained per instructions
     if (!ready || (isLoading && posts.length === 0)) {
         return <AnimeLoading message="Loading Posts" subMessage="Prepping Otaku content" />
     }
