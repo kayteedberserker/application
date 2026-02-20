@@ -31,8 +31,8 @@ let LAST_PROCESSED_NOTIF_ID = null;
 let LAST_PROCESSED_URL = null;
 
 // 🔹 AD CONFIGURATION
-const FIRST_AD_DELAY_MS = 120000;
-const COOLDOWN_MS = 240000;
+const FIRST_AD_DELAY_MS = 300000;
+const COOLDOWN_MS = 300000;
 
 const INTERSTITIAL_ID = String(AdConfig.interstitial || "34wz6l0uzrpi6ce0").trim();
 
@@ -98,12 +98,13 @@ const loadInterstitial = () => {
                 console.log("Ad closed");
                 interstitialLoaded = false;
                 lastShownTime = Date.now();
-                loadInterstitial();
+                // Delay reloading the next ad by 15 seconds after close to save resources
+                setTimeout(loadInterstitial, 15000);
             },
             onAdDisplayed: (adInfo) => console.log("Ad Displayed:"),
             onAdDisplayFailed: (error, adInfo) => {
                 console.warn("Display Failed:", error, adInfo);
-                loadInterstitial();
+                setTimeout(loadInterstitial, 15000);
             },
             onAdClicked: (adInfo) => console.log("User clicked the ad")
         };
@@ -201,7 +202,8 @@ function RootLayoutContent() {
                 console.error("Janitor failed:", err);
             }
         };
-        const timeout = setTimeout(runCacheJanitor, 5000);
+        // 🔹 DELAY JANITOR: Moved from 5 seconds to 30 seconds so it doesn't freeze the app on startup
+        const timeout = setTimeout(runCacheJanitor, 30000);
         return () => clearTimeout(timeout);
     }, []);
 
@@ -320,7 +322,10 @@ function RootLayoutContent() {
                     onInitSuccess: (config) => {
                         console.log("✅ LevelPlay initialized successfully");
                         setIsAdReady(true);
-                        loadInterstitial();
+                        // 🔹 DELAY AD LOAD: Wait 15 seconds before downloading the heavy video ad into memory
+                        setTimeout(() => {
+                            loadInterstitial();
+                        }, 15000);
                     },
                     onInitFailed: (err) => {
                         console.warn("❌ LevelPlay failed to initialize:", err);
