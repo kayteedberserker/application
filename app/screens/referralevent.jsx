@@ -38,7 +38,7 @@ export default function ReferralScreen() {
     });
 
     const referralCode = user?.referralCode?.toUpperCase() || "RECRUIT_01";
-    const referralLink = `https://oreblogda.com/register?ref=${referralCode}`;
+    const referralLink = `https://play.google.com/store/apps/details?id=com.kaytee.oreblogda&referrer=${referralCode}`;
 
     const rounds = [
         { id: 1, title: "Initiate Rank", reward: "$10", color: "#cd7f32", icon: "fountain-pen-tip" },
@@ -101,7 +101,7 @@ export default function ReferralScreen() {
     const onShare = async () => {
         try {
             await Share.share({
-                message: `Join my Clan on OreBlog! 🌀 Help us unlock the ${rounds[data.round - 1]?.reward} Grand Reward: ${referralLink}`,
+                message: `Join me on OreBlogda - My Anime blog! 🌀 Help us unlock the ${rounds[data.round - 1]?.reward} Grand Reward: ${referralLink}`,
             });
         } catch (error) {
             console.log(error.message);
