@@ -52,14 +52,10 @@ module.exports = function withAdMediation(config) {
 
   /* ---------------- 2. Implementation of Stable Adapters ---------------- */
   config = withAppBuildGradle(config, (config) => {
+    // 🛑 Removed Start.io and Liftoff/Vungle to save data and reduce build size
     const dependencies = `
     // Unity LevelPlay Core
     implementation 'com.unity3d.ads-mediation:mediation-sdk:8.9.1'
-
-    // Start.io (StartApp) Mediation Adapter
-    implementation 'io.start:unity-ads-mediation:3.0.0'
-    // Start.io SDK is pulled automatically by the adapter, but explicitly defined:
-    implementation 'com.startapp:inapp-sdk:5.1.0'
 
     // Google AdMob
     implementation 'com.unity3d.ads-mediation:admob-adapter:4.3.43'
@@ -68,10 +64,6 @@ module.exports = function withAdMediation(config) {
     // Unity Ads
     implementation 'com.unity3d.ads-mediation:unityads-adapter:5.5.0'
     implementation 'com.unity3d.ads:unity-ads:4.16.6'
-
-    // Liftoff/Vungle
-    implementation 'com.unity3d.ads-mediation:vungle-adapter:5.5.0'
-    implementation 'com.vungle:vungle-ads:7.7.0'
 
     implementation 'com.squareup.picasso:picasso:2.8'
 
@@ -82,8 +74,8 @@ module.exports = function withAdMediation(config) {
     }
     `;
 
-    // Only add if not already present
-    if (!config.modResults.contents.includes("io.start:unity-ads-mediation")) {
+    // Updated check to use the core mediation SDK as the insertion point
+    if (!config.modResults.contents.includes("com.unity3d.ads-mediation:mediation-sdk")) {
       config.modResults.contents = config.modResults.contents.replace(
         /dependencies\s?{/,
         `dependencies {${dependencies}`
@@ -95,17 +87,23 @@ module.exports = function withAdMediation(config) {
 
   /* ---------------- 3. Clean Repositories Block ---------------- */
   config = withProjectBuildGradle(config, (config) => {
-    // Added Start.io Maven Repository
-    if (!config.modResults.contents.includes("maven-repo.start.io")) {
+    // 🛑 Removed Start.io Maven Repository
+    // This ensures no connections are made to start.io during build
+    if (!config.modResults.contents.includes("mavenCentral()")) {
       config.modResults.contents = config.modResults.contents.replace(
         /dependencyResolutionManagement\s?{\s?repositories\s?{/,
         `dependencyResolutionManagement {
     repositories {
         google()
         mavenCentral()
-        maven { url "https://maven-repo.start.io/" }
         maven { url "https://jitpack.io" }`
       );
+    } else {
+        // Explicitly clean out the Start.io repo if it was injected in a previous run
+        config.modResults.contents = config.modResults.contents.replace(
+            /maven\s?{\s?url\s?"https:\/\/maven-repo\.start\.io\/"\s?}/g,
+            ""
+        );
     }
     return config;
   });
