@@ -46,6 +46,11 @@ const TopBar = ({ isDark }) => {
     // Shared value for animations
     const pulse = useSharedValue(1);
 
+    // UI Logic helpers (Moved up so the useEffect can read them)
+    const hasActiveStreak = streak?.streak > 0;
+    const showRestoreUI = streak?.canRestore;
+    const isZeroStreak = !hasActiveStreak && !showRestoreUI;
+
     useEffect(() => {
         pulse.value = withRepeat(
             withSequence(
@@ -59,7 +64,8 @@ const TopBar = ({ isDark }) => {
 
     // 🔹 LEVELPLAY REWARDED LOGIC - WITH RETRY MECHANISM
     useEffect(() => {
-        if (REWARDED_ID === "0") return;
+        // 🛑 DATA SAVER: Abort entirely if the user doesn't need to restore a streak or if streak data is still loading
+        if (REWARDED_ID === "0" || loading || !showRestoreUI) return;
 
         // 1. Create the instance
         const rewardedAd = new LevelPlayRewardedAd(REWARDED_ID);
@@ -108,7 +114,7 @@ const TopBar = ({ isDark }) => {
             onAdClosed: (adInfo) => {
                 console.log("Rewarded Ad Closed");
                 setIsAdShowing(false);
-                // Reload ad for next time
+                // Reload ad for next time (will clean up if streak is successfully restored)
                 rewardedAd.loadAd();
             },
             onAdShowFailed: (error, adInfo) => {
@@ -142,7 +148,7 @@ const TopBar = ({ isDark }) => {
                 }
             }
         };
-    }, []);
+    }, [loading, showRestoreUI]); // 👈 Now this effect will re-run correctly when streak state changes
 
     const handleRestoreStreak = async () => {
         if (!user?.deviceId) return;
@@ -186,11 +192,6 @@ const TopBar = ({ isDark }) => {
             adInstance.loadAd();
         }
     };
-
-    // UI Logic helpers
-    const hasActiveStreak = streak?.streak > 0;
-    const showRestoreUI = streak?.canRestore;
-    const isZeroStreak = !hasActiveStreak && !showRestoreUI;
 
     const urgentButtonStyle = useAnimatedStyle(() => ({
         transform: [{ scale: showRestoreUI ? pulse.value : 1 }],
