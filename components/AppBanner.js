@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState, memo } from 'react';
 import {
   ActivityIndicator,
   Platform,
@@ -82,11 +82,13 @@ const AppBanner = ({ size = 'MREC' }) => {
       if (retryTimer.current) clearTimeout(retryTimer.current);
       if (bannerAdViewRef.current) {
         // 🧹 MEMORY CLEANUP: Crucial to prevent lag when navigating away
+        // NOTE: If this banner is inside a FlatList, scrolling it out of view 
+        // will destroy the ad and force a re-download when scrolled back.
         bannerAdViewRef.current.destroy();
         bannerAdViewRef.current = null;
       }
     };
-  }, []); // Removed loadAdInternal from deps to ensure useEffect only runs ONCE on mount
+  }, []); 
 
   if (Platform.OS === 'web') return null;
 
@@ -130,12 +132,7 @@ const AppBanner = ({ size = 'MREC' }) => {
             adSize={layout.sdkSize}
             placementName={size === 'MREC' ? 'DefaultMREC' : 'DefaultBanner'} 
             listener={adListener}
-            onLayout={(e) => {
-              // Safety fallback only
-              if (!isInitialLoadTriggered.current) {
-                  loadAdInternal();
-              }
-            }}
+            // 🛑 DATA SAVER: Removed the onLayout trap that causes double-fetching
             style={{ width: layout.width, height: layout.height }}
           />
         )}
@@ -144,4 +141,5 @@ const AppBanner = ({ size = 'MREC' }) => {
   );
 };
 
-export default AppBanner;
+// 🛑 DATA SAVER: Memoize the component so parent re-renders don't cause the ad to reload
+export default memo(AppBanner, (prevProps, nextProps) => prevProps.size === nextProps.size);
