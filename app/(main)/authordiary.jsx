@@ -158,7 +158,7 @@ export default function AuthorDiaryDashboard() {
     // =================================================================
     const REWARDED_ID = String(AdConfig.rewarded || "pw746blifv59mqoq").trim();
     useEffect(() => {
-        if (REWARDED_ID === "0" || !fingerprint) return;
+        if (REWARDED_ID === "0" || !fingerprint || todayPosts.length < maxPostsToday) return;
 
         const rewardedAd = new LevelPlayRewardedAd(REWARDED_ID);
         rewardedAdRef.current = rewardedAd;
