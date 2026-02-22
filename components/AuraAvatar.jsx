@@ -1,5 +1,5 @@
-import React, { useEffect } from "react";
-import { Image, Pressable, View } from "react-native";
+import React, { useEffect, useMemo, useState } from "react";
+import { ActivityIndicator, Image, Pressable, View } from "react-native";
 import Animated, {
     Easing,
     useAnimatedStyle,
@@ -8,6 +8,7 @@ import Animated, {
     withTiming
 } from "react-native-reanimated";
 import { Text } from "./Text";
+import { SyncLoading } from "./SyncLoading"; // 🔹 Added for loading instruction
 
 export default function AuraAvatar({ 
     author, 
@@ -17,21 +18,50 @@ export default function AuraAvatar({
     onPress, 
     size = 44 
 }) {
+    const [imageLoading, setImageLoading] = useState(true);
+    
     // 🔹 REANIMATED SHARED VALUES
     const pulseAnim = useSharedValue(1);
     const rotationAnim = useSharedValue(0);
 
-    useEffect(() => {
-        if (!isTop10) return; // Only run animations if they are ranked
+    // 🔹 PRE-CALCULATE STATIC STYLES (Prevents UI Thread Crash)
+    const frameStyle = useMemo(() => {
+        const rank = author?.rank;
+        const base = {
+            borderRadius: size / 2,
+            borderWidth: 1,
+            transform: []
+        };
 
-        // Pulse: Scales to 1.1 over 2.5s, then reverses back to 1 infinitely
+        if (rank === 1) {
+            return { 
+                borderRadius: size * 0.3, 
+                transform: [{ rotate: '45deg' }], 
+                borderWidth: 2 
+            };
+        }
+        if (rank === 2) {
+            return { ...base, borderRadius: size * 0.56, borderWidth: 2 };
+        }
+        if (rank === 3) {
+            return { ...base, borderRadius: size * 0.18, borderWidth: 1.5 };
+        }
+        return { ...base, borderRadius: size };
+    }, [author?.rank, size]);
+
+    useEffect(() => {
+        if (!isTop10) {
+            pulseAnim.value = 1;
+            rotationAnim.value = 0;
+            return;
+        }
+
         pulseAnim.value = withRepeat(
             withTiming(1.1, { duration: 2500 }),
             -1, 
             true 
         );
 
-        // Rotation: Spins 360 degrees over 10s continuously
         rotationAnim.value = withRepeat(
             withTiming(360, { duration: 10000, easing: Easing.linear }),
             -1,
@@ -39,34 +69,28 @@ export default function AuraAvatar({
         );
     }, [isTop10]);
 
-    const getRankedFrameStyle = () => {
-        if (!author?.rank) return { borderRadius: size / 2, borderWidth: 1 };
-        if (author.rank === 1) return { borderRadius: size * 0.3, transform: [{ rotate: '45deg' }], borderWidth: 2 };
-        if (author.rank === 2) return { borderRadius: size * 0.56, borderWidth: 2 };
-        if (author.rank === 3) return { borderRadius: size * 0.18, borderWidth: 1.5 };
-        return { borderRadius: size, borderWidth: 1 };
-    };
-
-    // 🔹 ANIMATED STYLES
+    // 🔹 ANIMATED STYLES (No JS function calls inside here)
     const animatedSpinStyle = useAnimatedStyle(() => {
+        const staticRotation = frameStyle.transform[0]?.rotate || '0deg';
         return {
             transform: [
-                ...(getRankedFrameStyle().transform || []),
+                { rotate: staticRotation },
                 { rotate: `${rotationAnim.value}deg` }
             ]
         };
     });
 
     const animatedPulseStyle = useAnimatedStyle(() => {
+        const staticRotation = frameStyle.transform[0]?.rotate || '0deg';
         return {
             transform: [
-                ...(getRankedFrameStyle().transform || []),
+                { rotate: staticRotation },
                 { scale: pulseAnim.value }
             ]
         };
     });
 
-    const containerSize = size + 12; // Gives room for the external spinning borders
+    const containerSize = size + 12;
 
     return (
         <Pressable
@@ -75,10 +99,10 @@ export default function AuraAvatar({
             className="relative shrink-0 items-center justify-center"
         >
             {/* Layer 1: Dashed Spinning Border (Top 5 only) */}
-            {isTop10 && author.rank <= 5 && (
+            {isTop10 && author?.rank <= 5 && (
                 <Animated.View
                     style={[
-                        getRankedFrameStyle(),
+                        frameStyle,
                         animatedSpinStyle,
                         {
                             position: 'absolute',
@@ -96,7 +120,7 @@ export default function AuraAvatar({
             {isTop10 && (
                 <Animated.View
                     style={[
-                        getRankedFrameStyle(),
+                        frameStyle,
                         animatedPulseStyle,
                         {
                             position: 'absolute',
@@ -112,23 +136,32 @@ export default function AuraAvatar({
             {/* Layer 3: The Actual Avatar Image/Initials */}
             <View 
                 style={[
-                    getRankedFrameStyle(), 
+                    frameStyle, 
                     { 
                         width: size, 
                         height: size, 
                         borderColor: isTop10 ? aura?.color : 'rgba(96, 165, 250, 0.3)', 
                         overflow: 'hidden', 
-                        backgroundColor: isDark ? '#1a1d23' : '#f3f4f6' 
+                        backgroundColor: isDark ? '#1a1d23' : '#f3f4f6',
+                        zIndex: 2
                     }
                 ]}
             >
                 {author?.image ? (
-                    <Image
-                        source={{ uri: author.image }}
-                        className="w-full h-full bg-gray-200"
-                        resizeMode="cover"
-                        style={author.rank === 1 ? { transform: [{ rotate: '-45deg' }], scale: 1.4 } : {}}
-                    />
+                    <>
+                        <Image
+                            source={{ uri: author.image }}
+                            className="w-full h-full"
+                            resizeMode="cover"
+                            onLoadEnd={() => setImageLoading(false)}
+                            style={author.rank === 1 ? { transform: [{ rotate: '-45deg' }], scale: 1.4 } : {}}
+                        />
+                        {imageLoading && (
+                            <View className="absolute inset-0 items-center justify-center bg-gray-200 dark:bg-gray-800">
+                                <SyncLoading size="small" />
+                            </View>
+                        )}
+                    </>
                 ) : (
                     <View className="flex-1 items-center justify-center" style={{ backgroundColor: isTop10 ? aura?.color : '#2563eb' }}>
                         <Text className="text-white font-black">
@@ -141,8 +174,12 @@ export default function AuraAvatar({
             {/* Layer 4: The Status Dot */}
             <View 
                 className="absolute bottom-1 right-1 border-2 border-white dark:border-[#0d1117] rounded-full shadow-sm"
-                // Scale dot relative to size
-                style={[{ width: size * 0.3, height: size * 0.3, backgroundColor: isTop10 ? aura?.color : '#2563eb' }]} 
+                style={[{ 
+                    width: size * 0.3, 
+                    height: size * 0.3, 
+                    backgroundColor: isTop10 ? aura?.color : '#2563eb',
+                    zIndex: 10
+                }]} 
             />
         </Pressable>
     );
