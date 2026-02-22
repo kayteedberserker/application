@@ -158,7 +158,7 @@ export default function AuraAvatar({
                         />
                         {imageLoading && (
                             <View className="absolute inset-0 items-center justify-center bg-gray-200 dark:bg-gray-800">
-                                <SyncLoading size="small" />
+                                <Text>P</Text>
                             </View>
                         )}
                     </>
