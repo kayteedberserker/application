@@ -1,10 +1,10 @@
+import { Ionicons } from '@expo/vector-icons';
 import { usePathname, useRouter } from "expo-router";
 import { useCallback, useEffect, useRef, useState } from "react";
 import { BackHandler, DeviceEventEmitter, FlatList, TouchableOpacity, View } from "react-native";
 import { Text } from "./Text";
-// 🔹 Using Expo's built-in Ionicons
-import { Ionicons } from '@expo/vector-icons'; 
 
+// 🔹 Your original category list (No "All" tab)
 const categories = [
     { name: "News", icon: "newspaper-outline", activeIcon: "newspaper" },
     { name: "Memes", icon: "flash-outline", activeIcon: "flash" },
@@ -22,23 +22,25 @@ export default function CategoryNav({ isDark }) {
     const router = useRouter();
     const navListRef = useRef(null);
 
-    // Combine "All" with categories for the data source
-    const navData = [{ name: "All", icon: "grid-outline", activeIcon: "grid" }, ...categories];
-
     useEffect(() => {
+        // 🔹 Listen for swipes from HomePage
         const sub = DeviceEventEmitter.addListener("pageSwiped", (index) => {
             if (activeIndexRef.current !== index) {
                 activeIndexRef.current = index;
                 setActiveIndex(index);
                 
-                if (index >= 0 && navListRef.current) {
-                    // ⚡️ Added a safety check to prevent index out of bounds
+                if (navListRef.current) {
                     try {
-                        navListRef.current.scrollToIndex({ 
-                            index: index, 
-                            animated: true, 
-                            viewPosition: 0.5 
-                        });
+                        // Using your logic: index 0 is handled specially, others scroll
+                        if (index > 0) {
+                            navListRef.current.scrollToIndex({ 
+                                index: index - 1, 
+                                animated: true, 
+                                viewPosition: 0.5 
+                            });
+                        } else {
+                            navListRef.current.scrollToOffset({ offset: 0, animated: true });
+                        }
                     } catch (err) {
                         console.warn("Scroll error:", err);
                     }
@@ -72,10 +74,9 @@ export default function CategoryNav({ isDark }) {
             DeviceEventEmitter.emit("scrollToIndex", actualSwiperIndex);
         } else {
             router.replace("/");
-            // Keep the timeout for router transitions, but wrap the emit
             setTimeout(() => {
                 DeviceEventEmitter.emit("scrollToIndex", actualSwiperIndex);
-            }, 100); 
+            }, 50); 
         }
     }, [pathname]);
 
@@ -91,10 +92,9 @@ export default function CategoryNav({ isDark }) {
             <FlatList
                 ref={navListRef}
                 horizontal
-                data={navData} 
+                data={categories} 
                 keyExtractor={(item) => item.name}
                 showsHorizontalScrollIndicator={false}
-                // 🔹 Safety: Handles cases where index is requested before layout
                 onScrollToIndexFailed={(info) => {
                     const wait = new Promise(resolve => setTimeout(resolve, 500));
                     wait.then(() => {
@@ -106,12 +106,14 @@ export default function CategoryNav({ isDark }) {
                     alignItems: 'center',
                 }}
                 renderItem={({ item, index }) => {
-                    const isActive = activeIndex === index;
+                    // 🔹 Your logic: index + 1 maps to the swiper index
+                    const actualSwiperIndex = index + 1;
+                    const isActive = activeIndex === actualSwiperIndex;
                     const displayName = item.name === "Review" ? "Reviews" : item.name;
 
                     return (
                         <TouchableOpacity
-                            onPress={() => handleCategoryPress(index)}
+                            onPress={() => handleCategoryPress(actualSwiperIndex)}
                             activeOpacity={0.8}
                             style={{ 
                                 marginRight: 10,
@@ -119,7 +121,6 @@ export default function CategoryNav({ isDark }) {
                                 alignItems: 'center',
                                 paddingVertical: 8,
                                 paddingHorizontal: isActive ? 14 : 10,
-                                // Adding a slight scaling effect for feel
                                 transform: [{ scale: isActive ? 1.05 : 1 }]
                             }}
                             className={`rounded-full ${
@@ -130,19 +131,18 @@ export default function CategoryNav({ isDark }) {
                         >
                             <Ionicons 
                                 name={isActive ? item.activeIcon : item.icon} 
-                                size={isActive ? 18 : 20} 
+                                size={isActive ? 16 : 18} 
                                 color={isActive ? "white" : (isDark ? "#94a3b8" : "#64748b")} 
                             />
 
                             {isActive && (
                                 <Text 
-                                    className="ml-2 text-[11px] font-black uppercase tracking-tight text-white"
+                                    className="ml-2 text-[10px] font-black uppercase tracking-tight text-white"
                                 >
                                     {displayName}
                                 </Text>
                             )}
                             
-                            {/* Little indicator dot for the active tab */}
                             {isActive && (
                                 <View 
                                     className="absolute -bottom-[2px] self-center w-1 h-1 bg-white rounded-full" 
