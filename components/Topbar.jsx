@@ -235,18 +235,6 @@ const TopBar = ({ isDark }) => {
                         />
                     </TouchableOpacity>
 
-                    {/* 🔍 SEARCH */}
-                    <TouchableOpacity
-                        onPress={() => DeviceEventEmitter.emit("navigateSafely", "/screens/Search")}
-                        className={`p-1.5 rounded-xl ${isDark ? "bg-blue-500/10 border border-blue-500/20" : "bg-gray-100"}`}
-                    >
-                        <Ionicons
-                            name="search-outline"
-                            size={18}
-                            color={isDark ? "#60a5fa" : "#111827"}
-                        />
-                    </TouchableOpacity>
-
                     {/* 🔥 STREAK / 🏥 RESTORE HUD */}
                     {!loading && (
                         <Animated.View entering={FadeInRight}>
