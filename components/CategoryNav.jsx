@@ -2,42 +2,43 @@ import { usePathname, useRouter } from "expo-router";
 import { useCallback, useEffect, useRef, useState } from "react";
 import { BackHandler, DeviceEventEmitter, FlatList, TouchableOpacity, View } from "react-native";
 import { Text } from "./Text";
+// 🔹 Using Expo's built-in Ionicons
+import { Ionicons } from '@expo/vector-icons'; 
 
-const categories = ["News", "Memes", "Fan Art", "Polls", "Review", "Gaming"];
-
-// Pre-calculate item width for smoother scrolling (Estimate: Padding 16 + Text ~50 + Margin 8)
-const ESTIMATED_ITEM_WIDTH = 80; 
+const categories = [
+    { name: "News", icon: "newspaper-outline", activeIcon: "newspaper" },
+    { name: "Memes", icon: "flash-outline", activeIcon: "flash" },
+    { name: "Fan Art", icon: "brush-outline", activeIcon: "brush" },
+    { name: "Polls", icon: "stats-chart-outline", activeIcon: "stats-chart" },
+    { name: "Review", icon: "star-outline", activeIcon: "star" },
+    { name: "Gaming", icon: "game-controller-outline", activeIcon: "game-controller" },
+];
 
 export default function CategoryNav({ isDark }) {
     const [activeIndex, setActiveIndex] = useState(0);
-    const activeIndexRef = useRef(0); // ⚡️ Mutable ref for instant access without re-renders
+    const activeIndexRef = useRef(0); 
     
     const pathname = usePathname();
     const router = useRouter();
     const navListRef = useRef(null);
 
     useEffect(() => {
-        // 🔹 1. Listen for swipes from HomePage
         const sub = DeviceEventEmitter.addListener("pageSwiped", (index) => {
-            // Only update if changed to prevent thrashing
             if (activeIndexRef.current !== index) {
                 activeIndexRef.current = index;
                 setActiveIndex(index);
                 
-                // 🔹 Immediate Scroll Calculation
-                if (index > 0 && navListRef.current) {
+                if (index >= 0 && navListRef.current) {
+                    // ⚡️ Smoothly center the active icon when swiping the main feed
                     navListRef.current.scrollToIndex({ 
-                        index: index - 1, 
+                        index: index, 
                         animated: true, 
                         viewPosition: 0.5 
                     });
-                } else if (index === 0 && navListRef.current) {
-                     navListRef.current.scrollToOffset({ offset: 0, animated: true });
                 }
             }
         });
 
-        // 🔹 2. Handle Hardware Back Button
         const backAction = () => {
             if (activeIndexRef.current !== 0) {
                 setActiveIndex(0);
@@ -64,25 +65,17 @@ export default function CategoryNav({ isDark }) {
             DeviceEventEmitter.emit("scrollToIndex", actualSwiperIndex);
         } else {
             router.replace("/");
-            // Reduced timeout for snappier feel
             setTimeout(() => {
                 DeviceEventEmitter.emit("scrollToIndex", actualSwiperIndex);
             }, 50); 
         }
     }, [pathname]);
 
-    // ⚡️ Optimization: Define getItemLayout to avoid dynamic measurement lag
-    const getItemLayout = (data, index) => ({
-        length: ESTIMATED_ITEM_WIDTH,
-        offset: ESTIMATED_ITEM_WIDTH * index,
-        index,
-    });
-
     return (
         <View 
             className={`shadow-sm ${isDark ? "bg-black/40" : "bg-white/40"}`} 
             style={{ 
-                height: 55,
+                height: 60,
                 borderBottomWidth: 1,
                 borderBottomColor: isDark ? "rgba(30, 58, 138, 0.3)" : "rgba(229, 231, 235, 1)",
             }}
@@ -90,46 +83,54 @@ export default function CategoryNav({ isDark }) {
             <FlatList
                 ref={navListRef}
                 horizontal
-                data={categories}
-                keyExtractor={(item) => item}
+                data={[{ name: "All", icon: "grid-outline", activeIcon: "grid" }, ...categories]} 
+                keyExtractor={(item) => item.name}
                 showsHorizontalScrollIndicator={false}
-                // ⚡️ Added getItemLayout for performance
-                // getItemLayout={getItemLayout} 
-                // Note: If your tab widths vary significantly, remove getItemLayout. 
-                // But for similar sized text tabs, it helps massively.
-                
                 contentContainerStyle={{ 
                     paddingHorizontal: 15, 
                     alignItems: 'center',
-                    height: '100%' 
                 }}
                 renderItem={({ item, index }) => {
-                    const actualSwiperIndex = index + 1;
-                    const isActive = activeIndex === actualSwiperIndex;
-                    const displayName = item === "Review" ? "Reviews" : item;
+                    const isActive = activeIndex === index;
+                    const displayName = item.name === "Review" ? "Reviews" : item.name;
 
                     return (
                         <TouchableOpacity
-                            onPress={() => handleCategoryPress(actualSwiperIndex)}
-                            activeOpacity={0.7}
-                            style={{ marginRight: 8 }}
-                            className={`px-2 py-2 rounded-lg relative ${
-                                isActive ? "bg-blue-600" : "bg-gray-200 dark:bg-gray-800/80"
+                            onPress={() => handleCategoryPress(index)}
+                            activeOpacity={0.8}
+                            style={{ 
+                                marginRight: 10,
+                                flexDirection: 'row',
+                                alignItems: 'center',
+                                paddingVertical: 8,
+                                paddingHorizontal: isActive ? 14 : 10,
+                            }}
+                            className={`rounded-full ${
+                                isActive 
+                                ? "bg-blue-600 shadow-lg shadow-blue-500/40" 
+                                : "bg-gray-100 dark:bg-gray-800/80"
                             }`}
                         >
-                            <Text 
-                                className={`text-[10px] font-black uppercase tracking-widest ${
-                                    isActive ? "text-white" : "text-gray-800 dark:text-gray-400"
-                                }`}
-                            >
-                                {displayName}
-                            </Text>
+                            <Ionicons 
+                                name={isActive ? item.activeIcon : item.icon} 
+                                size={isActive ? 18 : 20} 
+                                color={isActive ? "white" : (isDark ? "#94a3b8" : "#64748b")} 
+                            />
 
                             {isActive && (
-                                <>
-                                    <View style={{ position: 'absolute', top: 0, left: 0, width: 4, height: 4, borderTopWidth: 1, borderLeftWidth: 1, borderColor: 'white' }} />
-                                    <View style={{ position: 'absolute', bottom: 0, right: 0, width: 4, height: 4, borderBottomWidth: 1, borderRightWidth: 1, borderColor: 'white' }} />
-                                </>
+                                <Text 
+                                    className="ml-2 text-[11px] font-black uppercase tracking-tight text-white"
+                                >
+                                    {displayName}
+                                </Text>
+                            )}
+                            
+                            {/* Little indicator dot for the active tab */}
+                            {isActive && (
+                                <View 
+                                    className="absolute -bottom-[2px] self-center w-1 h-1 bg-white rounded-full" 
+                                    style={{ left: '50%', marginLeft: -0.5 }}
+                                />
                             )}
                         </TouchableOpacity>
                     );
