@@ -6,6 +6,7 @@ import { useEffect, useRef, useState } from "react";
 import {
     Animated,
     DeviceEventEmitter,
+    Dimensions,
     StatusBar,
     StyleSheet,
     Text,
@@ -22,25 +23,42 @@ import "../globals.css";
 import CategoryNav from "./../../components/CategoryNav";
 import TopBar from "./../../components/Topbar";
 
+const { width } = Dimensions.get('window');
+// 🔹 Reduced width for a sleeker look since only the active tab has text
+const TAB_BAR_WIDTH = 280; 
+const TAB_WIDTH = (TAB_BAR_WIDTH - 8) / 4; // Minus padding
+
 export default function MainLayout() {
     // 1. ALL HOOKS MUST BE AT THE TOP
     const { colorScheme, setColorScheme } = useNativeWind();
     const systemScheme = useSystemScheme();
     const router = useRouter();
     const pathname = usePathname();
-    const insets = useSafeAreaInsets(); // Moved up from the bottom
+    const insets = useSafeAreaInsets(); 
 
     const [lastOffset, setLastOffset] = useState(0);
     const [isNavVisible, setIsNavVisible] = useState(true);
     const [showTop, setShowTop] = useState(false);
     const [showClanMenu, setShowClanMenu] = useState(false);
+    
     const navY = useRef(new Animated.Value(0)).current;
+    const tabX = useRef(new Animated.Value(0)).current; 
     const { user, contextLoading } = useUser();
     const animValue = useRef(new Animated.Value(0)).current;
     const eventPulse = useRef(new Animated.Value(1)).current;
 
     const [isUserAuthenticated, setIsUserAuthenticated] = useState(null);
     const [userInClan, setUserInClan] = useState(false);
+
+    // 🔹 Tab Configuration with custom colors
+    const tabs = [
+        { id: 'home', label: 'HOME', icon: 'home', route: '/', color: '#3b82f6', match: (p) => p === "/" || p.startsWith("/categories") },
+        { id: 'search', label: 'SEARCH', icon: 'search', route: '/screens/search', color: '#a855f7', match: (p) => p === "/screens/search" },
+        { id: 'diary', label: 'DIARY', icon: 'add-circle', route: '/authordiary', color: '#10b981', match: (p) => p === "/authordiary" },
+        { id: 'profile', label: 'PROFILE', icon: 'person', route: '/profile', color: '#f59e0b', match: (p) => p === "/profile" },
+    ];
+
+    const activeTabIndex = tabs.findIndex(tab => tab.match(pathname));
 
     // 2. ALL USEEFFECTS & MEMOIZED VALUES
     useEffect(() => {
@@ -51,6 +69,15 @@ export default function MainLayout() {
             useNativeDriver: true,
         }).start();
     }, [pathname]);
+
+    useEffect(() => {
+        Animated.spring(tabX, {
+            toValue: activeTabIndex * TAB_WIDTH,
+            useNativeDriver: false, // 🔹 Must be false for layout/color animations
+            bounciness: 4,
+            speed: 10
+        }).start();
+    }, [activeTabIndex]);
 
     useEffect(() => {
         Animated.spring(animValue, {
@@ -150,8 +177,19 @@ export default function MainLayout() {
     const translateY_2 = animValue.interpolate({ inputRange: [0, 1], outputRange: [40, 0] });
     const translateY_3 = animValue.interpolate({ inputRange: [0, 1], outputRange: [60, 0] });
     const scale = animValue.interpolate({ inputRange: [0, 1], outputRange: [0, 1] });
-    const opacity = animValue.interpolate({ inputRange: [0, 0.5, 1], outputRange: [0, 0, 1] });
+    const opacityClan = animValue.interpolate({ inputRange: [0, 0.5, 1], outputRange: [0, 0, 1] });
     const rotation = animValue.interpolate({ inputRange: [0, 1], outputRange: ['0deg', '90deg'] });
+
+    const navOpacity = navY.interpolate({
+        inputRange: [-70, -20, 0],
+        outputRange: [0, 0.5, 1]
+    });
+
+    // 🔹 Smoothly transition the pill color based on its position
+    const pillColor = tabX.interpolate({
+        inputRange: tabs.map((_, i) => i * TAB_WIDTH),
+        outputRange: tabs.map(tab => tab.color),
+    });
 
     const isDark = colorScheme === "dark";
     const handleBackToTop = () => DeviceEventEmitter.emit("doScrollToTop");
@@ -186,12 +224,18 @@ export default function MainLayout() {
             <SafeAreaView
                 style={{
                     zIndex: 100,
-                    maxHeight: 130,
+                    backgroundColor: isDark ? "#000" : "#fff",
+                    overflow: 'hidden',
                 }}>
-                <TopBar isDark={isDark} />
+                <View style={{ zIndex: 20, backgroundColor: isDark ? "#000" : "#fff" }}>
+                    <TopBar isDark={isDark} />
+                </View>
+                
                 <Animated.View
+                    pointerEvents={isNavVisible ? "auto" : "none"}
                     style={{
                         transform: [{ translateY: navY }],
+                        opacity: navOpacity,
                         zIndex: 10,
                     }}
                 >
@@ -237,55 +281,74 @@ export default function MainLayout() {
                 </TouchableOpacity>
             </Animated.View>
 
-            {/* CUSTOM FLOATING TAB BAR */}
+            {/* 🔹 COMPACT COLOR-CHANGING TAB BAR */}
             <View
                 style={{
                     position: "absolute",
                     bottom: insets.bottom + 15,
-                    height: 60,
-                    width: "70%",
+                    height: 58,
+                    width: TAB_BAR_WIDTH,
                     alignSelf: "center",
-                    borderRadius: 25,
-                    backgroundColor: isDark ? "#111111" : "#ffffff",
+                    borderRadius: 29,
+                    backgroundColor: isDark ? "rgba(17, 17, 17, 0.98)" : "rgba(255, 255, 255, 0.98)",
                     flexDirection: "row",
                     alignItems: "center",
-                    justifyContent: "space-around",
-                    elevation: 10,
+                    paddingHorizontal: 4,
+                    elevation: 15,
                     shadowColor: "#000",
-                    shadowOffset: { width: 0, height: 4 },
-                    shadowOpacity: 0.2,
-                    shadowRadius: 5,
-                    borderWidth: isDark ? 1 : 0.5,
-                    borderColor: isDark ? "#1e293b" : "#e2e8f0",
+                    shadowOffset: { width: 0, height: 8 },
+                    shadowOpacity: 0.3,
+                    shadowRadius: 10,
+                    borderWidth: 1,
+                    borderColor: isDark ? "rgba(255, 255, 255, 0.08)" : "rgba(0, 0, 0, 0.05)",
                     zIndex: 999,
                 }}
             >
-                <TouchableOpacity onPress={() => navigateTo("/")} className="items-center justify-center">
-                    <Ionicons
-                        name={pathname === "/" || pathname.startsWith("/categories") ? "home" : "home-outline"}
-                        size={22}
-                        color={pathname === "/" || pathname.startsWith("/categories") ? "#60a5fa" : (isDark ? "#94a3b8" : "#64748b")}
-                    />
-                    <Text style={{ fontSize: 9, fontWeight: '900', color: pathname === "/" || pathname.startsWith("/categories") ? "#60a5fa" : (isDark ? "#94a3b8" : "#64748b"), marginTop: 2 }}>HOME</Text>
-                </TouchableOpacity>
+                {/* 🔹 Color-Changing Sliding Pill Background */}
+                <Animated.View 
+                    style={{
+                        position: 'absolute',
+                        width: TAB_WIDTH,
+                        height: 50,
+                        borderRadius: 25,
+                        backgroundColor: pillColor, // 🔹 Animated color interpolation
+                        left: 4,
+                        transform: [{ translateX: tabX }],
+                        zIndex: 0
+                    }}
+                />
 
-                <TouchableOpacity onPress={() => navigateTo("/authordiary")} className="items-center justify-center">
-                    <Ionicons
-                        name={pathname === "/authordiary" ? "add-circle" : "add-circle-outline"}
-                        size={24}
-                        color={pathname === "/authordiary" ? "#60a5fa" : (isDark ? "#94a3b8" : "#64748b")}
-                    />
-                    <Text style={{ fontSize: 9, fontWeight: '900', color: pathname === "/authordiary" ? "#60a5fa" : (isDark ? "#94a3b8" : "#64748b"), marginTop: 2 }}>ORE DIARY</Text>
-                </TouchableOpacity>
-
-                <TouchableOpacity onPress={() => navigateTo("/profile")} className="items-center justify-center">
-                    <Ionicons
-                        name={pathname === "/profile" ? "person" : "person-outline"}
-                        size={22}
-                        color={pathname === "/profile" ? "#60a5fa" : (isDark ? "#94a3b8" : "#64748b")}
-                    />
-                    <Text style={{ fontSize: 9, fontWeight: '900', color: pathname === "/profile" ? "#60a5fa" : (isDark ? "#94a3b8" : "#64748b"), marginTop: 2 }}>PROFILE</Text>
-                </TouchableOpacity>
+                {tabs.map((tab) => {
+                    const isActive = tab.match(pathname);
+                    return (
+                        <TouchableOpacity 
+                            key={tab.id}
+                            onPress={() => navigateTo(tab.route)} 
+                            style={{ width: TAB_WIDTH, height: '100%' }}
+                            className="items-center justify-center flex-row"
+                            activeOpacity={0.7}
+                        >
+                            <Ionicons
+                                name={isActive ? tab.icon : `${tab.icon}-outline`}
+                                size={isActive ? 20 : 22}
+                                color={isActive ? "#fff" : (isDark ? "#64748b" : "#94a3b8")}
+                            />
+                            {isActive && (
+                                <Animated.Text 
+                                    numberOfLines={1}
+                                    style={{ 
+                                        fontSize: 9, 
+                                        fontWeight: '900', 
+                                        color: "#fff", 
+                                        marginLeft: 6 
+                                    }}
+                                >
+                                    {tab.label}
+                                </Animated.Text>
+                            )}
+                        </TouchableOpacity>
+                    );
+                })}
             </View>
 
             {/* CLAN OVERLAY */}
@@ -299,7 +362,7 @@ export default function MainLayout() {
 
             <View style={[styles.container, { bottom: insets.bottom + 22 }]}>
                 <Animated.View style={{
-                    opacity,
+                    opacity: opacityClan,
                     transform: [{ translateY: translateY_3 || -180 }, { scale }],
                     marginBottom: 10
                 }}>
@@ -316,7 +379,7 @@ export default function MainLayout() {
                 </Animated.View>
 
                 {userInClan && <Animated.View style={{
-                    opacity,
+                    opacity: opacityClan,
                     transform: [{ translateY: translateY_2 }, { scale }],
                     marginBottom: 10
                 }}>
@@ -334,7 +397,7 @@ export default function MainLayout() {
                 }
 
                 <Animated.View style={{
-                    opacity,
+                    opacity: opacityClan,
                     transform: [{ translateY: translateY_1 }, { scale }],
                     marginBottom: 12
                 }}>
