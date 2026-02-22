@@ -309,7 +309,7 @@ const ClanProfile = () => {
     const listHeader = (
         <View>
             {/* Header / Clan Crest Section */}
-            <View className="p-8 items-center border-b border-gray-100 dark:border-zinc-900">
+            <View className="p-8 mt-3 items-center border-b border-gray-100 dark:border-zinc-900">
                 <View className="relative">
                     <Animated.View
                         style={{
