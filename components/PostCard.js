@@ -524,13 +524,16 @@ export default function PostCard({ post, setPosts, isFeed, hideMedia, syncing, s
 		return (
 			<View className="my-2 rounded-2xl overflow-hidden bg-black" style={[glassStyle, { height: similarPosts ? 200 : 300 }]}>
 				{count === 1 ? (
-				       	<VideoView
+					isDirectVideo ? (
+						<View className="w-full h-full items-center justify-center relative">
+						     <VideoView
 								player={player}
 								style={{ width: "100%", height: "100%" }}
 								contentFit="contain"
 								nativeControls={true}
 								onIsVideoReadyToPlay={() => setIsVideoLoading(false)}
 							/>
+						</View>
 					) : (
 						<Pressable onPress={() => openItem(0)} className="w-full h-full">
 							<Image source={{ uri: firstItem.url }} className="w-full h-full" resizeMode="cover" />
@@ -778,4 +781,4 @@ export default function PostCard({ post, setPosts, isFeed, hideMedia, syncing, s
 			</Modal>
 		</View>
 	);
-}
+		   }
