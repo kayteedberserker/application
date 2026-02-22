@@ -129,7 +129,7 @@ const ClanCard = ({ clan, isDark }) => {
     return (
         <Animated.View entering={FadeInDown.duration(400)} layout={Layout.springify()}>
             <TouchableOpacity
-                onPress={() => DeviceEventEmitter.emit("navigateSafely", `/clan/${clan.tag}`)}
+                onPress={() => DeviceEventEmitter.emit("navigateSafely", `/clans/${clan.tag}`)}
                 className={`mb-3 mx-1 rounded-3xl border overflow-hidden relative ${
                     isDark ? "bg-[#0f0f0f] border-zinc-800" : "bg-white border-zinc-100 shadow-sm"
                 }`}
@@ -387,17 +387,17 @@ const SearchScreen = () => {
 
     const renderItem = ({ item }) => {
         // Handle Ads
-        // if (item.isAd) {
-        //     return item.adType === 'author' 
-        //         ? <View className="mb-3 mt-3 w-full p-6 border border-dashed border-gray-300 dark:border-gray-800 rounded-[32px] bg-gray-50/50 dark:bg-white/5 items-center justify-center">
-		// 					<Text className="text-[10px] font-bold text-gray-400 uppercase tracking-[0.2em] italic text-center">Sponsored Transmission</Text>
-		// 					<AppBanner size="LARGE" />
-		// 				</View>
-        //         : <View className="mb-3 mt-3 w-full p-6 border border-dashed border-gray-300 dark:border-gray-800 rounded-[32px] bg-gray-50/50 dark:bg-white/5 items-center justify-center">
-		// 					<Text className="text-[10px] font-bold text-gray-400 uppercase tracking-[0.2em] italic text-center">Sponsored Transmission</Text>
-		// 					<AppBanner size="MEDIUM_RECTANGLE" />
-		// 				</View>;
-        // }
+        if (item.isAd) {
+            return item.adType === 'author' 
+               ? <View className="mb-3 mt-3 w-full p-6 border border-dashed border-gray-300 dark:border-gray-800 rounded-[32px] bg-gray-50/50 dark:bg-white/5 items-center justify-center">
+							<Text className="text-[10px] font-bold text-gray-400 uppercase tracking-[0.2em] italic text-center">Sponsored Transmission</Text>
+						<AppBanner size="LARGE" />
+				</View>
+               : <View className="mb-3 mt-3 w-full p-6 border border-dashed border-gray-300 dark:border-gray-800 rounded-[32px] bg-gray-50/50 dark:bg-white/5 items-center justify-center">
+						<Text className="text-[10px] font-bold text-gray-400 uppercase tracking-[0.2em] italic text-center">Sponsored Transmission</Text>
+					<AppBanner size="MEDIUM_RECTANGLE" />
+					</View>;
+         }
 
         // Handle Organic Content
         if (item.username) return <AuthorCard author={item} isDark={isDark} />;
