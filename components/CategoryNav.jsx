@@ -3,7 +3,7 @@ import { useCallback, useEffect, useRef, useState } from "react";
 import { BackHandler, DeviceEventEmitter, FlatList, TouchableOpacity, View } from "react-native";
 import { Text } from "./Text";
 
-const categories = ["News", "Memes", "Polls", "Review", "Gaming"];
+const categories = ["News", "Memes", "Fan Art", "Polls", "Review", "Gaming"];
 
 // Pre-calculate item width for smoother scrolling (Estimate: Padding 16 + Text ~50 + Margin 8)
 const ESTIMATED_ITEM_WIDTH = 80; 
@@ -113,7 +113,7 @@ export default function CategoryNav({ isDark }) {
                             onPress={() => handleCategoryPress(actualSwiperIndex)}
                             activeOpacity={0.7}
                             style={{ marginRight: 8 }}
-                            className={`px-4 py-2 rounded-lg relative ${
+                            className={`px-2 py-2 rounded-lg relative ${
                                 isActive ? "bg-blue-600" : "bg-gray-200 dark:bg-gray-800/80"
                             }`}
                         >
