@@ -270,7 +270,7 @@ export default function MainLayout() {
                     position: "absolute",
                     bottom: insets.bottom + 15,
                     height: 60,
-                    left: 20, 
+                    left: 35, 
                     borderRadius: 30,
                     backgroundColor: isDark ? "rgba(17, 17, 17, 0.95)" : "rgba(255, 255, 255, 0.95)",
                     flexDirection: "row",
