@@ -82,7 +82,7 @@ export default function CategoryNav({ isDark }) {
 
     return (
         <View 
-            className={`shadow-sm ${isDark ? "bg-black/40" : "bg-white/40"}`} 
+            className="shadow-sm bg-transparent" // 🔹 Changed to completely transparent
             style={{ 
                 height: 60,
                 borderBottomWidth: 1,
@@ -95,6 +95,7 @@ export default function CategoryNav({ isDark }) {
                 data={categories} 
                 keyExtractor={(item) => item.name}
                 showsHorizontalScrollIndicator={false}
+                centerContent={true} // 🔹 Centers items automatically when they don't fill the screen width
                 onScrollToIndexFailed={(info) => {
                     const wait = new Promise(resolve => setTimeout(resolve, 500));
                     wait.then(() => {
