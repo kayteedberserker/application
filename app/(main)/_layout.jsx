@@ -44,7 +44,7 @@ export default function MainLayout() {
     const [isUserAuthenticated, setIsUserAuthenticated] = useState(null);
     const [userInClan, setUserInClan] = useState(false);
 
-    // 🔹 Tab Config with simple colors
+    // 🔹 Tab Config
     const tabs = [
         { id: 'home', label: 'HOME', icon: 'home', route: '/', color: '#3b82f6', match: (p) => p === "/" || p.startsWith("/categories") },
         { id: 'search', label: 'SEARCH', icon: 'search', route: '/screens/Search', color: '#a855f7', match: (p) => p === "/screens/Search" },
@@ -58,7 +58,7 @@ export default function MainLayout() {
         Animated.timing(navY, {
             toValue: 0,
             duration: 300,
-            useNativeDriver: false, // 🔹 Changed to false to animate actual layout (marginTop)
+            useNativeDriver: true, // 🔹 Back to true for smooth performance
         }).start();
     }, [pathname]);
 
@@ -125,16 +125,16 @@ export default function MainLayout() {
                     Animated.timing(navY, {
                         toValue: 0,
                         duration: 200,
-                        useNativeDriver: false, // 🔹 Changed to false
+                        useNativeDriver: true,
                     }).start();
                 }
             } else if (offsetY > lastOffset && offsetY > 100) {
                 if (isNavVisible) {
                     setIsNavVisible(false);
                     Animated.timing(navY, {
-                        toValue: -70,
+                        toValue: -80, // 🔹 Slide out slightly further to clear shadow
                         duration: 200,
-                        useNativeDriver: false, // 🔹 Changed to false
+                        useNativeDriver: true,
                     }).start();
                 }
             }
@@ -198,28 +198,33 @@ export default function MainLayout() {
         <View style={{ flex: 1, backgroundColor: isDark ? "#000" : "#fff" }}>
             <StatusBar barStyle={isDark ? "light-content" : "dark-content"} />
 
+            {/* Header Section */}
             <SafeAreaView
+                edges={['top', 'left', 'right']}
                 style={{
                     zIndex: 100,
                     backgroundColor: isDark ? "#000" : "#fff",
-                    overflow: 'hidden',
                 }}>
-                <View style={{ zIndex: 20, backgroundColor: isDark ? "#000" : "#fff" }}>
-                    <TopBar isDark={isDark} />
-                </View>
-                
-                <Animated.View
-                    pointerEvents={isNavVisible ? "auto" : "none"}
-                    style={{
-                        marginTop: navY, // 🔹 Now physically shrinks the layout instead of just moving visually!
-                        opacity: navOpacity,
-                        zIndex: 10,
-                        backgroundColor: "transparent", // 🔹 Explicitly transparent
-                    }}
-                >
-                    <CategoryNav isDark={isDark} />
-                </Animated.View>
+                <TopBar isDark={isDark} />
             </SafeAreaView>
+
+            {/* 🔹 Category Nav: Absolute Positioned to prevent layout jump */}
+            <Animated.View
+                pointerEvents={isNavVisible ? "auto" : "none"}
+                style={{
+                    position: 'absolute',
+                    top: insets.top + 55, // 🔹 Sits exactly below TopBar
+                    left: 0,
+                    right: 0,
+                    height: 40,
+                    transform: [{ translateY: navY }],
+                    opacity: navOpacity,
+                    zIndex: 90,
+                    backgroundColor: "transparent", 
+                }}
+            >
+                <CategoryNav isDark={isDark} />
+            </Animated.View>
 
             <UpdateHandler />
 
@@ -265,7 +270,7 @@ export default function MainLayout() {
                     position: "absolute",
                     bottom: insets.bottom + 15,
                     height: 60,
-                    left: 20, // 🔹 Replaced alignSelf: "center" so it anchors to the left and expands right
+                    left: 20, 
                     borderRadius: 30,
                     backgroundColor: isDark ? "rgba(17, 17, 17, 0.95)" : "rgba(255, 255, 255, 0.95)",
                     flexDirection: "row",
@@ -331,7 +336,6 @@ export default function MainLayout() {
             )}
 
             <View style={[styles.container, { bottom: insets.bottom + 22 }]}>
-                {/* Clan Sub-buttons (Logic preserved) */}
                 <Animated.View style={{ opacity: opacityClan, transform: [{ translateY: translateY_3 }, { scale }], marginBottom: 10 }}>
                     <TouchableOpacity onPress={() => { setShowClanMenu(false); navigateTo("/screens/war"); }} activeOpacity={0.8} style={[styles.subFab, { backgroundColor: "#ef4444" }]}>
                         <MaterialCommunityIcons name="sword-cross" size={20} color="#fff" />
