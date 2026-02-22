@@ -404,7 +404,7 @@ export default function MobileProfilePage() {
   };
 
   const listHeader = useMemo(() => (
-    <View className="px-6">
+    <View className="px-6 mt-3">
       <View className="flex-row items-center gap-4 mb-10 border-b border-gray-100 dark:border-gray-800 pb-6">
         <View className="w-2 h-8" style={{ backgroundColor: dynamicAuraColor }} />
         <Text className="text-3xl font-black italic tracking-tighter uppercase dark:text-white">Player Profile</Text>
