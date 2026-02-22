@@ -930,7 +930,7 @@ export default function AuthorDiaryDashboard() {
             >
 
                 {/* --- HEADER --- */}
-                <View className="flex-row justify-between items-end mt-4 mb-8 border-b border-gray-800 pb-6">
+                <View className="flex-row justify-between items-end mt-6 mb-8 border-b border-gray-800 pb-6">
                     <View>
                         <View className="flex-row items-center mb-1">
                             {/* 🔹 Offline/Online Status Indicator */}
