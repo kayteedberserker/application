@@ -82,9 +82,9 @@ export default function CategoryNav({ isDark }) {
 
     return (
         <View 
-            className="shadow-sm bg-transparent" // 🔹 Changed to completely transparent
+            className="shadow-sm bg-transparent w-full" // 🔹 Added w-full to ensure the wrapper spans the screen
             style={{ 
-                height: 60,
+                height: 50,
                 borderBottomWidth: 1,
                 borderBottomColor: isDark ? "rgba(30, 58, 138, 0.3)" : "rgba(229, 231, 235, 1)",
             }}
@@ -95,7 +95,8 @@ export default function CategoryNav({ isDark }) {
                 data={categories} 
                 keyExtractor={(item) => item.name}
                 showsHorizontalScrollIndicator={false}
-                centerContent={true} // 🔹 Centers items automatically when they don't fill the screen width
+                centerContent={true} 
+                style={{ width: '100%' }} // 🔹 Forces the FlatList to take the full width
                 onScrollToIndexFailed={(info) => {
                     const wait = new Promise(resolve => setTimeout(resolve, 500));
                     wait.then(() => {
@@ -105,6 +106,8 @@ export default function CategoryNav({ isDark }) {
                 contentContainerStyle={{ 
                     paddingHorizontal: 15, 
                     alignItems: 'center',
+                    flexGrow: 1, // 🔹 Crucial: Allows the container to grow to the screen width
+                    justifyContent: 'center', // 🔹 Crucial: Pushes the items to the center of that grown space
                 }}
                 renderItem={({ item, index }) => {
                     // 🔹 Your logic: index + 1 maps to the swiper index
@@ -120,8 +123,8 @@ export default function CategoryNav({ isDark }) {
                                 marginRight: 10,
                                 flexDirection: 'row',
                                 alignItems: 'center',
-                                paddingVertical: 8,
-                                paddingHorizontal: isActive ? 14 : 10,
+                                paddingVertical: 6,
+                                paddingHorizontal: isActive ? 12 : 8,
                                 transform: [{ scale: isActive ? 1.05 : 1 }]
                             }}
                             className={`rounded-full ${
