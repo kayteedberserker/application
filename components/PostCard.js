@@ -4,14 +4,12 @@ import * as FileSystem from 'expo-file-system/legacy'; // Legacy import for SDK 
 import * as MediaLibrary from 'expo-media-library';
 import { useNavigation, usePathname, useRouter } from "expo-router";
 import { useVideoPlayer, VideoView } from "expo-video";
-import { useEffect, useMemo, useRef, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import {
 	ActivityIndicator,
-	Animated,
 	BackHandler,
 	DeviceEventEmitter,
 	Dimensions,
-	Easing,
 	Image,
 	Linking,
 	Modal,
@@ -31,6 +29,7 @@ import { useAlert } from "../context/AlertContext";
 import { useUser } from "../context/UserContext";
 import apiFetch from "../utils/apiFetch";
 import AppBanner from "./AppBanner";
+import AuraAvatar from "./AuraAvatar"; // 🔹 NEW IMPORT HERE
 import ClanCrest from "./ClanCrest";
 import Poll from "./Poll";
 import { SyncLoading } from "./SyncLoading";
@@ -224,33 +223,6 @@ export default function PostCard({ post, setPosts, isFeed, hideMedia, syncing, s
 			player.pause();
 		}
 	}, [lightbox.open]);
-
-	// 🔹 ANIMATION REFS
-	const pulseAnim = useRef(new Animated.Value(1)).current;
-	const rotationAnim = useRef(new Animated.Value(0)).current;
-
-	useEffect(() => {
-		Animated.loop(
-			Animated.sequence([
-				Animated.timing(pulseAnim, { toValue: 1.1, duration: 2500, useNativeDriver: true }),
-				Animated.timing(pulseAnim, { toValue: 1, duration: 2500, useNativeDriver: true }),
-			])
-		).start();
-
-		Animated.loop(
-			Animated.timing(rotationAnim, {
-				toValue: 1,
-				duration: 10000,
-				easing: Easing.linear,
-				useNativeDriver: true
-			})
-		).start();
-	}, []);
-
-	const spin = rotationAnim.interpolate({
-		inputRange: [0, 1],
-		outputRange: ['0deg', '360deg']
-	});
 
 	const closeLightbox = () => {
 		lightboxPlayer.pause();
@@ -505,119 +477,173 @@ export default function PostCard({ post, setPosts, isFeed, hideMedia, syncing, s
 	}, [post.message, isFeed, isDark, similarPosts]);
 
 	const renderMediaContent = () => {
-		if (mediaItems.length === 0) return null;
+    if (mediaItems.length === 0) return null;
 
-		const firstItem = mediaItems[0];
-		const lowerUrl = firstItem.url.toLowerCase();
-		const isYouTube = lowerUrl.includes("youtube.com") || lowerUrl.includes("youtu.be");
-		const isTikTok = lowerUrl.includes("tiktok.com");
-		const isDirectVideo = firstItem.type?.startsWith("video") || lowerUrl.match(/\.(mp4|mov|m4v|webm)$/i);
-		const isVideo = isYouTube || isTikTok || isDirectVideo;
+    const [isVideoLoading, setIsVideoLoading] = useState(false);
+    const firstItem = mediaItems[0];
+    const lowerUrl = firstItem.url?.toLowerCase() || "";
+    const isYouTube = lowerUrl.includes("youtube.com") || lowerUrl.includes("youtu.be");
+    const isTikTok = lowerUrl.includes("tiktok.com");
+    const isDirectVideo = firstItem.type?.startsWith("video") || lowerUrl.match(/\.(mp4|mov|m4v|webm)$/i);
+    const isVideo = isYouTube || isTikTok || isDirectVideo;
 
-		if (!loadMedia && isVideo) {
-			return (
-				<View className="my-2">
-					<MediaPlaceholder height={similarPosts ? 160 : 250} type="video" onPress={() => setLoadMedia(true)} />
-				</View>
-			);
-		}
+    // 🔹 Lazy Player Logic: Only provide the URL if loadMedia is true
+    const player = useVideoPlayer(loadMedia && isDirectVideo ? firstItem.url : null, (p) => {
+        p.loop = false;
+        if (loadMedia) {
+            p.play();
+        }
+    });
 
-		const glassStyle = { borderWidth: 1, borderColor: 'rgba(96, 165, 250, 0.2)', shadowColor: "#60a5fa", shadowOffset: { width: 0, height: 0 }, shadowOpacity: 0.3, shadowRadius: 10 };
+    // 🔹 Loading Animation Logic
+    useEffect(() => {
+        if (loadMedia && isDirectVideo) {
+            setIsVideoLoading(true);
+        }
+    }, [loadMedia]);
 
-		if (isYouTube) {
-			const getYouTubeID = (url) => {
-				const regex = /(?:youtube\.com\/(?:[^\/]+\/.+\/|(?:v|e(?:mbed)?|shorts)\/|.*[?&]v=)|youtu\.be\/)([^"&?\/\s]{11})/;
-				const match = url.match(regex);
-				return match ? match[1] : null;
-			};
-			return <View className="w-full rounded-2xl overflow-hidden my-2 bg-black" style={glassStyle}>{!videoReady && <MediaSkeleton height={similarPosts ? 160 : 210} />}<YoutubePlayer height={similarPosts ? 160 : videoReady ? 210 : 0} play={false} videoId={getYouTubeID(firstItem.url)} onReady={() => setVideoReady(true)} webViewProps={{ allowsInlineMediaPlayback: true, androidLayerType: "hardware" }} /></View>;
-		}
+    // UI Styles
+    const glassStyle = { 
+        borderWidth: 1, 
+        borderColor: 'rgba(96, 165, 250, 0.2)', 
+        shadowColor: "#60a5fa", 
+        shadowOffset: { width: 0, height: 0 }, 
+        shadowOpacity: 0.3, 
+        shadowRadius: 10 
+    };
 
-		if (isTikTok) {
-			const getTikTokEmbedUrl = (url) => {
-				const match = url.match(/\/video\/(\d+)/);
-				return match?.[1] ? `https://www.tiktok.com/embed/${match[1]}` : url;
-			}
-			return <View className="w-full rounded-2xl overflow-hidden my-2 bg-black" style={[{ height: similarPosts ? 200 : 600 }, glassStyle]}>{!tikTokReady && <MediaSkeleton height={similarPosts ? 200 : 600} />}<WebView source={{ uri: getTikTokEmbedUrl(firstItem.url) }} userAgent="Mozilla/5.0 (iPhone; CPU iPhone OS 15_0 like Mac OS X)" onLoadEnd={() => setTikTokReady(true)} scrollEnabled={false} allowsFullscreenVideo javaScriptEnabled domStorageEnabled allowsInlineMediaPlayback={true} style={{ flex: 1, opacity: tikTokReady ? 1 : 0 }} /></View>;
-		}
+    // 1. Placeholder State (Prevents any video data transfer until clicked)
+    if (!loadMedia && isVideo) {
+        return (
+            <View className="my-2">
+                <MediaPlaceholder 
+                    height={similarPosts ? 160 : 250} 
+                    type="video" 
+                    onPress={() => setLoadMedia(true)} 
+                />
+            </View>
+        );
+    }
 
-		const count = mediaItems.length;
-		const openItem = (index) => {
-			setCurrentAssetIndex(index);
-			setLightbox({ open: true, index });
-		};
+    // 2. YouTube Handler
+    if (isYouTube) {
+        const getYouTubeID = (url) => {
+            const regex = /(?:youtube\.com\/(?:[^\/]+\/.+\/|(?:v|e(?:mbed)?|shorts)\/|.*[?&]v=)|youtu\.be\/)([^"&?\/\s]{11})/;
+            const match = url.match(regex);
+            return match ? match[1] : null;
+        };
+        return (
+            <View className="w-full rounded-2xl overflow-hidden my-2 bg-black" style={glassStyle}>
+                {!videoReady && <MediaSkeleton height={similarPosts ? 160 : 210} />}
+                <YoutubePlayer 
+                    height={similarPosts ? 160 : videoReady ? 210 : 0} 
+                    play={true} // Auto-play since user already clicked the placeholder
+                    videoId={getYouTubeID(firstItem.url)} 
+                    onReady={() => setVideoReady(true)} 
+                    webViewProps={{ allowsInlineMediaPlayback: true, androidLayerType: "hardware" }} 
+                />
+            </View>
+        );
+    }
 
-		return (
-			<View className="my-2 rounded-2xl overflow-hidden bg-black" style={[glassStyle, { height: similarPosts ? 200 : 300 }]}>
-				{count === 1 ? (
-					// Logic: If it's a video and there's only 1 item, don't wrap in Lightbox Pressable so user can interact with the video player
-					isDirectVideo ? (
-						<View className="w-full h-full items-center justify-center">
-							<VideoView
-								player={player}
-								style={{ width: "100%", height: "100%" }}
-								contentFit="contain"
-								nativeControls={true}
-								onIsVideoReadyToPlay={() => setIsVideoLoading(false)}
-							/>
-						</View>
-					) : (
-						<Pressable onPress={() => openItem(0)} className="w-full h-full">
-							<Image source={{ uri: firstItem.url }} className="w-full h-full" resizeMode="cover" />
-						</Pressable>
-					)
-				) : count === 2 ? (
-					<View className="flex-row w-full h-full gap-[2px]">
-						{mediaItems.slice(0, 2).map((item, idx) => (
-							<Pressable key={idx} onPress={() => openItem(idx)} className="flex-1">
-								{item.type === "video" ? (
-									<VideoView
-										player={player}
-										style={{ width: "100%", height: "100%" }}
-										contentFit="cover"
-										nativeControls={false}
-									/>
-								) : (
-									<Image source={{ uri: item.url }} className="w-full h-full" resizeMode="cover" />
-								)}
-							</Pressable>
-						))}
-					</View>
-				) : (
-					<View className="flex-row w-full h-full gap-[2px]">
-						<Pressable onPress={() => openItem(0)} className="w-1/2 h-full">
-							<Image source={{ uri: mediaItems[0].url }} className="w-full h-full" resizeMode="cover" />
-						</Pressable>
-						<View className="w-1/2 h-full gap-[2px]">
-							<Pressable onPress={() => openItem(1)} className="flex-1">
-								<Image source={{ uri: mediaItems[1].url }} className="w-full h-full" resizeMode="cover" />
-							</Pressable>
-							<Pressable onPress={() => openItem(2)} className="flex-1 relative">
-								<Image source={{ uri: mediaItems[2].url }} className="w-full h-full" resizeMode="cover" />
-								{count > 3 && (
-									<View className="absolute inset-0 bg-black/60 items-center justify-center">
-										<Text className="text-white text-2xl font-black">+{count - 2}</Text>
-									</View>
-								)}
-							</Pressable>
-						</View>
-					</View>
-				)}
-			</View>
-		);
-	};
+    // 3. TikTok Handler
+    if (isTikTok) {
+        const getTikTokEmbedUrl = (url) => {
+            const match = url.match(/\/video\/(\d+)/);
+            return match?.[1] ? `https://www.tiktok.com/embed/${match[1]}` : url;
+        }
+        return (
+            <View className="w-full rounded-2xl overflow-hidden my-2 bg-black" style={[{ height: similarPosts ? 200 : 600 }, glassStyle]}>
+                {!tikTokReady && <MediaSkeleton height={similarPosts ? 200 : 600} />}
+                <WebView 
+                    source={{ uri: getTikTokEmbedUrl(firstItem.url) }} 
+                    userAgent="Mozilla/5.0 (iPhone; CPU iPhone OS 15_0 like Mac OS X)" 
+                    onLoadEnd={() => setTikTokReady(true)} 
+                    scrollEnabled={false} 
+                    allowsFullscreenVideo 
+                    javaScriptEnabled 
+                    domStorageEnabled 
+                    allowsInlineMediaPlayback={true} 
+                    style={{ flex: 1, opacity: tikTokReady ? 1 : 0 }} 
+                />
+            </View>
+        );
+    }
 
+    // 4. Multi-Media and Direct Video Grid
+    const count = mediaItems.length;
+    const openItem = (index) => {
+        setCurrentAssetIndex(index);
+        setLightbox({ open: true, index });
+    };
+
+    return (
+        <View className="my-2 rounded-2xl overflow-hidden bg-black" style={[glassStyle, { height: similarPosts ? 200 : 300 }]}>
+            {count === 1 ? (
+                isDirectVideo ? (
+                    <View className="w-full h-full items-center justify-center relative">
+                        
+                        <VideoView
+                            player={player}
+                            style={{ width: "100%", height: "100%" }}
+                            contentFit="contain"
+                            nativeControls={true}
+                            onIsVideoReadyToPlay={() => setIsVideoLoading(false)}
+                        />
+                    </View>
+                ) : (
+                    <Pressable onPress={() => openItem(0)} className="w-full h-full">
+                        <Image source={{ uri: firstItem.url }} className="w-full h-full" resizeMode="cover" />
+                    </Pressable>
+                )
+            ) : count === 2 ? (
+                <View className="flex-row w-full h-full gap-[2px]">
+                    {mediaItems.slice(0, 2).map((item, idx) => (
+                        <Pressable key={idx} onPress={() => openItem(idx)} className="flex-1">
+                            {item.type === "video" ? (
+                                <View className="w-full h-full items-center justify-center">
+                                     {/* Note: useVideoPlayer usually handles one source at a time. 
+                                         For multiple videos in a grid, you'd typically need separate player instances. */}
+                                    <VideoView
+                                        player={player}
+                                        style={{ width: "100%", height: "100%" }}
+                                        contentFit="cover"
+                                        nativeControls={false}
+                                    />
+                                </View>
+                            ) : (
+                                <Image source={{ uri: item.url }} className="w-full h-full" resizeMode="cover" />
+                            )}
+                        </Pressable>
+                    ))}
+                </View>
+            ) : (
+                <View className="flex-row w-full h-full gap-[2px]">
+                    <Pressable onPress={() => openItem(0)} className="w-1/2 h-full">
+                        <Image source={{ uri: mediaItems[0].url }} className="w-full h-full" resizeMode="cover" />
+                    </Pressable>
+                    <View className="w-1/2 h-full gap-[2px]">
+                        <Pressable onPress={() => openItem(1)} className="flex-1">
+                            <Image source={{ uri: mediaItems[1].url }} className="w-full h-full" resizeMode="cover" />
+                        </Pressable>
+                        <Pressable onPress={() => openItem(2)} className="flex-1 relative">
+                            <Image source={{ uri: mediaItems[2].url }} className="w-full h-full" resizeMode="cover" />
+                            {count > 3 && (
+                                <View className="absolute inset-0 bg-black/60 items-center justify-center">
+                                    <Text className="text-white text-2xl font-black">+{count - 2}</Text>
+                                </View>
+                            )}
+                        </Pressable>
+                    </View>
+                </View>
+            )}
+        </View>
+    );
+};
 	const aura = getAuraVisuals(author.rank);
 	const isTop3 = author.rank > 0 && author.rank <= 3;
 	const isTop10 = author.rank > 0 && author.rank <= 10;
 	const isClanPost = !!(post.clanId || post.clanTag);
-
-	const getRankedFrameStyle = () => {
-		if (author.rank === 1) return { borderRadius: 14, transform: [{ rotate: '45deg' }], borderWidth: 2 };
-		if (author.rank === 2) return { borderRadius: 25, borderWidth: 2 };
-		if (author.rank === 3) return { borderRadius: 8, borderWidth: 1.5 };
-		return { borderRadius: 100, borderWidth: 1 };
-	};
 
 	const goToNext = () => {
 		if (currentAssetIndex < mediaItems.length - 1) {
@@ -729,53 +755,16 @@ export default function PostCard({ post, setPosts, isFeed, hideMedia, syncing, s
 					{/* --- AUTHOR & STATS ROW --- */}
 					<View className="flex-row justify-between items-start">
 						<View className="flex-row items-center gap-4 flex-1 pr-2">
-							{/* AUTHOR AVATAR SECTION */}
-							<Pressable
+							
+							{/* 🔹 EXTRACTED AURA AVATAR INTEGRATION */}
+							<AuraAvatar 
+								author={author}
+								aura={aura}
+								isTop10={isTop10}
+								isDark={isDark}
+								size={44}
 								onPress={() => DeviceEventEmitter.emit("navigateSafely", `/author/${post.authorUserId}`)}
-								className="relative shrink-0 w-14 h-14 items-center justify-center"
-							>
-								{isTop10 && author.rank <= 5 && (
-									<Animated.View
-										style={[
-											getRankedFrameStyle(),
-											{
-												position: 'absolute', width: 56, height: 56, borderColor: aura.color,
-												borderStyle: 'dashed', opacity: 0.6,
-												transform: [...getRankedFrameStyle().transform || [], { rotate: spin }]
-											}
-										]}
-									/>
-								)}
-
-								{isTop10 && (
-									<Animated.View
-										style={[
-											getRankedFrameStyle(),
-											{
-												position: 'absolute', width: 50, height: 50, borderColor: aura.color,
-												opacity: 0.3, transform: [...getRankedFrameStyle().transform || [], { scale: pulseAnim }]
-											}
-										]}
-									/>
-								)}
-
-								<View style={[getRankedFrameStyle(), { width: 44, height: 44, borderColor: isTop10 ? aura.color : 'rgba(96, 165, 250, 0.3)', overflow: 'hidden', backgroundColor: isDark ? '#1a1d23' : '#f3f4f6' }]}>
-									{author.image ? (
-										<Image
-											source={{ uri: author.image }}
-											className="w-full h-full bg-gray-200"
-											resizeMode="cover"
-											style={author.rank === 1 ? { transform: [{ rotate: '-45deg' }], scale: 1.4 } : {}}
-										/>
-									) : (
-										<View className="flex-1 items-center justify-center" style={{ backgroundColor: isTop10 ? aura.color : '#2563eb' }}>
-											<Text className="text-white font-black">{author.name?.charAt(0).toUpperCase() || "?"}</Text>
-										</View>
-									)}
-								</View>
-
-								<View style={{ backgroundColor: isTop10 ? aura.color : '#2563eb' }} className="absolute bottom-1 right-1 w-3.5 h-3.5 border-2 border-white dark:border-[#0d1117] rounded-full shadow-sm" />
-							</Pressable>
+							/>
 
 							{/* AUTHOR INFO SECTION */}
 							<View className="flex-1">
