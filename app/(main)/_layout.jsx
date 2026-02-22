@@ -373,7 +373,7 @@ export default function MainLayout() {
 }
 
 const styles = StyleSheet.create({
-    container: { position: "absolute", right: 4, alignItems: "center", zIndex: 1000 },
+    container: { position: "absolute", right: 15, alignItems: "center", zIndex: 1000 },
     overlay: { position: 'absolute', top: 0, bottom: 0, left: 0, right: 0, zIndex: 999 },
     mainFab: { width: 48, height: 48, borderRadius: 18, justifyContent: "center", alignItems: "center", elevation: 8, shadowColor: "#000", shadowOffset: { width: 0, height: 4 }, shadowOpacity: 0.3, shadowRadius: 4.65 },
     subFab: { width: 45, height: 45, borderRadius: 15, justifyContent: "center", alignItems: "center", elevation: 5, shadowColor: "#000", shadowOffset: { width: 0, height: 2 }, shadowOpacity: 0.25, shadowRadius: 3.84 },
