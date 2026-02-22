@@ -247,7 +247,7 @@ export default function FirstLaunchScreen() {
                         <TextInput
                             style={{ backgroundColor: THEME.card, borderColor: THEME.border, color: THEME.text }}
                             className="w-full border-2 rounded-2xl px-6 py-5 mb-6 font-black italic"
-                            placeholder="CHOOSE CALLSIGN..."
+                            placeholder="CENTER AUTHORNAME(username)..."
                             placeholderTextColor={THEME.textSecondary + '80'}
                             value={username}
                             onChangeText={setUsername}
@@ -260,7 +260,7 @@ export default function FirstLaunchScreen() {
                                 color: isAutoReferrer ? '#a855f7' : THEME.text 
                             }}
                             className="w-full border-2 rounded-2xl px-6 py-5 mb-4 font-black italic"
-                            placeholder="UPLINK CODE..."
+                            placeholder="UPLINK CODE(referral code)..."
                             value={referrerCode}
                             onChangeText={setReferrerCode}
                             editable={!isAutoReferrer}
