@@ -18,6 +18,7 @@ import {
 } from "react-native";
 import Animated, { FadeIn, FadeInDown, Layout } from "react-native-reanimated";
 import ClanCrest from '../../components/ClanCrest';
+import AppBanner from '../../components/AppBanner';
 import { Text } from "../../components/Text";
 import apiFetch from "../../utils/apiFetch";
 
