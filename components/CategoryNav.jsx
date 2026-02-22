@@ -22,6 +22,9 @@ export default function CategoryNav({ isDark }) {
     const router = useRouter();
     const navListRef = useRef(null);
 
+    // Combine "All" with categories for the data source
+    const navData = [{ name: "All", icon: "grid-outline", activeIcon: "grid" }, ...categories];
+
     useEffect(() => {
         const sub = DeviceEventEmitter.addListener("pageSwiped", (index) => {
             if (activeIndexRef.current !== index) {
@@ -29,12 +32,16 @@ export default function CategoryNav({ isDark }) {
                 setActiveIndex(index);
                 
                 if (index >= 0 && navListRef.current) {
-                    // ⚡️ Smoothly center the active icon when swiping the main feed
-                    navListRef.current.scrollToIndex({ 
-                        index: index, 
-                        animated: true, 
-                        viewPosition: 0.5 
-                    });
+                    // ⚡️ Added a safety check to prevent index out of bounds
+                    try {
+                        navListRef.current.scrollToIndex({ 
+                            index: index, 
+                            animated: true, 
+                            viewPosition: 0.5 
+                        });
+                    } catch (err) {
+                        console.warn("Scroll error:", err);
+                    }
                 }
             }
         });
@@ -65,9 +72,10 @@ export default function CategoryNav({ isDark }) {
             DeviceEventEmitter.emit("scrollToIndex", actualSwiperIndex);
         } else {
             router.replace("/");
+            // Keep the timeout for router transitions, but wrap the emit
             setTimeout(() => {
                 DeviceEventEmitter.emit("scrollToIndex", actualSwiperIndex);
-            }, 50); 
+            }, 100); 
         }
     }, [pathname]);
 
@@ -83,9 +91,16 @@ export default function CategoryNav({ isDark }) {
             <FlatList
                 ref={navListRef}
                 horizontal
-                data={[{ name: "All", icon: "grid-outline", activeIcon: "grid" }, ...categories]} 
+                data={navData} 
                 keyExtractor={(item) => item.name}
                 showsHorizontalScrollIndicator={false}
+                // 🔹 Safety: Handles cases where index is requested before layout
+                onScrollToIndexFailed={(info) => {
+                    const wait = new Promise(resolve => setTimeout(resolve, 500));
+                    wait.then(() => {
+                        navListRef.current?.scrollToIndex({ index: info.index, animated: true, viewPosition: 0.5 });
+                    });
+                }}
                 contentContainerStyle={{ 
                     paddingHorizontal: 15, 
                     alignItems: 'center',
@@ -104,6 +119,8 @@ export default function CategoryNav({ isDark }) {
                                 alignItems: 'center',
                                 paddingVertical: 8,
                                 paddingHorizontal: isActive ? 14 : 10,
+                                // Adding a slight scaling effect for feel
+                                transform: [{ scale: isActive ? 1.05 : 1 }]
                             }}
                             className={`rounded-full ${
                                 isActive 
