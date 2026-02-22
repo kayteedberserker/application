@@ -58,7 +58,7 @@ export default function MainLayout() {
         Animated.timing(navY, {
             toValue: 0,
             duration: 300,
-            useNativeDriver: true,
+            useNativeDriver: false, // 🔹 Changed to false to animate actual layout (marginTop)
         }).start();
     }, [pathname]);
 
@@ -125,7 +125,7 @@ export default function MainLayout() {
                     Animated.timing(navY, {
                         toValue: 0,
                         duration: 200,
-                        useNativeDriver: true,
+                        useNativeDriver: false, // 🔹 Changed to false
                     }).start();
                 }
             } else if (offsetY > lastOffset && offsetY > 100) {
@@ -134,7 +134,7 @@ export default function MainLayout() {
                     Animated.timing(navY, {
                         toValue: -70,
                         duration: 200,
-                        useNativeDriver: true,
+                        useNativeDriver: false, // 🔹 Changed to false
                     }).start();
                 }
             }
@@ -211,9 +211,10 @@ export default function MainLayout() {
                 <Animated.View
                     pointerEvents={isNavVisible ? "auto" : "none"}
                     style={{
-                        transform: [{ translateY: navY }],
+                        marginTop: navY, // 🔹 Now physically shrinks the layout instead of just moving visually!
                         opacity: navOpacity,
                         zIndex: 10,
+                        backgroundColor: "transparent", // 🔹 Explicitly transparent
                     }}
                 >
                     <CategoryNav isDark={isDark} />
@@ -258,13 +259,13 @@ export default function MainLayout() {
                 </TouchableOpacity>
             </Animated.View>
 
-            {/* 🔹 DYNAMIC TAB BAR - No Sliding Animation, No Extra Space */}
+            {/* 🔹 DYNAMIC TAB BAR - Anchored Left */}
             <View
                 style={{
                     position: "absolute",
                     bottom: insets.bottom + 15,
                     height: 60,
-                    alignSelf: "center",
+                    left: 20, // 🔹 Replaced alignSelf: "center" so it anchors to the left and expands right
                     borderRadius: 30,
                     backgroundColor: isDark ? "rgba(17, 17, 17, 0.95)" : "rgba(255, 255, 255, 0.95)",
                     flexDirection: "row",
