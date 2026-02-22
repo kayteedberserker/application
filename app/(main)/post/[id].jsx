@@ -302,23 +302,6 @@ export default function PostDetailScreen() {
           </View>
         </View>
 
-        {/* --- SIMILAR INTEL SECTOR --- */}
-        {similarPosts.length > 0 && (
-          <View className="mb-10">
-            <View className="flex-row items-center gap-4 mb-6">
-              <Text className="text-2xl font-[900] italic uppercase tracking-tighter text-gray-900 dark:text-white">
-                Related <Text className="text-blue-600">Intel</Text>
-              </Text>
-              <View className="h-[1px] flex-1 bg-gray-100 dark:bg-gray-800" />
-            </View>
-
-            <SimilarPosts
-              posts={similarPosts}
-              category={post?.category}
-              currentPostId={post?._id}
-            />
-          </View>
-        )}
       <View className="mb-3 mt-3 w-full p-6 border border-dashed border-gray-300 dark:border-gray-800 rounded-[32px] bg-gray-50/50 dark:bg-white/5 items-center justify-center">
 							<Text className="text-[10px] font-bold text-gray-400 uppercase tracking-[0.2em] italic text-center">Sponsored Transmission</Text>
 							<AppBanner size="BANNER" />
