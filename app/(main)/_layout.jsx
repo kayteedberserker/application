@@ -23,13 +23,8 @@ import "../globals.css";
 import CategoryNav from "./../../components/CategoryNav";
 import TopBar from "./../../components/Topbar";
 
-const { width } = Dimensions.get('window');
-// 🔹 Reduced width for a sleeker look since only the active tab has text
-const TAB_BAR_WIDTH = 280; 
-const TAB_WIDTH = (TAB_BAR_WIDTH - 8) / 4; // Minus padding
-
 export default function MainLayout() {
-    // 1. ALL HOOKS MUST BE AT THE TOP
+    // 1. ALL HOOKS
     const { colorScheme, setColorScheme } = useNativeWind();
     const systemScheme = useSystemScheme();
     const router = useRouter();
@@ -42,7 +37,6 @@ export default function MainLayout() {
     const [showClanMenu, setShowClanMenu] = useState(false);
     
     const navY = useRef(new Animated.Value(0)).current;
-    const tabX = useRef(new Animated.Value(0)).current; 
     const { user, contextLoading } = useUser();
     const animValue = useRef(new Animated.Value(0)).current;
     const eventPulse = useRef(new Animated.Value(1)).current;
@@ -50,17 +44,15 @@ export default function MainLayout() {
     const [isUserAuthenticated, setIsUserAuthenticated] = useState(null);
     const [userInClan, setUserInClan] = useState(false);
 
-    // 🔹 Tab Configuration with custom colors
+    // 🔹 Tab Config with simple colors
     const tabs = [
         { id: 'home', label: 'HOME', icon: 'home', route: '/', color: '#3b82f6', match: (p) => p === "/" || p.startsWith("/categories") },
-        { id: 'search', label: 'SEARCH', icon: 'search', route: '/screens/search', color: '#a855f7', match: (p) => p === "/screens/search" },
+        { id: 'search', label: 'SEARCH', icon: 'search', route: '/screens/Search', color: '#a855f7', match: (p) => p === "/screens/Search" },
         { id: 'diary', label: 'DIARY', icon: 'add-circle', route: '/authordiary', color: '#10b981', match: (p) => p === "/authordiary" },
         { id: 'profile', label: 'PROFILE', icon: 'person', route: '/profile', color: '#f59e0b', match: (p) => p === "/profile" },
     ];
 
-    const activeTabIndex = tabs.findIndex(tab => tab.match(pathname));
-
-    // 2. ALL USEEFFECTS & MEMOIZED VALUES
+    // 2. EFFECTS
     useEffect(() => {
         setIsNavVisible(true);
         Animated.timing(navY, {
@@ -69,15 +61,6 @@ export default function MainLayout() {
             useNativeDriver: true,
         }).start();
     }, [pathname]);
-
-    useEffect(() => {
-        Animated.spring(tabX, {
-            toValue: activeTabIndex * TAB_WIDTH,
-            useNativeDriver: false, // 🔹 Must be false for layout/color animations
-            bounciness: 4,
-            speed: 10
-        }).start();
-    }, [activeTabIndex]);
 
     useEffect(() => {
         Animated.spring(animValue, {
@@ -92,7 +75,7 @@ export default function MainLayout() {
         Animated.loop(
             Animated.sequence([
                 Animated.timing(eventPulse, {
-                    toValue: 1.08,
+                    toValue: 1.05,
                     duration: 1200,
                     useNativeDriver: true,
                 }),
@@ -160,7 +143,7 @@ export default function MainLayout() {
         return () => subscription.remove();
     }, [lastOffset, isNavVisible]);
 
-    // 3. LOGIC & HANDLERS
+    // 3. HANDLERS
     const handleClanPress = async () => {
         try {
             const userClanData = await AsyncStorage.getItem('userClan');
@@ -185,12 +168,6 @@ export default function MainLayout() {
         outputRange: [0, 0.5, 1]
     });
 
-    // 🔹 Smoothly transition the pill color based on its position
-    const pillColor = tabX.interpolate({
-        inputRange: tabs.map((_, i) => i * TAB_WIDTH),
-        outputRange: tabs.map(tab => tab.color),
-    });
-
     const isDark = colorScheme === "dark";
     const handleBackToTop = () => DeviceEventEmitter.emit("doScrollToTop");
 
@@ -204,7 +181,7 @@ export default function MainLayout() {
         DeviceEventEmitter.emit("navigateSafely", route);
     };
 
-    // 4. NOW IT IS SAFE TO DO EARLY RETURNS
+    // 4. EARLY RETURNS
     if (isUserAuthenticated === null) {
         return <AnimeLoading message="LOADING_PAGE" subMessage="Fetching Otaku Archives" />;
     };
@@ -281,52 +258,45 @@ export default function MainLayout() {
                 </TouchableOpacity>
             </Animated.View>
 
-            {/* 🔹 COMPACT COLOR-CHANGING TAB BAR */}
+            {/* 🔹 DYNAMIC TAB BAR - No Sliding Animation, No Extra Space */}
             <View
                 style={{
                     position: "absolute",
                     bottom: insets.bottom + 15,
-                    height: 58,
-                    width: TAB_BAR_WIDTH,
+                    height: 60,
                     alignSelf: "center",
-                    borderRadius: 29,
-                    backgroundColor: isDark ? "rgba(17, 17, 17, 0.98)" : "rgba(255, 255, 255, 0.98)",
+                    borderRadius: 30,
+                    backgroundColor: isDark ? "rgba(17, 17, 17, 0.95)" : "rgba(255, 255, 255, 0.95)",
                     flexDirection: "row",
                     alignItems: "center",
-                    paddingHorizontal: 4,
-                    elevation: 15,
+                    paddingHorizontal: 8,
+                    elevation: 10,
                     shadowColor: "#000",
-                    shadowOffset: { width: 0, height: 8 },
-                    shadowOpacity: 0.3,
-                    shadowRadius: 10,
+                    shadowOffset: { width: 0, height: 5 },
+                    shadowOpacity: 0.2,
+                    shadowRadius: 5,
                     borderWidth: 1,
-                    borderColor: isDark ? "rgba(255, 255, 255, 0.08)" : "rgba(0, 0, 0, 0.05)",
+                    borderColor: isDark ? "rgba(255, 255, 255, 0.1)" : "rgba(0, 0, 0, 0.05)",
                     zIndex: 999,
                 }}
             >
-                {/* 🔹 Color-Changing Sliding Pill Background */}
-                <Animated.View 
-                    style={{
-                        position: 'absolute',
-                        width: TAB_WIDTH,
-                        height: 50,
-                        borderRadius: 25,
-                        backgroundColor: pillColor, // 🔹 Animated color interpolation
-                        left: 4,
-                        transform: [{ translateX: tabX }],
-                        zIndex: 0
-                    }}
-                />
-
                 {tabs.map((tab) => {
                     const isActive = tab.match(pathname);
                     return (
                         <TouchableOpacity 
                             key={tab.id}
                             onPress={() => navigateTo(tab.route)} 
-                            style={{ width: TAB_WIDTH, height: '100%' }}
-                            className="items-center justify-center flex-row"
-                            activeOpacity={0.7}
+                            activeOpacity={0.9}
+                            style={{
+                                height: 44,
+                                borderRadius: 22,
+                                flexDirection: 'row',
+                                alignItems: 'center',
+                                justifyContent: 'center',
+                                paddingHorizontal: isActive ? 16 : 12,
+                                backgroundColor: isActive ? tab.color : 'transparent',
+                                marginHorizontal: 2,
+                            }}
                         >
                             <Ionicons
                                 name={isActive ? tab.icon : `${tab.icon}-outline`}
@@ -334,17 +304,16 @@ export default function MainLayout() {
                                 color={isActive ? "#fff" : (isDark ? "#64748b" : "#94a3b8")}
                             />
                             {isActive && (
-                                <Animated.Text 
-                                    numberOfLines={1}
+                                <Text 
                                     style={{ 
-                                        fontSize: 9, 
+                                        fontSize: 11, 
                                         fontWeight: '900', 
                                         color: "#fff", 
-                                        marginLeft: 6 
+                                        marginLeft: 8 
                                     }}
                                 >
                                     {tab.label}
-                                </Animated.Text>
+                                </Text>
                             )}
                         </TouchableOpacity>
                     );
@@ -361,95 +330,36 @@ export default function MainLayout() {
             )}
 
             <View style={[styles.container, { bottom: insets.bottom + 22 }]}>
-                <Animated.View style={{
-                    opacity: opacityClan,
-                    transform: [{ translateY: translateY_3 || -180 }, { scale }],
-                    marginBottom: 10
-                }}>
-                    <TouchableOpacity
-                        onPress={() => {
-                            setShowClanMenu(false);
-                            navigateTo("/screens/war");
-                        }}
-                        activeOpacity={0.8}
-                        style={[styles.subFab, { backgroundColor: "#ef4444" }]}
-                    >
+                {/* Clan Sub-buttons (Logic preserved) */}
+                <Animated.View style={{ opacity: opacityClan, transform: [{ translateY: translateY_3 }, { scale }], marginBottom: 10 }}>
+                    <TouchableOpacity onPress={() => { setShowClanMenu(false); navigateTo("/screens/war"); }} activeOpacity={0.8} style={[styles.subFab, { backgroundColor: "#ef4444" }]}>
                         <MaterialCommunityIcons name="sword-cross" size={20} color="#fff" />
                     </TouchableOpacity>
                 </Animated.View>
 
-                {userInClan && <Animated.View style={{
-                    opacity: opacityClan,
-                    transform: [{ translateY: translateY_2 }, { scale }],
-                    marginBottom: 10
-                }}>
-                    <TouchableOpacity
-                        onPress={() => {
-                            setShowClanMenu(false);
-                            navigateTo("/clanprofile");
-                        }}
-                        activeOpacity={0.8}
-                        style={[styles.subFab, { backgroundColor: "#3b82f6" }]}
-                    >
-                        <Ionicons name="shield" size={20} color="#fff" />
-                    </TouchableOpacity>
-                </Animated.View>
-                }
+                {userInClan && (
+                    <Animated.View style={{ opacity: opacityClan, transform: [{ translateY: translateY_2 }, { scale }], marginBottom: 10 }}>
+                        <TouchableOpacity onPress={() => { setShowClanMenu(false); navigateTo("/clanprofile"); }} activeOpacity={0.8} style={[styles.subFab, { backgroundColor: "#3b82f6" }]}>
+                            <Ionicons name="shield" size={20} color="#fff" />
+                        </TouchableOpacity>
+                    </Animated.View>
+                )}
 
-                <Animated.View style={{
-                    opacity: opacityClan,
-                    transform: [{ translateY: translateY_1 }, { scale }],
-                    marginBottom: 12
-                }}>
-                    <TouchableOpacity
-                        onPress={() => {
-                            setShowClanMenu(false);
-                            navigateTo("/screens/discover");
-                        }}
-                        activeOpacity={0.8}
-                        style={[styles.subFab, { backgroundColor: isDark ? "#1e293b" : "#475569" }]}
-                    >
+                <Animated.View style={{ opacity: opacityClan, transform: [{ translateY: translateY_1 }, { scale }], marginBottom: 12 }}>
+                    <TouchableOpacity onPress={() => { setShowClanMenu(false); navigateTo("/screens/discover"); }} activeOpacity={0.8} style={[styles.subFab, { backgroundColor: isDark ? "#1e293b" : "#475569" }]}>
                         <Ionicons name="search" size={20} color="#fff" />
                     </TouchableOpacity>
                 </Animated.View>
 
                 {showTop && (
-                    <TouchableOpacity
-                        onPress={handleBackToTop}
-                        activeOpacity={0.7}
-                        style={[
-                            styles.mainFab,
-                            {
-                                marginBottom: 12,
-                                backgroundColor: isDark ? "#111111" : "#f8fafc",
-                                borderColor: isDark ? "#1e293b" : "#e2e8f0",
-                            }
-                        ]}
-                    >
+                    <TouchableOpacity onPress={handleBackToTop} activeOpacity={0.7} style={[styles.mainFab, { marginBottom: 12, backgroundColor: isDark ? "#111111" : "#f8fafc", borderColor: isDark ? "#1e293b" : "#e2e8f0" }]}>
                         <Ionicons name="chevron-up" size={24} color="#3b82f6" />
                     </TouchableOpacity>
                 )}
 
-                <TouchableOpacity
-                    onPress={handleClanPress}
-                    activeOpacity={0.8}
-                    style={[
-                        styles.mainFab,
-                        {
-                            borderColor: showClanMenu ? (isDark ? "#fff" : "#3b82f6") : (isDark ? "#1e293b" : "#e2e8f0"),
-                            borderWidth: 2,
-                            backgroundColor: showClanMenu
-                                ? (isDark ? "#1e293b" : "#3b82f6")
-                                : (isDark ? "#111111" : "#f8fafc")
-                        }
-                    ]}
-                >
+                <TouchableOpacity onPress={handleClanPress} activeOpacity={0.8} style={[styles.mainFab, { borderColor: showClanMenu ? (isDark ? "#fff" : "#3b82f6") : (isDark ? "#1e293b" : "#e2e8f0"), borderWidth: 2, backgroundColor: showClanMenu ? (isDark ? "#1e293b" : "#3b82f6") : (isDark ? "#111111" : "#f8fafc") }]}>
                     <Animated.View style={{ transform: [{ rotate: rotation }] }}>
-                        <Ionicons
-                            name={showClanMenu ? "close" : "shield-half"}
-                            size={24}
-                            color={showClanMenu ? "#fff" : "#3b82f6"}
-                        />
+                        <Ionicons name={showClanMenu ? "close" : "shield-half"} size={24} color={showClanMenu ? "#fff" : "#3b82f6"} />
                     </Animated.View>
                 </TouchableOpacity>
             </View>
@@ -458,74 +368,12 @@ export default function MainLayout() {
 }
 
 const styles = StyleSheet.create({
-    container: {
-        position: "absolute",
-        right: 4,
-        alignItems: "center",
-        zIndex: 1000,
-    },
-    overlay: {
-        position: 'absolute',
-        top: 0,
-        bottom: 0,
-        left: 0,
-        right: 0,
-        zIndex: 999,
-    },
-    mainFab: {
-        width: 48,
-        height: 48,
-        borderRadius: 18,
-        justifyContent: "center",
-        alignItems: "center",
-        elevation: 8,
-        shadowColor: "#000",
-        shadowOffset: { width: 0, height: 4 },
-        shadowOpacity: 0.3,
-        shadowRadius: 4.65,
-    },
-    subFab: {
-        width: 45,
-        height: 45,
-        borderRadius: 15,
-        justifyContent: "center",
-        alignItems: "center",
-        elevation: 5,
-        shadowColor: "#000",
-        shadowOffset: { width: 0, height: 2 },
-        shadowOpacity: 0.25,
-        shadowRadius: 3.84,
-    },
-    eventButtonContainer: {
-        position: 'absolute',
-        right: 12,
-        top: '45%',
-        zIndex: 998,
-    },
-    eventButton: {
-        width: 50,
-        height: 50,
-        borderRadius: 25,
-        justifyContent: 'center',
-        alignItems: 'center',
-        elevation: 10,
-        shadowOffset: { width: 0, height: 4 },
-        shadowOpacity: 0.4,
-        shadowRadius: 5,
-        borderWidth: 2,
-    },
-    eventBadge: {
-        position: 'absolute',
-        top: -6,
-        left: -8,
-        borderRadius: 12,
-        paddingHorizontal: 6,
-        paddingVertical: 2,
-        borderWidth: 1.5,
-    },
-    eventBadgeText: {
-        fontSize: 8,
-        color: '#ffffff',
-        fontWeight: '900',
-    }
+    container: { position: "absolute", right: 4, alignItems: "center", zIndex: 1000 },
+    overlay: { position: 'absolute', top: 0, bottom: 0, left: 0, right: 0, zIndex: 999 },
+    mainFab: { width: 48, height: 48, borderRadius: 18, justifyContent: "center", alignItems: "center", elevation: 8, shadowColor: "#000", shadowOffset: { width: 0, height: 4 }, shadowOpacity: 0.3, shadowRadius: 4.65 },
+    subFab: { width: 45, height: 45, borderRadius: 15, justifyContent: "center", alignItems: "center", elevation: 5, shadowColor: "#000", shadowOffset: { width: 0, height: 2 }, shadowOpacity: 0.25, shadowRadius: 3.84 },
+    eventButtonContainer: { position: 'absolute', right: 12, top: '45%', zIndex: 998 },
+    eventButton: { width: 50, height: 50, borderRadius: 25, justifyContent: 'center', alignItems: 'center', elevation: 10, shadowOffset: { width: 0, height: 4 }, shadowOpacity: 0.4, shadowRadius: 5, borderWidth: 2 },
+    eventBadge: { position: 'absolute', top: -6, left: -8, borderRadius: 12, paddingHorizontal: 6, paddingVertical: 2, borderWidth: 1.5 },
+    eventBadgeText: { fontSize: 8, color: '#ffffff', fontWeight: '900' }
 });
