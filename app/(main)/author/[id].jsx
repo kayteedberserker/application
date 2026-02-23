@@ -118,7 +118,7 @@ export default function AuthorPage() {
     return () => sub.remove();
   }, []);
 
-  // 🛡️ UPDATED: Generic save for Janitor compatibility
+  // 🛡️ Generic save for Janitor compatibility
   const saveHeavyCache = async (key, data) => {
     try {
       const cacheEntry = {
@@ -145,7 +145,6 @@ export default function AuthorPage() {
 
       if (userRes.ok && userData?.user) {
         setAuthor(userData.user);
-        // Save to Memory & Storage
         AUTHOR_MEMORY_CACHE[CACHE_KEY_AUTHOR] = userData.user;
         saveHeavyCache(CACHE_KEY_AUTHOR, userData.user);
       }
@@ -154,7 +153,6 @@ export default function AuthorPage() {
         setTotalPosts(postData.total || postData.posts.length);
         setHasMore(postData.posts.length >= 6);
         
-        // Save to Memory & Storage
         AUTHOR_POSTS_MEMORY_CACHE[CACHE_KEY_POSTS] = postData.posts;
         saveHeavyCache(CACHE_KEY_POSTS, postData.posts);
       }
@@ -163,6 +161,7 @@ export default function AuthorPage() {
       setIsOffline(true);
     } finally {
       setLoading(false);
+      setRefreshing(false);
       setTimeout(() => setIsInitialMount(false), 800);
     }
   };
@@ -177,7 +176,7 @@ export default function AuthorPage() {
       if (res.ok && data.posts && data.posts.length > 0) {
         setPosts((prev) => {
             const updated = [...prev, ...data.posts];
-            AUTHOR_POSTS_MEMORY_CACHE[CACHE_KEY_POSTS] = updated; // Update memory on pagination
+            AUTHOR_POSTS_MEMORY_CACHE[CACHE_KEY_POSTS] = updated; 
             return updated;
         });
         setTotalPosts(data.total);
@@ -196,14 +195,12 @@ export default function AuthorPage() {
   // ⚡ HYBRID LOGIC: Memory -> Storage -> API Revalidate
   useEffect(() => {
     const init = async () => {
-      // 1. Check Memory first
       if (AUTHOR_MEMORY_CACHE[CACHE_KEY_AUTHOR]) {
-        setIsInitialMount(false); // Memory exists, skip full screen loading
-        fetchInitialData(); // Revalidate background
+        setIsInitialMount(false); 
+        fetchInitialData(); 
         return;
       }
 
-      // 2. Check AsyncStorage
       try {
         const [cAuth, cPosts] = await Promise.all([
           AsyncStorage.getItem(CACHE_KEY_AUTHOR),
@@ -222,10 +219,9 @@ export default function AuthorPage() {
           const postData = parsed?.data || parsed;
           setPosts(postData);
           AUTHOR_POSTS_MEMORY_CACHE[CACHE_KEY_POSTS] = postData;
-          setIsInitialMount(false); // We have content, don't show AnimeLoading
+          setIsInitialMount(false); 
         }
 
-        // 3. Revalidate from API regardless
         fetchInitialData();
       } catch (e) { 
         fetchInitialData(); 
@@ -420,13 +416,11 @@ export default function AuthorPage() {
     );
   };
 
-  const renderItem = ({ item, index }) => {
-    return (
-      <View className={'px-3'}>
-        <PostCard post={item} isFeed />
-      </View>
-    );
-  };
+  const renderItem = ({ item }) => (
+    <View className="px-3">
+      <PostCard post={item} isFeed setPosts={setPosts} syncing={loading} />
+    </View>
+  );
 
   if (!author && isOffline) {
     return (
@@ -469,7 +463,7 @@ export default function AuthorPage() {
       ListHeaderComponent={ListHeader}
       ListFooterComponent={
         <View className="py-10">
-          {loading && <SyncLoading />}
+          {loading && <SyncLoading message="Synchronizing Logs" />}
           {!hasMore && posts.length > 0 && (
             <View className="items-center opacity-30">
               <View className="h-[1px] w-24 bg-gray-500 mb-4" />
@@ -480,7 +474,7 @@ export default function AuthorPage() {
       }
       onEndReached={fetchMorePosts}
       onEndReachedThreshold={0.5}
-      onRefresh={() => { setPage(1); fetchInitialData(); }}
+      onRefresh={() => { setRefreshing(true); setPage(1); fetchInitialData(); }}
       refreshing={refreshing}
       onScroll={(e) => { DeviceEventEmitter.emit("onScroll", e.nativeEvent.contentOffset.y); }}
       scrollEventThrottle={16}
