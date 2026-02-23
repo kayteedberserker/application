@@ -20,7 +20,6 @@ import Animated, {
     withTiming
 } from 'react-native-reanimated';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
-import AnimeLoading from '../../components/AnimeLoading';
 import ClanCrest from '../../components/ClanCrest';
 import { SyncLoading } from '../../components/SyncLoading';
 import { Text } from '../../components/Text';
@@ -453,7 +452,6 @@ const ClanWarPage = () => {
         </View>
     );
 
-    if (loading && !refreshing) return <AnimeLoading />;
 
     return (
         <View style={{ paddingTop: insets.top }} className="flex-1 bg-white dark:bg-slate-950">

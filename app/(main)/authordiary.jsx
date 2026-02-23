@@ -17,15 +17,12 @@ import {
 } from "react-native";
 import Toast from "react-native-toast-message";
 import useSWR from "swr";
-import { LevelPlayRewardedAd } from 'unity-levelplay-mediation';
-import AnimeLoading from "../../components/AnimeLoading";
 import { Text } from "../../components/Text";
 import THEME from "../../components/useAppTheme";
 import { useAlert } from "../../context/AlertContext"; // 🔹 ALERT CONTEXT IMPORT
 import { useClan } from "../../context/ClanContext"; // 🔹 CLAN CONTEXT IMPORTED
 import { useStreak } from "../../context/StreakContext";
 import { useUser } from "../../context/UserContext";
-import { AdConfig } from "../../utils/AdConfig";
 import apiFetch from "../../utils/apiFetch";
 
 // 🔹 Notification Handler Configuration
@@ -102,12 +99,6 @@ export default function AuthorDiaryDashboard() {
     // 🔹 NEW: Ref for the message input to fix keyboard issue
     const messageInputRef = useRef(null);
 
-    // 🛠️ LEVELPLAY AD MANAGEMENT (Replaces useRewardedAd hook)
-    const rewardedAdRef = useRef(null);
-    const retryTimerRef = useRef(null);
-    const [isAdLoaded, setIsAdLoaded] = useState(false);
-    const [isAdLoading, setIsAdLoading] = useState(false); // For loading animation
-
     // Form & System States
     const [title, setTitle] = useState("");
     const [message, setMessage] = useState("");
@@ -153,76 +144,9 @@ export default function AuthorDiaryDashboard() {
     const CACHE_KEY_TODAY = `CACHE_TODAY_POSTS_${fingerprint}`;
     const CACHE_KEY_RANK = `CACHE_RANK_${fingerprint}`;
 
-    // =================================================================
-    // 1. LEVELPLAY REWARDED AD LOGIC (REPLACEMENT)
-    // =================================================================
-    const REWARDED_ID = String(AdConfig.rewarded || "pw746blifv59mqoq").trim();
-    useEffect(() => {
-        if (REWARDED_ID === "0" || !fingerprint || todayPosts.length < maxPostsToday) return;
-
-        const rewardedAd = new LevelPlayRewardedAd(REWARDED_ID);
-        rewardedAdRef.current = rewardedAd;
-
-        const listener = {
-            onAdLoaded: (adInfo) => {
-                setIsAdLoaded(true);
-                setIsAdLoading(false);
-                if (retryTimerRef.current) clearTimeout(retryTimerRef.current);
-            },
-            onAdLoadFailed: (error) => {
-                console.warn("LevelPlay Load Failed:", error?.errorMessage);
-                setIsAdLoaded(false);
-                setIsAdLoading(true); // Keep spinner if you want to show it's retrying
-
-                // Retry logic
-                if (retryTimerRef.current) clearTimeout(retryTimerRef.current);
-                retryTimerRef.current = setTimeout(() => {
-                    rewardedAd.loadAd();
-                }, 10000);
-            },
-            onAdAvailable: (adInfo) => {
-                setIsAdLoaded(true);
-                setIsAdLoading(false);
-                if (retryTimerRef.current) clearTimeout(retryTimerRef.current);
-            },
-            onAdUnavailable: () => setIsAdLoaded(false),
-            onAdRewarded: async (reward, adInfo) => {
-                // 🔹 PORTED FROM YOUR ADMOB LOGIC
-                console.log("Reward Earned via LevelPlay");
-                setRewardToken(`rewarded_${fingerprint}`);
-                setCanPostAgain(true);
-                try {
-                    await Notifications.cancelAllScheduledNotificationsAsync();
-                } catch (err) {
-                    console.error("Failed to cancel notifications:", err);
-                }
-            },
-            onAdClosed: (adInfo) => {
-                // Reload ad immediately for next time
-                rewardedAd.loadAd();
-            },
-            onAdShowFailed: (error, adInfo) => {
-                CustomAlert("Ad Error", "Failed to display reward video.");
-                rewardedAd.loadAd();
-            }
-        };
-
-        rewardedAd.setListener(listener);
-        rewardedAd.loadAd();
-
-        return () => {
-            if (retryTimerRef.current) clearTimeout(retryTimerRef.current);
-        };
-    }, [fingerprint]);
 
     // Manual Show Function (To be called by your button)
     const handleShowRewardAd = async () => {
-        if (rewardedAdRef.current && await rewardedAdRef.current.isAdReady()) {
-            rewardedAdRef.current.showAd("");
-        } else {
-            Toast.show({ type: 'error', text1: 'Ad not ready yet. Please wait.' });
-            rewardedAdRef.current?.loadAd();
-        }
     };
 
     // =================================================================
@@ -350,16 +274,16 @@ export default function AuthorDiaryDashboard() {
             ]
         );
     };
-//     const checkScheduledNotifications = async () => {
-//   const scheduled = await Notifications.getAllScheduledNotificationsAsync();
-//   console.log("Count:", scheduled.length);
-//   console.log("Scheduled Notifications:", JSON.stringify(scheduled, null, 2));
-// };
+    //     const checkScheduledNotifications = async () => {
+    //   const scheduled = await Notifications.getAllScheduledNotificationsAsync();
+    //   console.log("Count:", scheduled.length);
+    //   console.log("Scheduled Notifications:", JSON.stringify(scheduled, null, 2));
+    // };
 
-//      // Call this function to log scheduled notifications
-//      useEffect(() => {
-//       checkScheduledNotifications();
-//     }, []);
+    //      // Call this function to log scheduled notifications
+    //      useEffect(() => {
+    //       checkScheduledNotifications();
+    //     }, []);
     // =================================================================
     // 5. NOTIFICATIONS & SYSTEM SETUP
     // =================================================================
@@ -907,13 +831,6 @@ export default function AuthorDiaryDashboard() {
         );
     };
 
-    if (contextLoading || submitting || isDraftRestoring) {
-        return <AnimeLoading
-            message={submitting ? "Submitting" : uploading ? "Uploading" : isDraftRestoring ? "Restoring" : "Loading"}
-            subMessage={isDraftRestoring ? "Synchronizing core draft modules..." : "Fetching Otaku diary"}
-        />
-    }
-
     return (
         <View style={{ flex: 1, backgroundColor: THEME.bg }}>
             <StatusBar barStyle="light-content" />
@@ -994,9 +911,9 @@ export default function AuthorDiaryDashboard() {
 
                                     <TouchableOpacity
                                         onPress={handleShowRewardAd}
-                                        className={`mt-8 w-full py-5 rounded-2xl flex-row justify-center items-center ${isAdLoaded ? 'bg-blue-600' : 'bg-gray-800'}`}
+                                        className={`mt-8 w-full py-5 rounded-2xl flex-row justify-center items-center bg-blue-600`}
                                     >
-                                        {isAdLoaded ? <Ionicons name="play" size={20} color="white" /> : <ActivityIndicator size="small" color="#444" />}
+                                        <Ionicons name="play" size={20} color="white" />
                                         <Text className="text-white font-black uppercase tracking-widest ml-2">Override Limit (Watch Ad)</Text>
                                     </TouchableOpacity>
                                 </View>
@@ -1060,13 +977,26 @@ export default function AuthorDiaryDashboard() {
                             <View style={{ backgroundColor: THEME.card, borderColor: THEME.border }} className="mb-6 rounded-3xl border-2 p-2">{renderPreviewContent()}</View>
                         ) : (
                             <View className="space-y-6">
-                                <Link href={"/screens/Instructions"} asChild>
-                                    <TouchableOpacity className="mt-4">
-                                        <Text className="text-gray-600 font-bold uppercase tracking-tighter text-xs">
-                                            Don't understand how to go about this? Check out this page for clear explanation
-                                        </Text>
-                                    </TouchableOpacity>
-                                </Link>
+                                <View className="items-center justify-center px-6 py-4">
+                                    <Text style={{ color: THEME.text }} className="text-[12px] uppercase tracking-tighter text-xs text-center mb-3">
+                                        Don't understand how to go about this? Check out this
+                                    </Text>
+
+                                    <Link href={"/screens/Instructions"} asChild>
+                                        <TouchableOpacity
+                                            activeOpacity={0.7}
+                                            className="bg-blue-600 px-8 py-3 rounded-full shadow-sm active:bg-blue-700"
+                                        >
+                                            <Text className="text-white font-black uppercase tracking-widest text-sm">
+                                                View Instructions Page
+                                            </Text>
+                                        </TouchableOpacity>
+                                    </Link>
+
+                                    <Text style={{ color: THEME.text }} className="text-[12px] uppercase mt-2 tracking-tighter">
+                                        for a clear explanation
+                                    </Text>
+                                </View>
                                 {/* Title */}
                                 <View>
                                     <Text className="text-[9px] font-black uppercase text-gray-500 mb-2 ml-1">Subject Title</Text>
@@ -1121,8 +1051,8 @@ export default function AuthorDiaryDashboard() {
 
                                 {/* 🔹 CATEGORY SELECTION (Updated for Clan Logic) */}
                                 <View>
-                                    <Text className="text-[9px] font-black uppercase text-gray-500 mb-2 ml-1">Archive Category</Text>
-                                    <ScrollView horizontal showsHorizontalScrollIndicator={false}>
+                                    <Text className="text-[12px] font-black uppercase text-gray-500 my-2 ml-1">Select Category</Text>
+                                    <ScrollView className="mb-3" horizontal showsHorizontalScrollIndicator={false}>
                                         {/* 🔹 If in Clan, show 'Clan' as an option. Otherwise standard list. */}
                                         {(isInClan ? ["Clan", "News", "Memes", "Polls", "Gaming", "Review"] : ["News", "Memes", "Polls", "Gaming", "Review"]).map((cat) => (
                                             <TouchableOpacity

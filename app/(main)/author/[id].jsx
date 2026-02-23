@@ -15,7 +15,6 @@ import {
   View
 } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
-import AnimeLoading from "../../../components/AnimeLoading";
 import PostCard from "../../../components/PostCard";
 import { SyncLoading } from "../../../components/SyncLoading";
 import { Text } from "../../../components/Text";
@@ -422,12 +421,6 @@ export default function AuthorPage() {
     return (
       <View className={'px-3'}>
         <PostCard post={item} isFeed />
-        {/* {showAd && (
-          <View className="mb-3 mt-3 w-full p-6 border border-dashed border-gray-300 dark:border-gray-800 rounded-[32px] bg-gray-50/50 dark:bg-white/5 items-center justify-center">
-							<Text className="text-[10px] font-bold text-gray-400 uppercase tracking-[0.2em] italic text-center">Sponsored Transmission</Text>
-							<AppBanner size="MEDIUM_RECTANGLE" />
-						</View>
-        )} */}
       </View>
     );
   };
@@ -458,10 +451,6 @@ export default function AuthorPage() {
         </View>
       </ScrollView>
     );
-  }
-
-  if (isInitialMount && posts.length === 0 && !author) {
-    return <AnimeLoading message="Loading Author" subMessage="Decoding biological data..." />;
   }
 
   return (

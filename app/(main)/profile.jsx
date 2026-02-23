@@ -22,7 +22,6 @@ import {
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import Toast from "react-native-toast-message";
 import useSWRInfinite from "swr/infinite";
-import AnimeLoading from "../../components/AnimeLoading";
 import AppOnboarding from "../../components/AppOnboarding";
 import { SyncLoading } from "../../components/SyncLoading";
 import { Text } from "../../components/Text";
@@ -636,10 +635,6 @@ export default function MobileProfilePage() {
       </View>
     </View>
   ), [user, preview, description, username, isUpdating, spin, translateX, totalPosts, copied, refCopied, rankTitle, rankIcon, progress, nextMilestone, count, showId, isDark, aura, pulseAnim, filledBoxes, currentAuraPoints, dynamicAuraColor]); 
-
-  if (contextLoading || isRestoringCache) {
-    return <AnimeLoading message="Syncing Profile" subMessage="Checking local cache..." />;
-  }
 
   return (
     <View className="flex-1 bg-white dark:bg-[#0a0a0a]" style={{ paddingTop: insets.top }}>

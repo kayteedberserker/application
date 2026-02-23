@@ -1,6 +1,6 @@
 import { Ionicons } from "@expo/vector-icons";
 import { useRouter } from "expo-router";
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useState } from "react";
 import {
     ActivityIndicator,
     DeviceEventEmitter,
@@ -9,7 +9,6 @@ import {
     TouchableOpacity,
     View
 } from "react-native";
-// 🔹 Standard LevelPlay import
 import Animated, {
     FadeInRight,
     useAnimatedStyle,
@@ -18,35 +17,26 @@ import Animated, {
     withSequence,
     withTiming
 } from "react-native-reanimated";
-import { LevelPlayRewardedAd } from 'unity-levelplay-mediation';
 import { useAlert } from "../context/AlertContext";
 import { useStreak } from "../context/StreakContext";
 import { useUser } from "../context/UserContext";
-import { AdConfig } from "../utils/AdConfig";
 import apiFetch from "../utils/apiFetch";
+import CoinIcon from "./ClanIcon";
 import { Text } from "./Text";
 
-const REWARDED_ID = String(AdConfig.rewarded || "0");
-
 const TopBar = ({ isDark }) => {
-    const CustomAlert = useAlert()
+    const CustomAlert = useAlert();
     const router = useRouter();
     const { streak, loading, refreshStreak } = useStreak();
-    const { user } = useUser();
+    const { user, refreshUser } = useUser();
     
     // UI Logic states
     const [isRestoring, setIsRestoring] = useState(false);
-    const [isAdLoaded, setIsAdLoaded] = useState(false);
-    const [isAdShowing, setIsAdShowing] = useState(false);
-
-    // 🛠️ Refs to store the Ad Instance and Retry Timer
-    const rewardedAdRef = useRef(null);
-    const retryTimerRef = useRef(null);
 
     // Shared value for animations
     const pulse = useSharedValue(1);
 
-    // UI Logic helpers (Moved up so the useEffect can read them)
+    // UI Logic helpers
     const hasActiveStreak = streak?.streak > 0;
     const showRestoreUI = streak?.canRestore;
     const isZeroStreak = !hasActiveStreak && !showRestoreUI;
@@ -62,100 +52,18 @@ const TopBar = ({ isDark }) => {
         );
     }, []);
 
-    // 🔹 LEVELPLAY REWARDED LOGIC - WITH RETRY MECHANISM
-    useEffect(() => {
-        // 🛑 DATA SAVER: Abort entirely if the user doesn't need to restore a streak or if streak data is still loading
-        if (REWARDED_ID === "0" || loading || !showRestoreUI) return;
-
-        // 1. Create the instance
-        const rewardedAd = new LevelPlayRewardedAd(REWARDED_ID);
-        rewardedAdRef.current = rewardedAd;
-
-        const checkAvailability = async () => {
-            try {
-                // Use isAdReady() as defined in your library snippet
-                const available = await rewardedAd.isAdReady();
-                setIsAdLoaded(available);
-            } catch (e) {
-                console.log("Ad availability check failed:", e);
-            }
-        };
-
-        const listener = {
-            onAdLoaded: (adInfo) => {
-                console.log("Rewarded Ad Loaded (Internal Callback)", adInfo);
-                setIsAdLoaded(true);
-                if (retryTimerRef.current) clearTimeout(retryTimerRef.current);
-            },
-            onAdLoadFailed: (error) => {
-                console.warn("Rewarded Ad Load Failed:", error?.errorMessage);
-                setIsAdLoaded(false);
-                
-                // 🔄 RETRY LOGIC: If "No Fill", try again in 10 seconds
-                if (retryTimerRef.current) clearTimeout(retryTimerRef.current);
-                retryTimerRef.current = setTimeout(() => {
-                    console.log("Retrying to load Rewarded Ad...");
-                    rewardedAd.loadAd();
-                }, 10000); 
-            },
-            onAdAvailable: (adInfo) => {
-                console.log("Rewarded Ad Available");
-                setIsAdLoaded(true);
-                if (retryTimerRef.current) clearTimeout(retryTimerRef.current);
-            },
-            onAdUnavailable: () => {
-                console.log("Rewarded Ad Unavailable");
-                setIsAdLoaded(false);
-            },
-            onAdRewarded: (reward, adInfo) => {
-                console.log("User earned reward");
-                handleRestoreStreak();
-            },
-            onAdClosed: (adInfo) => {
-                console.log("Rewarded Ad Closed");
-                setIsAdShowing(false);
-                // Reload ad for next time (will clean up if streak is successfully restored)
-                rewardedAd.loadAd();
-            },
-            onAdShowFailed: (error, adInfo) => {
-                console.error("Rewarded Show Failed:", error?.errorMessage);
-                setIsAdShowing(false);
-                CustomAlert("Ad Error", "Could not play the video. Please try again.");
-                // Try to reload after show failure
-                rewardedAd.loadAd();
-            },
-            onAdClicked: (reward, adInfo) => console.log("Ad Clicked"),
-            onAdOpened: (adInfo) => setIsAdShowing(true),
-        };
-
-        // 2. Set listener on the instance
-        rewardedAd.setListener(listener);
-
-        // 3. Load the ad
-        rewardedAd.loadAd();
-
-        // Initial check
-        checkAvailability();
-
-        return () => {
-            if (retryTimerRef.current) clearTimeout(retryTimerRef.current);
-            // Cleanup if your library supports it
-            if (rewardedAd.remove) {
-                try {
-                    rewardedAd.remove();
-                } catch(e) {
-                    console.log("Cleanup error:", e);
-                }
-            }
-        };
-    }, [loading, showRestoreUI]); // 👈 Now this effect will re-run correctly when streak state changes
-
     const handleRestoreStreak = async () => {
+        // 🛑 Placeholder for Coin Logic
         if (!user?.deviceId) return;
+
+        if ((user?.coins || 0) < 30) {
+            CustomAlert("Insufficient OC", "You need 30 OC 🪙 to revive your streak. Check back daily!");
+            return;
+        }
         
         try {
             setIsRestoring(true);
-            const response = await apiFetch("/users/streak/restore", {
+            const response = await apiFetch("/users/streak/restore-with-coins", {
                 method: "POST",
                 headers: { "Content-Type": "application/json" },
                 body: JSON.stringify({ deviceId: user.deviceId }),
@@ -166,30 +74,15 @@ const TopBar = ({ isDark }) => {
             if (!response.ok) {
                 CustomAlert("System Notification", result.message || "Unable to restore streak.");
             } else {
-                CustomAlert("Streak Revived!", `Your ${result.streak} day streak is back from the dead.`);
+                CustomAlert("Streak Revived!", `30 OC spent. Your ${result.streak} day streak is back!`);
                 refreshStreak();
+                if (refreshUser) refreshUser(); // Update coin balance in global state
             }
         } catch (err) {
             console.log("Restore streak error:", err);
             CustomAlert("Connection Error", "Failed to reach the server.");
         } finally {
             setIsRestoring(false);
-        }
-    };
-
-    const handleShowAd = async () => {
-        const adInstance = rewardedAdRef.current;
-        if (!adInstance) {
-            CustomAlert("Error", "Ad system not initialized.");
-            return;
-        }
-
-        const canShow = await adInstance.isAdReady();
-        if (canShow) {
-            adInstance.showAd("");
-        } else {
-            console.log("Ad not ready yet. Attempting reload.");
-            adInstance.loadAd();
         }
     };
 
@@ -218,41 +111,36 @@ const TopBar = ({ isDark }) => {
             >
                 <Image
                     source={logoSrc}
-                    style={{ width: 110, height: 32, resizeMode: "contain" }}
+                    style={{ width: 105, height: 32, resizeMode: "contain" }}
                 />
 
-                <View className="flex-row items-center gap-2">
+                {/* Main Action Container with adjusted spacing */}
+                <View className="flex-row items-center gap-1.5">
                     
-                    {/* 🏆 LEADERBOARD */}
-                    <TouchableOpacity
-                        onPress={() => DeviceEventEmitter.emit("navigateSafely", "/screens/Leaderboard")}
-                        className={`p-1.5 rounded-xl ${isDark ? "bg-blue-500/10 border border-blue-500/20" : "bg-gray-100"}`}
+                    {/* 🪙 ORE COIN (OC) HUD - Retained design with added navigation logic */}
+                    <TouchableOpacity 
+                        onPress={() => {
+                            // CustomAlert placeholder replaced with navigation logic for the future
+                            DeviceEventEmitter.emit("navigateSafely", "/screens/Wallet"); 
+                        }}
+                        className={`flex-row items-center px-2 py-1.5 rounded-xl border ${
+                            isDark 
+                            ? "bg-yellow-500/10 border-yellow-500/20" 
+                            : "bg-yellow-50 border-yellow-200"
+                        }`}
                     >
-                        <Ionicons
-                            name="trophy-outline"
-                            size={18}
-                            color={isDark ? "#60a5fa" : "#111827"}
-                        />
+                        <Text className="text-yellow-600 dark:text-yellow-400 font-black text-[13px] mr-1">
+                            {user?.coins || 0}
+                        </Text>
+                        <CoinIcon type="OC" size={15} />
                     </TouchableOpacity>
 
-                    {/* 🔍 SEARCH */}
-                    <TouchableOpacity
-                        onPress={() => DeviceEventEmitter.emit("navigateSafely", "/screens/Search")}
-                        className={`p-1.5 rounded-xl ${isDark ? "bg-blue-500/10 border border-blue-500/20" : "bg-gray-100"}`}
-                    >
-                        <Ionicons
-                            name="search-outline"
-                            size={18}
-                            color={isDark ? "#60a5fa" : "#111827"}
-                        />
-                    </TouchableOpacity>
-
-                    {/* 🔥 STREAK / 🏥 RESTORE HUD */}
+                    {/* 🔥 STREAK / 🏥 RESTORE HUD - Retained design with padding safety */}
                     {!loading && (
                         <Animated.View entering={FadeInRight}>
                             <TouchableOpacity
-                                disabled={!showRestoreUI || isRestoring || isAdShowing}
-                                onPress={handleShowAd}
+                                disabled={(!showRestoreUI && !hasActiveStreak) || isRestoring}
+                                onPress={showRestoreUI ? handleRestoreStreak : () => CustomAlert("Streak", "Keep your daily streak alive by staying active!")}
                                 activeOpacity={showRestoreUI ? 0.7 : 1}
                             >
                                 <Animated.View 
@@ -260,14 +148,13 @@ const TopBar = ({ isDark }) => {
                                     className={`px-2 py-1.5 rounded-full flex-row items-center gap-1.5 border ${
                                         showRestoreUI 
                                         ? "bg-red-950/40 border-red-500/50" 
-                                        : isZeroStreak
+                                        : isZeroStreak 
                                         ? "bg-gray-500/10 border-gray-500/20"
                                         : "bg-orange-500/10 border-orange-500/30"
                                     }`}
                                 >
-                                    {/* 🔄 LOADING ANIMATION (Applied when ad or restoration is pending) */}
-                                    {isRestoring || (showRestoreUI && !isAdLoaded) ? (
-                                        <ActivityIndicator size="small" color={showRestoreUI ? "#ef4444" : "#f97316"} />
+                                    {isRestoring ? (
+                                        <ActivityIndicator size="small" color="#ef4444" />
                                     ) : (
                                         <View className="flex-row items-center">
                                             <Animated.View style={healthyFlameStyle}>
@@ -283,7 +170,7 @@ const TopBar = ({ isDark }) => {
                                             </Animated.View>
                                             {showRestoreUI && (
                                                 <View style={{ marginLeft: -5, marginTop: -6 }}>
-                                                    <Ionicons name="add-circle" size={10} color="#ef4444" />
+                                                    <Ionicons name="refresh-circle" size={10} color="#ef4444" />
                                                 </View>
                                             )}
                                         </View>
@@ -299,7 +186,7 @@ const TopBar = ({ isDark }) => {
                                         </Text>
                                         {showRestoreUI && !isRestoring && (
                                             <Text className="text-[6px] font-bold text-red-400 tracking-tighter -mt-1 uppercase">
-                                                RESTORE
+                                                -30 OC
                                             </Text>
                                         )}
                                         {isZeroStreak && (
@@ -313,17 +200,44 @@ const TopBar = ({ isDark }) => {
                         </Animated.View>
                     )}
 
-                    {/* MENU */}
-                    <TouchableOpacity
-                        onPress={() => DeviceEventEmitter.emit("navigateSafely", "/screens/MoreOptions")}
-                        className={`p-1.5 rounded-xl ${isDark ? "bg-blue-500/10 border border-blue-500/20" : "bg-gray-100"}`}
-                    >
-                        <Ionicons
-                            name="grid-outline"
-                            size={18}
-                            color={isDark ? "#60a5fa" : "#111827"}
-                        />
-                    </TouchableOpacity>
+                    {/* Utility Icons (Grouped slightly for balance) */}
+                    <View className="flex-row items-center gap-1">
+                        {/* 🏆 LEADERBOARD */}
+                        <TouchableOpacity
+                            onPress={() => DeviceEventEmitter.emit("navigateSafely", "/screens/Leaderboard")}
+                            className={`p-1.5 rounded-xl border ${isDark ? "bg-blue-500/10 border-blue-500/20" : "bg-gray-100 border-gray-200"}`}
+                        >
+                            <Ionicons
+                                name="trophy-outline"
+                                size={17}
+                                color={isDark ? "#60a5fa" : "#111827"}
+                            />
+                        </TouchableOpacity>
+
+                        {/* 🔍 SEARCH */}
+                        <TouchableOpacity
+                            onPress={() => DeviceEventEmitter.emit("navigateSafely", "/screens/Search")}
+                            className={`p-1.5 rounded-xl border ${isDark ? "bg-blue-500/10 border-blue-500/20" : "bg-gray-100 border-gray-200"}`}
+                        >
+                            <Ionicons
+                                name="search-outline"
+                                size={17}
+                                color={isDark ? "#60a5fa" : "#111827"}
+                            />
+                        </TouchableOpacity>
+
+                        {/* MENU */}
+                        <TouchableOpacity
+                            onPress={() => DeviceEventEmitter.emit("navigateSafely", "/screens/MoreOptions")}
+                            className={`p-1.5 rounded-xl border ${isDark ? "bg-blue-500/10 border-blue-500/20" : "bg-gray-100 border-gray-200"}`}
+                        >
+                            <Ionicons
+                                name="grid-outline"
+                                size={17}
+                                color={isDark ? "#60a5fa" : "#111827"}
+                            />
+                        </TouchableOpacity>
+                    </View>
                 </View>
             </View>
         </SafeAreaView>

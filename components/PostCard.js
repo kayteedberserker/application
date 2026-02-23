@@ -30,7 +30,6 @@ import useSWR from "swr";
 import { useAlert } from "../context/AlertContext";
 import { useUser } from "../context/UserContext";
 import apiFetch from "../utils/apiFetch";
-import AppBanner from "./AppBanner";
 import ClanCrest from "./ClanCrest";
 import Poll from "./Poll";
 import { SyncLoading } from "./SyncLoading";
@@ -505,107 +504,155 @@ export default function PostCard({ post, setPosts, isFeed, hideMedia, syncing, s
 	}, [post.message, isFeed, isDark, similarPosts]);
 
 	const renderMediaContent = () => {
-		if (mediaItems.length === 0) return null;
+    if (mediaItems.length === 0) return null;
 
-		const firstItem = mediaItems[0];
-		const lowerUrl = firstItem.url.toLowerCase();
-		const isYouTube = lowerUrl.includes("youtube.com") || lowerUrl.includes("youtu.be");
-		const isTikTok = lowerUrl.includes("tiktok.com");
-		const isDirectVideo = firstItem.type?.startsWith("video") || lowerUrl.match(/\.(mp4|mov|m4v|webm)$/i);
-		const isVideo = isYouTube || isTikTok || isDirectVideo;
+    const firstItem = mediaItems[0];
+    const lowerUrl = firstItem.url.toLowerCase();
+    
+    // Check for any video type in the list
+    const isYouTube = lowerUrl.includes("youtube.com") || lowerUrl.includes("youtu.be");
+    const isTikTok = lowerUrl.includes("tiktok.com");
+    const isDirectVideo = firstItem.type?.startsWith("video") || lowerUrl.match(/\.(mp4|mov|m4v|webm)$/i);
+    const isVideo = isYouTube || isTikTok || isDirectVideo;
 
-		if (!loadMedia && isVideo) {
-			return (
-				<View className="my-2">
-					<MediaPlaceholder height={similarPosts ? 160 : 250} type="video" onPress={() => setLoadMedia(true)} />
-				</View>
-			);
-		}
+    // DATA SAVER: If it's a video and loadMedia is false, return ONLY the placeholder.
+    // This prevents the 'player' object or WebViews from being instantiated/rendered.
+    if (!loadMedia && isVideo) {
+        return (
+            <View className="my-2">
+                <MediaPlaceholder 
+                    height={similarPosts ? 160 : 250} 
+                    type="video" 
+                    onPress={() => setLoadMedia(true)} 
+                />
+            </View>
+        );
+    }
 
-		const glassStyle = { borderWidth: 1, borderColor: 'rgba(96, 165, 250, 0.2)', shadowColor: "#60a5fa", shadowOffset: { width: 0, height: 0 }, shadowOpacity: 0.3, shadowRadius: 10 };
+    const glassStyle = { 
+        borderWidth: 1, 
+        borderColor: 'rgba(96, 165, 250, 0.2)', 
+        shadowColor: "#60a5fa", 
+        shadowOffset: { width: 0, height: 0 }, 
+        shadowOpacity: 0.3, 
+        shadowRadius: 10 
+    };
 
-		if (isYouTube) {
-			const getYouTubeID = (url) => {
-				const regex = /(?:youtube\.com\/(?:[^\/]+\/.+\/|(?:v|e(?:mbed)?|shorts)\/|.*[?&]v=)|youtu\.be\/)([^"&?\/\s]{11})/;
-				const match = url.match(regex);
-				return match ? match[1] : null;
-			};
-			return <View className="w-full rounded-2xl overflow-hidden my-2 bg-black" style={glassStyle}>{!videoReady && <MediaSkeleton height={similarPosts ? 160 : 210} />}<YoutubePlayer height={similarPosts ? 160 : videoReady ? 210 : 0} play={false} videoId={getYouTubeID(firstItem.url)} onReady={() => setVideoReady(true)} webViewProps={{ allowsInlineMediaPlayback: true, androidLayerType: "hardware" }} /></View>;
-		}
+    // YouTube - Only renders if loadMedia is true
+    if (isYouTube) {
+        const getYouTubeID = (url) => {
+            const regex = /(?:youtube\.com\/(?:[^\/]+\/.+\/|(?:v|e(?:mbed)?|shorts)\/|.*[?&]v=)|youtu\.be\/)([^"&?\/\s]{11})/;
+            const match = url.match(regex);
+            return match ? match[1] : null;
+        };
+        return (
+            <View className="w-full rounded-2xl overflow-hidden my-2 bg-black" style={glassStyle}>
+                {!videoReady && <MediaSkeleton height={similarPosts ? 160 : 210} />}
+                <YoutubePlayer 
+                    height={similarPosts ? 160 : videoReady ? 210 : 0} 
+                    play={false} 
+                    videoId={getYouTubeID(firstItem.url)} 
+                    onReady={() => setVideoReady(true)} 
+                    webViewProps={{ allowsInlineMediaPlayback: true, androidLayerType: "hardware" }} 
+                />
+            </View>
+        );
+    }
 
-		if (isTikTok) {
-			const getTikTokEmbedUrl = (url) => {
-				const match = url.match(/\/video\/(\d+)/);
-				return match?.[1] ? `https://www.tiktok.com/embed/${match[1]}` : url;
-			}
-			return <View className="w-full rounded-2xl overflow-hidden my-2 bg-black" style={[{ height: similarPosts ? 200 : 600 }, glassStyle]}>{!tikTokReady && <MediaSkeleton height={similarPosts ? 200 : 600} />}<WebView source={{ uri: getTikTokEmbedUrl(firstItem.url) }} userAgent="Mozilla/5.0 (iPhone; CPU iPhone OS 15_0 like Mac OS X)" onLoadEnd={() => setTikTokReady(true)} scrollEnabled={false} allowsFullscreenVideo javaScriptEnabled domStorageEnabled allowsInlineMediaPlayback={true} style={{ flex: 1, opacity: tikTokReady ? 1 : 0 }} /></View>;
-		}
+    // TikTok - Only renders if loadMedia is true
+    if (isTikTok) {
+        const getTikTokEmbedUrl = (url) => {
+            const match = url.match(/\/video\/(\d+)/);
+            return match?.[1] ? `https://www.tiktok.com/embed/${match[1]}` : url;
+        }
+        return (
+            <View className="w-full rounded-2xl overflow-hidden my-2 bg-black" style={[{ height: similarPosts ? 200 : 600 }, glassStyle]}>
+                {!tikTokReady && <MediaSkeleton height={similarPosts ? 200 : 600} />}
+                <WebView 
+                    source={{ uri: getTikTokEmbedUrl(firstItem.url) }} 
+                    userAgent="Mozilla/5.0 (iPhone; CPU iPhone OS 15_0 like Mac OS X)" 
+                    onLoadEnd={() => setTikTokReady(true)} 
+                    scrollEnabled={false} 
+                    allowsFullscreenVideo 
+                    javaScriptEnabled 
+                    domStorageEnabled 
+                    allowsInlineMediaPlayback={true} 
+                    style={{ flex: 1, opacity: tikTokReady ? 1 : 0 }} 
+                />
+            </View>
+        );
+    }
 
-		const count = mediaItems.length;
-		const openItem = (index) => {
-			setCurrentAssetIndex(index);
-			setLightbox({ open: true, index });
-		};
+    const count = mediaItems.length;
+    const openItem = (index) => {
+        setCurrentAssetIndex(index);
+        setLightbox({ open: true, index });
+    };
 
-		return (
-			<View className="my-2 rounded-2xl overflow-hidden bg-black" style={[glassStyle, { height: similarPosts ? 200 : 300 }]}>
-				{count === 1 ? (
-					// Logic: If it's a video and there's only 1 item, don't wrap in Lightbox Pressable so user can interact with the video player
-					isDirectVideo ? (
-						<View className="w-full h-full items-center justify-center">
-							<VideoView
-								player={player}
-								style={{ width: "100%", height: "100%" }}
-								contentFit="contain"
-								nativeControls={true}
-								onIsVideoReadyToPlay={() => setIsVideoLoading(false)}
-							/>
-						</View>
-					) : (
-						<Pressable onPress={() => openItem(0)} className="w-full h-full">
-							<Image source={{ uri: firstItem.url }} className="w-full h-full" resizeMode="cover" />
-						</Pressable>
-					)
-				) : count === 2 ? (
-					<View className="flex-row w-full h-full gap-[2px]">
-						{mediaItems.slice(0, 2).map((item, idx) => (
-							<Pressable key={idx} onPress={() => openItem(idx)} className="flex-1">
-								{item.type === "video" ? (
-									<VideoView
-										player={player}
-										style={{ width: "100%", height: "100%" }}
-										contentFit="cover"
-										nativeControls={false}
-									/>
-								) : (
-									<Image source={{ uri: item.url }} className="w-full h-full" resizeMode="cover" />
-								)}
-							</Pressable>
-						))}
-					</View>
-				) : (
-					<View className="flex-row w-full h-full gap-[2px]">
-						<Pressable onPress={() => openItem(0)} className="w-1/2 h-full">
-							<Image source={{ uri: mediaItems[0].url }} className="w-full h-full" resizeMode="cover" />
-						</Pressable>
-						<View className="w-1/2 h-full gap-[2px]">
-							<Pressable onPress={() => openItem(1)} className="flex-1">
-								<Image source={{ uri: mediaItems[1].url }} className="w-full h-full" resizeMode="cover" />
-							</Pressable>
-							<Pressable onPress={() => openItem(2)} className="flex-1 relative">
-								<Image source={{ uri: mediaItems[2].url }} className="w-full h-full" resizeMode="cover" />
-								{count > 3 && (
-									<View className="absolute inset-0 bg-black/60 items-center justify-center">
-										<Text className="text-white text-2xl font-black">+{count - 2}</Text>
-									</View>
-								)}
-							</Pressable>
-						</View>
-					</View>
-				)}
-			</View>
-		);
-	};
+    return (
+        <View className="my-2 rounded-2xl overflow-hidden bg-black" style={[glassStyle, { height: similarPosts ? 200 : 300 }]}>
+            {count === 1 ? (
+                isDirectVideo ? (
+                    <View className="w-full h-full items-center justify-center">
+                        <VideoView
+                            player={player}
+                            style={{ width: "100%", height: "100%" }}
+                            contentFit="contain"
+                            nativeControls={true}
+                            onIsVideoReadyToPlay={() => setIsVideoLoading(false)}
+                        />
+                    </View>
+                ) : (
+                    <Pressable onPress={() => openItem(0)} className="w-full h-full">
+                        <Image source={{ uri: firstItem.url }} className="w-full h-full" resizeMode="cover" />
+                    </Pressable>
+                )
+            ) : (
+                <View className="flex-row w-full h-full gap-[2px]">
+                    {count === 2 ? (
+                        mediaItems.slice(0, 2).map((item, idx) => (
+                            <Pressable key={idx} onPress={() => openItem(idx)} className="flex-1 relative">
+                                <Image source={{ uri: item.thumbnail || item.url }} className="w-full h-full" resizeMode="cover" />
+                                {item.type === "video" && (
+                                    <View className="absolute inset-0 items-center justify-center bg-black/20">
+                                        <Ionicons name="play-circle" size={40} color="white" />
+                                    </View>
+                                )}
+                            </Pressable>
+                        ))
+                    ) : (
+                        <>
+                            <Pressable onPress={() => openItem(0)} className="w-1/2 h-full relative">
+                                <Image source={{ uri: mediaItems[0].thumbnail || mediaItems[0].url }} className="w-full h-full" resizeMode="cover" />
+                                {mediaItems[0].type === "video" && (
+                                    <View className="absolute inset-0 items-center justify-center bg-black/10">
+                                        <Ionicons name="play-circle" size={30} color="white" />
+                                    </View>
+                                )}
+                            </Pressable>
+                            <View className="w-1/2 h-full gap-[2px]">
+                                <Pressable onPress={() => openItem(1)} className="flex-1 relative">
+                                    <Image source={{ uri: mediaItems[1].thumbnail || mediaItems[1].url }} className="w-full h-full" resizeMode="cover" />
+                                    {mediaItems[1].type === "video" && <Ionicons name="play-circle" size={20} color="white" style={{position: 'absolute', top: 5, right: 5}} />}
+                                </Pressable>
+                                <Pressable onPress={() => openItem(2)} className="flex-1 relative">
+                                    <Image source={{ uri: mediaItems[2].thumbnail || mediaItems[2].url }} className="w-full h-full" resizeMode="cover" />
+                                    {count > 3 ? (
+                                        <View className="absolute inset-0 bg-black/60 items-center justify-center">
+                                            <Text className="text-white text-2xl font-black">+{count - 2}</Text>
+                                        </View>
+                                    ) : (
+                                        mediaItems[2].type === "video" && <Ionicons name="play-circle" size={20} color="white" style={{position: 'absolute', top: 5, right: 5}} />
+                                    )}
+                                </Pressable>
+                            </View>
+                        </>
+                    )}
+                </View>
+            )}
+        </View>
+    );
+};
 
 	const aura = getAuraVisuals(author.rank);
 	const isTop3 = author.rank > 0 && author.rank <= 3;
@@ -821,12 +868,6 @@ export default function PostCard({ post, setPosts, isFeed, hideMedia, syncing, s
 						{post?.title}
 					</Text>
 					<View className="opacity-90">{renderContent}</View>
-					{!isFeed && !similarPosts && (
-						<View className="mb-3 mt-3 w-full p-6 border border-dashed border-gray-300 dark:border-gray-800 rounded-[32px] bg-gray-50/50 dark:bg-white/5 items-center justify-center">
-							<Text className="text-[10px] font-bold text-gray-400 uppercase tracking-[0.2em] italic text-center">Sponsored Transmission</Text>
-							<AppBanner size="BANNER" />
-						</View>
-					)}
 				</Pressable>
 
 				<View className={`${similarPosts ? "mb-2" : "mb-4"} rounded-2xl overflow-hidden border border-gray-100 dark:border-gray-800`}>

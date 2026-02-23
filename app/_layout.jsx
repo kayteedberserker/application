@@ -12,33 +12,20 @@ import { AppState, BackHandler, DeviceEventEmitter, InteractionManager, Platform
 import { SafeAreaProvider } from "react-native-safe-area-context";
 import Toast from 'react-native-toast-message';
 
-// 🔹 UNITY LEVELPLAY IMPORTS (Replaced AdMob)
-import { LevelPlay, LevelPlayInitRequest, LevelPlayInterstitialAd } from 'unity-levelplay-mediation';
-
 import AnimeLoading from "../components/AnimeLoading";
-import ReviewGate from "../components/ReviewGate"; // 👈 Import your new component
+import ReviewGate from "../components/ReviewGate";
 import { AlertProvider } from '../context/AlertContext';
 import { ClanProvider } from "../context/ClanContext";
+import { CoinProvider } from "../context/CoinContext";
 import { StreakProvider, useStreak } from "../context/StreakContext";
 import { UserProvider, useUser } from "../context/UserContext";
-import { AdConfig } from '../utils/AdConfig';
 import apiFetch from "../utils/apiFetch";
 import "./globals.css";
 
-// 🛑 GLOBAL LOCKS (Defined outside the component to prevent race conditions)
+// 🛑 GLOBAL LOCKS
 let IS_NAVIGATING_GLOBAL = false;
 let LAST_PROCESSED_NOTIF_ID = null;
 let LAST_PROCESSED_URL = null;
-
-// 🔹 AD CONFIGURATION
-const FIRST_AD_DELAY_MS = 300000;
-const COOLDOWN_MS = 300000;
-
-const INTERSTITIAL_ID = String(AdConfig.interstitial || "34wz6l0uzrpi6ce0").trim();
-
-let lastShownTime = Date.now() - (COOLDOWN_MS - FIRST_AD_DELAY_MS);
-let interstitialAd = null;
-let interstitialLoaded = false;
 
 // 🔹 NOTIFICATION HANDLER
 Notifications.setNotificationHandler({
@@ -48,9 +35,6 @@ Notifications.setNotificationHandler({
 
         if (Platform.OS === 'android' && groupId) {
             try {
-                const channelId = 'default';
-                const NOTIFICATION_COLOR = '#FF231F7C';
-
                 return {
                     shouldShowBanner: false,
                     shouldPlaySound: false,
@@ -68,63 +52,6 @@ Notifications.setNotificationHandler({
         };
     },
 });
-
-// 🔹 LEVELPLAY INTERSTITIAL LOGIC
-const loadInterstitial = () => {
-    if (!LevelPlayInterstitialAd) {
-        console.warn("LevelPlayInterstitialAd module not found");
-        return;
-    }
-
-    try {
-        if (!interstitialAd) {
-            console.log("Creating Interstitial with ID:", INTERSTITIAL_ID);
-            interstitialAd = new LevelPlayInterstitialAd(INTERSTITIAL_ID);
-        }
-
-        const listener = {
-            onAdLoaded: (adInfo) => {
-                console.log("✅ Interstitial Loaded:", adInfo);
-                interstitialLoaded = true;
-            },
-            onAdLoadFailed: (error) => {
-                console.warn("❌ Interstitial Load Failed:");
-                interstitialLoaded = false;
-                // Retry logic based on reference
-                const retryDelay = error.errorCode === 626 ? 60000 : 30000;
-                setTimeout(loadInterstitial, retryDelay);
-            },
-            onAdClosed: (adInfo) => {
-                console.log("Ad closed");
-                interstitialLoaded = false;
-                lastShownTime = Date.now();
-                // Delay reloading the next ad by 15 seconds after close to save resources
-                setTimeout(loadInterstitial, 15000);
-            },
-            onAdDisplayed: (adInfo) => console.log("Ad Displayed:"),
-            onAdDisplayFailed: (error, adInfo) => {
-                console.warn("Display Failed:", error, adInfo);
-                setTimeout(loadInterstitial, 15000);
-            },
-            onAdClicked: (adInfo) => console.log("User clicked the ad")
-        };
-
-        interstitialAd.setListener(listener);
-        interstitialAd.loadAd();
-    } catch (err) {
-        console.warn("Error in loadInterstitial:", err);
-    }
-};
-
-// 🔹 OPTIMIZED: Helper to show ads without freezing UI (Adapted for LevelPlay)
-const tryShowingInterstitial = () => {
-    const now = Date.now();
-    if (interstitialAd && interstitialAd.isAdReady() && (now - lastShownTime > COOLDOWN_MS)) {
-        requestAnimationFrame(() => {
-            if (interstitialAd) interstitialAd.showAd();
-        });
-    }
-};
 
 async function registerForPushNotificationsAsync() {
     if (Platform.OS === 'web') return null;
@@ -161,18 +88,15 @@ function RootLayoutContent() {
     const [isSyncing, setIsSyncing] = useState(true);
     const [isUpdating, setIsUpdating] = useState(false);
     const [appReady, setAppReady] = useState(false);
-    const [isAdReady, setIsAdReady] = useState(false);
 
     // Refs to track state inside listeners
     const appReadyRef = useRef(false);
-    const isAdReadyRef = useRef(false);
 
     const pendingNavigation = useRef(null);
     const appState = useRef(AppState.currentState);
 
     // Sync refs with state
     useEffect(() => { appReadyRef.current = appReady; }, [appReady]);
-    useEffect(() => { isAdReadyRef.current = isAdReady; }, [isAdReady]);
 
     useEffect(() => {
         const runCacheJanitor = async () => {
@@ -202,7 +126,6 @@ function RootLayoutContent() {
                 console.error("Janitor failed:", err);
             }
         };
-        // 🔹 DELAY JANITOR: Moved from 5 seconds to 30 seconds so it doesn't freeze the app on startup
         const timeout = setTimeout(runCacheJanitor, 30000);
         return () => clearTimeout(timeout);
     }, []);
@@ -212,21 +135,20 @@ function RootLayoutContent() {
         currentPathRef.current = pathname;
     }, [pathname]);
 
-    // 🔹 ROUTING PROCESSOR (REPAIRED)
+    // 🔹 ROUTING PROCESSOR
     const processRouting = useCallback((data) => {
-        // 1. Log immediately so we know the function was called
         console.log("📍 [processRouting] Incoming Data:", JSON.stringify(data));
         if (!data?.notificationId) return;
-        // 2. Identify the unique notification ID to prevent double-firing
+
         const currentNotifId = data.notificationId || data.id || JSON.stringify(data);
-        // 3. Check Global Locks
+
         if (IS_NAVIGATING_GLOBAL || LAST_PROCESSED_NOTIF_ID === currentNotifId) {
-            console.log("🚫 [processRouting] Blocked: Navigation in progress or Duplicate ID detected.");
             return;
         }
-        // 4. Check Readiness (Queue if not ready)
-        if (!isAdReadyRef.current || !appReadyRef.current) {
-            console.log("⏳ [processRouting] App/Ads not ready. Queuing request...");
+
+        // Ads check removed: now only waits for appReady
+        if (!appReadyRef.current) {
+            console.log("⏳ [processRouting] App not ready. Queuing request...");
             pendingNavigation.current = data;
             return;
         }
@@ -244,17 +166,13 @@ function RootLayoutContent() {
             targetPath = "/";
         }
 
-        if (!targetPath) {
-            console.log("⚠️ [processRouting] No target path resolved.");
-            return;
-        }
+        if (!targetPath) return;
 
         const currentPathBase = currentPathRef.current.split('?')[0];
         const targetPathBase = targetPath.split('?')[0];
         const isOnSamePage = currentPathBase === targetPathBase;
 
         if (isOnSamePage) {
-            console.log("📍 [processRouting] Already on target page. Emitting event.");
             if (targetDiscussionId) {
                 DeviceEventEmitter.emit("openCommentSection", { discussionId: targetDiscussionId });
             }
@@ -264,7 +182,6 @@ function RootLayoutContent() {
         const finalUrl = targetDiscussionId ? `${targetPath}?discussionId=${targetDiscussionId}` : targetPath;
 
         requestAnimationFrame(() => {
-            console.log("🏃 [processRouting] Pushing router to:", finalUrl);
             router.replace(finalUrl);
         });
     }, [router]);
@@ -275,19 +192,12 @@ function RootLayoutContent() {
             router.push(targetPath);
         });
 
-        const interstitialListener = DeviceEventEmitter.addListener("tryShowInterstitial", () => {
-            InteractionManager.runAfterInteractions(() => {
-                tryShowingInterstitial();
-            });
-        });
-
         const backHandler = BackHandler.addEventListener("hardwareBackPress", () => {
             const currentPath = currentPathRef.current;
             const isAtHome = currentPath === "/" || currentPath === "/(tabs)" || currentPath === "/index";
 
             if (router.canGoBack()) {
                 router.back();
-                requestAnimationFrame(() => DeviceEventEmitter.emit("tryShowInterstitial"));
                 return true;
             }
 
@@ -300,84 +210,37 @@ function RootLayoutContent() {
 
         return () => {
             navSub.remove();
-            interstitialListener.remove();
             backHandler.remove();
         };
     }, []);
 
-    // --- 🔹 LEVELPLAY INITIALIZATION ---
+    // 🔹 INITIALIZATION (AD-FREE)
     useEffect(() => {
         if (Platform.OS === 'web') {
-            setIsAdReady(true);
             setAppReady(true);
             return;
         }
 
-        const runMediationInit = async () => {
-            try {
-                const appKey = '24b53732d';
-                const adFormats = ['INTERSTITIAL', 'REWARDED_VIDEO', 'BANNER'];
-
-                const initListener = {
-                    onInitSuccess: (config) => {
-                        console.log("✅ LevelPlay initialized successfully");
-                        setIsAdReady(true);
-                        // 🔹 DELAY AD LOAD: Wait 15 seconds before downloading the heavy video ad into memory
-                        setTimeout(() => {
-                            loadInterstitial();
-                        }, 15000);
-                    },
-                    onInitFailed: (err) => {
-                        console.warn("❌ LevelPlay failed to initialize:", err);
-                        setIsAdReady(true);
-                    }
-                };
-
-                if (LevelPlayInitRequest && (LevelPlayInitRequest.builder || LevelPlayInitRequest.Builder)) {
-                    const BuilderClass = LevelPlayInitRequest.builder || LevelPlayInitRequest.Builder;
-                    const requestBuilder = new BuilderClass(appKey);
-
-                    if (requestBuilder.withAdFormats) {
-                        requestBuilder.withAdFormats(adFormats);
-                    } else if (requestBuilder.withLegacyAdFormats) {
-                        requestBuilder.withLegacyAdFormats(adFormats);
-                    }
-
-                    const initRequest = requestBuilder.build();
-                    LevelPlay.init(initRequest, initListener);
-                } else {
-                    LevelPlay.init({ appKey, adFormats }, initListener);
-                }
-            } catch (e) {
-                console.warn("Fatal Init Error caught:", e);
-                setIsAdReady(true);
-            } finally {
-                setAppReady(true);
-            }
-        };
-
-        runMediationInit();
+        // We no longer need LevelPlay.init here.
+        // Just set the app to ready once this effect runs.
+        setAppReady(true);
     }, []);
 
     // 🔹 FLUSH PENDING NAVIGATION
     useEffect(() => {
-        if (isAdReady && appReady && pendingNavigation.current) {
+        if (appReady && pendingNavigation.current) {
             console.log("🔄 Flushing pending navigation...");
             const data = pendingNavigation.current;
             pendingNavigation.current = null;
             processRouting(data);
         }
-    }, [isAdReady, appReady, processRouting]);
+    }, [appReady, processRouting]);
 
     useEffect(() => {
         const handleUrl = (url) => {
             if (!url || isUpdating) return;
 
-            // 🔹 URL DEDUPLICATION
-            if (url === LAST_PROCESSED_URL) {
-                console.log("🚫 [Linking] Ignoring duplicate URL event");
-                return;
-            }
+            if (url === LAST_PROCESSED_URL) return;
 
             LAST_PROCESSED_URL = url;
             setTimeout(() => { LAST_PROCESSED_URL = null; }, 3000);
@@ -396,8 +259,6 @@ function RootLayoutContent() {
                     const currentPathBase = currentPathRef.current;
                     if (currentPathBase !== `/${path}`) {
                         router.replace(path);
-                    } else {
-                        console.log("Already on same page");
                     }
                 }
             }
@@ -453,7 +314,7 @@ function RootLayoutContent() {
         return () => task.cancel();
     }, [fontsLoaded, user?.deviceId, isUpdating]);
 
-    // 🔹 NOTIFICATION LISTENER HELPERS
+    // 🔹 NOTIFICATION LISTENERS
     const handleNotificationNavigation = useCallback((response) => {
         const data = response?.notification?.request?.content?.data || {};
         const notificationId = response?.notification?.request?.identifier;
@@ -467,7 +328,6 @@ function RootLayoutContent() {
         }
     }, [processRouting]);
 
-    // 🔹 MASTER NOTIFICATION LISTENER SETUP
     useEffect(() => {
         if (isUpdating) return;
 
@@ -499,8 +359,8 @@ function RootLayoutContent() {
         };
     }, [isUpdating, handleNotifeeInteraction, handleNotificationNavigation]);
 
-    // --- LOADING UI ---
-    if (!fontsLoaded || isUpdating || !isAdReady) {
+    // --- 🔹 LOADING UI ---
+    if (!fontsLoaded || isUpdating || !appReady) {
         return (
             <AnimeLoading
                 message={isUpdating ? "UPDATING_CORE" : "LOADING_PAGE"}
@@ -518,7 +378,7 @@ function RootLayoutContent() {
                     contentStyle: { backgroundColor: isDark ? "#0a0a0a" : "#ffffff" },
                     animation: 'slide_from_right'
                 }}
-            />{/* It sits here quietly, listening for the event */}
+            />
             <ReviewGate />
             <Toast />
         </View>
@@ -531,9 +391,11 @@ export default function RootLayout() {
             <UserProvider>
                 <StreakProvider>
                     <ClanProvider>
-                            <AlertProvider>
-                        <RootLayoutContent />
-                            </AlertProvider>
+                        <AlertProvider>
+                            <CoinProvider>
+                                <RootLayoutContent />
+                            </CoinProvider>
+                        </AlertProvider>
                     </ClanProvider>
                 </StreakProvider>
             </UserProvider>

@@ -4,8 +4,10 @@ import { Redirect, Stack, usePathname, useRouter } from "expo-router";
 import { useColorScheme as useNativeWind } from "nativewind";
 import { useEffect, useRef, useState } from "react";
 import {
+    ActivityIndicator,
     Animated,
     DeviceEventEmitter,
+    Modal,
     StatusBar,
     StyleSheet,
     Text,
@@ -15,7 +17,9 @@ import {
 } from "react-native";
 import { SafeAreaView, useSafeAreaInsets } from "react-native-safe-area-context";
 import AnimeLoading from "../../components/AnimeLoading";
+import CoinIcon from "../../components/ClanIcon";
 import UpdateHandler from "../../components/UpdateModal";
+import { useCoins } from "../../context/CoinContext";
 import { useUser } from "../../context/UserContext";
 import apiFetch from "../../utils/apiFetch";
 import "../globals.css";
@@ -23,26 +27,33 @@ import CategoryNav from "./../../components/CategoryNav";
 import TopBar from "./../../components/Topbar";
 
 export default function MainLayout() {
-    // 1. ALL HOOKS MUST BE AT THE TOP
     const { colorScheme, setColorScheme } = useNativeWind();
     const systemScheme = useSystemScheme();
     const router = useRouter();
     const pathname = usePathname();
-    const insets = useSafeAreaInsets(); // Moved up from the bottom
+    const insets = useSafeAreaInsets(); 
 
     const [lastOffset, setLastOffset] = useState(0);
     const [isNavVisible, setIsNavVisible] = useState(true);
     const [showTop, setShowTop] = useState(false);
     const [showClanMenu, setShowClanMenu] = useState(false);
     const navY = useRef(new Animated.Value(0)).current;
+    
     const { user, contextLoading } = useUser();
+    const { processTransaction } = useCoins(); 
+
     const animValue = useRef(new Animated.Value(0)).current;
     const eventPulse = useRef(new Animated.Value(1)).current;
 
     const [isUserAuthenticated, setIsUserAuthenticated] = useState(null);
     const [userInClan, setUserInClan] = useState(false);
 
-    // 2. ALL USEEFFECTS & MEMOIZED VALUES
+    // --- DAILY REWARDS STATE ---
+    const [showDailyModal, setShowDailyModal] = useState(false);
+    const [dailyStreak, setDailyStreak] = useState(0);
+    const [canClaimToday, setCanClaimToday] = useState(false);
+    const [isClaiming, setIsClaiming] = useState(false);
+
     useEffect(() => {
         setIsNavVisible(true);
         Animated.timing(navY, {
@@ -85,6 +96,51 @@ export default function MainLayout() {
         };
         checkUser();
     }, []);
+
+    // --- DAILY REWARDS LOGIC ---
+    useEffect(() => {
+        const checkDailyReward = async () => {
+            if (!isUserAuthenticated) return;
+            
+            try {
+                const storedStreak = await AsyncStorage.getItem("dailyStreak");
+                const lastClaimed = await AsyncStorage.getItem("lastClaimedDate");
+                
+                let currentStreak = storedStreak ? parseInt(storedStreak) : 0;
+                const today = new Date();
+                today.setHours(0, 0, 0, 0);
+                
+                if (lastClaimed) {
+                    const lastDate = new Date(lastClaimed);
+                    lastDate.setHours(0, 0, 0, 0);
+                    
+                    const diffTime = today.getTime() - lastDate.getTime();
+                    const diffDays = Math.round(diffTime / (1000 * 60 * 60 * 24));
+                    
+                    if (diffDays === 0) {
+                        setCanClaimToday(false);
+                        setDailyStreak(currentStreak);
+                    } else if (diffDays === 1) {
+                        setCanClaimToday(true);
+                        setDailyStreak(currentStreak >= 7 ? 0 : currentStreak);
+                        setShowDailyModal(true); 
+                    } else {
+                        setCanClaimToday(true);
+                        setDailyStreak(0);
+                        setShowDailyModal(true);
+                    }
+                } else {
+                    setCanClaimToday(true);
+                    setDailyStreak(0);
+                    setShowDailyModal(true);
+                }
+            } catch (error) {
+                console.error("Error checking daily reward", error);
+            }
+        };
+        
+        checkDailyReward();
+    }, [isUserAuthenticated]);
 
     useEffect(() => {
         if (user?.deviceId) {
@@ -133,7 +189,6 @@ export default function MainLayout() {
         return () => subscription.remove();
     }, [lastOffset, isNavVisible]);
 
-    // 3. LOGIC & HANDLERS
     const handleClanPress = async () => {
         try {
             const userClanData = await AsyncStorage.getItem('userClan');
@@ -143,6 +198,35 @@ export default function MainLayout() {
             setShowClanMenu(!showClanMenu);
         } catch (e) {
             DeviceEventEmitter.emit("navigateSafely", "/screens/discover");
+        }
+    };
+
+    const handleClaimDaily = async () => {
+        setIsClaiming(true);
+        try {
+            const newStreak = dailyStreak + 1;
+            const transactionType = newStreak === 7 ? 'daily_login_7' : 'daily_login';
+            
+            const result = await processTransaction('claim', transactionType);
+            
+            if (result.success) {
+                const today = new Date().toISOString();
+                await AsyncStorage.setItem("dailyStreak", newStreak.toString());
+                await AsyncStorage.setItem("lastClaimedDate", today);
+                
+                setDailyStreak(newStreak);
+                setCanClaimToday(false);
+                
+                setTimeout(() => {
+                    setIsClaiming(false);
+                    setShowDailyModal(false);
+                }, 800);
+            } else {
+                throw new Error("Transaction failed");
+            }
+        } catch (error) {
+            console.error("Failed to claim daily reward", error);
+            setIsClaiming(false);
         }
     };
 
@@ -166,7 +250,6 @@ export default function MainLayout() {
         DeviceEventEmitter.emit("navigateSafely", route);
     };
 
-    // 4. NOW IT IS SAFE TO DO EARLY RETURNS
     if (isUserAuthenticated === null) {
         return <AnimeLoading message="LOADING_PAGE" subMessage="Fetching Otaku Archives" />;
     };
@@ -179,27 +262,96 @@ export default function MainLayout() {
         return <Redirect href="/screens/FirstLaunchScreen" />;
     }
 
+    const streakDays = [1, 2, 3, 4, 5, 6, 7];
+    const targetDay = canClaimToday ? dailyStreak + 1 : dailyStreak;
+
     return (
         <View style={{ flex: 1, backgroundColor: isDark ? "#000" : "#fff" }}>
             <StatusBar barStyle={isDark ? "light-content" : "dark-content"} />
 
-            <SafeAreaView
-                style={{
-                    zIndex: 100,
-                    maxHeight: 130,
-                }}>
+            <SafeAreaView style={{ zIndex: 100, maxHeight: 130 }}>
                 <TopBar isDark={isDark} />
-                <Animated.View
-                    style={{
-                        transform: [{ translateY: navY }],
-                        zIndex: 10,
-                    }}
-                >
+                <Animated.View style={{ transform: [{ translateY: navY }], zIndex: 10 }}>
                     <CategoryNav isDark={isDark} />
                 </Animated.View>
             </SafeAreaView>
 
             <UpdateHandler />
+
+            {/* DAILY REWARD MODAL */}
+            <Modal
+                visible={showDailyModal}
+                transparent={true}
+                animationType="fade"
+                onRequestClose={() => setShowDailyModal(false)}
+            >
+                <View style={[styles.modalOverlay, { backgroundColor: isDark ? 'rgba(0,0,0,0.8)' : 'rgba(0,0,0,0.6)' }]}>
+                    <View style={[styles.modalContent, { backgroundColor: isDark ? "#1e293b" : "#ffffff" }]}>
+                        <TouchableOpacity style={styles.closeButton} onPress={() => setShowDailyModal(false)}>
+                            <Ionicons name="close" size={24} color={isDark ? "#94a3b8" : "#64748b"} />
+                        </TouchableOpacity>
+
+                        <Text style={[styles.modalTitle, { color: isDark ? "#ffffff" : "#0f172a" }]}>Daily Check-In</Text>
+                        <Text style={[styles.modalSubtitle, { color: isDark ? "#94a3b8" : "#64748b" }]}>
+                            Claim coins every day! Complete the 7-day streak for a huge bonus.
+                        </Text>
+
+                        <View style={styles.daysGrid}>
+                            {streakDays.map((day) => {
+                                const isClaimed = day < targetDay || (!canClaimToday && day === targetDay);
+                                const isCurrent = canClaimToday && day === targetDay;
+                                const isDay7 = day === 7;
+                                
+                                return (
+                                    <View 
+                                        key={day} 
+                                        style={[
+                                            styles.dayItem, 
+                                            { 
+                                                backgroundColor: isClaimed ? "#10b981" : (isCurrent ? "#3b82f6" : (isDark ? "#334155" : "#f1f5f9")),
+                                                borderColor: isCurrent ? "#60a5fa" : "transparent",
+                                                borderWidth: isCurrent ? 2 : 0,
+                                                width: isDay7 ? '100%' : '30%', 
+                                            }
+                                        ]}
+                                    >
+                                        <Text className="mb-2" style={[styles.dayText, { color: isClaimed || isCurrent ? "#ffffff" : (isDark ? "#94a3b8" : "#64748b") }]}>
+                                            Day {day}
+                                        </Text>
+                                        
+                                        {isClaimed ? (
+                                            <Ionicons name="checkmark-circle" size={28} color="#ffffff" style={{ marginVertical: 4 }} />
+                                        ) : (
+                                            <CoinIcon size={24} type="OC" />
+                                        )}
+                                        
+                                        <Text style={[styles.coinText, { color: isClaimed || isCurrent ? "#ffffff" : (isDark ? "#94a3b8" : "#64748b") }]}>
+                                            +{isDay7 ? 50 : 10} OC
+                                        </Text>
+                                    </View>
+                                );
+                            })}
+                        </View>
+
+                        <TouchableOpacity
+                            onPress={handleClaimDaily}
+                            disabled={!canClaimToday || isClaiming}
+                            style={[
+                                styles.claimButton,
+                                { backgroundColor: canClaimToday ? "#3b82f6" : (isDark ? "#334155" : "#cbd5e1") }
+                            ]}
+                        >
+                            {isClaiming ? (
+                                <ActivityIndicator color="#ffffff" />
+                            ) : (
+                                <Text style={[styles.claimButtonText, { color: canClaimToday ? "#ffffff" : (isDark ? "#94a3b8" : "#64748b") }]}>
+                                    {canClaimToday ? `Claim Day ${targetDay} Reward` : "Come back tomorrow!"}
+                                </Text>
+                            )}
+                        </TouchableOpacity>
+                    </View>
+                </View>
+            </Modal>
 
             <Stack screenOptions={{ headerShown: false }}>
                 <Stack.Screen name="index" />
@@ -210,7 +362,14 @@ export default function MainLayout() {
                 <Stack.Screen name="categories/[id]" />
             </Stack>
 
-            {/* 🏆 THEMED GLOBAL EVENT BUTTON */}
+            <TouchableOpacity 
+                onPress={() => setShowDailyModal(true)}
+                style={[styles.manualDailyButton, { backgroundColor: isDark ? "#1e293b" : "#ffffff", borderColor: isDark ? "#334155" : "#e2e8f0" }]}
+            >
+                <MaterialCommunityIcons name="calendar-check" size={20} color="#3b82f6" />
+                {canClaimToday && <View style={styles.notificationDot} />}
+            </TouchableOpacity>
+
             <Animated.View style={[styles.eventButtonContainer, { transform: [{ scale: eventPulse }] }]}>
                 <TouchableOpacity
                     onPress={() => navigateTo("/screens/referralevent")}
@@ -225,19 +384,20 @@ export default function MainLayout() {
                     ]}
                 >
                     <Ionicons name="trophy" size={24} color={isDark ? "#60a5fa" : "#3b82f6"} />
-                    <View style={[
-                        styles.eventBadge, 
-                        { 
-                            backgroundColor: "#3b82f6", 
-                            borderColor: isDark ? "#111111" : "#ffffff" 
-                        }
-                    ]}>
-                        <Text style={styles.eventBadgeText}>WIN!</Text>
+                    <View style={{ position: 'absolute' }}> {/* Keep logic from prev version but wrapped correctly */}
+                        <View style={[
+                            styles.eventBadge, 
+                            { 
+                                backgroundColor: "#3b82f6", 
+                                borderColor: isDark ? "#111111" : "#ffffff" 
+                            }
+                        ]}>
+                            <Text style={styles.eventBadgeText}>WIN!</Text>
+                        </View>
                     </View>
                 </TouchableOpacity>
             </Animated.View>
 
-            {/* CUSTOM FLOATING TAB BAR */}
             <View
                 style={{
                     position: "absolute",
@@ -288,7 +448,6 @@ export default function MainLayout() {
                 </TouchableOpacity>
             </View>
 
-            {/* CLAN OVERLAY */}
             {showClanMenu && (
                 <TouchableOpacity
                     style={[styles.overlay, { backgroundColor: isDark ? 'rgba(0,0,0,0.6)' : 'rgba(0,0,0,0.3)' }]}
@@ -432,6 +591,104 @@ const styles = StyleSheet.create({
         shadowOffset: { width: 0, height: 2 },
         shadowOpacity: 0.25,
         shadowRadius: 3.84,
+    },
+    modalOverlay: {
+        flex: 1,
+        justifyContent: "center",
+        alignItems: "center",
+        padding: 20,
+    },
+    modalContent: {
+        width: "100%",
+        borderRadius: 24,
+        padding: 24,
+        alignItems: "center",
+        elevation: 10,
+        shadowColor: "#000",
+        shadowOffset: { width: 0, height: 10 },
+        shadowOpacity: 0.3,
+        shadowRadius: 20,
+    },
+    closeButton: {
+        position: "absolute",
+        top: 16,
+        right: 16,
+        zIndex: 10,
+        padding: 4,
+    },
+    modalTitle: {
+        fontSize: 24,
+        fontWeight: "900",
+        marginBottom: 8,
+        marginTop: 10,
+    },
+    modalSubtitle: {
+        fontSize: 14,
+        textAlign: "center",
+        marginBottom: 24,
+        lineHeight: 20,
+    },
+    daysGrid: {
+        flexDirection: "row",
+        flexWrap: "wrap",
+        justifyContent: "space-between",
+        width: "100%",
+        gap: 10,
+        marginBottom: 24,
+    },
+    dayItem: {
+        borderRadius: 16,
+        padding: 12,
+        alignItems: "center",
+        justifyContent: "center",
+    },
+    dayText: {
+        fontSize: 12,
+        fontWeight: "bold",
+    },
+    coinText: {
+        fontSize: 12,
+        fontWeight: "900",
+        marginTop: 4,
+    },
+    claimButton: {
+        width: "100%",
+        height: 56,
+        borderRadius: 16,
+        justifyContent: "center",
+        alignItems: "center",
+    },
+    claimButtonText: {
+        fontSize: 16,
+        fontWeight: "bold",
+    },
+    manualDailyButton: {
+        position: 'absolute',
+        right: 12,
+        top: '37%', 
+        zIndex: 998,
+        width: 40,
+        height: 40,
+        borderRadius: 20,
+        justifyContent: 'center',
+        alignItems: 'center',
+        borderWidth: 1,
+        elevation: 4,
+        shadowColor: "#000",
+        shadowOffset: { width: 0, height: 2 },
+        shadowOpacity: 0.2,
+        shadowRadius: 3,
+    },
+    notificationDot: {
+        position: 'absolute',
+        top: -2,
+        right: -2,
+        width: 12,
+        height: 12,
+        borderRadius: 6,
+        backgroundColor: '#ef4444',
+        borderWidth: 2,
+        borderColor: '#fff',
     },
     eventButtonContainer: {
         position: 'absolute',
