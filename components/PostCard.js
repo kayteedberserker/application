@@ -166,7 +166,7 @@ export default function PostCard({ post, setPosts, isFeed, hideMedia, syncing, s
 	const [loadMedia, setLoadMedia] = useState(false);
 	const [videoReady, setVideoReady] = useState(false);
 	const [tikTokReady, setTikTokReady] = useState(false);
-	const [isVideoLoading, setIsVideoLoading] = useState(false); // 🔹 Moved to top level
+	const [isVideoLoading, setIsVideoLoading] = useState(false);
 
 	const mediaItems = useMemo(() => {
 		if (post.media && Array.isArray(post.media) && post.media.length > 0) {
@@ -186,7 +186,6 @@ export default function PostCard({ post, setPosts, isFeed, hideMedia, syncing, s
 	const isVideo = isYouTube || isTikTok || isDirectVideo;
 
 	// 🔹 SINGLE FEED VIDEO PLAYER (LAZY)
-	// We only pass the URL if loadMedia is true to prevent background downloading
 	const player = useVideoPlayer(loadMedia && isDirectVideo ? firstItem.url : null, (p) => {
 		p.loop = false;
 		if (loadMedia) p.play();
@@ -430,14 +429,15 @@ export default function PostCard({ post, setPosts, isFeed, hideMedia, syncing, s
 
 	const renderContent = useMemo(() => {
 		const maxLength = similarPosts ? 100 : 150;
+        const safeMessage = post.message || ""; // 🛡️ Safety check added
 		if (isFeed) {
-			const plainText = post.message
+			const plainText = safeMessage
 				.replace(/s\((.*?)\)|\[section\](.*?)\[\/section\]|h\((.*?)\)|\[h\](.*?)\[\/h\]|l\((.*?)\)|\[li\](.*?)\[\/li\]|link\((.*?)\)-text\((.*?)\)|\[source="(.*?)" text:(.*?)\]|br\(\)|\[br\]/gs, (match, p1, p2, p3, p4, p5, p6, p8, p10) => p1 || p2 || p3 || p4 || p5 || p6 || p8 || p10 || '')
 				.trim();
 			const truncated = plainText.length > maxLength ? plainText.slice(0, maxLength) + "..." : plainText;
 			return <Text style={{ color: isDark ? "#9ca3af" : "#4b5563" }} className={`${similarPosts ? "text-sm" : "text-base"} leading-6`}>{truncated}</Text>;
 		}
-		const parts = parseCustomSyntax(post.message);
+		const parts = parseCustomSyntax(safeMessage);
 		return parts.map((part, i) => {
 			switch (part.type) {
 				case "text": return <Text key={i} className="text-base leading-7 text-gray-800 dark:text-gray-200">{part.content}</Text>;
@@ -451,7 +451,7 @@ export default function PostCard({ post, setPosts, isFeed, hideMedia, syncing, s
 		});
 	}, [post.message, isFeed, isDark, similarPosts]);
 
-	// 🔹 Refactored Media Content (Pure UI logic, no Hooks inside)
+	// 🔹 Refactored Media Content
 	const renderMediaContent = () => {
 		if (mediaItems.length === 0) return null;
 
@@ -533,6 +533,7 @@ export default function PostCard({ post, setPosts, isFeed, hideMedia, syncing, s
 								nativeControls={true}
 								onIsVideoReadyToPlay={() => setIsVideoLoading(false)}
 							/>
+                            {isVideoLoading && <View className="absolute inset-0 bg-black/40 items-center justify-center"><SyncLoading message="Syncing Broadcast" /></View>}
 						</View>
 					) : (
 						<Pressable onPress={() => openItem(0)} className="w-full h-full">
@@ -781,4 +782,4 @@ export default function PostCard({ post, setPosts, isFeed, hideMedia, syncing, s
 			</Modal>
 		</View>
 	);
-		   }
+}
