@@ -143,13 +143,13 @@ export default function AuthorPage() {
       const userData = await userRes.json();
       const postData = await postRes.json();
 
-      if (userRes.ok) {
+      if (userRes.ok && userData?.user) {
         setAuthor(userData.user);
         // Save to Memory & Storage
         AUTHOR_MEMORY_CACHE[CACHE_KEY_AUTHOR] = userData.user;
         saveHeavyCache(CACHE_KEY_AUTHOR, userData.user);
       }
-      if (postRes.ok) {
+      if (postRes.ok && postData?.posts) {
         setPosts(postData.posts);
         setTotalPosts(postData.total || postData.posts.length);
         setHasMore(postData.posts.length >= 6);
@@ -174,7 +174,7 @@ export default function AuthorPage() {
     try {
       const res = await apiFetch(`${API_BASE}/posts?author=${id}&page=${nextPage}&limit=10`);
       const data = await res.json();
-      if (res.ok && data.posts.length > 0) {
+      if (res.ok && data.posts && data.posts.length > 0) {
         setPosts((prev) => {
             const updated = [...prev, ...data.posts];
             AUTHOR_POSTS_MEMORY_CACHE[CACHE_KEY_POSTS] = updated; // Update memory on pagination
@@ -262,11 +262,14 @@ export default function AuthorPage() {
     const aura = getAuraTier(auraRank);
 
     const getBadgeStyle = () => {
-      if (auraRank === 1) return { borderRadius: 45, transform: [{ rotate: '45deg' }] };
-      if (auraRank === 2) return { borderRadius: 60 };
-      if (auraRank === 3) return { borderRadius: 35 };
-      return { borderRadius: 100 };
+      let style = { borderRadius: 100, transform: [] };
+      if (auraRank === 1) style = { borderRadius: 45, transform: [{ rotate: '45deg' }] };
+      if (auraRank === 2) style = { borderRadius: 60, transform: [] };
+      if (auraRank === 3) style = { borderRadius: 35, transform: [] };
+      return style;
     };
+
+    const badgeStyle = getBadgeStyle();
 
     return (
       <View className="px-4 pt-20 pb-6">
@@ -286,7 +289,7 @@ export default function AuthorPage() {
                 {auraRank > 0 && auraRank <= 5 && (
                   <Animated.View
                     style={[
-                      getBadgeStyle(),
+                      badgeStyle,
                       {
                         position: 'absolute',
                         width: 170,
@@ -294,7 +297,7 @@ export default function AuthorPage() {
                         borderWidth: 1,
                         borderColor: aura.color,
                         borderStyle: 'dashed',
-                        transform: [...getBadgeStyle().transform || [], { rotate: spin }]
+                        transform: [...badgeStyle.transform, { rotate: spin }]
                       }
                     ]}
                   />
@@ -303,7 +306,7 @@ export default function AuthorPage() {
                 {auraRank > 0 && (
                   <Animated.View
                     style={[
-                      getBadgeStyle(),
+                      badgeStyle,
                       {
                         position: 'absolute',
                         width: 155,
@@ -312,14 +315,14 @@ export default function AuthorPage() {
                         borderColor: aura.color,
                         borderStyle: auraRank <= 3 ? 'solid' : 'dashed',
                         opacity: 0.4,
-                        transform: [...getBadgeStyle().transform || [], { scale: pulseAnim }]
+                        transform: [...badgeStyle.transform, { scale: pulseAnim }]
                       }
                     ]}
                   />
                 )}
 
                 <View
-                  style={[getBadgeStyle(), { overflow: 'hidden', borderWidth: 4, borderColor: auraRank > 0 ? aura.color : '#eee' }]}
+                  style={[badgeStyle, { overflow: 'hidden', borderWidth: 4, borderColor: auraRank > 0 ? aura.color : '#eee' }]}
                   className="w-32 h-32 bg-gray-900"
                 >
                   <Image
@@ -418,16 +421,9 @@ export default function AuthorPage() {
   };
 
   const renderItem = ({ item, index }) => {
-    const showAd = (index + 1) % 4 === 0;
     return (
       <View className={'px-3'}>
         <PostCard post={item} isFeed />
-        {/* {showAd && (
-          <View className="mb-3 mt-3 w-full p-6 border border-dashed border-gray-300 dark:border-gray-800 rounded-[32px] bg-gray-50/50 dark:bg-white/5 items-center justify-center">
-							<Text className="text-[10px] font-bold text-gray-400 uppercase tracking-[0.2em] italic text-center">Sponsored Transmission</Text>
-							<AppBanner size="MEDIUM_RECTANGLE" />
-						</View>
-        )} */}
       </View>
     );
   };
@@ -468,7 +464,7 @@ export default function AuthorPage() {
     <FlatList
       ref={scrollRef}
       data={posts}
-      keyExtractor={(item) => item._id}
+      keyExtractor={(item, index) => item._id || index.toString()}
       renderItem={renderItem}
       ListHeaderComponent={ListHeader}
       ListFooterComponent={
