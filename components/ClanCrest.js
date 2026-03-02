@@ -19,10 +19,12 @@ const CLAN_TIERS = {
     1: { label: 'I', color: '#94a3b8', icon: 'weather-windy', title: "Wandering Ronin" },
 };
 
-const ClanCrest = ({ rank = 1, size = 120, isFeed = false }) => {
+const ClanCrest = ({ rank = 1, size = 120, isFeed = false, glowColor = null }) => {
     const config = CLAN_TIERS[rank] || CLAN_TIERS[1];
+    
+    // Use glowColor if provided, otherwise fallback to rank color
+    const displayColor = glowColor || config.color;
 
-    // Shared value for the pulse effect
     const pulseValue = useSharedValue(0);
 
     useEffect(() => {
@@ -33,7 +35,6 @@ const ClanCrest = ({ rank = 1, size = 120, isFeed = false }) => {
         );
     }, []);
 
-    // New "Energy Pulse" style instead of a dumb scanning line
     const pulseStyle = useAnimatedStyle(() => {
         const scale = interpolate(pulseValue.value, [0, 1], [0.6, 1.4]);
         const opacity = interpolate(pulseValue.value, [0, 0.5, 1], [0, 0.6, 0]);
@@ -49,7 +50,7 @@ const ClanCrest = ({ rank = 1, size = 120, isFeed = false }) => {
         <View style={{ width: size, height: size }} className="items-center justify-center relative">
             {/* Background Symbol Icon */}
             <View className="absolute opacity-20">
-                <MaterialCommunityIcons name={config.icon} size={size * 0.7} color={config.color} />
+                <MaterialCommunityIcons name={config.icon} size={size * 0.7} color={displayColor} />
             </View>
 
             {/* Energy Wave Pulse */}
@@ -61,8 +62,8 @@ const ClanCrest = ({ rank = 1, size = 120, isFeed = false }) => {
                         width: size,
                         height: size,
                         borderRadius: size / 2,
-                        borderColor: config.color,
-                        shadowColor: config.color,
+                        borderColor: displayColor,
+                        shadowColor: displayColor,
                         shadowOffset: { width: 0, height: 0 },
                         shadowOpacity: 0.8,
                         shadowRadius: 15,
@@ -75,7 +76,7 @@ const ClanCrest = ({ rank = 1, size = 120, isFeed = false }) => {
                 className="font-black italic tracking-tighter z-10"
                 style={{
                     fontSize: size * 0.35,
-                    color: config.color,
+                    color: displayColor,
                     textShadowColor: 'rgba(0,0,0,0.5)',
                     textShadowOffset: { width: 2, height: 2 },
                     textShadowRadius: 4
@@ -85,15 +86,16 @@ const ClanCrest = ({ rank = 1, size = 120, isFeed = false }) => {
             </Text>
 
             {/* Rank Title */}
-            {isFeed == false ? <View className="absolute -bottom-2">
-                <Text
-                    className="font-black uppercase tracking-[0.2em] text-[8px]"
-                    style={{ color: config.color }}
-                >
-                    {config.title}
-                </Text>
-            </View> : null
-            }
+            {!isFeed && (
+                <View className="absolute -bottom-2">
+                    <Text
+                        className="font-black uppercase tracking-[0.2em] text-[8px]"
+                        style={{ color: displayColor }}
+                    >
+                        {config.title}
+                    </Text>
+                </View>
+            )}
         </View>
     );
 };

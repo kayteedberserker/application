@@ -80,9 +80,14 @@ export default function CategoryNav({ isDark }) {
         }
     }, [pathname]);
 
+    // 🛑 MOVE THE CONDITIONAL CHECK HERE (After all hooks)
+    if (pathname === "/Search" || pathname === "/Search") {
+        return null
+    }
+
     return (
         <View 
-            className="shadow-sm bg-transparent w-full" // 🔹 Added w-full to ensure the wrapper spans the screen
+            className="shadow-sm bg-transparent w-full"
             style={{ 
                 height: 50,
                 borderBottomWidth: 1,
@@ -96,7 +101,7 @@ export default function CategoryNav({ isDark }) {
                 keyExtractor={(item) => item.name}
                 showsHorizontalScrollIndicator={false}
                 centerContent={true} 
-                style={{ width: '100%' }} // 🔹 Forces the FlatList to take the full width
+                style={{ width: '100%' }}
                 onScrollToIndexFailed={(info) => {
                     const wait = new Promise(resolve => setTimeout(resolve, 500));
                     wait.then(() => {
@@ -106,11 +111,10 @@ export default function CategoryNav({ isDark }) {
                 contentContainerStyle={{ 
                     paddingHorizontal: 15, 
                     alignItems: 'center',
-                    flexGrow: 1, // 🔹 Crucial: Allows the container to grow to the screen width
-                    justifyContent: 'center', // 🔹 Crucial: Pushes the items to the center of that grown space
+                    flexGrow: 1, 
+                    justifyContent: 'center', 
                 }}
                 renderItem={({ item, index }) => {
-                    // 🔹 Your logic: index + 1 maps to the swiper index
                     const actualSwiperIndex = index + 1;
                     const isActive = activeIndex === actualSwiperIndex;
                     const displayName = item.name === "Review" ? "Reviews" : item.name;
@@ -135,7 +139,7 @@ export default function CategoryNav({ isDark }) {
                         >
                             <Ionicons 
                                 name={isActive ? item.activeIcon : item.icon} 
-                                size={isActive ? 16 : 18} 
+                                size={16} 
                                 color={isActive ? "white" : (isDark ? "#94a3b8" : "#64748b")} 
                             />
 

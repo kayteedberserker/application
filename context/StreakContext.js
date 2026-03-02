@@ -32,7 +32,6 @@ const scheduleStreakReminders = async (expiresAt, setScheduledList = null) => {
       finalStatus = status;
     }
     if (finalStatus !== 'granted') {
-      console.log("Failed to get push token for push notification!");
       return;
     }
 

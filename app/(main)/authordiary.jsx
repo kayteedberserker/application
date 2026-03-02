@@ -17,10 +17,13 @@ import {
 } from "react-native";
 import Toast from "react-native-toast-message";
 import useSWR from "swr";
+import AnimeLoading from "../../components/AnimeLoading";
+import CoinIcon from "../../components/ClanIcon";
 import { Text } from "../../components/Text";
 import THEME from "../../components/useAppTheme";
 import { useAlert } from "../../context/AlertContext"; // 🔹 ALERT CONTEXT IMPORT
 import { useClan } from "../../context/ClanContext"; // 🔹 CLAN CONTEXT IMPORTED
+import { useCoins } from "../../context/CoinContext";
 import { useStreak } from "../../context/StreakContext";
 import { useUser } from "../../context/UserContext";
 import apiFetch from "../../utils/apiFetch";
@@ -85,6 +88,7 @@ const resolveUserRank = (totalPosts) => {
 
     return { rankTitle, rankIcon, postLimit };
 };
+
 export default function AuthorDiaryDashboard() {
     const CustomAlert = useAlert();
     const { user, loading: contextLoading } = useUser();
@@ -92,6 +96,7 @@ export default function AuthorDiaryDashboard() {
     const { streak } = useStreak();
     const fingerprint = user?.deviceId;
     const router = useRouter();
+    const { coins, processTransaction, isProcessingTransaction } = useCoins();
 
     // Use refs to store listeners so they can be cleaned up properly
     const notificationListener = useRef();
@@ -118,12 +123,21 @@ export default function AuthorDiaryDashboard() {
     const [uploading, setUploading] = useState(false);
     const [submitting, setSubmitting] = useState(false);
     const [timeLeft, setTimeLeft] = useState("");
-
+    const [additionalSlot, setAdditionalSlot] = useState(0); // For clan members with extra slots
+    useEffect(() => {
+        const checkAdditionalSlot = async () => {
+            const savedSlot = await AsyncStorage.getItem("additionalSlot");
+            if (savedSlot == 1) {
+                setAdditionalSlot(parseInt(savedSlot));
+            }
+        };
+        checkAdditionalSlot();
+        
+    }, [additionalSlot]);
     // Rank & Post Limit State
     const [userRank, setUserRank] = useState({ rankTitle: "Novice_Researcher", rankIcon: "🛡️", postLimit: 2 });
     const [canPostAgain, setCanPostAgain] = useState(false);
 
-    const [rewardToken, setRewardToken] = useState(null);
     const [isLoadingNotifications, setIsLoadingNotifications] = useState(true);
     const [pickedImage, setPickedImage] = useState(false);
 
@@ -143,11 +157,6 @@ export default function AuthorDiaryDashboard() {
     // Cache Keys
     const CACHE_KEY_TODAY = `CACHE_TODAY_POSTS_${fingerprint}`;
     const CACHE_KEY_RANK = `CACHE_RANK_${fingerprint}`;
-
-
-    // Manual Show Function (To be called by your button)
-    const handleShowRewardAd = async () => {
-    };
 
     // =================================================================
     // 2. INITIALIZATION: RESTORE DRAFTS AND CACHED DATA
@@ -172,10 +181,12 @@ export default function AuthorDiaryDashboard() {
 
                 // B. Restore Cached Posts
                 const savedPosts = await AsyncStorage.getItem(CACHE_KEY_TODAY);
+                
                 if (savedPosts) setCachedTodayPosts(JSON.parse(savedPosts));
 
                 // C. Restore Cached Rank
                 const savedRank = await AsyncStorage.getItem(CACHE_KEY_RANK);
+                
                 if (savedRank) {
                     const rankData = JSON.parse(savedRank);
                     setCachedRankData(rankData);
@@ -211,7 +222,7 @@ export default function AuthorDiaryDashboard() {
         user?.deviceId ? `/posts?author=${user.deviceId}&last24Hours=true` : null,
         fetcher,
         {
-            refreshInterval: isOfflineMode ? 0 : 5000,
+            refreshInterval: isOfflineMode ? 0 : 60000,
             fallbackData: cachedTodayPosts,
             onSuccess: (data) => {
                 setIsOfflineMode(false);
@@ -224,10 +235,11 @@ export default function AuthorDiaryDashboard() {
     const todayPosts = useMemo(() => {
         return todayPostsData?.posts || cachedTodayPosts?.posts || [];
     }, [todayPostsData, cachedTodayPosts]);
-    const todayPost = todayPosts[0] || null;
+    const todayPost = todayPosts[0] || null
+
 
     const postsLast24h = todayPosts.length;
-    const maxPostsToday = isInClan ? userRank.postLimit + 2 : userRank.postLimit;
+    const maxPostsToday = isInClan ? userRank.postLimit + 2 + additionalSlot : userRank.postLimit + additionalSlot;
 
     // =================================================================
     // 4. DRAFT AUTO-SAVE LOGIC
@@ -274,16 +286,7 @@ export default function AuthorDiaryDashboard() {
             ]
         );
     };
-    //     const checkScheduledNotifications = async () => {
-    //   const scheduled = await Notifications.getAllScheduledNotificationsAsync();
-    //   console.log("Count:", scheduled.length);
-    //   console.log("Scheduled Notifications:", JSON.stringify(scheduled, null, 2));
-    // };
 
-    //      // Call this function to log scheduled notifications
-    //      useEffect(() => {
-    //       checkScheduledNotifications();
-    //     }, []);
     // =================================================================
     // 5. NOTIFICATIONS & SYSTEM SETUP
     // =================================================================
@@ -353,8 +356,6 @@ export default function AuthorDiaryDashboard() {
         if ((postsLast24h >= 1) && targetTime) {
 
             const scheduleDoneNotification = async () => {
-                if (rewardToken) return;
-
                 const now = Date.now();
                 const triggerInSeconds = Math.floor((targetTime - now) / 1000);
 
@@ -364,7 +365,6 @@ export default function AuthorDiaryDashboard() {
                 const lastScheduledStr = await AsyncStorage.getItem("LAST_SCHEDULED_TARGET");
                 const lastScheduledTarget = lastScheduledStr ? parseInt(lastScheduledStr) : 0;
 
-                // If the targetTime is basically the same (within 5 seconds), don't reschedule
                 if (Math.abs(lastScheduledTarget - targetTime) < 5000) {
                     return;
                 }
@@ -386,7 +386,6 @@ export default function AuthorDiaryDashboard() {
                             sound: 'default',
                             priority: 'high',
                             data: { type: "open_diary" },
-                            // Grouping prevents the "4, 3, 2, 1" list effect on Android
                             android: {
                                 channelId: "cooldown-timer",
                                 groupKey: "com.oreblogda.COOLDOWN_GROUP",
@@ -402,11 +401,8 @@ export default function AuthorDiaryDashboard() {
                         },
                     });
 
-                    // Store both the Notification ID AND the Target Time we scheduled for
                     await AsyncStorage.setItem(COOLDOWN_NOTIFICATION_KEY, notificationId);
                     await AsyncStorage.setItem("LAST_SCHEDULED_TARGET", targetTime.toString());
-
-                    console.log(`📡 Notification scheduled for ${triggerInSeconds}s from now`);
                 } catch (error) {
                     console.error("Failed to schedule notification:", error);
                 }
@@ -430,7 +426,7 @@ export default function AuthorDiaryDashboard() {
                         const m = Math.floor((distance % (1000 * 60 * 60)) / (1000 * 60));
                         const s = Math.floor((distance % (1000 * 60)) / 1000);
                         setTimeLeft(`${h}h ${m}m ${s}s`);
-                        if (!rewardToken) setCanPostAgain(false);
+                        setCanPostAgain(false);
                     }
                 }, 1000);
             };
@@ -441,7 +437,7 @@ export default function AuthorDiaryDashboard() {
         }
 
         return () => { if (interval) clearInterval(interval); };
-    }, [todayPosts, postsLast24h, rewardToken]); // 👈 Removed maxPostsToday to reduce unnecessary triggers
+    }, [todayPosts, postsLast24h]);
 
 
 
@@ -487,18 +483,13 @@ export default function AuthorDiaryDashboard() {
         const after = message.substring(selection.end);
         const middle = message.substring(selection.start, selection.end);
 
-        // Smart Wrapping: If text is selected (middle exists), wrap it. 
-        // If empty, add placeholder.
         const content = middle.length > 0 ? middle : (tagType === 'link' ? "Link Text" : "Add text here");
 
         const newText = `${before}${tagOpen}${content}${tagClose}${after}`;
-
-        // Calculate new cursor position
         const cursorPosition = before.length + tagOpen.length + content.length + tagClose.length;
 
         setMessage(newText);
 
-        // 🔹 KEYBOARD FIX: Focus back on the input programmatically
         setTimeout(() => {
             if (messageInputRef.current) {
                 messageInputRef.current.focus();
@@ -506,9 +497,10 @@ export default function AuthorDiaryDashboard() {
             }
         }, 50);
     };
+
     const [mediaList, setMediaList] = useState([]); // Array of {url, type}
     const pickImage = async () => {
-        const remainingSlots = 5 - mediaList.length;
+        const remainingSlots = 10 - mediaList.length;
         if (remainingSlots <= 0) {
             CustomAlert("Limit Reached", "You can only upload a maximum of 5 media files.");
             return;
@@ -516,7 +508,7 @@ export default function AuthorDiaryDashboard() {
 
         let result = await ImagePicker.launchImageLibraryAsync({
             mediaTypes: ImagePicker.MediaTypeOptions.All,
-            allowsMultipleSelection: true, // Enable multi-selection
+            allowsMultipleSelection: true,
             selectionLimit: remainingSlots,
             quality: 0.5,
         });
@@ -530,7 +522,6 @@ export default function AuthorDiaryDashboard() {
 
                 const uploadedAssets = [];
 
-                // Loop through selected assets
                 for (const selected of result.assets) {
                     const isVideo = selected.type === "video";
                     const currentLimit = isVideo ? 15 * 1024 * 1024 : 5 * 1024 * 1024;
@@ -578,7 +569,6 @@ export default function AuthorDiaryDashboard() {
         }
     };
 
-    // 🔹 NEW: REMOVE MEDIA
     const removeMedia = (index) => {
         const updatedList = mediaList.filter((_, i) => i !== index);
         setMediaList(updatedList);
@@ -618,16 +608,13 @@ export default function AuthorDiaryDashboard() {
                     message,
                     category: finalCategory,
                     clanId: finalClanId,
-                    // NEW: Send the full array
                     media: mediaList,
-                    // BACKWARD COMPATIBILITY: Send first item as main media
                     mediaUrl: mediaList.length > 0 ? mediaList[0].url : mediaUrlLink || null,
                     mediaType: mediaList.length > 0 ? mediaList[0].type : (mediaUrlLink?.includes("video") ? "video" : "image"),
                     hasPoll,
                     pollMultiple,
                     pollOptions: hasPoll ? pollOptions.filter(opt => opt.trim() !== "").map(opt => ({ text: opt })) : [],
-                    fingerprint,
-                    rewardToken
+                    fingerprint
                 }),
             });
 
@@ -635,10 +622,10 @@ export default function AuthorDiaryDashboard() {
             if (!response.ok) throw new Error(data.message || "Failed to create post");
 
             await AsyncStorage.removeItem(`draft_${fingerprint}`);
-            // 🚀 TRIGGER THE REVIEW LOGIC HERE
             DeviceEventEmitter.emit("POST_CREATED_SUCCESS");
             CustomAlert("Success", "Your entry has been submitted for approval!");
             updateStreak(fingerprint)
+
             // Reset States
             setMediaList([]);
             setTitle("");
@@ -646,30 +633,30 @@ export default function AuthorDiaryDashboard() {
             setMediaUrlLink("");
             setPickedImage(false);
             mutateTodayPosts();
-        } catch (err) { CustomAlert("Error", err.message); }
+            if (todayPosts.length >= maxPostsToday && additionalSlot == 1) {
+                setAdditionalSlot(0)
+                let addnumber = 0
+                AsyncStorage.setItem("additionalSlot", addnumber.toString());
+            }
+        } catch (err) { CustomAlert("Error", err.message) }
         finally { setSubmitting(false); }
     };
 
     // 6. Preview Logic
-    // 🔹 UPDATED: Parser for new syntax
     const parseMessageSections = (msg) => {
-        // Regex for: s(), h(), l(), link()-text(), and [br]
         const regex = /s\((.*?)\)|h\((.*?)\)|l\((.*?)\)|link\((.*?)\)-text\((.*?)\)|\[br\]/gs;
-
         const parts = [];
         let lastIndex = 0;
         let match;
 
         while ((match = regex.exec(msg)) !== null) {
-            // Push text before the match
             if (match.index > lastIndex) parts.push({ type: "text", content: msg.slice(lastIndex, match.index) });
 
-            // Identify match type based on capture group index
-            if (match[1] !== undefined) parts.push({ type: "section", content: match[1].trim() }); // s()
-            else if (match[2] !== undefined) parts.push({ type: "heading", content: match[2].trim() }); // h()
-            else if (match[3] !== undefined) parts.push({ type: "listItem", content: match[3].trim() }); // l()
-            else if (match[4] !== undefined) parts.push({ type: "link", url: match[4], content: match[5] }); // link()-text()
-            else parts.push({ type: "br" }); // [br] (if you still use it)
+            if (match[1] !== undefined) parts.push({ type: "section", content: match[1].trim() });
+            else if (match[2] !== undefined) parts.push({ type: "heading", content: match[2].trim() });
+            else if (match[3] !== undefined) parts.push({ type: "listItem", content: match[3].trim() });
+            else if (match[4] !== undefined) parts.push({ type: "link", url: match[4], content: match[5] });
+            else parts.push({ type: "br" });
 
             lastIndex = regex.lastIndex;
         }
@@ -677,11 +664,9 @@ export default function AuthorDiaryDashboard() {
         return parts;
     };
 
-    // 🔹 UPDATED: cleanup function
     function normalizePostContent(content) {
         if (!content || typeof content !== "string") return content;
-        // Simple trim for now, the new syntax is less prone to whitespace errors than the old tags
-        return content.trim();
+        return content.trim()
     }
 
     const renderPreviewContent = () => {
@@ -699,15 +684,6 @@ export default function AuthorDiaryDashboard() {
         const rawParts = parseMessageSections(normalizePostContent(message));
         const finalElements = [];
         let inlineBuffer = [];
-
-        const renderInArticleAd = (key) => (
-            <View key={`ad-${key}`} className="my-6 items-center py-4 border-y border-gray-100 dark:border-gray-800">
-                <Text className="text-[10px] text-gray-400 mb-2 uppercase">Advertisement (Preview)</Text>
-                <View className="bg-gray-200 w-[320px] h-[50px] items-center justify-center rounded">
-                    <Text className="text-gray-400">Ad Placeholder</Text>
-                </View>
-            </View>
-        );
 
         const flushInlineBuffer = (key) => {
             if (inlineBuffer.length > 0) {
@@ -758,7 +734,6 @@ export default function AuthorDiaryDashboard() {
 
             if (totalWordCount >= nextAdThreshold) {
                 flushInlineBuffer(`ad-flush-${i}`);
-                finalElements.push(renderInArticleAd(i));
                 nextAdThreshold += WORD_THRESHOLD;
             }
         });
@@ -766,10 +741,22 @@ export default function AuthorDiaryDashboard() {
         flushInlineBuffer("end");
         return <View className="px-4 py-1">{finalElements}</View>;
     };
+    const handleAdditionalSlot = async () => {
+        if (coins < 20) {
+           CustomAlert("Insufficient OC", "You need 20 OC 🪙 to purchase additional slot. Check back daily!") 
+        }
+        const result = await processTransaction("spend", 'extra_slot')
+        if (result.success) {
+            CustomAlert("Success", "Additional slot purchased!")
+            let addNumber = 1
+            await AsyncStorage.setItem(`additionalSlot`, addNumber.toString());
+            setAdditionalSlot(addNumber)
+        } else {
+            CustomAlert("Error", result.error || "Failed to purchase additional slot.");
+        }
+    }
 
-    // 🔹 Mission Log UI Component
     const renderMissionLog = () => {
-        // Use cached/live mixed data
         if (!todayPosts || todayPosts.length === 0) return null;
 
         return (
@@ -802,7 +789,6 @@ export default function AuthorDiaryDashboard() {
                                 </Text>
                             </View>
 
-                            {/* Show Rejection Reason */}
                             {post.rejectionReason && (
                                 <View className={`mt-2 p-2 rounded-lg border ${post.status === 'approved' ? 'bg-green-500/5 border-green-500/10' : 'bg-red-500/5 border-red-500/10'}`}>
                                     <Text className={`text-[10px] font-medium italic ${post.status === 'approved' ? 'text-green-400' : 'text-red-400'}`}>
@@ -810,8 +796,6 @@ export default function AuthorDiaryDashboard() {
                                     </Text>
                                 </View>
                             )}
-
-
                         </View>
 
                         <View className="items-end">
@@ -831,6 +815,13 @@ export default function AuthorDiaryDashboard() {
         );
     };
 
+    if (contextLoading || submitting || isDraftRestoring) {
+        return <AnimeLoading
+            message={submitting ? "Submitting" : uploading ? "Uploading" : isDraftRestoring ? "Restoring" : "Loading"}
+            subMessage={isDraftRestoring ? "Synchronizing core draft modules..." : "Fetching Otaku diary"}
+        />
+    }
+
     return (
         <View style={{ flex: 1, backgroundColor: THEME.bg }}>
             <StatusBar barStyle="light-content" />
@@ -842,7 +833,6 @@ export default function AuthorDiaryDashboard() {
             <ScrollView
                 className="flex-1"
                 contentContainerStyle={{ padding: 24, paddingBottom: 100 }}
-                // Important for keyboard handling on scrolling
                 keyboardShouldPersistTaps="handled"
             >
 
@@ -850,7 +840,6 @@ export default function AuthorDiaryDashboard() {
                 <View className="flex-row justify-between items-end mt-6 mb-8 border-b border-gray-800 pb-6">
                     <View>
                         <View className="flex-row items-center mb-1">
-                            {/* 🔹 Offline/Online Status Indicator */}
                             <View
                                 className={`h-2 w-2 rounded-full mr-2 ${isOfflineMode ? 'bg-orange-500' : 'bg-blue-600'}`}
                                 style={{ shadowColor: isOfflineMode ? '#f97316' : '#2563eb', shadowRadius: 8, shadowOpacity: 0.8 }}
@@ -859,7 +848,6 @@ export default function AuthorDiaryDashboard() {
                                 {isOfflineMode ? "ARCHIVED_DATA // OFFLINE" : "LIVE_UPLINK // ACTIVE"}
                             </Text>
 
-                            {/* Sync Status Badge */}
                             <View className="ml-4 flex-row items-center bg-gray-900 px-2 py-0.5 rounded-full border border-gray-800">
                                 {saveStatus === "saving" ? (
                                     <>
@@ -884,8 +872,7 @@ export default function AuthorDiaryDashboard() {
                 </View>
 
                 {/* --- POST LIMIT / STATUS VIEW --- */}
-                {/* Checks both Live and Cached posts to determine UI state */}
-                {postsLast24h >= maxPostsToday && !canPostAgain ? (
+                {additionalSlot <= 0 && postsLast24h >= maxPostsToday && !canPostAgain ? (
                     <View>
                         <View style={{ backgroundColor: THEME.card, borderColor: THEME.border }} className="p-8 rounded-[40px] border items-center">
                             <View className={`w-20 h-20 rounded-full items-center justify-center mb-6 ${todayPost?.status === 'rejected' ? 'bg-red-500/10' : 'bg-blue-500/10'}`}>
@@ -897,7 +884,7 @@ export default function AuthorDiaryDashboard() {
                             </Text>
 
                             <Text className="text-gray-500 text-center mt-3 leading-5 font-medium">
-                                {todayPost?.status === 'pending' && "Your intel is currently being decrypted by our THE SYSTEM."}
+                                {todayPost?.status === 'pending' && "Your intel is currently being decrypted by THE SYSTEM."}
                                 {todayPost?.status === 'approved' && "Daily transmission limit reached. Link available in:"}
                                 {todayPost?.status === 'rejected' && "Transmission failed. System cooldown active:"}
                             </Text>
@@ -908,14 +895,6 @@ export default function AuthorDiaryDashboard() {
                                         <Ionicons name="timer-outline" size={18} color={THEME.accent} style={{ marginRight: 8 }} />
                                         <Text className="font-black text-xl text-blue-600">{timeLeft || "00:00"}</Text>
                                     </View>
-
-                                    <TouchableOpacity
-                                        onPress={handleShowRewardAd}
-                                        className={`mt-8 w-full py-5 rounded-2xl flex-row justify-center items-center bg-blue-600`}
-                                    >
-                                        <Ionicons name="play" size={20} color="white" />
-                                        <Text className="text-white font-black uppercase tracking-widest ml-2">Override Limit (Watch Ad)</Text>
-                                    </TouchableOpacity>
                                 </View>
                             )}
 
@@ -926,7 +905,25 @@ export default function AuthorDiaryDashboard() {
                                     </Text>
                                 </TouchableOpacity>
                             </Link>
+                            <TouchableOpacity
+                                className="w-fit py-4 px-3 rounded-2xl flex-row items-center gap-1 justify-center space-x-2"
+                                onPress={handleAdditionalSlot}
+                                style={{ backgroundColor: THEME.glowOrange }}
+                                disabled={isProcessingTransaction}>
+                                <Text className="text-yellow-500 font-bold uppercase tracking-tighter text-sm">Unlock + 1 slot 20</Text><CoinIcon type="OC" size={16} />
+                            </TouchableOpacity>
                         </View>
+                        {/* LOADING OVERLAY */}
+                        {isProcessingTransaction && (
+                            <View className="absolute inset-0 bg-black/60 flex items-center justify-center z-[100]">
+                                <View style={{ backgroundColor: THEME.card }} className="p-10 rounded-[40px] items-center border-2 border-white/10">
+                                    <ActivityIndicator size="large" color={THEME.streak} />
+                                    <Text style={{ color: THEME.text }} className="font-black uppercase mt-4 tracking-widest text-xs">
+                                        Syncing Wallet...
+                                    </Text>
+                                </View>
+                            </View>
+                        )}
 
                         {renderMissionLog()}
                     </View>
@@ -940,7 +937,7 @@ export default function AuthorDiaryDashboard() {
                             </View>
                             <View className="items-end">
                                 <Text className="text-[9px] font-black text-gray-500 uppercase tracking-widest">Daily Quota</Text>
-                                <Text className="text-blue-500 font-black">{postsLast24h} / {maxPostsToday} {isInClan && <Text className="text-yellow-500 text-[8px]">(+2 CLAN BONUS)</Text>}</Text>
+                                <Text className="text-blue-500 font-black">{postsLast24h} / {maxPostsToday} {additionalSlot == 1 && <Text className="text-yellow-500 text-[8px]">(+1 SLOT)</Text>} {isInClan && <Text className="text-yellow-500 text-[8px]">(+2 CLAN BONUS)</Text>} </Text>
                             </View>
                         </View>
 
@@ -977,27 +974,14 @@ export default function AuthorDiaryDashboard() {
                             <View style={{ backgroundColor: THEME.card, borderColor: THEME.border }} className="mb-6 rounded-3xl border-2 p-2">{renderPreviewContent()}</View>
                         ) : (
                             <View className="space-y-6">
-                                <View className="items-center justify-center px-6 py-4">
-                                    <Text style={{ color: THEME.text }} className="text-[12px] uppercase tracking-tighter text-xs text-center mb-3">
-                                        Don't understand how to go about this? Check out this
-                                    </Text>
+                                <Link href={"/screens/Instructions"} asChild>
+                                    <TouchableOpacity className="mt-4">
+                                        <Text className="text-gray-600 font-bold uppercase tracking-tighter text-xs">
+                                            Don't understand how to go about this? Check out this page for clear explanation
+                                        </Text>
+                                    </TouchableOpacity>
+                                </Link>
 
-                                    <Link href={"/screens/Instructions"} asChild>
-                                        <TouchableOpacity
-                                            activeOpacity={0.7}
-                                            className="bg-blue-600 px-8 py-3 rounded-full shadow-sm active:bg-blue-700"
-                                        >
-                                            <Text className="text-white font-black uppercase tracking-widest text-sm">
-                                                View Instructions Page
-                                            </Text>
-                                        </TouchableOpacity>
-                                    </Link>
-
-                                    <Text style={{ color: THEME.text }} className="text-[12px] uppercase mt-2 tracking-tighter">
-                                        for a clear explanation
-                                    </Text>
-                                </View>
-                                {/* Title */}
                                 <View>
                                     <Text className="text-[9px] font-black uppercase text-gray-500 mb-2 ml-1">Subject Title</Text>
                                     <TextInput
@@ -1010,35 +994,27 @@ export default function AuthorDiaryDashboard() {
                                     />
                                 </View>
 
-                                {/* Message */}
                                 <View>
                                     <View className="flex-col gap-1 mb-2 mt-2 px-1">
                                         <Text className="text-[13px] font-black uppercase text-gray-500">Content Module</Text>
-
-                                        {/* 🔹 UPDATED: Formatting Buttons */}
                                         <View className="flex-row gap-2">
-                                            {/* Using your new functional syntax logic */}
                                             <TouchableOpacity onPress={() => insertTag('section')}>
                                                 <Text className="text-[11px] font-mono bg-blue-600/10 px-2 py-1 rounded text-blue-500 border border-blue-500/20">s(Section)</Text>
                                             </TouchableOpacity>
-
                                             <TouchableOpacity onPress={() => insertTag('heading')}>
                                                 <Text className="text-[11px] font-mono bg-blue-600/10 px-2 py-1 rounded text-blue-500 border border-blue-500/20">h(Heading)</Text>
                                             </TouchableOpacity>
-
                                             <TouchableOpacity onPress={() => insertTag('list')}>
                                                 <Text className="text-[11px] font-mono bg-blue-600/10 px-2 py-1 rounded text-blue-500 border border-blue-500/20">l(List)</Text>
                                             </TouchableOpacity>
-
                                             <TouchableOpacity onPress={() => insertTag('link')}>
                                                 <Text className="text-[11px] font-mono bg-blue-600/10 px-2 py-1 rounded text-blue-500 border border-blue-500/20">Link</Text>
                                             </TouchableOpacity>
                                         </View>
                                     </View>
 
-                                    {/* 🔹 UPDATED: TextInput with Ref for focus control */}
                                     <TextInput
-                                        ref={messageInputRef} // Attached ref here
+                                        ref={messageInputRef}
                                         placeholder="Type your message here..."
                                         value={message}
                                         onChangeText={(text) => setMessage(sanitizeMessage(text))}
@@ -1049,11 +1025,9 @@ export default function AuthorDiaryDashboard() {
                                     />
                                 </View>
 
-                                {/* 🔹 CATEGORY SELECTION (Updated for Clan Logic) */}
                                 <View>
-                                    <Text className="text-[12px] font-black uppercase text-gray-500 my-2 ml-1">Select Category</Text>
-                                    <ScrollView className="mb-3" horizontal showsHorizontalScrollIndicator={false}>
-                                        {/* 🔹 If in Clan, show 'Clan' as an option. Otherwise standard list. */}
+                                    <Text className="text-[9px] font-black uppercase text-gray-500 mb-2 ml-1">Archive Category</Text>
+                                    <ScrollView horizontal showsHorizontalScrollIndicator={false}>
                                         {(isInClan ? ["Clan", "News", "Memes", "Fanart", "Polls", "Gaming", "Review"] : ["News", "Memes", "Fanart", "Polls", "Gaming", "Review"]).map((cat) => (
                                             <TouchableOpacity
                                                 key={cat}
@@ -1065,7 +1039,6 @@ export default function AuthorDiaryDashboard() {
                                         ))}
                                     </ScrollView>
 
-                                    {/* 🔹 SUB-CATEGORY SELECTION (Only visible if Clan is selected) */}
                                     {category === "Clan" && (
                                         <View className="mt-4 bg-blue-600/5 p-4 rounded-xl border border-blue-600/20">
                                             <Text className="text-[9px] font-black uppercase text-blue-400 mb-2 ml-1">Select Clan Sub-Channel</Text>
@@ -1083,7 +1056,7 @@ export default function AuthorDiaryDashboard() {
                                         </View>
                                     )}
                                 </View>
-                                {/* --- MEDIA & PREVIEW SECTION --- */}
+
                                 <View className="space-y-4">
                                     <TextInput
                                         placeholder="External Uplink (URL)"
@@ -1094,7 +1067,6 @@ export default function AuthorDiaryDashboard() {
                                         className="border-2 p-5 rounded-2xl text-white font-bold"
                                     />
 
-                                    {/* 🔹 MULTI-MEDIA CAROUSEL PREVIEW */}
                                     {mediaList.length > 0 && (
                                         <View className="mb-2">
                                             <Text className="text-[9px] font-black uppercase text-gray-500 mb-3 ml-1">Linked Assets ({mediaList.length}/5)</Text>
@@ -1111,7 +1083,6 @@ export default function AuthorDiaryDashboard() {
                                                                 <Image source={{ uri: item.url }} className="w-full h-full" contentFit="cover" />
                                                             )}
                                                         </View>
-                                                        {/* Delete Button Badge */}
                                                         <TouchableOpacity
                                                             onPress={() => removeMedia(index)}
                                                             className="absolute -top-2 -right-2 bg-red-600 w-6 h-6 rounded-full items-center justify-center border-2 border-black"
@@ -1121,7 +1092,6 @@ export default function AuthorDiaryDashboard() {
                                                     </View>
                                                 ))}
 
-                                                {/* Small "Add More" button if under limit */}
                                                 {mediaList.length < 5 && (
                                                     <TouchableOpacity
                                                         onPress={pickImage}
@@ -1135,7 +1105,6 @@ export default function AuthorDiaryDashboard() {
                                         </View>
                                     )}
 
-                                    {/* 🔹 UPLOAD BUTTON (Hidden if list has items and you want them to use the carousel 'add' button, or keep as main trigger) */}
                                     {mediaList.length === 0 && (
                                         <TouchableOpacity
                                             onPress={pickImage}
@@ -1160,7 +1129,6 @@ export default function AuthorDiaryDashboard() {
                                     )}
                                 </View>
 
-                                {/* Poll Module */}
                                 <View style={{ backgroundColor: THEME.card, borderColor: hasPoll ? THEME.accent : THEME.border }} className="p-6 rounded-3xl border-2 mt-4">
                                     <View className="flex-row justify-between items-center mb-4">
                                         <Text className="font-black uppercase tracking-widest text-[11px]">Deploy Poll Module</Text>
@@ -1170,7 +1138,6 @@ export default function AuthorDiaryDashboard() {
                                             trackColor={{ false: '#3f3f46', true: '#2563eb' }}
                                             thumbColor={THEME.text}
                                         />
-
                                     </View>
                                     {hasPoll && (
                                         <View className="space-y-3">
@@ -1193,7 +1160,6 @@ export default function AuthorDiaryDashboard() {
                                     )}
                                 </View>
 
-                                {/* Final Submit */}
                                 <TouchableOpacity
                                     onPress={handleSubmit}
                                     disabled={submitting || uploading}

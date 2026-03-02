@@ -3,7 +3,7 @@ import AsyncStorage from "@react-native-async-storage/async-storage";
 const APP_SECRET = process.env.EXPO_PUBLIC_APP_SECRET || "thisismyrandomsuperlongsecretkey";
 
 export const apiFetch = async (endpoint, options = {}) => {
-  const baseUrl = "http://10.168.113.121:3000/api";
+  const baseUrl = "http://10.200.135.121:3000/api";
   const cleanEndpoint = endpoint.startsWith('/') ? endpoint : `/${endpoint}`;
   const url = endpoint.startsWith('http') ? endpoint : `${baseUrl}${cleanEndpoint}`;
   
@@ -11,12 +11,13 @@ export const apiFetch = async (endpoint, options = {}) => {
   let userAnimes = ""; // Comma-separated list for backend $in check
   let userGenres = ""; // Comma-separated list for backend $in check
   let userCharacter = ""; // 🔹 Added for character-specific targeting
-
+  let userId = ""
   try {
     const stored = await AsyncStorage.getItem("mobileUser");
     if (stored) {
       const parsed = JSON.parse(stored);
       userCountry = parsed.country || "Unknown";
+      userId = parsed.deviceId
       
       // 🔹 Extract and format preferences for the backend algorithm
       if (parsed.preferences) {
@@ -43,6 +44,7 @@ export const apiFetch = async (endpoint, options = {}) => {
     "x-user-country": userCountry,
     // 🔹 Specific headers the backend algorithm is now looking for
     "x-user-animes": userAnimes,
+    "x-user-deviceId": userId,
     "x-user-genres": userGenres,
     "x-user-character": userCharacter, // 🔹 Sent to backend
     ...options.headers,

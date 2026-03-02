@@ -5,7 +5,9 @@ import { useColorScheme } from "nativewind";
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { ActivityIndicator, Clipboard, DeviceEventEmitter, FlatList, Modal, ScrollView, Text, TextInput, TouchableOpacity, View } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
+import ClanCrest from '../../components/ClanCrest';
 import { SyncLoading } from "../../components/SyncLoading";
+import { useCoins } from '../../context/CoinContext';
 import { useStreak } from "../../context/StreakContext";
 import { useUser } from "../../context/UserContext";
 import apiFetch from '../../utils/apiFetch';
@@ -16,8 +18,8 @@ let USER_STATS_MEMORY_CACHE = null;
 
 const CLANS_CACHE_KEY = 'cached_clans_list';
 const USER_STATS_CACHE_KEY = 'clan_user_stats_cache';
-const MIN_POSTS_REQUIRED = 50;
-const MIN_STREAK_REQUIRED = 10;
+const MIN_POSTS_REQUIRED = 25;
+const MIN_STREAK_REQUIRED = 5;
 
 export default function ClanDiscover() {
     const { colorScheme } = useColorScheme();
@@ -70,6 +72,7 @@ export default function ClanDiscover() {
             
             if (res.ok) {
                 const newClans = data.clans || [];
+                console.log(newClans);
                 
                 setClans(prev => {
                     const updatedList = isRefreshing || pageNum === 1 ? newClans : [...prev, ...newClans];
@@ -335,7 +338,6 @@ const ClanCard = ({ clan, lbRank, isDark, refreshClans, showAlert }) => {
     const { user } = useUser();
     const [actionLoading, setActionLoading] = useState(false);
     const [copied, setCopied] = useState(false);
-
     const getRankInfo = (rank) => {
         const ranks = {
             6: { title: "The Akatsuki", color: "#2563eb" }, 
@@ -347,6 +349,9 @@ const ClanCard = ({ clan, lbRank, isDark, refreshClans, showAlert }) => {
         };
         return ranks[rank] || ranks[1];
     };
+    const equippedGlow = clan.specialInventory?.find(i => i.category === 'GLOW' && i.isEquipped);
+  const activeGlowColor = equippedGlow?.visualConfig?.primaryColor || equippedGlow?.visualData?.glowColor || null;
+    console.log(equippedGlow, clan);
     
     const rankInfo = getRankInfo(clan.rank);
 
@@ -365,6 +370,9 @@ const ClanCard = ({ clan, lbRank, isDark, refreshClans, showAlert }) => {
                 body: JSON.stringify({ clanTag: clan.tag, deviceId: user.deviceId, action: "follow" })
             });
             if (res.ok) {
+                const followedClans = await AsyncStorage.getItem('followed_clans');
+                let clanList = followedClans ? JSON.parse(followedClans) : [];
+                await AsyncStorage.setItem('followed_clans', JSON.stringify(clanList));
                 refreshClans();
             } else {
                 const data = await res.json();
@@ -403,7 +411,7 @@ const ClanCard = ({ clan, lbRank, isDark, refreshClans, showAlert }) => {
             activeOpacity={0.9}
             onPress={() => DeviceEventEmitter.emit("navigateSafely", `/clans/${clan.tag}`)}
             className={`w-full rounded-[40px] border mb-6 overflow-hidden ${isDark ? "bg-zinc-900 border-zinc-800" : "bg-white border-zinc-200 shadow-xl shadow-zinc-200"}`}
-            style={{ height: 380 }}
+            style={{ height: 400 }}
         >
             {/* Top Stats Row */}
             <View className="flex-row justify-between items-center p-6 pb-2">
@@ -418,12 +426,12 @@ const ClanCard = ({ clan, lbRank, isDark, refreshClans, showAlert }) => {
             </View>
 
             {/* Avatar & Info Section */}
-            <View className="items-center px-6 mt-2">
-                <View className={`w-24 h-24 rounded-[32px] items-center justify-center mb-4 ${isDark ? 'bg-black border border-zinc-800' : 'bg-zinc-50 border border-zinc-100'}`}>
-                    <Text className={`font-black text-4xl ${isDark ? 'text-white' : 'text-zinc-900'}`}>{clan.name.charAt(0).toUpperCase()}</Text>
-                </View>
+            <View className="items-center px-6">
+                
+            <ClanCrest glowColor={activeGlowColor} rank={clan?.rank} size={120}/>
 
-                <Text numberOfLines={1} className={`text-2xl font-black text-center tracking-tight ${isDark ? "text-white" : "text-zinc-900"}`}>{clan.name}</Text>
+
+                <Text numberOfLines={1} className={`text-2xl mt-3 font-black text-center tracking-tight ${isDark ? "text-white" : "text-zinc-900"}`}>{clan.name}</Text>
                 
                 {/* 🏷️ Styled Clan Tag + Copy Button */}
                 <TouchableOpacity 
@@ -476,22 +484,34 @@ const CreateClanModal = ({ visible, onClose, onSuccess, isDark, showAlert }) => 
     const [name, setName] = useState('');
     const [desc, setDesc] = useState('');
     const [isCreating, setIsCreating] = useState(false);
+    const { coins, processTransaction, isProcessingTransaction } = useCoins(); 
 
     const handleCreate = async () => {
         if (!name || !user) return;
         setIsCreating(true);
+        if (coins < 500) {
+            showAlert("Insufficient OC", "You need 500 OC 🪙 to create a clan. Visit Store to purchase OC!");
+            return;
+        }
         try {
+            const result = await processTransaction('spend', 'create_clan'); 
+            
+            if (!result.success) {
+                showAlert("System Notification", result.error || "Unable to create clan.");
+                return;
+            }
             const res = await apiFetch("/clans/create", {
                 method: "POST",
                 body: JSON.stringify({ name, description: desc, deviceId: user.deviceId })
             });
-            const data = await res.json();
+            const data = await res.json()
 
             if (res.ok) {
                 onSuccess(data.clan);
                 setName(''); setDesc('');
             } else {
-                showAlert("CREATION DENIED", data.message || "This clan name might be taken.");
+                showAlert("CREATION DENIED", `${data.message}, OC refunded` || "This clan name might be taken, OC refunded.");
+                processTransaction('refund', 'create_clan'); // Refund OC on failure
             }
         } catch (err) {
             showAlert("NETWORK ERROR", "Failed to reach the Archives. Check your connection.");

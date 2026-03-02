@@ -25,12 +25,13 @@ import { SyncLoading } from '../../components/SyncLoading';
 import { Text } from '../../components/Text';
 import { useAlert } from '../../context/AlertContext';
 import { useClan } from '../../context/ClanContext';
+import { useCoins } from '../../context/CoinContext';
 import apiFetch from '../../utils/apiFetch';
 
 const { width } = Dimensions.get('window');
 
 // 🧠 Tier 1: Memory Cache (Persists while app is open, even when navigating away)
-let WARS_MEMORY_CACHE = {}; 
+let WARS_MEMORY_CACHE = {};
 let PROFILE_MEMORY_CACHE = {};
 
 const WAR_METRICS = [
@@ -53,14 +54,14 @@ const ClanWarPage = () => {
     const isDark = colorScheme === "dark";
 
     const [activeTab, setActiveTab] = useState('ACTIVE');
-    
+
     // Initialize state from Memory Cache if available
     const cacheKeyWars = userClan?.tag ? `WARS_${userClan.tag}_${activeTab}` : null;
     const cacheKeyProfile = userClan?.tag ? `CLAN_PROFILE_${userClan.tag}` : null;
 
     const [wars, setWars] = useState(cacheKeyWars ? (WARS_MEMORY_CACHE[cacheKeyWars] || []) : []);
     const [clanPoints, setClanPoints] = useState(cacheKeyProfile ? (PROFILE_MEMORY_CACHE[cacheKeyProfile] || 0) : 0);
-    
+
     const [loading, setLoading] = useState(!wars.length); // Only full-screen load if memory is empty
     const [refreshing, setRefreshing] = useState(false);
     const [isOffline, setIsOffline] = useState(false);
@@ -80,6 +81,7 @@ const ClanWarPage = () => {
     const [duration, setDuration] = useState(3);
     const [winCondition, setWinCondition] = useState('FULL');
     const [selectedMetric, setSelectedMetric] = useState('POINTS');
+    const { coins, processTransaction, isProcessingTransaction } = useCoins();
 
     // 🛡️ Tier 2 Save: To Disk
     const saveHeavyCache = async (key, data) => {
@@ -92,7 +94,7 @@ const ClanWarPage = () => {
 
     const fetchInitialData = async (isBackground = false) => {
         if (!isBackground && wars.length === 0) setLoading(true);
-        
+
         // ⚡ Tiered Init: Attempt Disk load if Memory was empty
         if (userClan?.tag && wars.length === 0) {
             try {
@@ -100,7 +102,7 @@ const ClanWarPage = () => {
                     AsyncStorage.getItem(cacheKeyWars),
                     AsyncStorage.getItem(cacheKeyProfile)
                 ]);
-                
+
                 if (cachedWars) {
                     const parsed = JSON.parse(cachedWars);
                     setWars(parsed);
@@ -183,7 +185,7 @@ const ClanWarPage = () => {
                 const data = await res.json();
                 const points = data.totalPoints || 0;
                 setClanPoints(points);
-                
+
                 // 💾 Update Memory & Disk
                 PROFILE_MEMORY_CACHE[cacheKeyProfile] = points;
                 saveHeavyCache(cacheKeyProfile, points);
@@ -273,9 +275,19 @@ const ClanWarPage = () => {
             CustomAlert("Insufficient Points", `Only ${clanPoints.toLocaleString()} points available.`);
             return;
         }
-
         setRefreshing(true);
+        if (coins < 20) {
+            CustomAlert("Insufficient Coins", "You need at least 20 OC to send/negotiate a challenge.");
+            setRefreshing(false);
+            return;
+        }
+
         try {
+            const result = await processTransaction('spend', 'clan_war');
+            if (!result.success) {
+                CustomAlert("System Notification", result.error || "Unable to make challenge.");
+                return;
+            }
             const endpoint = isNegotiatingMode ? '/clans/wars/counter' : '/clans/wars/declare';
 
             const response = await apiFetch(endpoint, {
@@ -301,7 +313,8 @@ const ClanWarPage = () => {
                 fetchInitialData(true);
             } else {
                 const err = await response.json();
-                CustomAlert("Error", err.message || "Action failed");
+                processTransaction('refund', 'clan_war'); // Refund OC on failure
+                CustomAlert("Error", err.message || "Action failed, OC refunded");
             }
         } catch (error) {
             console.error(error);

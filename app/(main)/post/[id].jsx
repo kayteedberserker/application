@@ -12,10 +12,9 @@ import Animated, {
   withTiming
 } from 'react-native-reanimated';
 import { useSafeAreaInsets } from "react-native-safe-area-context";
-import AnimeLoading from '../../../components/AnimeLoading';
 import CommentSection from "../../../components/CommentSection";
 import PostCard from "../../../components/PostCard";
-import SimilarPosts from "../../../components/SimilarPosts";
+import { SyncLoading } from '../../../components/SyncLoading';
 import { Text } from '../../../components/Text';
 import apiFetch from "../../../utils/apiFetch";
 
@@ -24,8 +23,9 @@ const API_URL = "https://oreblogda.com";
 
 export default function PostDetailScreen() {
   // 🔔 Extracts both 'discussion' (from web link) and 'commentId' (from notification)
-  const { id, discussion, commentId } = useLocalSearchParams(); 
-  const targetCommentId = discussion || commentId;
+  const { id, discussion, commentId, comment } = useLocalSearchParams();
+  const targetCommentId = discussion || commentId || comment
+  
 
   const { colorScheme } = useColorScheme();
   const insets = useSafeAreaInsets();
@@ -66,7 +66,7 @@ export default function PostDetailScreen() {
       if (cached) {
         const cachedData = JSON.parse(cached);
         setPost(cachedData);
-        setLoading(false); 
+        setLoading(false);
         if (cachedData.category) handleSimilarPosts(cachedData.category);
       }
 
@@ -108,9 +108,9 @@ export default function PostDetailScreen() {
       // Small timeout to allow the layout to finalize after loading stops
       const timer = setTimeout(() => {
         if (commentSectionY.current > 0) {
-          scrollRef.current?.scrollTo({ 
-            y: commentSectionY.current - 100, 
-            animated: true 
+          scrollRef.current?.scrollTo({
+            y: commentSectionY.current - 100,
+            animated: true
           });
         }
       }, 700);
@@ -127,8 +127,8 @@ export default function PostDetailScreen() {
       const data = await res.json();
       const filtered = (data.posts || []).filter((p) => p._id !== id);
       setSimilarPosts(filtered);
-    } catch (e) { 
-      console.log("Similar posts error", e); 
+    } catch (e) {
+      console.log("Similar posts error", e);
     }
   };
 
@@ -155,12 +155,12 @@ export default function PostDetailScreen() {
     });
 
     const commentSub = DeviceEventEmitter.addListener("openCommentSection", (data) => {
-      scrollRef.current?.scrollTo({ 
-        y: commentSectionY.current - 100, 
-        animated: true 
+      scrollRef.current?.scrollTo({
+        y: commentSectionY.current - 100,
+        animated: true
       });
       setDiscussionId(data.discussionId)
-      
+
     });
 
     return () => {
@@ -171,7 +171,11 @@ export default function PostDetailScreen() {
 
   // --- UI: LOADING STATE ---
   if (loading && !post) {
-    return <AnimeLoading message="Decrypting Intel..." subMessage="Accessing Mainframe" />;
+    return (
+      <View style={{ backgroundColor: isDark ? "#050505" : "#ffffff" }} className="flex-1 h-full items-center justify-center">
+        <SyncLoading message='Decrypting Anime Intel' />
+      </View>
+    )
   }
 
   // --- UI: OFFLINE / NOT FOUND STATE ---
@@ -188,12 +192,12 @@ export default function PostDetailScreen() {
           Signal Lost
         </Text>
         <Text className="text-center text-gray-500 dark:text-gray-400 font-medium mb-8 leading-6">
-          {isOffline 
-          ? "Unable to establish neural link with the server.\nCheck your internet connection." 
-          : "This intel has been redacted or deleted from the archive."}
+          {isOffline
+            ? "Unable to establish neural link with the server.\nCheck your internet connection."
+            : "This intel has been redacted or deleted from the archive."}
         </Text>
 
-        <TouchableOpacity 
+        <TouchableOpacity
           onPress={handleRefresh}
           className="flex-row items-center gap-2 bg-red-600 px-8 py-3 rounded-full shadow-lg shadow-red-500/30 active:scale-95"
         >
@@ -203,7 +207,7 @@ export default function PostDetailScreen() {
           </Text>
         </TouchableOpacity>
 
-        <TouchableOpacity 
+        <TouchableOpacity
           onPress={() => router.back()}
           className="mt-6"
         >
@@ -220,28 +224,28 @@ export default function PostDetailScreen() {
     <View style={{ flex: 1, backgroundColor: isDark ? "#050505" : "#ffffff" }}>
 
       {/* --- TOP DATA STREAM LOADER --- */}
-      <View 
+      <View
         className="absolute top-0 left-0 w-full h-[1px] z-50 overflow-hidden"
         style={{ backgroundColor: isDark ? 'rgba(30, 58, 138, 0.2)' : 'rgba(37, 99, 235, 0.1)' }}
       >
-        <Animated.View 
+        <Animated.View
           className="h-full w-1/2 bg-blue-500"
           style={[streamStyle, { shadowColor: '#3b82f6', shadowRadius: 4, shadowOpacity: 0.5 }]}
         />
       </View>
 
-      <ScrollView 
-        ref={scrollRef} 
+      <ScrollView
+        ref={scrollRef}
         onScroll={(e) => {
           DeviceEventEmitter.emit("onScroll", e.nativeEvent.contentOffset.y);
         }}
         scrollEventThrottle={16}
         style={{ flex: 1 }}
-        contentContainerStyle={{ 
-          paddingTop: insets.top + 20, 
-          paddingBottom: insets.bottom + 100, 
-          paddingHorizontal: 16 
-        }} 
+        contentContainerStyle={{
+          paddingTop: insets.top + 20,
+          paddingBottom: insets.bottom + 100,
+          paddingHorizontal: 16
+        }}
       >
         {/* --- BREADCRUMB HUD --- */}
         <View className="flex-row items-center gap-2 mb-6 px-1">
@@ -250,7 +254,7 @@ export default function PostDetailScreen() {
             {isOffline ? "OFFLINE_CACHE" : "INTEL_STREAM"}
           </Text>
           <View className="h-[1px] w-8 bg-gray-200 dark:bg-gray-800" />
-          <Text 
+          <Text
             numberOfLines={1}
             className="text-[10px] font-bold text-gray-500 dark:text-gray-400 uppercase tracking-widest flex-1"
           >
@@ -263,15 +267,15 @@ export default function PostDetailScreen() {
           <PostCard
             post={post}
             isFeed={false}
-            posts={[post]} 
-            setPosts={() => {}} 
+            posts={[post]}
+            setPosts={() => { }}
             hideComments={true}
             isDark={isDark}
           />
         </View>
 
         {/* --- COMMS CHANNEL (Comment Section) --- */}
-        <View 
+        <View
           className="mb-10"
           onLayout={(event) => {
             commentSectionY.current = event.nativeEvent.layout.y;
@@ -290,38 +294,16 @@ export default function PostDetailScreen() {
           </View>
 
           <View className="bg-gray-50/50 dark:bg-gray-900/30 rounded-[32px] border border-gray-100 dark:border-blue-900/20 p-1">
-            <CommentSection 
-              slug={post?.slug} 
-              postId={post?._id} 
-              mutatePost={() => {}} 
+            <CommentSection
+              slug={post?.slug}
+              postId={post?._id}
+              mutatePost={() => { }}
               isOffline={isOffline}
               discussionIdfromPage={discussionId}
-              // This is now dynamically fed by useLocalSearchParams inside CommentSection
+            // This is now dynamically fed by useLocalSearchParams inside CommentSection
             />
           </View>
         </View>
-
-        {/* --- SIMILAR INTEL SECTOR --- */}
-        {similarPosts.length > 0 && (
-          <View className="mb-10">
-            <View className="flex-row items-center gap-4 mb-6">
-              <Text className="text-2xl font-[900] italic uppercase tracking-tighter text-gray-900 dark:text-white">
-                Related <Text className="text-blue-600">Intel</Text>
-              </Text>
-              <View className="h-[1px] flex-1 bg-gray-100 dark:bg-gray-800" />
-            </View>
-
-            <SimilarPosts
-              posts={similarPosts}
-              category={post?.category}
-              currentPostId={post?._id}
-            />
-          </View>
-        )}
-      <View className="mb-3 mt-3 w-full p-6 border border-dashed border-gray-300 dark:border-gray-800 rounded-[32px] bg-gray-50/50 dark:bg-white/5 items-center justify-center">
-							<Text className="text-[10px] font-bold text-gray-400 uppercase tracking-[0.2em] italic text-center">Sponsored Transmission</Text>
-							<AppBanner size="BANNER" />
-						</View>
       </ScrollView>
     </View>
   );

@@ -2,14 +2,15 @@ import { Ionicons, MaterialCommunityIcons } from "@expo/vector-icons";
 import AsyncStorage from "@react-native-async-storage/async-storage";
 import { useCallback, useEffect, useState } from "react";
 import {
-  Clipboard,
-  RefreshControl,
-  SafeAreaView,
-  ScrollView,
-  Share,
-  TouchableOpacity,
-  View
+    Clipboard,
+    RefreshControl,
+    ScrollView,
+    Share,
+    TouchableOpacity,
+    View
 } from "react-native";
+import { SafeAreaView } from 'react-native-safe-area-context';
+import CoinIcon from "../../components/ClanIcon";
 import { Text } from "../../components/Text";
 import THEME from "../../components/useAppTheme";
 import { useUser } from "../../context/UserContext";
@@ -83,23 +84,23 @@ export default function ReferralDashboard() {
     const onShare = async () => {
         try {
             await Share.share({
-                message: `Join me on Oreblogda! Use my link to get +20 Aura and 3 days of Double Streak boosts: ${referralLink}`,
+                message: `Join me on Oreblogda! Use my link to get +20 Aura, 50 OC and 3 days of Double Streak boosts: ${referralLink}`,
             });
         } catch (error) {
             console.log(error.message);
         }
     };
 
-    const RewardCard = ({ icon, title, sub, color }) => (
+    const RewardCard = ({ icon, title, sub, color, isCoin }) => (
         <View 
             style={{ backgroundColor: THEME.card, borderColor: THEME.border }} 
-            className="flex-1 p-5 rounded-[24px] border-2 m-1 relative overflow-hidden"
+            className="flex-1 p-5 py-3 rounded-[24px] border-2 m-1 relative overflow-hidden"
         >
             <View className="absolute -right-3 -top-3 opacity-10">
-                 <MaterialCommunityIcons name={icon} size={70} color={color} />
+                 {!isCoin ?<MaterialCommunityIcons name={icon} size={70} color={color} /> : <CoinIcon type="OC" size={70} />}
             </View>
             <View style={{ backgroundColor: `${color}20` }} className="w-10 h-10 rounded-xl items-center justify-center mb-3">
-                <MaterialCommunityIcons name={icon} size={22} color={color} />
+                 {!isCoin ?<MaterialCommunityIcons name={icon} size={22} color={color} /> : <CoinIcon type="OC" size={22} />}
             </View>
             <Text className="text-[14px] font-black uppercase italic" style={{ color: THEME.text }}>{title}</Text>
             <Text className="text-[8px] font-bold uppercase tracking-[0.1em] opacity-60" style={{ color: THEME.textSecondary }}>{sub}</Text>
@@ -173,6 +174,7 @@ export default function ReferralDashboard() {
                 <View className="flex-row mb-10">
                     {/* Fixed Icon for Aura: Star-Four-Points aligns much better with spirit/aura energy */}
                     <RewardCard icon="star-four-points" title="+20 Aura" sub="Soul Perk" color="#eab308" />
+                    <RewardCard isCoin={true} title="+50 0C" sub="OC " color="#eab308" />
                     <RewardCard icon="fire" title="2X Boost" sub="72hr Overdrive" color="#ef4444" />
                 </View>
 

@@ -8,12 +8,12 @@ import {
   DeviceEventEmitter,
   Dimensions,
   Platform,
-  SafeAreaView,
   ScrollView,
   Switch,
   TouchableOpacity,
   View
 } from 'react-native';
+import { SafeAreaView } from 'react-native-safe-area-context';
 import { Text } from '../../components/Text';
 import THEME from '../../components/useAppTheme';
 import { useAlert } from '../../context/AlertContext';

@@ -63,10 +63,10 @@ export default function PostsViewer() {
     const appState = useRef(AppState.currentState);
 
     const [ready, setReady] = useState(false);
-    const [canFetch, setCanFetch] = useState(false); 
-    const [cachedData, setCachedData] = useState(SESSION_STATE.memoryCache); 
+    const [canFetch, setCanFetch] = useState(false);
+    const [cachedData, setCachedData] = useState(SESSION_STATE.memoryCache);
     const [isOfflineMode, setIsOfflineMode] = useState(false);
-    const [refreshing, setRefreshing] = useState(false); 
+    const [refreshing, setRefreshing] = useState(false);
 
     // 🔹 Ref to store shuffled batches so they don't re-shuffle on every render
     const shuffledPagesRef = useRef({});
@@ -96,7 +96,7 @@ export default function PostsViewer() {
                     setReady(true);
                     setTimeout(() => {
                         if (isMounted) setCanFetch(true);
-                    }, 600); 
+                    }, 600);
                 }
             });
         };
@@ -132,23 +132,23 @@ export default function PostsViewer() {
     };
 
     const { data, size, setSize, isLoading, isValidating, mutate } = useSWRInfinite(getKey, fetcher, {
-        refreshInterval: 0, 
-        revalidateOnFocus: false, 
+        refreshInterval: 0,
+        revalidateOnFocus: false,
         revalidateOnReconnect: true,
-        revalidateIfStale: false, 
-        revalidateOnMount: !SESSION_STATE.hasFetched, 
+        revalidateIfStale: false,
+        revalidateOnMount: !SESSION_STATE.hasFetched,
         dedupingInterval: 10000,
         fallbackData: cachedData || undefined,
         onSuccess: (newData) => {
             setIsOfflineMode(false);
-            setRefreshing(false); 
+            setRefreshing(false);
             SESSION_STATE.memoryCache = newData;
-            SESSION_STATE.hasFetched = true; 
+            SESSION_STATE.hasFetched = true;
             saveHeavyCache(CACHE_KEY, newData);
         },
         onError: () => {
             setIsOfflineMode(true);
-            setRefreshing(false); 
+            setRefreshing(false);
         }
     });
 
@@ -159,6 +159,16 @@ export default function PostsViewer() {
         SESSION_STATE.hasFetched = false;
         await mutate();
     }, [mutate]);
+    const [visibleIds, setVisibleIds] = useState(new Set());
+
+    const onViewableItemsChanged = useRef(({ viewableItems }) => {
+        const newVisible = new Set(viewableItems.map(v => v.item._id));
+        setVisibleIds(newVisible);
+    }).current;
+
+    const viewabilityConfig = useRef({
+        itemVisiblePercentThreshold: 60,
+    }).current;
 
     // 🛠️ UPDATED: Stable Frontend Shuffle Logic
     const posts = useMemo(() => {
@@ -172,7 +182,7 @@ export default function PostsViewer() {
             if (page?.posts && Array.isArray(page.posts)) {
                 // Use the ID of the first post as a key to cache the shuffle for this page
                 const pageKey = page.posts[0]?._id || `page-${index}`;
-                
+
                 // If we haven't shuffled this batch yet, shuffle it and save it
                 if (!shuffledPagesRef.current[pageKey]) {
                     shuffledPagesRef.current[pageKey] = shuffleArray(page.posts);
@@ -188,7 +198,7 @@ export default function PostsViewer() {
                 });
             }
         });
-        
+
         return orderedList;
     }, [data, cachedData]);
 
@@ -214,12 +224,13 @@ export default function PostsViewer() {
     const renderItem = ({ item }) => {
         return (
             <View key={item._id}>
-                <PostCard 
-                    post={item} 
-                    isFeed 
-                    posts={posts} 
-                    setPosts={mutate} 
-                    syncing={!SESSION_STATE.hasFetched || isValidating} 
+                <PostCard
+                    post={item}
+                    isFeed
+                    posts={posts}
+                    setPosts={mutate}
+                    syncing={!SESSION_STATE.hasFetched || isValidating}
+                    isVisible={visibleIds.has(item._id)}
                 />
             </View>
         );
@@ -255,6 +266,8 @@ export default function PostsViewer() {
                     paddingBottom: insets.bottom + 120,
                 }}
                 renderItem={renderItem}
+                onViewableItemsChanged={onViewableItemsChanged}
+                viewabilityConfig={viewabilityConfig}
                 onEndReached={loadMore}
                 onEndReachedThreshold={0.5}
                 refreshControl={
@@ -269,10 +282,10 @@ export default function PostsViewer() {
                     />
                 }
                 removeClippedSubviews={true}
-                initialNumToRender={5} 
+                initialNumToRender={5}
                 maxToRenderPerBatch={5}
-                windowSize={3} 
-                updateCellsBatchingPeriod={100} 
+                windowSize={3}
+                updateCellsBatchingPeriod={100}
                 onScroll={(e) => {
                     const offsetY = e.nativeEvent.contentOffset.y;
                     DeviceEventEmitter.emit("onScroll", offsetY);

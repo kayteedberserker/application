@@ -7,15 +7,15 @@ import {
   Dimensions,
   KeyboardAvoidingView,
   Platform,
-  SafeAreaView,
   ScrollView,
   TextInput,
   TouchableOpacity,
   View
 } from 'react-native';
+import { SafeAreaView } from 'react-native-safe-area-context';
 import { Text } from '../../components/Text';
 import THEME from '../../components/useAppTheme';
-import apiFetch from "../../utils/apiFetch"
+import apiFetch from "../../utils/apiFetch";
 
 const { width } = Dimensions.get('window');
 

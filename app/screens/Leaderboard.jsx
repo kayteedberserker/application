@@ -149,8 +149,7 @@ export default function Leaderboard() {
         if (count > 50) return { title: "NOVICE_WRITER", icon: "⚔️", color: "#a78bfa", next: 100 };
         if (count > 25) return { title: "RESEACHER_SR", icon: "📜", color: "#34d399", next: 50 };
         return { title: "RESEACHER_JR", icon: "🛡️", color: "#94a3b8", next: 25 };
-    };
-
+    }
     const renderItem = ({ item, index }) => {
         if (!item) return null; // Safety check
         const isTop3 = index < 3;
@@ -158,8 +157,8 @@ export default function Leaderboard() {
             index === 0 ? "#fbbf24" :
             index === 1 ? "#94a3b8" :
             index === 2 ? "#cd7f32" :
-            "transparent";
-
+            "transparent"
+        
         if (category === "authors") {
             const postCount = item.postCount || 0;
             const streakCount = item.streak || 0;

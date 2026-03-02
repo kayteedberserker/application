@@ -45,7 +45,7 @@ export default function FirstLaunchScreen() {
   const CustomAlert = useAlert();
   const router = useRouter();
   const isMounted = useRef(true);
-  const { setUser } = useUser(); 
+  const { setUser } = useUser();
   const { refreshStreak } = useStreak();
 
   // Logic States
@@ -55,10 +55,10 @@ export default function FirstLaunchScreen() {
 
   // Data States
   const [username, setUsername] = useState("");
-  const [recoverId, setRecoverId] = useState(""); 
-  const [referrerCode, setReferrerCode] = useState(""); 
-  const [isAutoReferrer, setIsAutoReferrer] = useState(false); 
-  const [isRecoveryMode, setIsRecoveryMode] = useState(false); 
+  const [recoverId, setRecoverId] = useState("");
+  const [referrerCode, setReferrerCode] = useState("");
+  const [isAutoReferrer, setIsAutoReferrer] = useState(false);
+  const [isRecoveryMode, setIsRecoveryMode] = useState(false);
 
   // Selection States
   const [selectedAnimes, setSelectedAnimes] = useState([]);
@@ -78,7 +78,7 @@ export default function FirstLaunchScreen() {
         const storedUser = await AsyncStorage.getItem("mobileUser");
         if (storedUser && isMounted.current) {
           const parsed = JSON.parse(storedUser);
-          setUser(parsed); 
+          setUser(parsed);
           router.replace("/profile");
           return;
         }
@@ -88,8 +88,8 @@ export default function FirstLaunchScreen() {
             const installReferrer = await Application.getInstallReferrerAsync();
             const isInvalid = !installReferrer || installReferrer.includes("google-play") || installReferrer.includes("(not%20set)");
             if (!isInvalid && isMounted.current) {
-                setReferrerCode(installReferrer);
-                setIsAutoReferrer(true); 
+              setReferrerCode(installReferrer);
+              setIsAutoReferrer(true);
             }
           } catch (refErr) { console.log("Referrer not available:", refErr); }
         }
@@ -123,20 +123,20 @@ export default function FirstLaunchScreen() {
 
   const handleNextStep = () => {
     if (step === 1) {
-        if (isRecoveryMode) {
-            if (!recoverId.trim()) return notify("Required", "Please enter your Recovery ID.");
-            // 🔹 Instead of calling handleAction, we now move to Step 2 to collect fresh preferences
-            setStep(2);
-            return;
-        }
-        if (username.trim().length < 3) return notify("Identity Weak", "Callsign must be 3+ characters.");
-        if (FORBIDDEN_NAMES.includes(username.toLowerCase())) return notify("Access Denied", "This callsign is restricted.");
-        setStep(2);
+      if (isRecoveryMode) {
+        if (!recoverId.trim()) return notify("Required", "Please enter your Recovery ID.");
+        // 🔹 Recovery Mode skips affinity steps and triggers the action immediately
+        handleAction();
+        return;
+      }
+      if (username.trim().length < 3) return notify("Identity Weak", "Callsign must be 3+ characters.");
+      if (FORBIDDEN_NAMES.includes(username.toLowerCase())) return notify("Access Denied", "This callsign is restricted.");
+      setStep(2);
     } else if (step === 2) {
-        if (selectedAnimes.length === 0 || selectedGenres.length === 0) {
-            return notify("Input Required", "Select your interests to synchronize.");
-        }
-        setStep(3);
+      if (selectedAnimes.length === 0 || selectedGenres.length === 0) {
+        return notify("Input Required", "Select your interests to synchronize.");
+      }
+      setStep(3);
     }
   };
 
@@ -148,39 +148,40 @@ export default function FirstLaunchScreen() {
       const currentDeviceId = await getFingerprint();
       const pushToken = await registerForPushNotificationsAsync();
       const targetId = isRecoveryMode ? recoverId.trim() : (currentDeviceId || "device-id");
-      
+
       const endpoint = isRecoveryMode ? "/mobile/recover" : "/mobile/register";
 
       const res = await apiFetch(endpoint, {
-          method: "POST",
-          body: JSON.stringify({
-            deviceId: targetId,
-            username: isRecoveryMode ? undefined : username.trim(),
-            pushToken,
-            referredBy: isRecoveryMode ? undefined : referrerCode.trim(), 
-            preferences: {
-                favAnimes: selectedAnimes,
-                favGenres: selectedGenres,
-                favCharacter: favCharacter.trim()
-            }
-          }),
-        }
+        method: "POST",
+        body: JSON.stringify({
+          deviceId: targetId,
+          username: isRecoveryMode ? undefined : username.trim(),
+          pushToken,
+          referredBy: isRecoveryMode ? undefined : referrerCode.trim(),
+          preferences: isRecoveryMode ? undefined : {
+            favAnimes: selectedAnimes,
+            favGenres: selectedGenres,
+            favCharacter: favCharacter.trim()
+          }
+        }),
+      }
       );
 
       const data = await res.json();
       if (!res.ok) throw new Error(data.message || "Operation failed");
 
-      // 🔹 Construct the user object with the newly selected preferences
+      // 🔹 Construct the user object
+      // If recovering, we use preferences returned from the backend
       const userData = {
         deviceId: targetId,
-        username: data.user?.username || username.trim(), 
-        pushToken,
+        username: data.user?.username || username.trim(),
+        pushToken: pushToken || data.user?.pushToken,
         country: data.user?.country || "Unknown",
-        referredBy: referrerCode.trim(),
-        preferences: {
-            favAnimes: selectedAnimes,
-            favGenres: selectedGenres,
-            favCharacter: favCharacter.trim()
+        referredBy: data.user?.referredBy || referrerCode.trim(),
+        preferences: isRecoveryMode ? (data.user?.preferences || {}) : {
+          favAnimes: selectedAnimes,
+          favGenres: selectedGenres,
+          favCharacter: favCharacter.trim()
         }
       };
 
@@ -196,7 +197,7 @@ export default function FirstLaunchScreen() {
   };
 
   // Filter the list based on search query
-  const filteredAnimes = ANIME_LIST.filter(anime => 
+  const filteredAnimes = ANIME_LIST.filter(anime =>
     anime.toLowerCase().includes(searchQuery.toLowerCase())
   );
 
@@ -204,190 +205,192 @@ export default function FirstLaunchScreen() {
 
   return (
     <View style={{ flex: 1, backgroundColor: THEME.bg }} className="px-8 pt-20">
-      
+
       {/* Step Indicator */}
-      <View className="flex-row justify-between mb-12 px-2">
-        {[1, 2, 3].map((s) => (
-           <View key={s} style={{ height: 4, width: (width - 100) / 3, borderRadius: 2, backgroundColor: step >= s ? THEME.accent : THEME.border }} />
-        ))}
-      </View>
+      {!isRecoveryMode && (
+        <View className="flex-row justify-between mb-12 px-2">
+          {[1, 2, 3].map((s) => (
+            <View key={s} style={{ height: 4, width: (width - 100) / 3, borderRadius: 2, backgroundColor: step >= s ? THEME.accent : THEME.border }} />
+          ))}
+        </View>
+      )}
 
       <ScrollView showsVerticalScrollIndicator={false} keyboardShouldPersistTaps="handled">
         {/* Dynamic Header */}
         <View className="items-center mb-10">
           <View style={{ backgroundColor: THEME.card, borderColor: THEME.border }} className="w-16 h-16 rounded-2xl items-center justify-center mb-4 border-2 shadow-xl">
-             <Ionicons 
-                name={step === 1 ? (isRecoveryMode ? "key-outline" : "finger-print") : step === 2 ? "flame-outline" : "heart-outline"} 
-                size={32} 
-                color={THEME.accent} 
-             />
+            <Ionicons
+              name={step === 1 ? (isRecoveryMode ? "key-outline" : "finger-print") : step === 2 ? "flame-outline" : "heart-outline"}
+              size={32}
+              color={THEME.accent}
+            />
           </View>
           <Text style={{ color: THEME.accent }} className="text-[10px] font-black uppercase tracking-[0.4em] mb-1">
-             Phase 0{step}
+            Phase 0{step}
           </Text>
           <Text style={{ color: THEME.text }} className="text-3xl font-black italic uppercase text-center">
-             {step === 1 ? (isRecoveryMode ? "Link Account" : "Identity") : step === 2 ? "Affinities" : "Soul Link"}
+            {step === 1 ? (isRecoveryMode ? "Link Account" : "Identity") : step === 2 ? "Affinities" : "Soul Link"}
           </Text>
         </View>
 
         {/* --- STEP 1: IDENTITY --- */}
         {step === 1 && (
-            <View>
-                {isRecoveryMode ? (
-                    <TextInput
-                        style={{ backgroundColor: THEME.card, borderColor: '#a855f7', color: THEME.text}}
-                        className="w-full border-2 rounded-2xl px-6 py-5 mb-4 font-black italic"
-                        placeholder="ENTER RECOVERY ID..."
-                        placeholderTextColor={THEME.textSecondary + '80'}
-                        value={recoverId}
-                        onChangeText={setRecoverId}
-                    />
-                ) : (
-                    <>
-                        <TextInput
-                            style={{ backgroundColor: THEME.card, borderColor: THEME.border, color: THEME.text }}
-                            className="w-full border-2 rounded-2xl px-6 py-5 mb-6 font-black italic"
-                            placeholder="CENTER AUTHORNAME(username)..."
-                            placeholderTextColor={THEME.textSecondary + '80'}
-                            value={username}
-                            onChangeText={setUsername}
-                        />
-                        <Text style={{ color: THEME.textSecondary }} className="font-black uppercase text-[9px] mb-3 ml-2 tracking-widest">Referral Link (Optional)</Text>
-                        <TextInput
-                            style={{ 
-                                backgroundColor: isAutoReferrer ? THEME.bg : THEME.card, 
-                                borderColor: isAutoReferrer ? '#a855f760' : THEME.border, 
-                                color: isAutoReferrer ? '#a855f7' : THEME.text 
-                            }}
-                            className="w-full border-2 rounded-2xl px-6 py-5 mb-4 font-black italic"
-                            placeholder="UPLINK CODE(referral code)..."
-                            value={referrerCode}
-                            onChangeText={setReferrerCode}
-                            editable={!isAutoReferrer}
-                        />
-                    </>
-                )}
-                <TouchableOpacity onPress={() => setIsRecoveryMode(!isRecoveryMode)} className="mt-2 items-center">
-                    <RNText style={{ color: THEME.accent }} className="text-[10px] font-bold uppercase tracking-widest">
-                        {isRecoveryMode ? "Create New Instead" : "Switch to Recovery Mode"}
-                    </RNText>
-                </TouchableOpacity>
-            </View>
+          <View>
+            {isRecoveryMode ? (
+              <TextInput
+                style={{ backgroundColor: THEME.card, borderColor: '#a855f7', color: THEME.text }}
+                className="w-full border-2 rounded-2xl px-6 py-5 mb-4 font-black italic"
+                placeholder="ENTER RECOVERY ID..."
+                placeholderTextColor={THEME.textSecondary + '80'}
+                value={recoverId}
+                onChangeText={setRecoverId}
+              />
+            ) : (
+              <>
+                <TextInput
+                  style={{ backgroundColor: THEME.card, borderColor: THEME.border, color: THEME.text }}
+                  className="w-full border-2 rounded-2xl px-6 py-5 mb-6 font-black italic"
+                  placeholder="CENTER AUTHORNAME(username)..."
+                  placeholderTextColor={THEME.textSecondary + '80'}
+                  value={username}
+                  onChangeText={setUsername}
+                />
+                <Text style={{ color: THEME.textSecondary }} className="font-black uppercase text-[9px] mb-3 ml-2 tracking-widest">Referral Link (Optional)</Text>
+                <TextInput
+                  style={{
+                    backgroundColor: isAutoReferrer ? THEME.bg : THEME.card,
+                    borderColor: isAutoReferrer ? '#a855f760' : THEME.border,
+                    color: isAutoReferrer ? '#a855f7' : THEME.text
+                  }}
+                  className="w-full border-2 rounded-2xl px-6 py-5 mb-4 font-black italic"
+                  placeholder="UPLINK CODE(referral code)..."
+                  value={referrerCode}
+                  onChangeText={setReferrerCode}
+                  editable={!isAutoReferrer}
+                />
+              </>
+            )}
+            <TouchableOpacity onPress={() => setIsRecoveryMode(!isRecoveryMode)} className="mt-2 items-center">
+              <RNText style={{ color: THEME.accent }} className="text-[10px] font-bold uppercase tracking-widest">
+                {isRecoveryMode ? "Create New Instead" : "Switch to Recovery Mode"}
+              </RNText>
+            </TouchableOpacity>
+          </View>
         )}
 
         {/* --- STEP 2: AFFINITIES --- */}
-        {step === 2 && (
-            <View>
-                <Text style={{ color: THEME.textSecondary }} className="font-black uppercase text-[10px] mb-4 tracking-widest">Local Database Filter</Text>
-                
-                {/* 🔹 Local Search Input */}
-                <View className="mb-6 relative">
-                  <TextInput
-                    style={{ backgroundColor: THEME.card, borderColor: THEME.border, color: THEME.text }}
-                    className="w-full border-2 rounded-2xl px-6 py-4 font-black italic pr-12"
-                    placeholder="FILTER POPULAR..."
-                    placeholderTextColor={THEME.textSecondary + '40'}
-                    value={searchQuery}
-                    onChangeText={setSearchQuery}
-                  />
-                  <View className="absolute right-4 top-4">
-                    <Ionicons name="filter" size={20} color={THEME.textSecondary} />
-                  </View>
-                </View>
+        {step === 2 && !isRecoveryMode && (
+          <View>
+            <Text style={{ color: THEME.textSecondary }} className="font-black uppercase text-[10px] mb-4 tracking-widest">Local Database Filter</Text>
 
-                <Text style={{ color: THEME.textSecondary }} className="font-black uppercase text-[10px] mb-4 tracking-widest">Popular Series (Pick 2+)</Text>
-                <View className="flex-row flex-wrap mb-8">
-                    {filteredAnimes.map((anime) => {
-                        const active = selectedAnimes.includes(anime);
-                        return (
-                            <TouchableOpacity 
-                                key={anime} 
-                                onPress={() => toggleItem(anime, selectedAnimes, setSelectedAnimes)}
-                                style={{ backgroundColor: active ? THEME.accent : THEME.card, borderColor: active ? THEME.accent : THEME.border }}
-                                className="px-5 py-2.5 rounded-full border-2 mr-2 mb-3"
-                            >
-                                <RNText style={{ color: active ? 'white' : THEME.textSecondary }} className="font-black text-[11px] uppercase">{anime}</RNText>
-                            </TouchableOpacity>
-                        );
-                    })}
-                    {filteredAnimes.length === 0 && (
-                      <RNText style={{ color: THEME.textSecondary }} className="italic text-xs py-4 opacity-50">No matches found in standard database...</RNText>
-                    )}
-                </View>
-
-                <Text style={{ color: THEME.textSecondary }} className="font-black uppercase text-[10px] mb-4 tracking-widest">Preferred Genres</Text>
-                <View className="flex-row flex-wrap mb-8">
-                    {GENRE_LIST.map((genre) => {
-                        const active = selectedGenres.includes(genre);
-                        return (
-                            <TouchableOpacity 
-                                key={genre} 
-                                onPress={() => toggleItem(genre, selectedGenres, setSelectedGenres)}
-                                style={{ backgroundColor: active ? '#a855f7' : THEME.card, borderColor: active ? '#a855f7' : THEME.border }}
-                                className="px-5 py-2.5 rounded-full border-2 mr-2 mb-3"
-                            >
-                                <RNText style={{ color: active ? 'white' : THEME.textSecondary }} className="font-black text-[11px] uppercase">{genre}</RNText>
-                            </TouchableOpacity>
-                        );
-                    })}
-                </View>
+            {/* 🔹 Local Search Input */}
+            <View className="mb-6 relative">
+              <TextInput
+                style={{ backgroundColor: THEME.card, borderColor: THEME.border, color: THEME.text }}
+                className="w-full border-2 rounded-2xl px-6 py-4 font-black italic pr-12"
+                placeholder="FILTER POPULAR..."
+                placeholderTextColor={THEME.textSecondary + '40'}
+                value={searchQuery}
+                onChangeText={setSearchQuery}
+              />
+              <View className="absolute right-4 top-4">
+                <Ionicons name="filter" size={20} color={THEME.textSecondary} />
+              </View>
             </View>
+
+            <Text style={{ color: THEME.textSecondary }} className="font-black uppercase text-[10px] mb-4 tracking-widest">Popular Series (Pick 2+)</Text>
+            <View className="flex-row flex-wrap mb-8">
+              {filteredAnimes.map((anime) => {
+                const active = selectedAnimes.includes(anime);
+                return (
+                  <TouchableOpacity
+                    key={anime}
+                    onPress={() => toggleItem(anime, selectedAnimes, setSelectedAnimes)}
+                    style={{ backgroundColor: active ? THEME.accent : THEME.card, borderColor: active ? THEME.accent : THEME.border }}
+                    className="px-5 py-2.5 rounded-full border-2 mr-2 mb-3"
+                  >
+                    <RNText style={{ color: active ? 'white' : THEME.textSecondary }} className="font-black text-[11px] uppercase">{anime}</RNText>
+                  </TouchableOpacity>
+                );
+              })}
+              {filteredAnimes.length === 0 && (
+                <RNText style={{ color: THEME.textSecondary }} className="italic text-xs py-4 opacity-50">No matches found in standard database...</RNText>
+              )}
+            </View>
+
+            <Text style={{ color: THEME.textSecondary }} className="font-black uppercase text-[10px] mb-4 tracking-widest">Preferred Genres</Text>
+            <View className="flex-row flex-wrap mb-8">
+              {GENRE_LIST.map((genre) => {
+                const active = selectedGenres.includes(genre);
+                return (
+                  <TouchableOpacity
+                    key={genre}
+                    onPress={() => toggleItem(genre, selectedGenres, setSelectedGenres)}
+                    style={{ backgroundColor: active ? '#a855f7' : THEME.card, borderColor: active ? '#a855f7' : THEME.border }}
+                    className="px-5 py-2.5 rounded-full border-2 mr-2 mb-3"
+                  >
+                    <RNText style={{ color: active ? 'white' : THEME.textSecondary }} className="font-black text-[11px] uppercase">{genre}</RNText>
+                  </TouchableOpacity>
+                );
+              })}
+            </View>
+          </View>
         )}
 
         {/* --- STEP 3: CHARACTER & FINAL --- */}
-        {step === 3 && (
-            <View className="items-center">
-                <Text style={{ color: THEME.textSecondary }} className="font-black uppercase text-[10px] mb-6 tracking-widest text-center">
-                    Who is your absolute GOAT character?
-                </Text>
-                <TextInput
-                    style={{ backgroundColor: THEME.card, borderColor: THEME.accent, color: THEME.text }}
-                    className="w-full border-2 rounded-[30px] px-6 py-8 mb-10 font-black italic text-2xl text-center"
-                    placeholder="E.G. MADARA"
-                    placeholderTextColor={THEME.textSecondary + '40'}
-                    autoFocus
-                    value={favCharacter}
-                    onChangeText={setFavCharacter}
-                />
-                <View style={{ backgroundColor: THEME.accent + '10' }} className="p-6 rounded-3xl border border-dashed border-sky-500/30">
-                    <Text style={{ color: THEME.textSecondary }} className="text-[11px] text-center leading-5 italic">
-                        "Your path is set. Establishing this link will synchronize your preferences across the Great Library."
-                    </Text>
-                </View>
+        {step === 3 && !isRecoveryMode && (
+          <View className="items-center">
+            <Text style={{ color: THEME.textSecondary }} className="font-black uppercase text-[10px] mb-6 tracking-widest text-center">
+              Who is your absolute GOAT character?
+            </Text>
+            <TextInput
+              style={{ backgroundColor: THEME.card, borderColor: THEME.accent, color: THEME.text }}
+              className="w-full border-2 rounded-[30px] px-6 py-8 mb-10 font-black italic text-2xl text-center"
+              placeholder="E.G. MADARA"
+              placeholderTextColor={THEME.textSecondary + '40'}
+              autoFocus
+              value={favCharacter}
+              onChangeText={setFavCharacter}
+            />
+            <View style={{ backgroundColor: THEME.accent + '10' }} className="p-6 rounded-3xl border border-dashed border-sky-500/30">
+              <Text style={{ color: THEME.textSecondary }} className="text-[11px] text-center leading-5 italic">
+                "Your path is set. Establishing this link will synchronize your preferences across the Great Library."
+              </Text>
             </View>
+          </View>
         )}
 
         {/* --- ACTION BUTTON --- */}
         <View className="mt-12 mb-20">
-            <Pressable
-                onPress={step === 3 ? handleAction : handleNextStep}
-                disabled={isProcessing}
-                style={({ pressed }) => [
-                    {
-                        backgroundColor: isProcessing ? THEME.border : THEME.accent,
-                        transform: [{ scale: pressed ? 0.96 : 1 }],
-                        opacity: isProcessing ? 0.6 : 1
-                    }
-                ]}
-                className="w-full py-6 rounded-[28px] flex-row justify-center items-center shadow-2xl"
-            >
-                {isProcessing ? (
-                    <ActivityIndicator size="small" color="white" />
-                ) : (
-                    <>
-                        <RNText style={{ color: 'white' }} className="font-black italic uppercase tracking-[0.2em] text-lg mr-2">
-                            {step === 3 ? (isRecoveryMode ? "Recover Link" : "Establish Link") : "Next Phase"}
-                        </RNText>
-                        <Ionicons name="arrow-forward" size={20} color="white" />
-                    </>
-                )}
-            </Pressable>
-            
-            {step > 1 && (
-                <TouchableOpacity onPress={() => setStep(step - 1)} className="mt-6 self-center">
-                    <RNText style={{ color: THEME.textSecondary }} className="text-[10px] font-black uppercase tracking-widest opacity-50">Go Back</RNText>
-                </TouchableOpacity>
+          <Pressable
+            onPress={step === 3 || isRecoveryMode ? handleAction : handleNextStep}
+            disabled={isProcessing}
+            style={({ pressed }) => [
+              {
+                backgroundColor: isProcessing ? THEME.border : THEME.accent,
+                transform: [{ scale: pressed ? 0.96 : 1 }],
+                opacity: isProcessing ? 0.6 : 1
+              }
+            ]}
+            className="w-full py-6 rounded-[28px] flex-row justify-center items-center shadow-2xl"
+          >
+            {isProcessing ? (
+              <ActivityIndicator size="small" color="white" />
+            ) : (
+              <>
+                <RNText style={{ color: 'white' }} className="font-black italic uppercase tracking-[0.2em] text-lg mr-2">
+                  {isRecoveryMode ? "Recover Link" : (step === 3 ? "Establish Link" : "Next Phase")}
+                </RNText>
+                <Ionicons name="arrow-forward" size={20} color="white" />
+              </>
             )}
+          </Pressable>
+
+          {step > 1 && !isRecoveryMode && (
+            <TouchableOpacity onPress={() => setStep(step - 1)} className="mt-6 self-center">
+              <RNText style={{ color: THEME.textSecondary }} className="text-[10px] font-black uppercase tracking-widest opacity-50">Go Back</RNText>
+            </TouchableOpacity>
+          )}
         </View>
       </ScrollView>
 

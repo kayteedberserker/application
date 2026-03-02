@@ -12,6 +12,7 @@ import * as Updates from 'expo-updates';
 import { useColorScheme } from "nativewind";
 import { useCallback, useEffect, useRef, useState } from "react";
 import { AppState, BackHandler, DeviceEventEmitter, InteractionManager, Platform, StatusBar, View } from "react-native";
+import Purchases from 'react-native-purchases'; // 🔹 Added RevenueCat Import
 import { SafeAreaProvider } from "react-native-safe-area-context";
 import Toast from 'react-native-toast-message';
 
@@ -29,6 +30,12 @@ import "./globals.css";
 let IS_NAVIGATING_GLOBAL = false;
 let LAST_PROCESSED_NOTIF_ID = null;
 let LAST_PROCESSED_URL = null;
+
+// 🔹 REVENUECAT KEYS
+const REVENUE_CAT_API_KEYS = {
+    ios: "goog_your_ios_key_here", // Replace with actual iOS key if needed
+    android: "goog_cypWcXGzLgDujHkFvHTcUoqUNQi"
+};
 
 // 🔹 NOTIFICATION HANDLER
 Notifications.setNotificationHandler({
@@ -98,14 +105,41 @@ function RootLayoutContent() {
 
     // Refs to track state inside listeners
     const appReadyRef = useRef(false);
-    const isAdReadyRef = useRef(false);
 
     const pendingNavigation = useRef(null);
     const appState = useRef(AppState.currentState);
 
     // Sync refs with state
     useEffect(() => { appReadyRef.current = appReady; }, [appReady]);
-    useEffect(() => { isAdReadyRef.current = isAdReady; }, [isAdReady]);
+
+    // 🔹 REVENUECAT INITIALIZATION LOGIC
+    useEffect(() => {
+        const setupRevenueCat = async () => {
+            try {
+                // Check if already configured to avoid "Duplicate Call" warnings
+                const isConfigured = await Purchases.isConfigured();
+                
+                if (!isConfigured) {
+                    if (Platform.OS === 'ios') {
+                        await Purchases.configure({ apiKey: REVENUE_CAT_API_KEYS.ios });
+                    } else {
+                        await Purchases.configure({ apiKey: REVENUE_CAT_API_KEYS.android });
+                    }
+                    console.log("✅ RevenueCat: Configuration Complete");
+                }
+
+                // Sync user identity if logged in
+                if (user?.uid || user?.id) {
+                    await Purchases.logIn(user.uid || user.id);
+                    console.log("👤 RevenueCat: User Sync Successful");
+                }
+            } catch (e) {
+                console.error("❌ RevenueCat: Initialization Failed", e);
+            }
+        };
+
+        setupRevenueCat();
+    }, [user?.uid, user?.id]);
 
     useEffect(() => {
         const runCacheJanitor = async () => {
@@ -155,7 +189,7 @@ function RootLayoutContent() {
             return;
         }
         // 4. Check Readiness (Queue if not ready)
-        if (!isAdReadyRef.current || !appReadyRef.current) {
+        if (!appReadyRef.current) {
             console.log("⏳ [processRouting] App/Ads not ready. Queuing request...");
             pendingNavigation.current = data;
             return;
@@ -163,6 +197,10 @@ function RootLayoutContent() {
 
         const targetPostId = data.postId || data.id || data.body?.postId;
         const targetType = data.type || data.body?.type;
+        let targetPage = null
+        if (targetType) {
+            targetPage = data.page || data.body?.page;
+        }
         const targetDiscussionId = data.discussion || data.commentId;
 
         let targetPath = "";
@@ -172,6 +210,8 @@ function RootLayoutContent() {
             targetPath = `/post/${targetPostId}`;
         } else if (targetType === "version_update") {
             targetPath = "/";
+        } else if (targetType === "screen" && targetPage == "clanprofile") {
+            targetPath = "/clanprofile"
         }
 
         if (!targetPath) return;
@@ -236,14 +276,14 @@ function RootLayoutContent() {
 
     // 🔹 FLUSH PENDING NAVIGATION (Now waits for router to be ready too)
     useEffect(() => {
-        if (isAdReady && appReady && pendingNavigation.current) {
+        if (appReady && pendingNavigation.current) {
             console.log("🔄 Flushing pending navigation...");
             const data = pendingNavigation.current;
             pendingNavigation.current = null;
             // Delay slightly to ensure UI has cleanly mounted before we push
             setTimeout(() => processRouting(data), 150);
         }
-    }, [isAdReady, appReady, processRouting]);
+    }, [appReady, processRouting]);
 
     useEffect(() => {
         const handleUrl = (url) => {

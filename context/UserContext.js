@@ -5,13 +5,15 @@ import apiFetch from "../utils/apiFetch";
 const UserContext = createContext();
 
 export const UserProvider = ({ children }) => {
-  const [user, setUser] = useState(null); 
+  const [user, setUser] = useState(null);
+   
   const [loading, setLoading] = useState(true);
   const hasFetched = useRef(false); // 🔹 Prevents repeated fetching
 
   useEffect(() => {
     
     const loadUser = async () => {
+      
       if (hasFetched.current) return; // 🔹 Exit if already done
 
       try {

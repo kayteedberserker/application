@@ -7,8 +7,6 @@ import {
     DeviceEventEmitter,
     FlatList,
     Image,
-    Platform,
-    SafeAreaView,
     ScrollView,
     StatusBar,
     TextInput,
@@ -17,7 +15,7 @@ import {
     View
 } from "react-native";
 import Animated, { FadeIn, FadeInDown, Layout } from "react-native-reanimated";
-import AppBanner from '../../components/AppBanner';
+import { SafeAreaView } from 'react-native-safe-area-context';
 import ClanCrest from '../../components/ClanCrest';
 import { Text } from "../../components/Text";
 import apiFetch from "../../utils/apiFetch";
@@ -40,7 +38,6 @@ const resolveUserRank = (totalPosts) => {
 const AuthorCard = ({ author, isDark }) => {
     const router = useRouter();
 
-    // 🔹 UPDATED AURA VISUALS LOGIC
     const getAuraVisuals = (rank) => {
         if (!rank || rank > 10 || rank <= 0) return { color: isDark ? '#1e293b' : '#cbd5e1', label: 'OPERATIVE', icon: 'target' };
         switch (rank) {
@@ -48,7 +45,7 @@ const AuthorCard = ({ author, isDark }) => {
             case 2: return { color: '#ef4444', label: 'YONKO', icon: 'flare' };
             case 3: return { color: '#a855f7', label: 'KAGE', icon: 'moon-waxing-crescent' };
             case 4: return { color: '#3b82f6', label: 'SHOGUN', icon: 'shield-star' };
-            case 5: return { color: '#e0f2fe', label: 'ESPADA 0', icon: 'skull' }; // Reiatsu White
+            case 5: return { color: '#e0f2fe', label: 'ESPADA 0', icon: 'skull' }; 
             case 6: return { color: '#cbd5e1', label: 'ESPADA 1', icon: 'sword-cross' };
             case 7: return { color: '#94a3b8', label: 'ESPADA 2', icon: 'sword-cross' };
             case 8: return { color: '#64748b', label: 'ESPADA 3', icon: 'sword-cross' };
@@ -123,13 +120,9 @@ const AuthorCard = ({ author, isDark }) => {
 };
 
 const ClanCard = ({ clan, isDark }) => {
-    // Calculate stats for display
     const badgeCount = clan.badges ? clan.badges.length : 0;
     const isWar = clan.isInWar;
-    const equippedGlow = clan.specialInventory?.find(i => i.category === 'GLOW' && i.isEquipped);
-  const activeGlowColor = equippedGlow?.visualConfig?.primaryColor || equippedGlow?.visualData?.glowColor || null;
-  console.log(clan)
-  
+
     return (
         <Animated.View entering={FadeInDown.duration(400)} layout={Layout.springify()}>
             <TouchableOpacity
@@ -138,14 +131,12 @@ const ClanCard = ({ clan, isDark }) => {
                     isDark ? "bg-[#0f0f0f] border-zinc-800" : "bg-white border-zinc-100 shadow-sm"
                 }`}
                 style={{
-                    // Add a subtle red glow if in war
                     shadowColor: isWar ? "#ef4444" : "#000",
                     shadowOpacity: isWar ? 0.3 : 0.1,
                     shadowRadius: isWar ? 10 : 4,
                     borderColor: isWar ? 'rgba(239, 68, 68, 0.4)' : isDark ? '#27272a' : '#f4f4f5'
                 }}
             >
-                {/* ⚔️ ACTIVE WAR BANNER OVERLAY */}
                 {isWar && (
                     <View className="absolute top-0 right-0 z-20 bg-red-600/90 px-3 py-1 rounded-bl-xl">
                         <View className="flex-row items-center gap-1">
@@ -158,11 +149,8 @@ const ClanCard = ({ clan, isDark }) => {
                 )}
 
                 <View className="p-4 flex-row items-center">
-                    {/* LEFT: CLAN CREST */}
                     <View className="mr-4 items-center justify-center">
-                        <ClanCrest glowColor={activeGlowColor} isFeed={true} rank={clan.rank || 1} size={70} />
-                        
-                        {/* Rank Badge below crest */}
+                        <ClanCrest rank={clan.rank || 1} size={70} />
                         <View className="mt-2 bg-zinc-900/80 px-2 py-0.5 rounded-full border border-zinc-800">
                              <Text className="text-zinc-400 text-[8px] font-bold uppercase">
                                 LVL {clan.rank || 1}
@@ -170,10 +158,7 @@ const ClanCard = ({ clan, isDark }) => {
                         </View>
                     </View>
 
-                    {/* RIGHT: CONTENT */}
                     <View className="flex-1 justify-center">
-                        
-                        {/* Header: Name & Tag */}
                         <View className="flex-row items-center justify-between mb-1 pr-2">
                             <View className="flex-1 mr-2">
                                 <Text numberOfLines={1} className={`font-black italic uppercase text-lg ${isDark ? 'text-white' : 'text-black'}`}>
@@ -187,15 +172,11 @@ const ClanCard = ({ clan, isDark }) => {
                             </View>
                         </View>
 
-                        {/* Description */}
                         <Text numberOfLines={1} className={`text-[11px] font-medium italic mb-3 ${isDark ? 'text-zinc-500' : 'text-zinc-400'}`}>
                             {clan.description || "A powerful alliance awaiting destiny..."}
                         </Text>
 
-                        {/* Stats Grid */}
                         <View className={`flex-row items-center justify-between border-t pt-2 ${isDark ? 'border-zinc-800/50' : 'border-zinc-100'}`}>
-                            
-                            {/* Members */}
                             <View className="flex-row items-center">
                                 <Ionicons name="people" size={12} color={isDark ? "#a1a1aa" : "#71717a"} />
                                 <Text className={`text-[10px] font-bold ml-1.5 ${isDark ? 'text-zinc-400' : 'text-zinc-500'}`}>
@@ -203,7 +184,6 @@ const ClanCard = ({ clan, isDark }) => {
                                 </Text>
                             </View>
 
-                            {/* Followers */}
                             <View className="flex-row items-center">
                                 <Ionicons name="heart" size={12} color="#f472b6" />
                                 <Text className={`text-[10px] font-bold ml-1.5 ${isDark ? 'text-zinc-400' : 'text-zinc-500'}`}>
@@ -211,7 +191,6 @@ const ClanCard = ({ clan, isDark }) => {
                                 </Text>
                             </View>
 
-                            {/* Badges/Trophies */}
                             <View className="flex-row items-center">
                                 <MaterialCommunityIcons name="trophy" size={12} color="#fbbf24" />
                                 <Text className={`text-[10px] font-bold ml-1.5 ${isDark ? 'text-zinc-400' : 'text-zinc-500'}`}>
@@ -219,7 +198,6 @@ const ClanCard = ({ clan, isDark }) => {
                                 </Text>
                             </View>
 
-                            {/* Recruiting Indicator */}
                             {clan.isRecruiting && (
                                 <View className="flex-row items-center bg-emerald-500/10 px-1.5 py-0.5 rounded border border-emerald-500/20">
                                     <View className="w-1.5 h-1.5 rounded-full bg-emerald-500 mr-1" />
@@ -236,9 +214,7 @@ const ClanCard = ({ clan, isDark }) => {
     );
 };
 
-// --- POST SEARCH CARD ---
 const PostSearchCard = ({ item, isDark }) => {
-    const router = useRouter();
     return (
         <Animated.View entering={FadeIn.duration(500)} layout={Layout.springify()}>
             <TouchableOpacity 
@@ -282,7 +258,6 @@ const PostSearchCard = ({ item, isDark }) => {
     );
 };
 
-// --- MAIN SEARCH SCREEN ---
 const SearchScreen = () => {
     const router = useRouter();
     const systemTheme = useColorScheme(); 
@@ -325,8 +300,7 @@ const SearchScreen = () => {
         if (pageNum === 1) setLoading(true);
         else setLoadingMore(true);
         setIsOffline(false);
-        console.log("hi");
-        
+
         try {
             const response = await apiFetch(`/search?q=${encodeURIComponent(text)}&page=${pageNum}&limit=10`);
             const data = await response.json();
@@ -367,7 +341,6 @@ const SearchScreen = () => {
         }
     };
 
-    // 🔹 UI DATA LOGIC: INJECT ADS EVERY 3 CARDS
     const listData = useMemo(() => {
         const rawResults = [
             ...(activeTab === 'all' || activeTab === 'authors' ? results.authors : []),
@@ -378,33 +351,11 @@ const SearchScreen = () => {
         const processed = [];
         rawResults.forEach((item, index) => {
             processed.push(item);
-            // After every 3rd item, push an Ad placeholder
-            if ((index + 1) % 3 === 0) {
-                processed.push({ 
-                    _id: `ad-${index}`, 
-                    isAd: true, 
-                    adType: index % 2 === 0 ? 'author' : 'post' // Alternates ad style
-                });
-            }
         });
         return processed;
     }, [results, activeTab]);
 
     const renderItem = ({ item }) => {
-        // Handle Ads
-        if (item.isAd) {
-            return item.adType === 'author' 
-               ? <View className="mb-3 mt-3 w-full p-6 border border-dashed border-gray-300 dark:border-gray-800 rounded-[32px] bg-gray-50/50 dark:bg-white/5 items-center justify-center">
-							<Text className="text-[10px] font-bold text-gray-400 uppercase tracking-[0.2em] italic text-center">Sponsored Transmission</Text>
-						<AppBanner size="LARGE" />
-				</View>
-               : <View className="mb-3 mt-3 w-full p-6 border border-dashed border-gray-300 dark:border-gray-800 rounded-[32px] bg-gray-50/50 dark:bg-white/5 items-center justify-center">
-						<Text className="text-[10px] font-bold text-gray-400 uppercase tracking-[0.2em] italic text-center">Sponsored Transmission</Text>
-					<AppBanner size="MEDIUM_RECTANGLE" />
-					</View>;
-         }
-
-        // Handle Organic Content
         if (item.username) return <AuthorCard author={item} isDark={isDark} />;
         if (item.tag) return <ClanCard clan={item} isDark={isDark} />;
         return <PostSearchCard item={item} isDark={isDark} />;
@@ -412,12 +363,10 @@ const SearchScreen = () => {
 
     return (
         <SafeAreaView className={`flex-1 ${isDark ? "bg-[#050505]" : "bg-white"}`}>
+            
             <StatusBar barStyle={isDark ? "light-content" : "dark-content"} />
-
-            <View style={{ height: Platform.OS === 'android' ? StatusBar.currentHeight : 0 }} />
-
             {/* Header / Search Bar */}
-            <View className="px-4 py-3 flex-row items-center">
+            <View className={`px-4 pb-3 flex-row items-center`}>
                 <TouchableOpacity onPress={() => router.back()} className="pr-3">
                     <Ionicons name="chevron-back" size={32} color={isDark ? "white" : "black"} />
                 </TouchableOpacity>
@@ -478,7 +427,6 @@ const SearchScreen = () => {
                 </ScrollView>
             ) : (
                 <>
-                    {/* Tabs Section */}
                     {!isOffline && (
                         <View className="flex-row px-4 py-3 gap-2">
                             {['all', 'authors', 'clans', 'posts'].map((tab) => (
@@ -493,7 +441,6 @@ const SearchScreen = () => {
                         </View>
                     )}
 
-                    {/* Search Results List */}
                     <View className="flex-1 px-4 mt-2">
                         {loading && page === 1 ? (
                             <View className="flex-1 justify-center items-center">
