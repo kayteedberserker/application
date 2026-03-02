@@ -13,6 +13,7 @@ const CHANNELS = [
     { id: 'all', title: 'Global', type: 'feed' },
     { id: 'news', title: 'News', type: 'category' },
     { id: 'memes', title: 'Memes', type: 'category' },
+    { id: 'fanart', title: 'Fan Art', type: 'category' },
     { id: 'polls', title: 'Polls', type: 'category' },
     { id: 'review', title: 'Review', type: 'category' },
     { id: 'gaming', title: 'Gaming', type: 'category' },

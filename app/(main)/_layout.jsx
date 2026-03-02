@@ -7,7 +7,6 @@ import {
     ActivityIndicator,
     Animated,
     DeviceEventEmitter,
-    Modal,
     StatusBar,
     StyleSheet,
     Text,
@@ -27,6 +26,7 @@ import CategoryNav from "./../../components/CategoryNav";
 import TopBar from "./../../components/Topbar";
 
 export default function MainLayout() {
+    // 1. ALL HOOKS MUST BE AT THE TOP
     const { colorScheme, setColorScheme } = useNativeWind();
     const systemScheme = useSystemScheme();
     const router = useRouter();
@@ -37,6 +37,7 @@ export default function MainLayout() {
     const [isNavVisible, setIsNavVisible] = useState(true);
     const [showTop, setShowTop] = useState(false);
     const [showClanMenu, setShowClanMenu] = useState(false);
+    
     const navY = useRef(new Animated.Value(0)).current;
     
     const { user, contextLoading } = useUser();
@@ -48,18 +49,13 @@ export default function MainLayout() {
     const [isUserAuthenticated, setIsUserAuthenticated] = useState(null);
     const [userInClan, setUserInClan] = useState(false);
 
-    // --- DAILY REWARDS STATE ---
-    const [showDailyModal, setShowDailyModal] = useState(false);
-    const [dailyStreak, setDailyStreak] = useState(0);
-    const [canClaimToday, setCanClaimToday] = useState(false);
-    const [isClaiming, setIsClaiming] = useState(false);
-
+    // 2. ALL USEEFFECTS & MEMOIZED VALUES
     useEffect(() => {
         setIsNavVisible(true);
         Animated.timing(navY, {
             toValue: 0,
             duration: 300,
-            useNativeDriver: true,
+            useNativeDriver: true, // 🔹 Back to true for smooth performance
         }).start();
     }, [pathname]);
 
@@ -76,7 +72,7 @@ export default function MainLayout() {
         Animated.loop(
             Animated.sequence([
                 Animated.timing(eventPulse, {
-                    toValue: 1.08,
+                    toValue: 1.05,
                     duration: 1200,
                     useNativeDriver: true,
                 }),
@@ -178,7 +174,7 @@ export default function MainLayout() {
                 if (isNavVisible) {
                     setIsNavVisible(false);
                     Animated.timing(navY, {
-                        toValue: -70,
+                        toValue: -80, // 🔹 Slide out slightly further to clear shadow
                         duration: 200,
                         useNativeDriver: true,
                     }).start();
@@ -189,6 +185,7 @@ export default function MainLayout() {
         return () => subscription.remove();
     }, [lastOffset, isNavVisible]);
 
+    // 3. LOGIC & HANDLERS
     const handleClanPress = async () => {
         try {
             const userClanData = await AsyncStorage.getItem('userClan');
@@ -234,8 +231,13 @@ export default function MainLayout() {
     const translateY_2 = animValue.interpolate({ inputRange: [0, 1], outputRange: [40, 0] });
     const translateY_3 = animValue.interpolate({ inputRange: [0, 1], outputRange: [60, 0] });
     const scale = animValue.interpolate({ inputRange: [0, 1], outputRange: [0, 1] });
-    const opacity = animValue.interpolate({ inputRange: [0, 0.5, 1], outputRange: [0, 0, 1] });
+    const opacityClan = animValue.interpolate({ inputRange: [0, 0.5, 1], outputRange: [0, 0, 1] });
     const rotation = animValue.interpolate({ inputRange: [0, 1], outputRange: ['0deg', '90deg'] });
+
+    const navOpacity = navY.interpolate({
+        inputRange: [-70, -20, 0],
+        outputRange: [0, 0.5, 1]
+    });
 
     const isDark = colorScheme === "dark";
     const handleBackToTop = () => DeviceEventEmitter.emit("doScrollToTop");
@@ -250,6 +252,7 @@ export default function MainLayout() {
         DeviceEventEmitter.emit("navigateSafely", route);
     };
 
+    // 4. NOW IT IS SAFE TO DO EARLY RETURNS
     if (isUserAuthenticated === null) {
         return <AnimeLoading message="LOADING_PAGE" subMessage="Fetching Otaku Archives" />;
     };
@@ -269,9 +272,18 @@ export default function MainLayout() {
         <View style={{ flex: 1, backgroundColor: isDark ? "#000" : "#fff" }}>
             <StatusBar barStyle={isDark ? "light-content" : "dark-content"} />
 
-            <SafeAreaView style={{ zIndex: 100, maxHeight: 130 }}>
+            <SafeAreaView
+                style={{
+                    zIndex: 100,
+                    maxHeight: 130,
+                }}>
                 <TopBar isDark={isDark} />
-                <Animated.View style={{ transform: [{ translateY: navY }], zIndex: 10 }}>
+                <Animated.View
+                    style={{
+                        transform: [{ translateY: navY }],
+                        zIndex: 10,
+                    }}
+                >
                     <CategoryNav isDark={isDark} />
                 </Animated.View>
             </SafeAreaView>
@@ -398,54 +410,66 @@ export default function MainLayout() {
                 </TouchableOpacity>
             </Animated.View>
 
+            {/* CUSTOM FLOATING TAB BAR */}
             <View
                 style={{
                     position: "absolute",
                     bottom: insets.bottom + 15,
                     height: 60,
-                    width: "70%",
-                    alignSelf: "center",
-                    borderRadius: 25,
-                    backgroundColor: isDark ? "#111111" : "#ffffff",
+                    left: 35, 
+                    borderRadius: 30,
+                    backgroundColor: isDark ? "rgba(17, 17, 17, 0.95)" : "rgba(255, 255, 255, 0.95)",
                     flexDirection: "row",
                     alignItems: "center",
-                    justifyContent: "space-around",
+                    paddingHorizontal: 8,
                     elevation: 10,
                     shadowColor: "#000",
-                    shadowOffset: { width: 0, height: 4 },
+                    shadowOffset: { width: 0, height: 5 },
                     shadowOpacity: 0.2,
                     shadowRadius: 5,
-                    borderWidth: isDark ? 1 : 0.5,
-                    borderColor: isDark ? "#1e293b" : "#e2e8f0",
+                    borderWidth: 1,
+                    borderColor: isDark ? "rgba(255, 255, 255, 0.1)" : "rgba(0, 0, 0, 0.05)",
                     zIndex: 999,
                 }}
             >
-                <TouchableOpacity onPress={() => navigateTo("/")} className="items-center justify-center">
-                    <Ionicons
-                        name={pathname === "/" || pathname.startsWith("/categories") ? "home" : "home-outline"}
-                        size={22}
-                        color={pathname === "/" || pathname.startsWith("/categories") ? "#60a5fa" : (isDark ? "#94a3b8" : "#64748b")}
-                    />
-                    <Text style={{ fontSize: 9, fontWeight: '900', color: pathname === "/" || pathname.startsWith("/categories") ? "#60a5fa" : (isDark ? "#94a3b8" : "#64748b"), marginTop: 2 }}>HOME</Text>
-                </TouchableOpacity>
-
-                <TouchableOpacity onPress={() => navigateTo("/authordiary")} className="items-center justify-center">
-                    <Ionicons
-                        name={pathname === "/authordiary" ? "add-circle" : "add-circle-outline"}
-                        size={24}
-                        color={pathname === "/authordiary" ? "#60a5fa" : (isDark ? "#94a3b8" : "#64748b")}
-                    />
-                    <Text style={{ fontSize: 9, fontWeight: '900', color: pathname === "/authordiary" ? "#60a5fa" : (isDark ? "#94a3b8" : "#64748b"), marginTop: 2 }}>ORE DIARY</Text>
-                </TouchableOpacity>
-
-                <TouchableOpacity onPress={() => navigateTo("/profile")} className="items-center justify-center">
-                    <Ionicons
-                        name={pathname === "/profile" ? "person" : "person-outline"}
-                        size={22}
-                        color={pathname === "/profile" ? "#60a5fa" : (isDark ? "#94a3b8" : "#64748b")}
-                    />
-                    <Text style={{ fontSize: 9, fontWeight: '900', color: pathname === "/profile" ? "#60a5fa" : (isDark ? "#94a3b8" : "#64748b"), marginTop: 2 }}>PROFILE</Text>
-                </TouchableOpacity>
+                {tabs.map((tab) => {
+                    const isActive = tab.match(pathname);
+                    return (
+                        <TouchableOpacity 
+                            key={tab.id}
+                            onPress={() => navigateTo(tab.route)} 
+                            activeOpacity={0.9}
+                            style={{
+                                height: 44,
+                                borderRadius: 22,
+                                flexDirection: 'row',
+                                alignItems: 'center',
+                                justifyContent: 'center',
+                                paddingHorizontal: isActive ? 16 : 12,
+                                backgroundColor: isActive ? tab.color : 'transparent',
+                                marginHorizontal: 2,
+                            }}
+                        >
+                            <Ionicons
+                                name={isActive ? tab.icon : `${tab.icon}-outline`}
+                                size={isActive ? 20 : 22}
+                                color={isActive ? "#fff" : (isDark ? "#64748b" : "#94a3b8")}
+                            />
+                            {isActive && (
+                                <Text 
+                                    style={{ 
+                                        fontSize: 11, 
+                                        fontWeight: '900', 
+                                        color: "#fff", 
+                                        marginLeft: 8 
+                                    }}
+                                >
+                                    {tab.label}
+                                </Text>
+                            )}
+                        </TouchableOpacity>
+                    );
+                })}
             </View>
 
             {showClanMenu && (
@@ -457,95 +481,35 @@ export default function MainLayout() {
             )}
 
             <View style={[styles.container, { bottom: insets.bottom + 22 }]}>
-                <Animated.View style={{
-                    opacity,
-                    transform: [{ translateY: translateY_3 || -180 }, { scale }],
-                    marginBottom: 10
-                }}>
-                    <TouchableOpacity
-                        onPress={() => {
-                            setShowClanMenu(false);
-                            navigateTo("/screens/war");
-                        }}
-                        activeOpacity={0.8}
-                        style={[styles.subFab, { backgroundColor: "#ef4444" }]}
-                    >
+                <Animated.View style={{ opacity: opacityClan, transform: [{ translateY: translateY_3 }, { scale }], marginBottom: 10 }}>
+                    <TouchableOpacity onPress={() => { setShowClanMenu(false); navigateTo("/screens/war"); }} activeOpacity={0.8} style={[styles.subFab, { backgroundColor: "#ef4444" }]}>
                         <MaterialCommunityIcons name="sword-cross" size={20} color="#fff" />
                     </TouchableOpacity>
                 </Animated.View>
 
-                {userInClan && <Animated.View style={{
-                    opacity,
-                    transform: [{ translateY: translateY_2 }, { scale }],
-                    marginBottom: 10
-                }}>
-                    <TouchableOpacity
-                        onPress={() => {
-                            setShowClanMenu(false);
-                            navigateTo("/clanprofile");
-                        }}
-                        activeOpacity={0.8}
-                        style={[styles.subFab, { backgroundColor: "#3b82f6" }]}
-                    >
-                        <Ionicons name="shield" size={20} color="#fff" />
-                    </TouchableOpacity>
-                </Animated.View>
-                }
+                {userInClan && (
+                    <Animated.View style={{ opacity: opacityClan, transform: [{ translateY: translateY_2 }, { scale }], marginBottom: 10 }}>
+                        <TouchableOpacity onPress={() => { setShowClanMenu(false); navigateTo("/clanprofile"); }} activeOpacity={0.8} style={[styles.subFab, { backgroundColor: "#3b82f6" }]}>
+                            <Ionicons name="shield" size={20} color="#fff" />
+                        </TouchableOpacity>
+                    </Animated.View>
+                )}
 
-                <Animated.View style={{
-                    opacity,
-                    transform: [{ translateY: translateY_1 }, { scale }],
-                    marginBottom: 12
-                }}>
-                    <TouchableOpacity
-                        onPress={() => {
-                            setShowClanMenu(false);
-                            navigateTo("/screens/discover");
-                        }}
-                        activeOpacity={0.8}
-                        style={[styles.subFab, { backgroundColor: isDark ? "#1e293b" : "#475569" }]}
-                    >
+                <Animated.View style={{ opacity: opacityClan, transform: [{ translateY: translateY_1 }, { scale }], marginBottom: 12 }}>
+                    <TouchableOpacity onPress={() => { setShowClanMenu(false); navigateTo("/screens/discover"); }} activeOpacity={0.8} style={[styles.subFab, { backgroundColor: isDark ? "#1e293b" : "#475569" }]}>
                         <Ionicons name="search" size={20} color="#fff" />
                     </TouchableOpacity>
                 </Animated.View>
 
                 {showTop && (
-                    <TouchableOpacity
-                        onPress={handleBackToTop}
-                        activeOpacity={0.7}
-                        style={[
-                            styles.mainFab,
-                            {
-                                marginBottom: 12,
-                                backgroundColor: isDark ? "#111111" : "#f8fafc",
-                                borderColor: isDark ? "#1e293b" : "#e2e8f0",
-                            }
-                        ]}
-                    >
+                    <TouchableOpacity onPress={handleBackToTop} activeOpacity={0.7} style={[styles.mainFab, { marginBottom: 12, backgroundColor: isDark ? "#111111" : "#f8fafc", borderColor: isDark ? "#1e293b" : "#e2e8f0" }]}>
                         <Ionicons name="chevron-up" size={24} color="#3b82f6" />
                     </TouchableOpacity>
                 )}
 
-                <TouchableOpacity
-                    onPress={handleClanPress}
-                    activeOpacity={0.8}
-                    style={[
-                        styles.mainFab,
-                        {
-                            borderColor: showClanMenu ? (isDark ? "#fff" : "#3b82f6") : (isDark ? "#1e293b" : "#e2e8f0"),
-                            borderWidth: 2,
-                            backgroundColor: showClanMenu
-                                ? (isDark ? "#1e293b" : "#3b82f6")
-                                : (isDark ? "#111111" : "#f8fafc")
-                        }
-                    ]}
-                >
+                <TouchableOpacity onPress={handleClanPress} activeOpacity={0.8} style={[styles.mainFab, { borderColor: showClanMenu ? (isDark ? "#fff" : "#3b82f6") : (isDark ? "#1e293b" : "#e2e8f0"), borderWidth: 2, backgroundColor: showClanMenu ? (isDark ? "#1e293b" : "#3b82f6") : (isDark ? "#111111" : "#f8fafc") }]}>
                     <Animated.View style={{ transform: [{ rotate: rotation }] }}>
-                        <Ionicons
-                            name={showClanMenu ? "close" : "shield-half"}
-                            size={24}
-                            color={showClanMenu ? "#fff" : "#3b82f6"}
-                        />
+                        <Ionicons name={showClanMenu ? "close" : "shield-half"} size={24} color={showClanMenu ? "#fff" : "#3b82f6"} />
                     </Animated.View>
                 </TouchableOpacity>
             </View>
@@ -591,104 +555,6 @@ const styles = StyleSheet.create({
         shadowOffset: { width: 0, height: 2 },
         shadowOpacity: 0.25,
         shadowRadius: 3.84,
-    },
-    modalOverlay: {
-        flex: 1,
-        justifyContent: "center",
-        alignItems: "center",
-        padding: 20,
-    },
-    modalContent: {
-        width: "100%",
-        borderRadius: 24,
-        padding: 24,
-        alignItems: "center",
-        elevation: 10,
-        shadowColor: "#000",
-        shadowOffset: { width: 0, height: 10 },
-        shadowOpacity: 0.3,
-        shadowRadius: 20,
-    },
-    closeButton: {
-        position: "absolute",
-        top: 16,
-        right: 16,
-        zIndex: 10,
-        padding: 4,
-    },
-    modalTitle: {
-        fontSize: 24,
-        fontWeight: "900",
-        marginBottom: 8,
-        marginTop: 10,
-    },
-    modalSubtitle: {
-        fontSize: 14,
-        textAlign: "center",
-        marginBottom: 24,
-        lineHeight: 20,
-    },
-    daysGrid: {
-        flexDirection: "row",
-        flexWrap: "wrap",
-        justifyContent: "space-between",
-        width: "100%",
-        gap: 10,
-        marginBottom: 24,
-    },
-    dayItem: {
-        borderRadius: 16,
-        padding: 12,
-        alignItems: "center",
-        justifyContent: "center",
-    },
-    dayText: {
-        fontSize: 12,
-        fontWeight: "bold",
-    },
-    coinText: {
-        fontSize: 12,
-        fontWeight: "900",
-        marginTop: 4,
-    },
-    claimButton: {
-        width: "100%",
-        height: 56,
-        borderRadius: 16,
-        justifyContent: "center",
-        alignItems: "center",
-    },
-    claimButtonText: {
-        fontSize: 16,
-        fontWeight: "bold",
-    },
-    manualDailyButton: {
-        position: 'absolute',
-        right: 12,
-        top: '37%', 
-        zIndex: 998,
-        width: 40,
-        height: 40,
-        borderRadius: 20,
-        justifyContent: 'center',
-        alignItems: 'center',
-        borderWidth: 1,
-        elevation: 4,
-        shadowColor: "#000",
-        shadowOffset: { width: 0, height: 2 },
-        shadowOpacity: 0.2,
-        shadowRadius: 3,
-    },
-    notificationDot: {
-        position: 'absolute',
-        top: -2,
-        right: -2,
-        width: 12,
-        height: 12,
-        borderRadius: 6,
-        backgroundColor: '#ef4444',
-        borderWidth: 2,
-        borderColor: '#fff',
     },
     eventButtonContainer: {
         position: 'absolute',

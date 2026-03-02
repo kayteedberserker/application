@@ -847,7 +847,7 @@ export default function AuthorDiaryDashboard() {
             >
 
                 {/* --- HEADER --- */}
-                <View className="flex-row justify-between items-end mt-4 mb-8 border-b border-gray-800 pb-6">
+                <View className="flex-row justify-between items-end mt-6 mb-8 border-b border-gray-800 pb-6">
                     <View>
                         <View className="flex-row items-center mb-1">
                             {/* 🔹 Offline/Online Status Indicator */}
@@ -1054,7 +1054,7 @@ export default function AuthorDiaryDashboard() {
                                     <Text className="text-[12px] font-black uppercase text-gray-500 my-2 ml-1">Select Category</Text>
                                     <ScrollView className="mb-3" horizontal showsHorizontalScrollIndicator={false}>
                                         {/* 🔹 If in Clan, show 'Clan' as an option. Otherwise standard list. */}
-                                        {(isInClan ? ["Clan", "News", "Memes", "Polls", "Gaming", "Review"] : ["News", "Memes", "Polls", "Gaming", "Review"]).map((cat) => (
+                                        {(isInClan ? ["Clan", "News", "Memes", "Fanart", "Polls", "Gaming", "Review"] : ["News", "Memes", "Fanart", "Polls", "Gaming", "Review"]).map((cat) => (
                                             <TouchableOpacity
                                                 key={cat}
                                                 onPress={() => setCategory(cat)}
@@ -1070,7 +1070,7 @@ export default function AuthorDiaryDashboard() {
                                         <View className="mt-4 bg-blue-600/5 p-4 rounded-xl border border-blue-600/20">
                                             <Text className="text-[9px] font-black uppercase text-blue-400 mb-2 ml-1">Select Clan Sub-Channel</Text>
                                             <ScrollView horizontal showsHorizontalScrollIndicator={false}>
-                                                {["Memes", "News", "Polls", "Review", "Gaming"].map((subCat) => (
+                                                {["Memes", "News", "Fanart", "Polls", "Review", "Gaming"].map((subCat) => (
                                                     <TouchableOpacity
                                                         key={subCat}
                                                         onPress={() => setClanSubCategory(subCat)}

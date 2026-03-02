@@ -1,10 +1,13 @@
+import FontAwesome from '@expo/vector-icons/FontAwesome';
+import Ionicons from '@expo/vector-icons/Ionicons';
+import MaterialCommunityIcons from '@expo/vector-icons/MaterialCommunityIcons';
 import notifee, { AndroidImportance, EventType } from '@notifee/react-native';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import Constants from 'expo-constants';
 import { useFonts } from "expo-font";
 import * as Linking from 'expo-linking';
 import * as Notifications from "expo-notifications";
-import { Stack, usePathname, useRouter } from "expo-router";
+import { Stack, usePathname, useRootNavigationState, useRouter } from "expo-router";
 import * as Updates from 'expo-updates';
 import { useColorScheme } from "nativewind";
 import { useCallback, useEffect, useRef, useState } from "react";
@@ -84,6 +87,10 @@ function RootLayoutContent() {
     const router = useRouter();
     const pathname = usePathname();
     const { user } = useUser();
+    
+    // Check if the navigation tree is fully mounted and ready
+    const rootNavigationState = useRootNavigationState();
+    const isNavigationReady = rootNavigationState?.key != null;
 
     const [isSyncing, setIsSyncing] = useState(true);
     const [isUpdating, setIsUpdating] = useState(false);
@@ -91,12 +98,14 @@ function RootLayoutContent() {
 
     // Refs to track state inside listeners
     const appReadyRef = useRef(false);
+    const isAdReadyRef = useRef(false);
 
     const pendingNavigation = useRef(null);
     const appState = useRef(AppState.currentState);
 
     // Sync refs with state
     useEffect(() => { appReadyRef.current = appReady; }, [appReady]);
+    useEffect(() => { isAdReadyRef.current = isAdReady; }, [isAdReady]);
 
     useEffect(() => {
         const runCacheJanitor = async () => {
@@ -145,10 +154,9 @@ function RootLayoutContent() {
         if (IS_NAVIGATING_GLOBAL || LAST_PROCESSED_NOTIF_ID === currentNotifId) {
             return;
         }
-
-        // Ads check removed: now only waits for appReady
-        if (!appReadyRef.current) {
-            console.log("⏳ [processRouting] App not ready. Queuing request...");
+        // 4. Check Readiness (Queue if not ready)
+        if (!isAdReadyRef.current || !appReadyRef.current) {
+            console.log("⏳ [processRouting] App/Ads not ready. Queuing request...");
             pendingNavigation.current = data;
             return;
         }
@@ -226,15 +234,16 @@ function RootLayoutContent() {
         setAppReady(true);
     }, []);
 
-    // 🔹 FLUSH PENDING NAVIGATION
+    // 🔹 FLUSH PENDING NAVIGATION (Now waits for router to be ready too)
     useEffect(() => {
-        if (appReady && pendingNavigation.current) {
+        if (isAdReady && appReady && pendingNavigation.current) {
             console.log("🔄 Flushing pending navigation...");
             const data = pendingNavigation.current;
             pendingNavigation.current = null;
-            processRouting(data);
+            // Delay slightly to ensure UI has cleanly mounted before we push
+            setTimeout(() => processRouting(data), 150);
         }
-    }, [appReady, processRouting]);
+    }, [isAdReady, appReady, processRouting]);
 
     useEffect(() => {
         const handleUrl = (url) => {
@@ -283,9 +292,13 @@ function RootLayoutContent() {
         onFetchUpdateAsync();
     }, []);
 
+    // 🔹 PRELOADING ICON FONTS ALONGSIDE CUSTOM FONTS
     const [fontsLoaded] = useFonts({
         "SpaceGrotesk": require("../assets/fonts/SpaceGrotesk.ttf"),
         "SpaceGroteskBold": require("../assets/fonts/SpaceGrotesk.ttf"),
+        ...Ionicons.font,
+        ...MaterialCommunityIcons.font,
+        ...FontAwesome.font,
     });
 
     useEffect(() => {
