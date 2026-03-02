@@ -147,7 +147,7 @@ const MediaPlaceholder = ({ height = 250, onPress, type, thumbUrl, showPlayIcon 
     </View>
   </Pressable>
 );
-
+// --- PLACE THESE OUTSIDE THE COMPONENT FUNCTION ---
 const AUTHOR_CACHE = {};
 const CLAN_CACHE = {};
 // 🎨 --- RENDERER FOR BACKEND SVGS ---
