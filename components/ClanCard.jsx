@@ -24,9 +24,10 @@ export default function ClanCard({ clan, isDark, THEME = { card: '#0a0a0a', text
 
   // --- Special Inventory & Logic extraction ---
   const isVerified = clan.verifiedUntil && new Date(clan.verifiedUntil) > new Date();
+  const verifiedTier = clan.activeCustomizations?.verifiedTier
+  const verifiedColor = verifiedTier == "premium" ? "#facc15" : verifiedTier == "standard" ? "#ef4444" : "#3b82f6"
   const rankInfo = getClanTierDetails(clan.rankTitle || "Wandering Ronin");
-  const highlightColor = isVerified ? "#fbbf24" : (rankInfo.color || THEME.accent);
-
+  const highlightColor = isVerified ? verifiedColor : (rankInfo.color || THEME.accent);
   const equippedGlow = clan.specialInventory?.find(i => i.category === 'GLOW' && i.isEquipped);
   const activeGlowColor = equippedGlow?.visualConfig?.primaryColor || equippedGlow?.visualData?.glowColor || null;
 
@@ -75,32 +76,32 @@ export default function ClanCard({ clan, isDark, THEME = { card: '#0a0a0a', text
 
   const SpecialWatermark = () => {
     if (!equippedWatermark) return null;
-    
+
     const iconSize = watermarkVisual.size || 320;
     const iconColor = watermarkVisual.color || (isDark ? 'white' : 'black');
-    
+
     return (
-      <View 
-        className="absolute" 
-        style={{ 
-          bottom: -60, 
-          right: -60, 
-          opacity: watermarkVisual.opacity || 0.08, 
-          transform: [{ rotate: watermarkVisual.rotation || '-15deg' }] 
+      <View
+        className="absolute"
+        style={{
+          bottom: -20,
+          right: -20,
+          opacity: watermarkVisual.opacity || 0.4,
+          transform: [{ rotate: watermarkVisual.rotation || '-15deg' }]
         }}
         pointerEvents="none"
       >
         {watermarkVisual.svgCode ? (
-          <SvgXml 
-            xml={watermarkVisual.svgCode.replace(/currentColor/g, iconColor)} 
-            width={iconSize} 
-            height={iconSize} 
+          <SvgXml
+            xml={watermarkVisual.svgCode.replace(/currentColor/g, iconColor)}
+            width={iconSize}
+            height={iconSize}
           />
         ) : (
-          <MaterialCommunityIcons 
-            name={watermarkVisual.icon || 'fountain-pen-tip'} 
-            size={iconSize} 
-            color={iconColor} 
+          <MaterialCommunityIcons
+            name={watermarkVisual.icon || 'fountain-pen-tip'}
+            size={iconSize}
+            color={iconColor}
           />
         )}
       </View>
@@ -110,9 +111,9 @@ export default function ClanCard({ clan, isDark, THEME = { card: '#0a0a0a', text
   const CardInner = (
     <View
       className="relative p-8 overflow-hidden"
-      style={{ 
-        borderRadius: 28, 
-        width: 380, 
+      style={{
+        borderRadius: 28,
+        width: 380,
         backgroundColor: isDark ? '#0a0a0a' : '#ffffff',
         borderWidth: equippedBorder ? 0 : 1,
         borderColor: isVerified ? highlightColor : (isDark ? '#262626' : '#f3f4f6')
@@ -154,7 +155,7 @@ export default function ClanCard({ clan, isDark, THEME = { card: '#0a0a0a', text
             style={{ transform: [{ rotate: spin }], borderColor: `${activeGlowColor}40`, width: 160, height: 160 }}
             className="absolute border border-dashed rounded-full"
           />
-          <ClanCrest rank={clan.rank || 1} size={130} glowColor={activeGlowColor} />
+          <ClanCrest rank={clan.rank || 1} size={130} glowColor={activeGlowColor || verifiedColor} />
         </View>
 
         {/* Equipped Special Badges Row */}
@@ -162,18 +163,18 @@ export default function ClanCard({ clan, isDark, THEME = { card: '#0a0a0a', text
           <View className="flex-row gap-2 mb-4">
             {specialBadges.map((badge, bIdx) => (
               <View key={`spec-${bIdx}`} className="bg-white/5 p-1 rounded-full border border-white/10">
-                <ClanBadge badgeName={badge.id} size="xs" /> 
+                <ClanBadge badgeName={badge.id} size="xs" />
               </View>
             ))}
           </View>
         )}
 
-        <View className="flex-row items-center mb-1">
+        <View className="flex-row gap-2 items-center mb-1">
           <Text className="text-3xl font-black italic uppercase tracking-tighter dark:text-white">
             {clan.name}
           </Text>
           {isVerified && (
-            <MaterialCommunityIcons name="check-decagram" size={24} color={highlightColor} style={{ marginLeft: 8 }} />
+            <RemoteSvgIcon size={24} xml={clan.activeCustomizations?.verifiedBadgeXml} />
           )}
         </View>
 
@@ -230,7 +231,7 @@ export default function ClanCard({ clan, isDark, THEME = { card: '#0a0a0a', text
         {/* Progress */}
         <View className="w-full">
           <View className="flex-row justify-between mb-2 px-1">
-            <Text style={{color: activeGlowColor || highlightColor}} className="text-[10px] font-black text-gray-400 uppercase tracking-widest">{clan.rankTitle}</Text>
+            <Text style={{ color: activeGlowColor || highlightColor }} className="text-[10px] font-black text-gray-400 uppercase tracking-widest">{clan.rankTitle}</Text>
             <Text className="text-[10px] font-mono text-gray-400">{currentPoints} / {nextMilestone}</Text>
           </View>
           <View className="h-2 w-full bg-gray-100 dark:bg-gray-800 rounded-full overflow-hidden">
@@ -259,3 +260,9 @@ export default function ClanCard({ clan, isDark, THEME = { card: '#0a0a0a', text
     </View>
   );
 }
+
+
+const RemoteSvgIcon = ({ xml, size = 50, color }) => {
+    if (!xml) return <MaterialCommunityIcons name="help-circle-outline" size={size} color="gray" />;
+    return <SvgXml xml={xml} width={size} height={size} />;
+  };

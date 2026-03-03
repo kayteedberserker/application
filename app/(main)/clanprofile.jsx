@@ -40,17 +40,6 @@ import apiFetch from "../../utils/apiFetch";
 
 const { width, height: SCREEN_HEIGHT } = Dimensions.get("window");
 
-const CLAN_STORE_ITEMS = [
-    { id: 'increase_slot', name: 'Increase Author Slot', cost: 1500, icon: 'account-multiple-plus', type: 'functional' },
-    { id: 'badge_2_days', name: 'Verified Badge - 2 Days', cost: 1000, icon: 'check-decagram', type: 'general' },
-    { id: 'badge_5_days', name: 'Verified Badge - 5 Days', cost: 2000, icon: 'check-decagram', type: 'general' },
-    { id: 'badge_7_days', name: 'Verified Badge - 7 Days', cost: 3000, icon: 'check-decagram', type: 'general' },
-    { id: 'badge_30_days', name: 'Verified Badge - 30 Days', cost: 10000, icon: 'check-decagram', type: 'general' },
-    { id: 'bounty_card_1', name: 'Bounty Card I', cost: 2000, icon: 'cards-playing-outline', type: 'general' },
-    { id: 'bounty_card_2', name: 'Bounty Card II', cost: 5000, icon: 'cards-playing-outline', type: 'general' },
-    { id: 'bounty_card_3', name: 'Bounty Card III', cost: 10000, icon: 'cards-playing-outline', type: 'general' },
-];
-
 // 🔹 Global session tracker to ensure heavy loading only shows once per app run
 let HAS_SHOWN_SESSION_LOADER = false;
 
@@ -73,7 +62,6 @@ const ClanProfile = () => {
     const [isProcessingAction, setIsProcessingAction] = useState(false);
     const { colorScheme } = useColorScheme();
     const isDark = useColorScheme() === "dark";
-    console.log(isDark);
 
 
     // Pagination & Posts State
@@ -168,12 +156,15 @@ const ClanProfile = () => {
         }
     };
     let equippedGlow
+    let verifiedTier
     if (fullData) {
         equippedGlow = fullData.specialInventory?.find(i => i.category === 'GLOW' && i.isEquipped) || {}
+        verifiedTier = fullData.activeCustomizations?.verifiedTier
     }
+    const verifiedColor = verifiedTier == "premium" ? "#facc15" : verifiedTier == "standard" ? "#ef4444" : "#3b82f6"
     const activeGlowColor = equippedGlow?.visualConfig?.primaryColor || equippedGlow?.visualData?.glowColor || null;
     //   console.log(activeGlowColor);
-    const APP_BLUE = activeGlowColor || "#3b82f6";
+    const APP_BLUE = activeGlowColor || verifiedColor || "#3b82f6";
 
     const fetchFullDetails = async () => {
         const shouldShowHeavyLoader = !fullData && !HAS_SHOWN_SESSION_LOADER;
@@ -337,7 +328,7 @@ const ClanProfile = () => {
         ]);
     };
 
-    if ((loading || clanLoading) && !HAS_SHOWN_SESSION_LOADER) {
+    if (loading || clanLoading) {
         return <AnimeLoading message="Syncing Bloodline" subMessage="Consulting the Elder Scrolls..." />;
     }
 
@@ -378,7 +369,7 @@ const ClanProfile = () => {
                             style={{ transform: [{ rotate: spin }], borderColor: `${activeGlowColor || APP_BLUE}40` }}
                             className="absolute -inset-5 border border-dashed rounded-full"
                         />
-                        <ClanCrest glowColor={activeGlowColor} rank={fullData?.rank || 1} size={120} />
+                        <ClanCrest glowColor={activeGlowColor || verifiedColor} rank={fullData?.rank || 1} size={120} />
                     </View>
 
                     {/* Top Actions Column */}
@@ -425,9 +416,12 @@ const ClanProfile = () => {
                         </View>
                     ) : (
                         <>
+                            <View className="flex flex-row gap-2 items-center">
                             <Text className="text-2xl font-black text-black dark:text-white uppercase italic tracking-tighter text-center">
-                                {fullData?.name}
+                                {fullData?.name} 
                             </Text>
+                            <RemoteSvgIcon size={30} xml={fullData?.activeCustomizations?.verifiedBadgeXml}/>
+                            </View>
                             <Text className="text-gray-500 dark:text-gray-400 text-xs italic mt-2 text-center px-6 leading-4">
                                 "{fullData?.description || "No village motto defined."}"
                             </Text>
@@ -710,484 +704,520 @@ const ClanProfile = () => {
 };
 
 // 🎨 --- RENDERER FOR BACKEND SVGS ---
-const RemoteSvgIcon = ({ xml, size = 50, color }) => {
+const RemoteSvgIcon = ({ xml, size = 150, color }) => {
     if (!xml) return <MaterialCommunityIcons name="help-circle-outline" size={size} color={color || "gray"} />;
     return <SvgXml xml={xml} width={size} height={size} color={color} />;
 };
 
 const ClanStoreModal = ({ visible, fetchFullDetails, onClose, isDark }) => {
-    const { coins, clanCoins, processTransaction, isProcessingTransaction } = useCoins();
-    const [loading, setLoading] = useState(true);
-    const [catalog, setCatalog] = useState({ themes: [], standaloneItems: [] });
-    const [selectedTheme, setSelectedTheme] = useState(null);
-    const CustomAlert = useAlert();
+const { coins, clanCoins, processTransaction, isProcessingTransaction } = useCoins();
+const [loading, setLoading] = useState(true);
+const [catalog, setCatalog] = useState({ themes: [], standaloneItems: [] });
+const [selectedTheme, setSelectedTheme] = useState(null);
+const CustomAlert = useAlert();
 
-    useEffect(() => {
-        if (visible) {
-            fetchStoreData();
-        } else {
-            setSelectedTheme(null);
-        }
-    }, [visible]);
+useEffect(() => {
+if (visible) {
+fetchStoreData();
+} else {
+setSelectedTheme(null);
+}
+}, [visible]);
 
-    const fetchStoreData = async () => {
-        try {
-            setLoading(true);
-            const res = await apiFetch(`/store?type=clan`);
-            const data = await res.json();
+const fetchStoreData = async () => {
+try {
+setLoading(true);
+const res = await apiFetch(`/store?type=clan`);
+const data = await res.json();
 
-            if (data.success && data.catalog) {
-                setCatalog({
-                    themes: data.catalog.themes || [],
-                    standaloneItems: data.catalog.standaloneItems || []
-                });
-            }
-        } catch (e) {
-            console.error("Store fetch error:", e);
-        } finally {
-            setLoading(false);
-        }
-    };
+if (data.success && data.catalog) {
+setCatalog({
+themes: data.catalog.themes || [],
+standaloneItems: data.catalog.standaloneItems || []
+});
+}
+} catch (e) {
+console.error("Store fetch error:", e);
+} finally {
+setLoading(false);
+}
+};
 
-    const handlePurchase = async (item) => {
-        const currentBalance = item.currency === 'CC' ? clanCoins : coins;
-        const currencyName = item.currency === 'CC' ? "ClanCoins" : "OreCoins";
+const handlePurchase = async (item) => {
+const currentBalance = item.currency === 'CC' ? clanCoins : coins;
+const currencyName = item.currency === 'CC' ? "ClanCoins" : "OreCoins";
 
-        if (currentBalance < item.price) {
-            CustomAlert("Insufficient Funds", `You need more ${currencyName}.`);
-            return;
-        }
+if (currentBalance < item.price) {
+CustomAlert("Insufficient Funds", `You need more ${currencyName}.`);
+return;
+}
 
-        CustomAlert(
-            "Confirm Purchase",
-            `Buy ${item.name} for ${item.price} ${item.currency || 'CC'}?`,
-            [
-                { text: "Cancel", style: "cancel" },
-                {
-                    text: "Purchase",
-                    onPress: async () => {
-                        const result = await processTransaction('buy_item', item.category, {
-                            itemId: item.id,
-                            price: item.price,
-                            name: item.name,
-                            category: item.category,
-                            currency: item.currency || 'CC',
-                            visualData: item.visualData
-                        });
+CustomAlert(
+"Confirm Purchase",
+`Buy ${item.name} for ${item.price} ${item.currency || 'CC'}?`,
+[
+{ text: "Cancel", style: "cancel" },
+{
+text: "Purchase",
+onPress: async () => {
+const result = await processTransaction('buy_item', item.category, {
+itemId: item.id,
+price: item.price,
+name: item.name,
+category: item.category,
+currency: item.currency || 'CC',
+visualData: item.visualData
+});
+if (result.success) {
+CustomAlert("Success", "Item added to your inventory!");
+if (typeof fetchFullDetails === 'function') {
+fetchFullDetails();
+}
+} else {
+CustomAlert("Error", result.error || "Transaction failed");
+}
+}
+}
+]
+);
+};
 
-                        if (result.success) {
-                            CustomAlert("Success", "Item added to your inventory!");
-                            if (typeof fetchFullDetails === 'function') {
-                                fetchFullDetails();
-                            }
-                        } else {
-                            CustomAlert("Error", result.error || "Transaction failed");
-                        }
-                    }
-                }
-            ]
-        );
-    };
+// 1. STANDALONE ITEM CARD (Rectangular, 100% width, column layout)
+const renderStandaloneCard = (item) => {
+const visual = item.visualData || {};
+const isBorder = item.category === 'BORDER';
 
-    // 1. STANDALONE ITEM CARD (Rectangular, 100% width, column layout)
-    const renderStandaloneCard = (item) => {
-        const visual = item.visualData || {};
-        const isBorder = item.category === 'BORDER';
+return (
+<TouchableOpacity
+key={item.id}
+onPress={() => handlePurchase(item)}
+className="w-full bg-gray-100 dark:bg-[#1a1a1a] mb-3 p-4 rounded-3xl border border-green-900/20 flex-row items-center"
+>
+<View className="h-20 w-20 bg-black/40 rounded-2xl items-center justify-center overflow-hidden border border-white/5 mr-4">
+{isBorder ? (
+<ClanBorder
+color={visual.primaryColor || visual.color || "#ff0000"}
+secondaryColor={visual.secondaryColor}
+animationType={visual.animationType}
+>
+<View className="p-2">
+<Text className="text-[8px] dark:text-white/50 text-center">Border</Text>
+</View>
+</ClanBorder>
+) : (
+<RemoteSvgIcon xml={visual.svgCode} color={visual.glowColor || visual.primaryColor || visual.color} size={45} />
+)}
+</View>
 
-        return (
-            <TouchableOpacity
-                key={item.id}
-                onPress={() => handlePurchase(item)}
-                className="w-full bg-gray-100 dark:bg-[#1a1a1a] mb-3 p-4 rounded-3xl border border-green-900/20 flex-row items-center"
-            >
-                <View className="h-20 w-20 bg-black/40 rounded-2xl items-center justify-center overflow-hidden border border-white/5 mr-4">
-                    {isBorder ? (
-                        <ClanBorder
-                            color={visual.primaryColor || visual.color || "#ff0000"}
-                            secondaryColor={visual.secondaryColor}
-                            animationType={visual.animationType}
-                        >
-                            <View className="p-2">
-                                <Text className="text-[8px] dark:text-white/50 text-center">Border</Text>
-                            </View>
-                        </ClanBorder>
-                    ) : (
-                        <RemoteSvgIcon xml={visual.svgCode} color={visual.glowColor || visual.primaryColor || visual.color} size={45} />
-                    )}
-                </View>
+<View className="flex-1 justify-center">
+<Text className="text-gray-500 font-black text-[8px] uppercase tracking-tighter mb-1">{item.category}</Text>
+<Text className="dark:text-white font-black text-base uppercase" numberOfLines={1}>{item.name}</Text>
+<View className="flex-row items-center mt-1">
+<Text className="text-green-500 font-black text-sm mr-1">{item.price}</Text>
+<CoinIcon type={item.currency || "CC"} size={14} />
+</View>
+</View>
 
-                <View className="flex-1 justify-center">
-                    <Text className="text-gray-500 font-black text-[8px] uppercase tracking-tighter mb-1">{item.category}</Text>
-                    <Text className="dark:text-white font-black text-base uppercase" numberOfLines={1}>{item.name}</Text>
-                    <View className="flex-row items-center mt-1">
-                        <Text className="text-green-500 font-black text-sm mr-1">{item.price}</Text>
-                        <CoinIcon type={item.currency || "CC"} size={14} />
-                    </View>
-                </View>
+<View className="bg-green-500 p-3 rounded-2xl">
+<Ionicons name="cart" size={18} color="white" />
+</View>
+</TouchableOpacity>
+);
+};
 
-                <View className="bg-green-500 p-3 rounded-2xl">
-                    <Ionicons name="cart" size={18} color="white" />
-                </View>
-            </TouchableOpacity>
-        );
-    };
+// 2. THEMED ITEM CARD (Square, used inside horizontal FlatLists within themes)
+const renderThemedItemCard = (item) => {
+const visual = item.visualData || {};
+const isBorder = item.category === 'BORDER';
 
-    // 2. THEMED ITEM CARD (Square, used inside horizontal FlatLists within themes)
-    const renderThemedItemCard = (item) => {
-        const visual = item.visualData || {};
-        const isBorder = item.category === 'BORDER';
+return (
+<TouchableOpacity
+key={item.id}
+onPress={() => handlePurchase(item)}
+className="bg-gray-100 dark:bg-[#1a1a1a] mr-4 p-4 rounded-3xl w-44 border border-green-900/30"
+>
+<View className="mb-3">
+<View className="h-28 w-full bg-black/40 rounded-2xl items-center justify-center overflow-hidden border border-white/5">
+{isBorder ? (
+<ClanBorder
+color={visual.primaryColor || visual.color || "#ff0000"}
+secondaryColor={visual.secondaryColor}
+animationType={visual.animationType}
+>
+<View className="h-10 flex justify-center items-center rounded-sm">
+<Text className="text-[10px] dark:text-white/50">Banner</Text>
+</View>
+</ClanBorder>
+) : (
+<RemoteSvgIcon xml={visual.svgCode} color={visual.glowColor || visual.primaryColor || visual.color} size={60} />
+)}
+</View>
+</View>
+<Text className="dark:text-white font-bold text-xs uppercase" numberOfLines={1}>{item.name}</Text>
+<View className="flex-row items-center mt-2 justify-between">
+<View className="flex-row items-center">
+<Text className="text-green-500 font-black text-xs mr-1">{item.price}</Text>
+<CoinIcon type={item.currency || "CC"} size={12} />
+</View>
+<View className="bg-green-500/10 p-1 rounded-full">
+<Ionicons name="cart" size={12} color="#22c55e" />
+</View>
+</View>
+</TouchableOpacity>
+);
+};
 
-        return (
-            <TouchableOpacity
-                key={item.id}
-                onPress={() => handlePurchase(item)}
-                className="bg-gray-100 dark:bg-[#1a1a1a] mr-4 p-4 rounded-3xl w-44 border border-green-900/30"
-            >
-                <View className="mb-3">
-                    <View className="h-28 w-full bg-black/40 rounded-2xl items-center justify-center overflow-hidden border border-white/5">
-                        {isBorder ? (
-                            <ClanBorder
-                                color={visual.primaryColor || visual.color || "#ff0000"}
-                                secondaryColor={visual.secondaryColor}
-                                animationType={visual.animationType}
-                            >
-                                <View className="h-10 flex justify-center items-center rounded-sm">
-                                    <Text className="text-[10px] dark:text-white/50">Banner</Text>
-                                </View>
-                            </ClanBorder>
-                        ) : (
-                            <RemoteSvgIcon xml={visual.svgCode} color={visual.glowColor || visual.primaryColor || visual.color} size={60} />
-                        )}
-                    </View>
-                </View>
-                <Text className="dark:text-white font-bold text-xs uppercase" numberOfLines={1}>{item.name}</Text>
-                <View className="flex-row items-center mt-2 justify-between">
-                    <View className="flex-row items-center">
-                        <Text className="text-green-500 font-black text-xs mr-1">{item.price}</Text>
-                        <CoinIcon type={item.currency || "CC"} size={12} />
-                    </View>
-                    <View className="bg-green-500/10 p-1 rounded-full">
-                        <Ionicons name="cart" size={12} color="#22c55e" />
-                    </View>
-                </View>
-            </TouchableOpacity>
-        );
-    };
+return (
+<Modal visible={visible} animationType="slide" transparent>
+<View className="flex-1 bg-black/60 justify-end">
+<View className="bg-white dark:bg-[#0a0a0a] h-[85%] rounded-t-[40px] p-6 border-t-4 border-green-500">
 
-    return (
-        <Modal visible={visible} animationType="slide" transparent>
-            <View className="flex-1 bg-black/60 justify-end">
-                <View className="bg-white dark:bg-[#0a0a0a] h-[85%] rounded-t-[40px] p-6 border-t-4 border-green-500">
+{/* Header */}
+<View className="flex-row justify-between items-center mb-6">
+<View>
+<TouchableOpacity
+onPress={() => selectedTheme ? setSelectedTheme(null) : null}
+className="flex-row items-center"
+disabled={!selectedTheme}
+>
+{selectedTheme && <Ionicons name="chevron-back" size={20} color="#22c55e" />}
+<Text className="text-2xl font-black uppercase italic dark:text-white">
+{selectedTheme ? selectedTheme.label : "Black Market"}
+</Text>
+</TouchableOpacity>
+<View className="flex-row items-center">
+<Text className="text-green-500 font-black text-[10px] uppercase mr-1">CC: {clanCoins || 0}</Text>
+<CoinIcon type="CC" size={12} />
+<Text className="text-gray-500 font-black text-[10px] uppercase mx-2">|</Text>
+<Text className="text-blue-500 font-black text-[10px] uppercase mr-1">OC: {coins || 0}</Text>
+<CoinIcon type="OC" size={12} />
+</View>
+</View>
+<TouchableOpacity onPress={onClose}>
+<Ionicons name="close" size={28} color={isDark ? "white" : "black"} />
+</TouchableOpacity>
+</View>
 
-                    {/* Header */}
-                    <View className="flex-row justify-between items-center mb-6">
-                        <View>
-                            <TouchableOpacity
-                                onPress={() => selectedTheme ? setSelectedTheme(null) : null}
-                                className="flex-row items-center"
-                                disabled={!selectedTheme}
-                            >
-                                {selectedTheme && <Ionicons name="chevron-back" size={20} color="#22c55e" />}
-                                <Text className="text-2xl font-black uppercase italic dark:text-white">
-                                    {selectedTheme ? selectedTheme.label : "Black Market"}
-                                </Text>
-                            </TouchableOpacity>
-                            <View className="flex-row items-center">
-                                <Text className="text-green-500 font-black text-[10px] uppercase mr-1">CC: {clanCoins || 0}</Text>
-                                <CoinIcon type="CC" size={12} />
-                                <Text className="text-gray-500 font-black text-[10px] uppercase mx-2">|</Text>
-                                <Text className="text-blue-500 font-black text-[10px] uppercase mr-1">OC: {coins || 0}</Text>
-                                <CoinIcon type="OC" size={12} />
-                            </View>
-                        </View>
-                        <TouchableOpacity onPress={onClose}>
-                            <Ionicons name="close" size={28} color={isDark ? "white" : "black"} />
-                        </TouchableOpacity>
-                    </View>
+{/* Content */}
+{loading ? (
+<View className="flex-1 justify-center items-center">
+<ActivityIndicator size="large" color="#22c55e" />
+<Text className="text-green-500 font-black uppercase text-[10px] mt-4 tracking-widest">Downloading Assets...</Text>
+</View>
+) : (
+<ScrollView showsVerticalScrollIndicator={false}>
+{!selectedTheme ? (
+<View>
+{/* --- STANDALONE ITEMS SECTION (COLUMN LAYOUT - 100% WIDTH) --- */}
+{catalog.standaloneItems.length > 0 && (
+<View className="mb-8">
+<Text className="text-gray-500 font-black uppercase text-xs mb-4 tracking-widest">Village Upgrades</Text>
+{catalog.standaloneItems.map(item => renderStandaloneCard(item))}
+</View>
+)}
 
-                    {/* Content */}
-                    {loading ? (
-                        <View className="flex-1 justify-center items-center">
-                            <ActivityIndicator size="large" color="#22c55e" />
-                            <Text className="text-green-500 font-black uppercase text-[10px] mt-4 tracking-widest">Downloading Assets...</Text>
-                        </View>
-                    ) : (
-                        <ScrollView showsVerticalScrollIndicator={false}>
-                            {!selectedTheme ? (
-                                <View>
-                                    {/* --- STANDALONE ITEMS SECTION (COLUMN LAYOUT - 100% WIDTH) --- */}
-                                    {catalog.standaloneItems.length > 0 && (
-                                        <View className="mb-8">
-                                            <Text className="text-gray-500 font-black uppercase text-xs mb-4 tracking-widest">Village Upgrades</Text>
-                                            {catalog.standaloneItems.map(item => renderStandaloneCard(item))}
-                                        </View>
-                                    )}
+{/* --- THEMES SECTION (GRID LAYOUT) --- */}
+<Text className="text-gray-500 font-black uppercase text-xs mb-4 tracking-widest">Thematic Collections</Text>
+<View className="flex-row flex-wrap justify-between">
+{catalog.themes.map((theme) => (
+<TouchableOpacity
+key={theme.id}
+onPress={() => setSelectedTheme(theme)}
+className="w-[48%] bg-gray-100 dark:bg-[#1a1a1a] p-6 rounded-3xl mb-4 items-center border border-gray-800"
+>
+{/* Remote SVG for Theme Icon */}
+<View className="mb-2">
+<RemoteSvgIcon xml={theme.iconsvg} color="#22c55e" size={120} />
+</View>
+<Text className="dark:text-white font-black uppercase mt-1 text-center text-xs">{theme.label}</Text>
+<Text className="text-gray-500 text-[8px] uppercase">{theme.items?.length || 0} Items</Text>
+</TouchableOpacity>
+))}
+</View>
+</View>
+) : (
+<View>
+{/* --- ITEMS INSIDE SELECTED THEME (HORIZONTAL ROWS) --- */}
+{['VERIFIED', 'UPGRADE', 'BADGE', 'THEME', 'BACKGROUND', "WATERMARK", 'EFFECT', 'GLOW', 'BORDER'].map((cat) => {
+const items = selectedTheme.items?.filter(i => i.category?.toUpperCase() === cat) || [];
+if (items.length === 0) return null;
 
-                                    {/* --- THEMES SECTION (GRID LAYOUT) --- */}
-                                    <Text className="text-gray-500 font-black uppercase text-xs mb-4 tracking-widest">Thematic Collections</Text>
-                                    <View className="flex-row flex-wrap justify-between">
-                                        {catalog.themes.map((theme) => (
-                                            <TouchableOpacity
-                                                key={theme.id}
-                                                onPress={() => setSelectedTheme(theme)}
-                                                className="w-[48%] bg-gray-100 dark:bg-[#1a1a1a] p-6 rounded-3xl mb-4 items-center border border-gray-800"
-                                            >
-                                                {/* Remote SVG for Theme Icon */}
-                                                <View className="mb-2">
-                                                    <RemoteSvgIcon xml={theme.iconsvg} color="#22c55e" size={40} />
-                                                </View>
-                                                <Text className="dark:text-white font-black uppercase mt-1 text-center text-xs">{theme.label}</Text>
-                                                <Text className="text-gray-500 text-[8px] uppercase">{theme.items?.length || 0} Items</Text>
-                                            </TouchableOpacity>
-                                        ))}
-                                    </View>
-                                </View>
-                            ) : (
-                                <View>
-                                    {/* --- ITEMS INSIDE SELECTED THEME (HORIZONTAL ROWS) --- */}
-                                    {['VERIFIED', 'UPGRADE', 'BADGE', 'THEME', 'BACKGROUND', "WATERMARK", 'EFFECT', 'GLOW', 'BORDER'].map((cat) => {
-                                        const items = selectedTheme.items?.filter(i => i.category?.toUpperCase() === cat) || [];
-                                        if (items.length === 0) return null;
+return (
+<View key={cat} className="mb-6">
+<Text className="text-gray-500 font-black uppercase text-xs mb-3 tracking-widest">{cat}S</Text>
+<FlatList
+data={items}
+horizontal
+showsHorizontalScrollIndicator={false}
+keyExtractor={item => item.id}
+renderItem={({ item }) => renderThemedItemCard(item)}
+/>
+</View>
+);
+})}
+</View>
+)}
+</ScrollView>
+)}
 
-                                        return (
-                                            <View key={cat} className="mb-6">
-                                                <Text className="text-gray-500 font-black uppercase text-xs mb-3 tracking-widest">{cat}S</Text>
-                                                <FlatList
-                                                    data={items}
-                                                    horizontal
-                                                    showsHorizontalScrollIndicator={false}
-                                                    keyExtractor={item => item.id}
-                                                    renderItem={({ item }) => renderThemedItemCard(item)}
-                                                />
-                                            </View>
-                                        );
-                                    })}
-                                </View>
-                            )}
-                        </ScrollView>
-                    )}
-
-                    {isProcessingTransaction && (
-                        <View className="absolute inset-0 bg-black/60 items-center justify-center rounded-t-[40px]">
-                            <ActivityIndicator size="large" color="#22c55e" />
-                            <Text className="text-green-500 font-black uppercase text-[10px] mt-4">Syncing with Chain...</Text>
-                        </View>
-                    )}
-                </View>
-            </View>
-        </Modal>
-    );
+{isProcessingTransaction && (
+<View className="absolute inset-0 bg-black/60 items-center justify-center rounded-t-[40px]">
+<ActivityIndicator size="large" color="#22c55e" />
+<Text className="text-green-500 font-black uppercase text-[10px] mt-4">Syncing with Chain...</Text>
+</View>
+)}
+</View>
+</View>
+</Modal>
+);
 };
 
 const ClanInventoryModal = ({ visible, onClose, fetchFullDetails, clan, isDark, user }) => {
+const [filter, setFilter] = useState('ALL');
+const [isUpdating, setIsUpdating] = useState(false);
+const CustomAlert = useAlert();
 
-    const [filter, setFilter] = useState('ALL');
-    const [isUpdating, setIsUpdating] = useState(false);
-    const CustomAlert = useAlert();
-    const getExpirationText = (expiry) => {
-        if (!expiry) return null;
-        const now = new Date();
-        const end = new Date(expiry);
-        const diff = end - now;
+const getExpirationText = (expiry) => {
+if (!expiry) return null;
+const now = new Date();
+const end = new Date(expiry);
+const diff = end - now;
 
-        if (diff <= 0) return "Expired";
+if (diff <= 0) return "Expired";
 
-        const days = Math.floor(diff / (1000 * 60 * 60 * 24));
-        if (days > 0) return `${days}d remaining`;
+const days = Math.floor(diff / (1000 * 60 * 60 * 24));
+if (days > 0) return `${days}d remaining`;
 
-        const hours = Math.floor(diff / (1000 * 60 * 60));
-        return `${hours}h remaining`;
-    };
-    // We use inventory as identified in your backend update
-    let inventory
-    if (clan) {
-        inventory = clan?.specialInventory || []
-    }
+const hours = Math.floor(diff / (1000 * 60 * 60));
+return `${hours}h remaining`;
+};
+const now = new Date();
+const expiry = new Date(clan.verifiedUntil);
 
-    const categories = ['ALL', 'WATERMARK', 'BADGE', "BACKGROUND", 'GLOW', 'BORDER'];
-    const handleEquipToggle = async (selectedItem) => {
+// 🛠️ LOGIC: Construct the "Virtual" Verified Item
+const getVerifiedItem = () => {
+if (!clan?.verifiedUntil) return null;
 
-        if (isUpdating) return
-        setIsUpdating(true); // Triggers your loading animation
+const now = new Date();
+const expiry = new Date(clan.verifiedUntil);
+if (expiry < now) return null; // Don't show if expired
 
-        try {
-            const res = await apiFetch(`/clans/${clan.tag}`, {
-                method: 'PATCH',
-                headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({
-                    deviceId: user.deviceId,
-                    action: "EQUIP_ITEM",
-                    payload: { itemId: selectedItem.itemId }
-                })
-            });
+return {
+itemId: 'active_verification_status',
+name: `${clan.activeCustomizations?.verifiedTier || 'Clan'} Verification`,
+category: 'VERIFIED',
+isEquipped: true,
+expiresAt: clan.verifiedUntil,
+visualConfig: {
+svgCode: clan.activeCustomizations?.verifiedBadgeXml,
+primaryColor: clan.activeCustomizations?.verifiedTier === 'premium' ? '#facc15' : 
+clan.activeCustomizations?.verifiedTier === 'standard' ? '#ef4444' : '#3b82f6'
+}
+};
+};
 
-            const data = await res.json();
+// Prepare Inventory
+let inventory = clan?.specialInventory ? [...clan.specialInventory] : [];
 
-            if (res.ok) {
-                // Re-fetch the clan details to update the UI globally
-                if (typeof fetchFullDetails === 'function') {
-                    fetchFullDetails();
-                }
-            } else {
-                throw new Error(data.message || "Jutsu failed to activate");
-            }
-        } catch (err) {
-            console.error("Equip Error:", err);
-            CustomAlert("Scroll Error", "Connection to the village lost.");
-        } finally {
-            setIsUpdating(false);
-        }
-    };
+// Inject the verified badge if active
+const verifiedItem = getVerifiedItem();
+if (verifiedItem) {
+inventory.unshift(verifiedItem); // Put it at the very top
+}
 
-    const filteredInventory = filter === 'ALL'
-        ? inventory
-        : inventory.filter(item => item.category === filter);
+const categories = ['ALL', 'VERIFIED', 'WATERMARK', 'BADGE', "BACKGROUND", 'GLOW', 'BORDER'];
 
-    return (
-        <Modal visible={visible} animationType="slide" transparent>
-            <View className="flex-1 bg-black/60 justify-end">
-                <View className="bg-white dark:bg-[#0d1117] h-[85%] rounded-t-[40px] p-6 border-t-4 border-blue-500">
+const handleEquipToggle = async (selectedItem) => {
+// Prevent interaction with the "Status" badge
+if (selectedItem.itemId === 'active_verification_status') return;
 
-                    {/* Header */}
-                    <View className="flex-row justify-between items-center mb-4">
-                        <View>
-                            <Text className="text-2xl font-black uppercase italic dark:text-white">Arsenal</Text>
-                            <Text className="text-blue-500 font-black text-[10px] uppercase tracking-widest">
-                                {inventory.length} Collectibles Owned
-                            </Text>
-                        </View>
-                        <TouchableOpacity onPress={onClose}>
-                            <Ionicons name="close" size={28} color={isDark ? "white" : "black"} />
-                        </TouchableOpacity>
-                    </View>
+if (isUpdating) return;
+setIsUpdating(true);
 
-                    {/* Category Tabs */}
-                    <View className="flex-row mb-6">
-                        <ScrollView horizontal showsHorizontalScrollIndicator={false}>
-                            {categories.map((cat) => (
-                                <TouchableOpacity
-                                    key={cat}
-                                    onPress={() => setFilter(cat)}
-                                    className={`mr-2 px-4 py-2 rounded-full border ${filter === cat ? 'bg-blue-500 border-blue-500' : 'bg-transparent border-gray-700'}`}
-                                >
-                                    <Text className={`text-[10px] font-black uppercase ${filter === cat ? 'text-white' : 'text-gray-500'}`}>
-                                        {cat}
-                                    </Text>
-                                </TouchableOpacity>
-                            ))}
-                        </ScrollView>
-                    </View>
+try {
+const res = await apiFetch(`/clans/${clan.tag}`, {
+method: 'PATCH',
+headers: { 'Content-Type': 'application/json' },
+body: JSON.stringify({
+deviceId: user.deviceId,
+action: "EQUIP_ITEM",
+payload: { itemId: selectedItem.itemId }
+})
+});
 
-                    {/* Inventory List */}
-                    <ScrollView showsVerticalScrollIndicator={false} contentContainerStyle={{ paddingBottom: 40 }}>
-                        {filteredInventory.length > 0 ? (
-                            filteredInventory.map((item, idx) => {
-                                const expiration = getExpirationText(item.expiresAt);
-                                const isExpired = expiration === "Expired";
-                                const isBorder = item.category === 'BORDER';
-                                const visual = item.visualConfig || {};
+const data = await res.json();
 
-                                const PreviewIcon = (
-                                    <View className={`w-20 h-20 bg-black/20 items-center justify-center rounded-2xl overflow-hidden ${isBorder ? '' : 'border border-white/5'}`}>
-                                        <RemoteSvgIcon xml={visual.svgCode} color={visual.primaryColor} size={60} />
-                                    </View>
-                                );
+if (res.ok) {
+if (typeof fetchFullDetails === 'function') {
+fetchFullDetails();
+}
+} else {
+throw new Error(data.message || "Jutsu failed to activate");
+}
+} catch (err) {
+console.error("Equip Error:", err);
+CustomAlert("Scroll Error", "Connection to the village lost.");
+} finally {
+setIsUpdating(false);
+}
+};
 
-                                return (
-                                    <View
-                                        key={item.itemId || idx}
-                                        className={`flex-row items-center p-4 rounded-3xl mb-3 border ${item.isEquipped
-                                            ? 'bg-blue-500/10 border-blue-500'
-                                            : 'bg-gray-50 dark:bg-[#161b22] border-gray-100 dark:border-gray-800'
-                                            } ${isExpired ? 'opacity-50' : ''}`}
-                                    >
-                                        {/* Icon Container */}
-                                        <View className="mr-4">
-                                            {isBorder ? (
-                                                <ClanBorder
-                                                    color={visual.primaryColor || visual.color || "#ff0000"}
-                                                    secondaryColor={visual.secondaryColor}
-                                                    animationType={visual.animationType}
-                                                    duration={visual.duration}
-                                                >
-                                                    <View className="h-10 flex justify-center items-center rounded-sm">
-                                                        <Text>Clan Banner</Text>
-                                                    </View>
-                                                </ClanBorder>
-                                            ) : (
-                                                PreviewIcon
-                                            )}
-                                        </View>
+const filteredInventory = filter === 'ALL'
+? inventory
+: inventory.filter(item => item.category === filter);
 
-                                        {/* Info Container */}
-                                        <View className="flex-1">
-                                            <Text className="font-black dark:text-white text-sm uppercase italic">
-                                                {item.name}
-                                            </Text>
+return (
+<Modal visible={visible} animationType="slide" transparent>
+<View className="flex-1 bg-black/60 justify-end">
+<View className="bg-white dark:bg-[#0d1117] h-[85%] rounded-t-[40px] p-6 border-t-4 border-blue-500">
 
-                                            <View className="flex-row mt-2 items-center">
-                                                <Text className="text-[9px] text-gray-500 uppercase font-bold tracking-widest">
-                                                    {item.category}
-                                                </Text>
+{/* Header */}
+<View className="flex-row justify-between items-center mb-4">
+<View>
+<Text className="text-2xl font-black uppercase italic dark:text-white">Arsenal</Text>
+<Text className="text-blue-500 font-black text-[10px] uppercase tracking-widest">
+{expiry > now  ? clan?.specialInventory?.length + 1 || 1 : clan?.specialInventory?.length || 0} Collectibles Owned
+</Text>
+</View>
+<TouchableOpacity onPress={onClose}>
+<Ionicons name="close" size={28} color={isDark ? "white" : "black"} />
+</TouchableOpacity>
+</View>
 
-                                                {expiration && (
-                                                    <>
-                                                        <Text className="text-gray-600 dark:text-gray-400 text-[9px] mx-1">•</Text>
-                                                        <View className="flex-row items-center">
-                                                            <MaterialCommunityIcons
-                                                                name="clock-outline"
-                                                                size={10}
-                                                                color={isExpired ? "#ef4444" : "#6b7280"}
-                                                            />
-                                                            <Text className={`text-[9px] font-bold ml-1 ${isExpired ? 'text-red-500' : 'text-gray-500'}`}>
-                                                                {expiration}
-                                                            </Text>
-                                                        </View>
-                                                    </>
-                                                )}
-                                            </View>
-                                        </View>
+{/* Category Tabs */}
+<View className="flex-row mb-6">
+<ScrollView horizontal showsHorizontalScrollIndicator={false}>
+{categories.map((cat) => (
+<TouchableOpacity
+key={cat}
+onPress={() => setFilter(cat)}
+className={`mr-2 px-4 py-2 rounded-full border ${filter === cat ? 'bg-blue-500 border-blue-500' : 'bg-transparent border-gray-700'}`}
+>
+<Text className={`text-[10px] font-black uppercase ${filter === cat ? 'text-white' : 'text-gray-500'}`}>
+{cat}
+</Text>
+</TouchableOpacity>
+))}
+</ScrollView>
+</View>
 
-                                        {/* Action Button */}
-                                        {item.category !== "VERIFIED" && (
-                                            <TouchableOpacity
-                                                disabled={isUpdating}
-                                                onPress={() => handleEquipToggle(item)}
-                                                className={`px-6 py-3 rounded-xl ${item.isEquipped ? 'bg-green-500' : 'bg-blue-600'
-                                                    } ${isUpdating ? 'opacity-50' : ''}`}
-                                            >
-                                                {isUpdating ? (
-                                                    <ActivityIndicator size="small" color="white" />
-                                                ) : (
-                                                    <Text className="text-white text-[10px] font-black uppercase">
-                                                        {item.isEquipped ? 'Active' : 'Equip'}
-                                                    </Text>
-                                                )}
-                                            </TouchableOpacity>
-                                        )}
+{/* Inventory List */}
+<ScrollView showsVerticalScrollIndicator={false} contentContainerStyle={{ paddingBottom: 40 }}>
+{filteredInventory.length > 0 ? (
+filteredInventory.map((item, idx) => {
+const expiration = getExpirationText(item.expiresAt);
+const isExpired = expiration === "Expired";
+const isBorder = item.category === 'BORDER';
+const isStatusBadge = item.itemId === 'active_verification_status';
+const visual = item.visualConfig || {};
 
-                                        {/* Show 'Delete' or 'Expired' label if it's dead */}
-                                        {isExpired && (
-                                            <View className="px-4 py-2 bg-red-500/10 rounded-lg border border-red-500/20">
-                                                <Text className="text-red-500 text-[10px] font-black uppercase">Void</Text>
-                                            </View>
-                                        )}
-                                    </View>
-                                );
-                            })
-                        ) : (
-                            <View className="items-center mt-20 opacity-30">
-                                <MaterialCommunityIcons name="package-variant" size={80} color="gray" />
-                                <Text className="mt-4 font-black uppercase text-xs tracking-widest dark:text-white">
-                                    No {filter === 'ALL' ? '' : filter} items
-                                </Text>
-                            </View>
-                        )}
-                    </ScrollView>
-                </View>
-            </View>
-        </Modal>
-    );
+const PreviewIcon = (
+<View className={`w-20 h-20 bg-black/20 items-center justify-center rounded-2xl overflow-hidden ${isBorder ? '' : 'border border-white/5'}`}>
+<RemoteSvgIcon xml={visual.svgCode} color={visual.primaryColor} size={60} />
+</View>
+);
+
+return (
+<View
+key={item.itemId || idx}
+className={`flex-row items-center p-4 rounded-3xl mb-3 border ${item.isEquipped
+? 'bg-blue-500/10 border-blue-500'
+: 'bg-gray-50 dark:bg-[#161b22] border-gray-100 dark:border-gray-800'
+} ${isExpired ? 'opacity-50' : ''}`}
+>
+{/* Icon Container */}
+<View className="mr-4">
+{isBorder ? (
+<ClanBorder
+color={visual.primaryColor || visual.color || "#ff0000"}
+secondaryColor={visual.secondaryColor}
+animationType={visual.animationType}
+duration={visual.duration}
+>
+<View className="h-10 w-20 flex justify-center items-center rounded-sm">
+<Text className="text-[8px] font-black dark:text-white uppercase">Preview</Text>
+</View>
+</ClanBorder>
+) : (
+PreviewIcon
+)}
+</View>
+
+{/* Info Container */}
+<View className="flex-1">
+<Text className="font-black dark:text-white text-sm uppercase italic">
+{item.name}
+</Text>
+
+<View className="flex-row mt-2 items-center">
+<View className={`px-2 py-0.5 rounded-md ${isStatusBadge ? 'bg-blue-500' : 'bg-gray-700'}`}>
+<Text className="text-[8px] text-white uppercase font-black tracking-widest">
+{item.category}
+</Text>
+</View>
+
+{expiration && (
+<>
+<Text className="text-gray-600 dark:text-gray-400 text-[9px] mx-1">•</Text>
+<View className="flex-row items-center">
+<MaterialCommunityIcons
+name="clock-outline"
+size={10}
+color={isExpired ? "#ef4444" : "#6b7280"}
+/>
+<Text className={`text-[9px] font-bold ml-1 ${isExpired ? 'text-red-500' : 'text-gray-500'}`}>
+{expiration}
+</Text>
+</View>
+</>
+)}
+</View>
+</View>
+
+{/* Action Button */}
+{!isStatusBadge ? (
+<TouchableOpacity
+disabled={isUpdating}
+onPress={() => handleEquipToggle(item)}
+className={`px-6 py-3 rounded-xl ${item.isEquipped ? 'bg-green-500' : 'bg-blue-600'
+} ${isUpdating ? 'opacity-50' : ''}`}
+>
+{isUpdating ? (
+<ActivityIndicator size="small" color="white" />
+) : (
+<Text className="text-white text-[10px] font-black uppercase">
+{item.isEquipped ? 'Active' : 'Equip'}
+</Text>
+)}
+</TouchableOpacity>
+) : (
+<View className="px-4 py-3 bg-blue-500/20 rounded-xl border border-blue-500/30">
+<Text className="text-blue-500 text-[10px] font-black uppercase italic">In Effect</Text>
+</View>
+)}
+
+{/* Show 'Void' if expired */}
+{isExpired && !isStatusBadge && (
+<View className="px-4 py-2 bg-red-500/10 rounded-lg border border-red-500/20 ml-2">
+<Text className="text-red-500 text-[10px] font-black uppercase">Void</Text>
+</View>
+)}
+</View>
+);
+})
+) : (
+<View className="items-center mt-20 opacity-30">
+<MaterialCommunityIcons name="package-variant" size={80} color="gray" />
+<Text className="mt-4 font-black uppercase text-xs tracking-widest dark:text-white">
+No {filter === 'ALL' ? '' : filter} items
+</Text>
+</View>
+)}
+</ScrollView>
+</View>
+</View>
+</Modal>
+);
 };
 // --- Sub Components
 

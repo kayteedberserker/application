@@ -15,7 +15,7 @@ export const ClanProvider = ({ children }) => {
     const hasSynced = useRef(false);
     const [fullData, setFullData] = useState()
     const [cCoins, setClanCoins] = useState(0)
-
+    const [clanRank, setClanRank] = useState(0)
     // 1. Initial Load from AsyncStorage
     useEffect(() => {
         const loadStoredClan = async () => {
@@ -88,6 +88,7 @@ export const ClanProvider = ({ children }) => {
             const data = await res.json();
             setFullData(data?.joinRequests.length);
             setClanCoins(data?.spendablePoints || 0)
+            setClanRank(data?.rank)
         } catch (err) {
             console.error("Fetch Details Error:", err);
         }
@@ -107,6 +108,7 @@ export const ClanProvider = ({ children }) => {
 
             if (data.userInClan) {
                 setUserClan(data.userClan);
+                setClanRank(data.rank)
                 await AsyncStorage.setItem("userClan", JSON.stringify(data.userClan));
                 // 🔹 Trigger notification check once clan is confirmed
                 checkWarNotifications(data.userClan.tag);
@@ -144,6 +146,7 @@ export const ClanProvider = ({ children }) => {
                 userClan,
                 allClans,
                 isLoading,
+                clanRank,
                 fullData,
                 cCoins,
                 warActionsCount, // 🔴 Exported for global Red Dot

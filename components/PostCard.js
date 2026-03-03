@@ -418,7 +418,7 @@ export default function PostCard({ post, setPosts, isFeed, hideMedia, syncing, s
   const displayBadge = author.equippedBadges?.length > 0
     ? author.equippedBadges[Math.floor(Math.random() * author.equippedBadges.length)]
     : null;
-    
+
   const renderContent = useMemo(() => {
     const maxLength = similarPosts ? 100 : 150;
     if (isFeed) {
@@ -577,8 +577,10 @@ export default function PostCard({ post, setPosts, isFeed, hideMedia, syncing, s
         <View className="mb-5">
           {isClanPost && clanInfo && (() => {
             const isVerified = clanInfo.verifiedUntil && new Date(clanInfo.verifiedUntil) > new Date();
-            const highlightColor = isVerified ? "#fbbf24" : THEME.accent;
-
+            const verifiedTier = clanInfo.activeCustomizations?.verifiedTier
+            const verifiedColor = verifiedTier == "premium" ? "#facc15" : verifiedTier == "standard" ? "#ef4444" : verifiedTier == "basic" ? "#3b82f6" : ""
+            const highlightColor = isVerified ? verifiedColor : THEME.accent;
+            
             const equippedBadges = clanInfo.specialInventory?.filter(i => i.category === 'BADGE' && i.isEquipped) || [];
             const displayBadge = equippedBadges.length > 0
               ? equippedBadges[Math.floor(Math.random() * equippedBadges.length)]
@@ -624,7 +626,7 @@ export default function PostCard({ post, setPosts, isFeed, hideMedia, syncing, s
                           <Stop
                             offset="100%"
                             stopColor={bgVisual.secondaryColor || bgVisual.primaryColor || '#22c55e'}
-                            stopOpacity={0.05}
+                            stopOpacity={0.12}
                           />
                         </LinearGradient>
                       </Defs>
@@ -634,7 +636,7 @@ export default function PostCard({ post, setPosts, isFeed, hideMedia, syncing, s
                 )}
 
                 {displayBadge && (
-                  <View className="absolute -right-2 -top-4 opacity-[0.05]">
+                  <View className="absolute -right-2 -top-4 opacity-[0.4]">
                     <RemoteSvgIcon xml={displayBadge.visualConfig?.svgCode || displayBadge.visualData?.svgCode} size={80} />
                   </View>
                 )}
@@ -644,15 +646,15 @@ export default function PostCard({ post, setPosts, isFeed, hideMedia, syncing, s
                   className="flex-row items-center flex-1 z-10"
                 >
                   <View className="mr-4">
-                    <ClanCrest isFeed={true} rank={clanInfo.rank} size={48} glowColor={activeGlowColor} />
+                    <ClanCrest isFeed={true} rank={clanInfo.rank} size={48} glowColor={activeGlowColor || verifiedColor} />
                   </View>
                   <View>
-                    <View className="flex-row items-center">
+                    <View className="flex-row gap-2 items-center">
                       <Text style={{ color: THEME.text }} className="text-[16px] font-black uppercase tracking-tighter italic">
                         {clanInfo.name}
                       </Text>
                       {isVerified && (
-                        <MaterialCommunityIcons name="check-decagram" size={16} color={highlightColor} style={{ marginLeft: 6 }} />
+                        <RemoteSvgIcon size={24} xml={clanInfo.activeCustomizations?.verifiedBadgeXml} />
                       )}
                     </View>
                     <View className="flex-row items-center mt-0.5">

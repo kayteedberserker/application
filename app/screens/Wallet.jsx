@@ -37,7 +37,8 @@ const REVENUE_CAT_API_KEYS = {
 };
 
 const CACHE_KEY = '@store_packages_cache';
-const VAULT_CACHE_KEY = '@vault_packs_cache';
+const VAULT_CACHE_KEY_AUTHOR = '@vault_packs_author_cache';
+const VAULT_CACHE_KEY_CLAN = '@vault_packs_clan_cache';
 const USER_STATS_CACHE_KEY = '@user_vault_stats_cache';
 
 const RemoteSvgIcon = ({ xml, size = 50, color }) => {
@@ -49,13 +50,19 @@ const WalletPage = () => {
     const navigation = useNavigation();
     const { user } = useUser();
     const { coins, clanCoins, processTransaction, isProcessingTransaction } = useCoins();
-    const { cCoins, isLoading: clanLoading, userClan } = useClan();
+    const { cCoins, isLoading: clanLoading, userClan, clanRank } = useClan();
+
     const colorScheme = useColorScheme();
     const isDark = colorScheme === "dark";
 
     const [activeTab, setActiveTab] = useState('OC');
+    const [vaultTab, setVaultTab] = useState('AUTHOR'); // 'AUTHOR' | 'CLAN'
     const [packages, setPackages] = useState([]);
-    const [vaultPacks, setVaultPacks] = useState([]);
+    
+    // Split the vault packs into two states
+    const [authorVaultPacks, setAuthorVaultPacks] = useState([]);
+    const [clanVaultPacks, setClanVaultPacks] = useState([]);
+    
     const [userStats, setUserStats] = useState({ postCount: 0, rankLevel: 1 });
     const [isFetchingStore, setIsFetchingStore] = useState(false);
     const [message, setMessage] = useState({ text: '', type: '' });
@@ -116,17 +123,19 @@ const WalletPage = () => {
     }, [user, coins]);
 
     const fetchOfferings = useCallback(async (force = false) => {
-        if (packages.length > 0 && vaultPacks.length > 0 && !force) return;
+        if (packages.length > 0 && authorVaultPacks.length > 0 && clanVaultPacks.length > 0 && !force) return;
         setIsFetchingStore(true);
         try {
-            const [cachedStore, cachedVault, cachedStats] = await Promise.all([
+            const [cachedStore, cachedAuthorVault, cachedClanVault, cachedStats] = await Promise.all([
                 AsyncStorage.getItem(CACHE_KEY),
-                AsyncStorage.getItem(VAULT_CACHE_KEY),
+                AsyncStorage.getItem(VAULT_CACHE_KEY_AUTHOR),
+                AsyncStorage.getItem(VAULT_CACHE_KEY_CLAN),
                 AsyncStorage.getItem(USER_STATS_CACHE_KEY)
             ]);
 
             if (cachedStore) setPackages(JSON.parse(cachedStore));
-            if (cachedVault) setVaultPacks(JSON.parse(cachedVault));
+            if (cachedAuthorVault) setAuthorVaultPacks(JSON.parse(cachedAuthorVault));
+            if (cachedClanVault) setClanVaultPacks(JSON.parse(cachedClanVault));
             if (cachedStats) setUserStats(JSON.parse(cachedStats));
 
             const isConfigured = await Purchases.isConfigured();
@@ -134,9 +143,11 @@ const WalletPage = () => {
                 await Purchases.configure({ apiKey: Platform.OS === 'ios' ? REVENUE_CAT_API_KEYS.ios : REVENUE_CAT_API_KEYS.android });
             }
 
-            const [offerings, packRes] = await Promise.all([
+            // Fetch revenueCat, author packs, and clan packs
+            const [offerings, authorPackRes, clanPackRes] = await Promise.all([
                 Purchases.getOfferings(),
-                apiFetch('/packs?type=author')
+                apiFetch('/packs?type=author'),
+                apiFetch('/packs?type=clan')
             ]);
 
             if (offerings.current !== null) {
@@ -145,22 +156,31 @@ const WalletPage = () => {
                 await AsyncStorage.setItem(CACHE_KEY, JSON.stringify(availablePkgs));
             }
 
-            if (packRes && packRes.ok) {
-                const packData = await packRes.json();
+            if (authorPackRes && authorPackRes.ok) {
+                const packData = await authorPackRes.json();
                 if (packData.success) {
-                    setVaultPacks(packData.packs);
+                    setAuthorVaultPacks(packData.packs);
                     const stats = { postCount: packData.meta.postCount, rankLevel: packData.meta.rankLevel };
                     setUserStats(stats);
-                    await AsyncStorage.setItem(VAULT_CACHE_KEY, JSON.stringify(packData.packs));
+                    await AsyncStorage.setItem(VAULT_CACHE_KEY_AUTHOR, JSON.stringify(packData.packs));
                     await AsyncStorage.setItem(USER_STATS_CACHE_KEY, JSON.stringify(stats));
                 }
             }
+            
+            if (clanPackRes && clanPackRes.ok) {
+                const clanData = await clanPackRes.json();
+                if (clanData.success) {
+                    setClanVaultPacks(clanData.packs);
+                    await AsyncStorage.setItem(VAULT_CACHE_KEY_CLAN, JSON.stringify(clanData.packs));
+                }
+            }
+
         } catch (e) {
             console.error("❌ Vault Sync Error", e);
         } finally {
             setIsFetchingStore(false);
         }
-    }, [packages.length, vaultPacks.length]);
+    }, [packages.length, authorVaultPacks.length, clanVaultPacks.length]);
 
     useEffect(() => { fetchOfferings(); }, []);
 
@@ -199,7 +219,8 @@ const WalletPage = () => {
 
             const action = isPreviewingPack ? 'purchase_pack' : 'buy_coins';
             const packIdentifier = pkgToBuy.product.identifier;
-            const coinType = activeTab === 'CC' ? 'CC' : 'OC';
+            // Determine currency type correctly if buying packs
+            const coinType = isPreviewingPack ? (vaultTab === 'CLAN' ? 'CC' : 'OC') : (activeTab === 'CC' ? 'CC' : 'OC');
 
             // 🔹 CORRECTED ARGUMENTS: (action, type, extraData, clanTag)
             const result = await processTransaction(
@@ -225,14 +246,10 @@ const WalletPage = () => {
     };
 
     const getCleanAmount = (title) => {
-        console.log(title);
-
-        // Use .includes() for the check
         if (title.includes("CC") || title.includes("21000")) {
             const match = title.match(/\d+/);
             if (match) {
                 let numStr = match[0];
-                // Remove the last character if it's a '0'
                 if (numStr.endsWith('0')) {
                     return numStr.slice(0, -1);
                 }
@@ -240,7 +257,6 @@ const WalletPage = () => {
             }
             return title;
         } else {
-            // Standard behavior for non-CC titles
             const match = title.match(/\d+/);
             return match ? match[0] : title;
         }
@@ -264,24 +280,41 @@ const WalletPage = () => {
     };
 
     const renderPackProgressBar = (requiredRank) => {
-        const requiredPosts = getRankRequirements(requiredRank);
-        const currentPosts = userStats.postCount || 0;
-        const remaining = Math.max(0, requiredPosts - currentPosts);
-        const progress = Math.min(1, currentPosts / requiredPosts);
+        if (vaultTab === 'CLAN') {
+            // Clan rank logic - using simplified logic assuming rank numeric mapping
+            const currentClanLvl = typeof clanRank === 'number' ? clanRank : (clanRank?.level || 1);
+            const remaining = Math.max(0, requiredRank - currentClanLvl);
+            
+            return (
+                <View className="mt-3">
+                    <View className="flex-row justify-between mb-1">
+                        <Text style={{ color: THEME.textSecondary }} className="text-[7px] font-black uppercase tracking-tighter">
+                            {remaining > 0 ? `Unlocks at Clan Rank ${requiredRank}` : 'Rank Achieved'}
+                        </Text>
+                    </View>
+                </View>
+            );
+        } else {
+            // Author rank logic
+            const requiredPosts = getRankRequirements(requiredRank);
+            const currentPosts = userStats.postCount || 0;
+            const remaining = Math.max(0, requiredPosts - currentPosts);
+            const progress = Math.min(1, currentPosts / requiredPosts);
 
-        return (
-            <View className="mt-3">
-                <View className="flex-row justify-between mb-1">
-                    <Text style={{ color: THEME.textSecondary }} className="text-[7px] font-black uppercase tracking-tighter">
-                        {remaining > 0 ? `Unlocks in ${remaining} Posts` : 'Rank Achieved'}
-                    </Text>
-                    <Text style={{ color: THEME.text }} className="text-[7px] font-black">{currentPosts}/{requiredPosts}</Text>
+            return (
+                <View className="mt-3">
+                    <View className="flex-row justify-between mb-1">
+                        <Text style={{ color: THEME.textSecondary }} className="text-[7px] font-black uppercase tracking-tighter">
+                            {remaining > 0 ? `Unlocks in ${remaining} Posts` : 'Rank Achieved'}
+                        </Text>
+                        <Text style={{ color: THEME.text }} className="text-[7px] font-black">{currentPosts}/{requiredPosts}</Text>
+                    </View>
+                    <View style={{ backgroundColor: THEME.border }} className="h-1 rounded-full overflow-hidden">
+                        <View style={{ width: `${progress * 100}%`, backgroundColor: THEME.accent }} className="h-full" />
+                    </View>
                 </View>
-                <View style={{ backgroundColor: THEME.border }} className="h-1 rounded-full overflow-hidden">
-                    <View style={{ width: `${progress * 100}%`, backgroundColor: THEME.accent }} className="h-full" />
-                </View>
-            </View>
-        );
+            );
+        }
     };
 
     const spin = spinValue.interpolate({
@@ -291,6 +324,7 @@ const WalletPage = () => {
 
     const correctCoin = activeTab === 'CC' ? (clanCoins || 0) : (coins || 0);
     const correctIcon = activeTab === 'CC' ? "CC" : "OC";
+    const currentVaultPacks = vaultTab === 'AUTHOR' ? authorVaultPacks : clanVaultPacks;
 
     const renderRewardPreview = (reward) => {
         const visual = reward.visualConfig || {};
@@ -313,7 +347,9 @@ const WalletPage = () => {
         }
         switch (reward.type) {
             case 'OC': return <CoinIcon size={18} type='OC' />;
+            case 'CC': return <CoinIcon size={18} type='CC' />;
             case 'MULTIPLIER': return <MaterialCommunityIcons name="trending-up" size={20} color={THEME.accent} />;
+            case 'UPGRADE': return <MaterialCommunityIcons name="arrow-up-bold" size={20} color={THEME.accent} />;
             default: return <Ionicons name="cube-outline" size={20} color={THEME.accent} />;
         }
     };
@@ -410,14 +446,46 @@ const WalletPage = () => {
 
                     {activeTab === 'PACKS' && (
                         <View>
+                            {/* Vault Header & Clan Sub-Tabs */}
                             <View className="mb-6 px-1">
-                                <Text style={{ color: THEME.text }} className="text-2xl font-black uppercase italic">Limited Bundles</Text>
-                                <Text style={{ color: THEME.accent }} className="text-[8px] font-black uppercase tracking-[2px]">Rank-Locked Equipment</Text>
+                                <View className="flex-row items-center justify-between">
+                                    <Text style={{ color: THEME.text }} className="text-2xl font-black uppercase italic">Limited Bundles</Text>
+                                    <Text style={{ color: THEME.accent }} className="text-[8px] font-black uppercase tracking-[2px]">Rank-Locked Equipment</Text>
+                                </View>
+                                
+                                {userClan && (
+                                    <View className="flex-row mt-4 bg-black/5 dark:bg-white/5 rounded-2xl p-1 border border-black/5 dark:border-white/5">
+                                        <TouchableOpacity
+                                            onPress={() => setVaultTab('AUTHOR')}
+                                            className="flex-1 py-2.5 items-center justify-center rounded-xl"
+                                            style={vaultTab === 'AUTHOR' ? { backgroundColor: THEME.accent } : {}}
+                                        >
+                                            <Text style={{ color: vaultTab === 'AUTHOR' ? 'white' : THEME.textSecondary }} className="font-black uppercase tracking-widest text-[9px]">Author Packs</Text>
+                                        </TouchableOpacity>
+                                        <TouchableOpacity
+                                            onPress={() => setVaultTab('CLAN')}
+                                            className="flex-1 py-2.5 items-center justify-center rounded-xl"
+                                            style={vaultTab === 'CLAN' ? { backgroundColor: THEME.accent } : {}}
+                                        >
+                                            <Text style={{ color: vaultTab === 'CLAN' ? 'white' : THEME.textSecondary }} className="font-black uppercase tracking-widest text-[9px]">Clan Packs</Text>
+                                        </TouchableOpacity>
+                                    </View>
+                                )}
                             </View>
 
-                            {vaultPacks.map((pack) => {
+                            {/* Render Active Vault Packs */}
+                            {currentVaultPacks.length === 0 ? (
+                                <Text style={{ color: THEME.textSecondary }} className="text-center font-bold uppercase tracking-widest text-[10px] mt-10">No packs available.</Text>
+                            ) : currentVaultPacks.map((pack) => {
                                 const storePkg = packages.find(p => p.product.identifier === pack.storeId);
-                                const isLocked = pack.isLocked;
+                                
+                                // Override isLocked for Clan packs based on clanRank
+                                let isLocked = pack.isLocked;
+                                if (vaultTab === 'CLAN') {
+                                    const currentClanLvl = typeof clanRank === 'number' ? clanRank : (clanRank?.level || 1);
+                                    isLocked = currentClanLvl < pack.requiredRank;
+                                }
+                                
                                 const isOwned = pack.isPurchased;
                                 const cardColor = isLocked ? '#444' : (pack.color || THEME.accent);
 
