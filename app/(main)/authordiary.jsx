@@ -1174,4 +1174,4 @@ export default function AuthorDiaryDashboard() {
             </ScrollView>
         </View>
     );
-}
+    }
