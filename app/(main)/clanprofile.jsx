@@ -718,7 +718,7 @@ const RemoteSvgIcon = ({ xml, size = 50, color }) => {
 const ClanStoreModal = ({ visible, fetchFullDetails, onClose, isDark }) => {
     const { coins, clanCoins, processTransaction, isProcessingTransaction } = useCoins();
     const [loading, setLoading] = useState(true);
-    const [catalog, setCatalog] = useState([]);
+    const [catalog, setCatalog] = useState({ themes: [], standaloneItems: [] });
     const [selectedTheme, setSelectedTheme] = useState(null);
     const CustomAlert = useAlert();
 
@@ -733,13 +733,14 @@ const ClanStoreModal = ({ visible, fetchFullDetails, onClose, isDark }) => {
     const fetchStoreData = async () => {
         try {
             setLoading(true);
-            // Updated to use the correct API endpoint
             const res = await apiFetch(`/store?type=clan`);
             const data = await res.json();
 
             if (data.success && data.catalog) {
-                // data.catalog.themes is the array of theme objects
-                setCatalog(data.catalog.themes);
+                setCatalog({
+                    themes: data.catalog.themes || [],
+                    standaloneItems: data.catalog.standaloneItems || []
+                });
             }
         } catch (e) {
             console.error("Store fetch error:", e);
@@ -759,7 +760,7 @@ const ClanStoreModal = ({ visible, fetchFullDetails, onClose, isDark }) => {
 
         CustomAlert(
             "Confirm Purchase",
-            `Buy ${item.name} for ${item.price} ${item.currency}?`,
+            `Buy ${item.name} for ${item.price} ${item.currency || 'CC'}?`,
             [
                 { text: "Cancel", style: "cancel" },
                 {
@@ -770,7 +771,7 @@ const ClanStoreModal = ({ visible, fetchFullDetails, onClose, isDark }) => {
                             price: item.price,
                             name: item.name,
                             category: item.category,
-                            currency: item.currency,
+                            currency: item.currency || 'CC',
                             visualData: item.visualData
                         });
 
@@ -785,6 +786,91 @@ const ClanStoreModal = ({ visible, fetchFullDetails, onClose, isDark }) => {
                     }
                 }
             ]
+        );
+    };
+
+    // 1. STANDALONE ITEM CARD (Rectangular, 100% width, column layout)
+    const renderStandaloneCard = (item) => {
+        const visual = item.visualData || {};
+        const isBorder = item.category === 'BORDER';
+
+        return (
+            <TouchableOpacity
+                key={item.id}
+                onPress={() => handlePurchase(item)}
+                className="w-full bg-gray-100 dark:bg-[#1a1a1a] mb-3 p-4 rounded-3xl border border-green-900/20 flex-row items-center"
+            >
+                <View className="h-20 w-20 bg-black/40 rounded-2xl items-center justify-center overflow-hidden border border-white/5 mr-4">
+                    {isBorder ? (
+                        <ClanBorder
+                            color={visual.primaryColor || visual.color || "#ff0000"}
+                            secondaryColor={visual.secondaryColor}
+                            animationType={visual.animationType}
+                        >
+                            <View className="p-2">
+                                <Text className="text-[8px] dark:text-white/50 text-center">Border</Text>
+                            </View>
+                        </ClanBorder>
+                    ) : (
+                        <RemoteSvgIcon xml={visual.svgCode} color={visual.glowColor || visual.primaryColor || visual.color} size={45} />
+                    )}
+                </View>
+
+                <View className="flex-1 justify-center">
+                    <Text className="text-gray-500 font-black text-[8px] uppercase tracking-tighter mb-1">{item.category}</Text>
+                    <Text className="dark:text-white font-black text-base uppercase" numberOfLines={1}>{item.name}</Text>
+                    <View className="flex-row items-center mt-1">
+                        <Text className="text-green-500 font-black text-sm mr-1">{item.price}</Text>
+                        <CoinIcon type={item.currency || "CC"} size={14} />
+                    </View>
+                </View>
+
+                <View className="bg-green-500 p-3 rounded-2xl">
+                    <Ionicons name="cart" size={18} color="white" />
+                </View>
+            </TouchableOpacity>
+        );
+    };
+
+    // 2. THEMED ITEM CARD (Square, used inside horizontal FlatLists within themes)
+    const renderThemedItemCard = (item) => {
+        const visual = item.visualData || {};
+        const isBorder = item.category === 'BORDER';
+
+        return (
+            <TouchableOpacity
+                key={item.id}
+                onPress={() => handlePurchase(item)}
+                className="bg-gray-100 dark:bg-[#1a1a1a] mr-4 p-4 rounded-3xl w-44 border border-green-900/30"
+            >
+                <View className="mb-3">
+                    <View className="h-28 w-full bg-black/40 rounded-2xl items-center justify-center overflow-hidden border border-white/5">
+                        {isBorder ? (
+                            <ClanBorder
+                                color={visual.primaryColor || visual.color || "#ff0000"}
+                                secondaryColor={visual.secondaryColor}
+                                animationType={visual.animationType}
+                            >
+                                <View className="h-10 flex justify-center items-center rounded-sm">
+                                    <Text className="text-[10px] dark:text-white/50">Banner</Text>
+                                </View>
+                            </ClanBorder>
+                        ) : (
+                            <RemoteSvgIcon xml={visual.svgCode} color={visual.glowColor || visual.primaryColor || visual.color} size={60} />
+                        )}
+                    </View>
+                </View>
+                <Text className="dark:text-white font-bold text-xs uppercase" numberOfLines={1}>{item.name}</Text>
+                <View className="flex-row items-center mt-2 justify-between">
+                    <View className="flex-row items-center">
+                        <Text className="text-green-500 font-black text-xs mr-1">{item.price}</Text>
+                        <CoinIcon type={item.currency || "CC"} size={12} />
+                    </View>
+                    <View className="bg-green-500/10 p-1 rounded-full">
+                        <Ionicons name="cart" size={12} color="#22c55e" />
+                    </View>
+                </View>
+            </TouchableOpacity>
         );
     };
 
@@ -807,14 +893,10 @@ const ClanStoreModal = ({ visible, fetchFullDetails, onClose, isDark }) => {
                                 </Text>
                             </TouchableOpacity>
                             <View className="flex-row items-center">
-                                <Text className="text-green-500 font-black text-[10px] uppercase mr-1">
-                                    CC: {clanCoins || 0}
-                                </Text>
+                                <Text className="text-green-500 font-black text-[10px] uppercase mr-1">CC: {clanCoins || 0}</Text>
                                 <CoinIcon type="CC" size={12} />
                                 <Text className="text-gray-500 font-black text-[10px] uppercase mx-2">|</Text>
-                                <Text className="text-blue-500 font-black text-[10px] uppercase mr-1">
-                                    OC: {coins || 0}
-                                </Text>
+                                <Text className="text-blue-500 font-black text-[10px] uppercase mr-1">OC: {coins || 0}</Text>
                                 <CoinIcon type="OC" size={12} />
                             </View>
                         </View>
@@ -832,24 +914,38 @@ const ClanStoreModal = ({ visible, fetchFullDetails, onClose, isDark }) => {
                     ) : (
                         <ScrollView showsVerticalScrollIndicator={false}>
                             {!selectedTheme ? (
-                                <View className="flex-row flex-wrap justify-between">
-                                    {catalog.map((theme) => (
-                                        <TouchableOpacity
-                                            key={theme.id}
-                                            onPress={() => setSelectedTheme(theme)}
-                                            className="w-[48%] bg-gray-100 dark:bg-[#1a1a1a] p-6 rounded-3xl mb-4 items-center border border-gray-800"
-                                        >
-                                            <MaterialCommunityIcons name={theme.icon || "star"} size={40} color="#22c55e" />
-                                            <Text className="dark:text-white font-black uppercase mt-2 text-center">{theme.label}</Text>
-                                            <Text className="text-gray-500 text-[8px] uppercase">{theme.items?.length || 0} Items Available</Text>
-                                        </TouchableOpacity>
-                                    ))}
+                                <View>
+                                    {/* --- STANDALONE ITEMS SECTION (COLUMN LAYOUT - 100% WIDTH) --- */}
+                                    {catalog.standaloneItems.length > 0 && (
+                                        <View className="mb-8">
+                                            <Text className="text-gray-500 font-black uppercase text-xs mb-4 tracking-widest">Village Upgrades</Text>
+                                            {catalog.standaloneItems.map(item => renderStandaloneCard(item))}
+                                        </View>
+                                    )}
+
+                                    {/* --- THEMES SECTION (GRID LAYOUT) --- */}
+                                    <Text className="text-gray-500 font-black uppercase text-xs mb-4 tracking-widest">Thematic Collections</Text>
+                                    <View className="flex-row flex-wrap justify-between">
+                                        {catalog.themes.map((theme) => (
+                                            <TouchableOpacity
+                                                key={theme.id}
+                                                onPress={() => setSelectedTheme(theme)}
+                                                className="w-[48%] bg-gray-100 dark:bg-[#1a1a1a] p-6 rounded-3xl mb-4 items-center border border-gray-800"
+                                            >
+                                                {/* Remote SVG for Theme Icon */}
+                                                <View className="mb-2">
+                                                    <RemoteSvgIcon xml={theme.iconsvg} color="#22c55e" size={40} />
+                                                </View>
+                                                <Text className="dark:text-white font-black uppercase mt-1 text-center text-xs">{theme.label}</Text>
+                                                <Text className="text-gray-500 text-[8px] uppercase">{theme.items?.length || 0} Items</Text>
+                                            </TouchableOpacity>
+                                        ))}
+                                    </View>
                                 </View>
                             ) : (
                                 <View>
-                                    {/* 🛠 ADDED 'BACKGROUND' TO THIS ARRAY TO ENSURE IT RENDERS */}
-                                    {['BADGE', 'THEME', 'BACKGROUND', "WATERMARK", 'EFFECT', 'GLOW', 'BORDER'].map((cat) => {
-                                        // Case-insensitive filtering for safety
+                                    {/* --- ITEMS INSIDE SELECTED THEME (HORIZONTAL ROWS) --- */}
+                                    {['VERIFIED', 'UPGRADE', 'BADGE', 'THEME', 'BACKGROUND', "WATERMARK", 'EFFECT', 'GLOW', 'BORDER'].map((cat) => {
                                         const items = selectedTheme.items?.filter(i => i.category?.toUpperCase() === cat) || [];
                                         if (items.length === 0) return null;
 
@@ -859,54 +955,9 @@ const ClanStoreModal = ({ visible, fetchFullDetails, onClose, isDark }) => {
                                                 <FlatList
                                                     data={items}
                                                     horizontal
-                                                    renderToHardwareTextureAndroid
                                                     showsHorizontalScrollIndicator={false}
                                                     keyExtractor={item => item.id}
-                                                    renderItem={({ item }) => {
-                                                        const isBorder = item.category === 'BORDER';
-                                                        const visual = item.visualData || {};
-
-                                                        const IconPreview = (
-                                                            <View className={`h-28 w-full bg-black/40 rounded-xl items-center justify-center overflow-hidden ${isBorder ? '' : 'border border-white/5'}`}>
-                                                                <RemoteSvgIcon xml={visual.svgCode} color={visual.primaryColor} size={60} />
-                                                            </View>
-                                                        );
-
-                                                        return (
-                                                            <TouchableOpacity
-                                                                onPress={() => handlePurchase(item)}
-                                                                className="bg-gray-100 dark:bg-[#1a1a1a] mr-4 p-4 rounded-2xl w-44 border border-green-900/30"
-                                                            >
-                                                                <View className="mb-3">
-                                                                    {isBorder ? (
-                                                                        <ClanBorder
-                                                                            color={visual.primaryColor || visual.color || "#ff0000"}
-                                                                            secondaryColor={visual.secondaryColor}
-                                                                            animationType={visual.animationType}
-                                                                            duration={visual.duration}
-                                                                            snakeLength={visual.snakeLength}
-                                                                        >
-                                                                            <View className="h-10 flex justify-center items-center rounded-sm">
-                                                                                <Text className="text-[10px] dark:text-white/50">Clan Banner</Text>
-                                                                            </View>
-                                                                        </ClanBorder>
-                                                                    ) : (
-                                                                        IconPreview
-                                                                    )}
-                                                                </View>
-                                                                <Text className="dark:text-white font-bold text-xs uppercase" numberOfLines={1}>{item.name}</Text>
-                                                                <View className="flex-row items-center mt-2 justify-between">
-                                                                    <View className="flex-row items-center">
-                                                                        <Text className="text-green-500 font-black text-xs mr-1">{item.price}</Text>
-                                                                        <CoinIcon type={item.currency || "OC"} size={12} />
-                                                                    </View>
-                                                                    <View className="bg-green-500/10 p-1 rounded-full">
-                                                                        <Ionicons name="cart" size={12} color="#22c55e" />
-                                                                    </View>
-                                                                </View>
-                                                            </TouchableOpacity>
-                                                        );
-                                                    }}
+                                                    renderItem={({ item }) => renderThemedItemCard(item)}
                                                 />
                                             </View>
                                         );
