@@ -39,6 +39,10 @@ const { width } = Dimensions.get('window');
 const CLAN_MEMORY_CACHE = {};
 const CLAN_POSTS_MEMORY_CACHE = {};
 
+const THEME = {
+  accent: "#3b82f6"
+};
+
 const getClanTierDetails = (title) => {
   switch (title) {
     case "The Akatsuki": return { rank: 6, color: '#ef4444' };
@@ -312,6 +316,8 @@ export default function ClanPage() {
 
   const ListHeader = () => {
     if (!clan && isOffline) return <ClanSkeleton />;
+    if (!clan) return null;
+
     const nextMilestone = clan.nextThreshold || 5000;
     const currentPoints = clan.totalPoints || 0;
     const progress = Math.min((currentPoints / nextMilestone) * 100, 100);
@@ -328,7 +334,6 @@ export default function ClanPage() {
     const equippedBorder = clan.specialInventory?.find(i => i.category === 'BORDER' && i.isEquipped);
     const borderVisual = equippedBorder?.visualConfig || equippedBorder?.visualData || {};
 
-    // --- UPDATED WATERMARK LOGIC WITH SVG RENDER ---
     const equippedWatermark = clan.specialInventory?.find(i => i.category === 'WATERMARK' && i.isEquipped);
     const watermarkVisual = equippedWatermark?.visualConfig || equippedWatermark?.visualData || {};
     
@@ -380,10 +385,8 @@ export default function ClanPage() {
               <View className="relative p-5 bg-white dark:bg-[#0a0a0a] shadow-2xl rounded-[35px] overflow-hidden">
                 <View className="absolute -top-10 -right-10 w-40 h-40 opacity-10 rounded-full blur-3xl" style={{ backgroundColor: rankInfo.color }} />
                 
-                {/* Watermark Rendering */}
                 <SpecialWatermark />
 
-                {/* --- SVG BACKGROUND GLOW --- */}
                 {equippedBg && (
                   <View className="absolute inset-0">
                     <Svg height="100%" width="100%">
@@ -471,7 +474,6 @@ export default function ClanPage() {
             <View className="relative p-5 bg-white dark:bg-[#0a0a0a] border border-gray-100 dark:border-gray-800 shadow-2xl rounded-[35px] overflow-hidden">
               <View className="absolute -top-10 -right-10 w-40 h-40 opacity-10 rounded-full blur-3xl" style={{ backgroundColor: rankInfo.color }} />
               
-              {/* Watermark Rendering for standard card */}
               <SpecialWatermark />
 
               <TouchableOpacity
@@ -567,14 +569,7 @@ export default function ClanPage() {
         contentContainerStyle={{ paddingBottom: insets.bottom + 100 }}
       />
 
-      {/* Hidden Capture Layer */}
-      <View style={{ position: 'absolute', left: -10000, opacity: 0 }} pointerEvents="none">
-        <ViewShot ref={clanCardRef} options={{ format: "png", quality: 1 }}>
-          <ClanCard clan={clan} isDark={isDark} forSnapshot={true} />
-        </ViewShot>
-      </View>
-
-      {/* 🔹 Clan Card Preview Modal */}
+      {/* 🔹 Clan Card Preview Modal - Now only renders ClanCard when visible */}
       <Modal visible={cardPreviewVisible} transparent animationType="slide">
         <View className="flex-1 bg-black/95">
           <ScrollView contentContainerStyle={{ flexGrow: 1, justifyContent: 'center', alignItems: 'center', padding: 20 }}>
@@ -589,14 +584,19 @@ export default function ClanPage() {
                 </Pressable>
               </View>
 
-              <View style={{ transform: [{ scale: Math.min(1, (width - 40) / 380) }], width: 380, alignItems: 'center' }}>
-                <ClanCard clan={clan} isDark={isDark} forSnapshot={true} />
-              </View>
+              {/* Only rendered when modal is active */}
+              {cardPreviewVisible && (
+                <ViewShot ref={clanCardRef} options={{ format: "png", quality: 1 }}>
+                  <View style={{ transform: [{ scale: Math.min(1, (width - 40) / 380) }], width: 380, alignItems: 'center' }}>
+                    <ClanCard clan={clan} isDark={isDark} forSnapshot={true} />
+                  </View>
+                </ViewShot>
+              )}
 
-              <View className="w-full">
+              <View className="w-full mt-6">
                 <TouchableOpacity
                   onPress={captureAndShare}
-                  style={{ backgroundColor: getClanTierDetails(clan?.rankTitle).color }}
+                  style={{ backgroundColor: clan ? getClanTierDetails(clan.rankTitle).color : '#3b82f6' }}
                   className="flex-row items-center justify-center gap-3 w-full h-16 rounded-[30px] shadow-lg"
                 >
                   <MaterialCommunityIcons name="share-variant" size={24} color="white" />

@@ -1,9 +1,8 @@
 import { Feather, Ionicons, MaterialCommunityIcons } from "@expo/vector-icons";
 import AsyncStorage from "@react-native-async-storage/async-storage";
-import * as Clipboard from 'expo-clipboard';
 import { useRouter } from 'expo-router';
-import * as Sharing from 'expo-sharing'; // Ensure this is imported
-import { useEffect, useMemo, useRef, useState } from 'react';
+import * as Sharing from 'expo-sharing';
+import { memo, useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import {
     ActivityIndicator,
     Animated,
@@ -15,7 +14,6 @@ import {
     Modal,
     Pressable,
     ScrollView,
-    Share,
     TextInput,
     TouchableOpacity,
     useColorScheme,
@@ -40,19 +38,57 @@ import apiFetch from "../../utils/apiFetch";
 
 const { width, height: SCREEN_HEIGHT } = Dimensions.get("window");
 
-const CLAN_STORE_ITEMS = [
-    { id: 'increase_slot', name: 'Increase Author Slot', cost: 1500, icon: 'account-multiple-plus', type: 'functional' },
-    { id: 'badge_2_days', name: 'Verified Badge - 2 Days', cost: 1000, icon: 'check-decagram', type: 'general' },
-    { id: 'badge_5_days', name: 'Verified Badge - 5 Days', cost: 2000, icon: 'check-decagram', type: 'general' },
-    { id: 'badge_7_days', name: 'Verified Badge - 7 Days', cost: 3000, icon: 'check-decagram', type: 'general' },
-    { id: 'badge_30_days', name: 'Verified Badge - 30 Days', cost: 10000, icon: 'check-decagram', type: 'general' },
-    { id: 'bounty_card_1', name: 'Bounty Card I', cost: 2000, icon: 'cards-playing-outline', type: 'general' },
-    { id: 'bounty_card_2', name: 'Bounty Card II', cost: 5000, icon: 'cards-playing-outline', type: 'general' },
-    { id: 'bounty_card_3', name: 'Bounty Card III', cost: 10000, icon: 'cards-playing-outline', type: 'general' },
-];
-
-// 🔹 Global session tracker to ensure heavy loading only shows once per app run
+// 🔹 Global session tracker
 let HAS_SHOWN_SESSION_LOADER = false;
+
+// --- Optimized Sub-Components ---
+
+const RemoteSvgIcon = memo(({ xml, size = 50, color }) => {
+    if (!xml) return <MaterialCommunityIcons name="help-circle-outline" size={size} color={color || "gray"} />;
+    return <SvgXml xml={xml} width={size} height={size} color={color} />;
+});
+
+const StatCard = memo(({ label, value, icon, isCoin, glowColor }) => (
+    <View className="w-[48%] bg-white dark:bg-zinc-900/50 p-5 rounded-[30px] mb-4 border border-gray-100 dark:border-zinc-800 shadow-sm">
+        <MaterialCommunityIcons name={icon} size={20} color={glowColor || "#3b82f6"} />
+        <Text className="text-gray-400 dark:text-gray-500 text-[9px] font-black uppercase tracking-widest mt-2">{label}</Text>
+        <View className="flex-row items-center mt-1">
+            <Text style={isCoin ? { color: "#9333ea" } : null} className="text-lg font-black mt-1 dark:text-white">{value?.toLocaleString() || 0} </Text>
+            {isCoin && <CoinIcon size={20} type="CC" />}
+        </View>
+    </View>
+));
+
+const StatRow = memo(({ label, value, highlight, color }) => (
+    <View className="flex-row justify-between px-4 py-4 border-b border-gray-100 dark:border-zinc-900/50 last:border-0">
+        <Text className="text-gray-500 dark:text-gray-400 font-bold text-[11px] uppercase">{label}</Text>
+        <Text className={`font-black text-xs ${highlight ? '' : 'text-black dark:text-white'}`} style={highlight ? { color: color } : {}}>
+            {value || 0}
+        </Text>
+    </View>
+));
+
+const MemberItem = memo(({ member, roleLabel, canManage, isLeader, onKick, onAppoint, accent }) => (
+    <View className="flex-row items-center mb-3 bg-white dark:bg-zinc-900/40 p-4 rounded-[24px] border border-gray-100 dark:border-zinc-800">
+        <Image source={{ uri: member.profilePic?.url }} className="w-12 h-12 rounded-full border-2 border-zinc-100 dark:border-zinc-800" />
+        <View className="flex-1 ml-4">
+            <Text className="text-black dark:text-white font-black uppercase text-xs tracking-tight">{member.username}</Text>
+            <Text style={{ color: accent }} className="text-[8px] font-black uppercase tracking-widest mt-0.5">{roleLabel}</Text>
+        </View>
+        <View className="flex-row gap-x-2">
+            {isLeader && roleLabel !== "Kage" && roleLabel !== "Jonin" && (
+                <TouchableOpacity onPress={onAppoint} className="bg-blue-500/10 px-4 py-2 rounded-xl border border-blue-500/20">
+                    <Text className="text-blue-600 dark:text-blue-400 font-black text-[9px] uppercase">Appoint Jonin</Text>
+                </TouchableOpacity>
+            )}
+            {canManage && (
+                <TouchableOpacity onPress={onKick} className="bg-red-500/10 px-4 py-2 rounded-xl">
+                    <Text className="text-red-600 dark:text-red-500 font-black text-[9px] uppercase">Banish</Text>
+                </TouchableOpacity>
+            )}
+        </View>
+    </View>
+));
 
 const ClanProfile = () => {
     const CustomAlert = useAlert();
@@ -67,16 +103,11 @@ const ClanProfile = () => {
     const [isEditing, setIsEditing] = useState(false);
     const [editData, setEditData] = useState({ name: '', description: '', logo: '' });
 
-    // Modals
     const [storeModalVisible, setStoreModalVisible] = useState(false);
     const [inventoryModalVisible, setInventoryModalVisible] = useState(false);
     const [isProcessingAction, setIsProcessingAction] = useState(false);
-    const { colorScheme } = useColorScheme();
     const isDark = useColorScheme() === "dark";
-    console.log(isDark);
 
-
-    // Pagination & Posts State
     const [posts, setPosts] = useState([]);
     const [page, setPage] = useState(1);
     const [isFetchingNextPage, setIsFetchingNextPage] = useState(false);
@@ -84,31 +115,13 @@ const ClanProfile = () => {
     const [cardPreviewVisible, setCardPreviewVisible] = useState(false);
     const clanCardRef = useRef(null);
 
-    const captureAndShare = async () => {
-        try {
-            if (clanCardRef.current) {
-                const uri = await clanCardRef.current.capture();
-                if (await Sharing.isAvailableAsync()) {
-                    await Sharing.shareAsync(uri);
-                }
-            }
-        } catch (error) {
-            console.error("Capture Error:", error);
-        }
-    };
-
-    // War History State
     const [warHistory, setWarHistory] = useState([]);
     const [loadingWars, setLoadingWars] = useState(false);
 
     const { coins, clanCoins, processTransaction, isProcessingTransaction } = useCoins();
-
-
     const CACHE_KEY = `@clan_data_${userClan?.tag}`;
 
-    // =================================================================
-    // 🔹 ANIMATION LOGIC
-    // =================================================================
+    // --- ANIMATIONS ---
     const scanAnim = useRef(new Animated.Value(0)).current;
     const pulseAnim = useRef(new Animated.Value(1)).current;
 
@@ -118,21 +131,29 @@ const ClanProfile = () => {
     }, [fullData]);
 
     useEffect(() => {
-        Animated.loop(
+        const rotation = Animated.loop(
             Animated.timing(scanAnim, {
                 toValue: 1,
                 duration: 10000,
                 easing: Easing.linear,
                 useNativeDriver: true,
             })
-        ).start();
-
-        Animated.loop(
+        );
+        
+        const pulse = Animated.loop(
             Animated.sequence([
-                Animated.timing(pulseAnim, { toValue: 1.05, duration: 2500, useNativeDriver: true }),
-                Animated.timing(pulseAnim, { toValue: 1, duration: 2500, useNativeDriver: true }),
+                Animated.timing(pulseAnim, { toValue: 1.05, duration: 2500, easing: Easing.inOut(Easing.ease), useNativeDriver: true }),
+                Animated.timing(pulseAnim, { toValue: 1, duration: 2500, easing: Easing.inOut(Easing.ease), useNativeDriver: true }),
             ])
-        ).start();
+        );
+
+        rotation.start();
+        pulse.start();
+
+        return () => {
+            rotation.stop();
+            pulse.stop();
+        };
     }, []);
 
     const spin = scanAnim.interpolate({
@@ -163,16 +184,15 @@ const ClanProfile = () => {
             }
             await fetchFullDetails();
         } catch (err) {
-            console.error("Cache Initialization Error:", err);
             fetchFullDetails();
         }
     };
-    let equippedGlow
+
+    let equippedGlow;
     if (fullData) {
-        equippedGlow = fullData.specialInventory?.find(i => i.category === 'GLOW' && i.isEquipped) || {}
+        equippedGlow = fullData.specialInventory?.find(i => i.category === 'GLOW' && i.isEquipped) || {};
     }
     const activeGlowColor = equippedGlow?.visualConfig?.primaryColor || equippedGlow?.visualData?.glowColor || null;
-    //   console.log(activeGlowColor);
     const APP_BLUE = activeGlowColor || "#3b82f6";
 
     const fetchFullDetails = async () => {
@@ -240,7 +260,6 @@ const ClanProfile = () => {
                 { text: "Cancel", style: "cancel", onPress: () => setIsProcessingAction(false) },
                 {
                     text: "Purchase",
-                    style: "default",
                     onPress: async () => {
                         const result = await processTransaction('spend', 'change_name_desc', "CC", userClan.tag);
                         if (result.success) {
@@ -254,8 +273,6 @@ const ClanProfile = () => {
                                 CustomAlert("Transaction Done", "Clan Info Updated.");
                                 fetchFullDetails();
                             }
-                        } else {
-                            CustomAlert("Transaction Failed", result.error || "The scroll could not be processed.");
                         }
                         setIsProcessingAction(false);
                     }
@@ -272,72 +289,42 @@ const ClanProfile = () => {
             const data = await res.json();
             if (res.ok) {
                 if (action === "EDIT_CLAN") setIsEditing(false);
-                if (action === "BUY_STORE_ITEM") CustomAlert("Success", `'${payload.itemName || 'Item'}' applied to the village.`);
                 if (action === "LEAVE_CLAN") {
                     await AsyncStorage.removeItem(CACHE_KEY);
-                    CustomAlert("Deserted", "You have left the village.");
                     router.replace('/clans');
                 }
                 fetchFullDetails();
-                if (action === "DELETE_POST") {
-                    setPosts(prev => prev.filter(p => p._id !== payload.postId));
-                }
             } else {
-                CustomAlert("Action Failed", data.message || "Jutsu failed to activate");
-                if (action === "BUY_STORE_ITEM" && payload.itemId) {
-                    await processTransaction('refund', payload.itemId, "CC");
-                }
+                CustomAlert("Action Failed", data.message || "Jutsu failed");
             }
         } catch (err) {
-            CustomAlert("Scroll Error", "Connection to the village lost.");
-            if (action === "BUY_STORE_ITEM" && payload.itemId) {
-                await processTransaction('refund', payload.itemId, "CC");
-            }
+            CustomAlert("Scroll Error", "Connection lost.");
         } finally {
             setIsProcessingAction(false);
         }
     };
 
-    const handleDeletePost = (postId) => {
-        CustomAlert("Banish Post", "Destroy this scroll from the village archives?", [
-            { text: "Cancel", style: "cancel" },
-            {
-                text: "Destroy",
-                style: "destructive",
-                onPress: () => triggerAction("DELETE_POST", { postId })
-            }
-        ]);
-    };
-
-    const handleShareClan = async () => {
-        const shareUrl = `https://oreblogda.com/clans/${fullData?.tag}`;
+    const captureAndShare = async () => {
         try {
-            await Share.share({
-                message: `Join my clan ${fullData?.name} on the app! Local Tag: #${fullData?.tag}\nLink: ${shareUrl}`,
-            });
+            if (clanCardRef.current) {
+                const uri = await clanCardRef.current.capture();
+                if (await Sharing.isAvailableAsync()) {
+                    await Sharing.shareAsync(uri);
+                }
+            }
         } catch (error) {
-            CustomAlert("Error", "Could not manifest the share scroll.");
+            console.error("Capture Error:", error);
         }
     };
 
-    const copyLinkToClipboard = async () => {
-        const shareUrl = `clans/${fullData?.tag}`;
-        await Clipboard.setStringAsync(shareUrl);
-        CustomAlert("Link Sealed", "Clan link copied to clipboard!");
-    };
-
     const handleLeaveClan = () => {
-        CustomAlert("Leave Village", "Are you sure you want to abandon your clan? This action cannot be undone.", [
+        CustomAlert("Leave Village", "Abandon your clan?", [
             { text: "Cancel", style: "cancel" },
-            {
-                text: "Leave",
-                style: "destructive",
-                onPress: () => triggerAction("LEAVE_CLAN")
-            }
+            { text: "Leave", style: "destructive", onPress: () => triggerAction("LEAVE_CLAN") }
         ]);
     };
 
-    if ((loading || clanLoading) && !HAS_SHOWN_SESSION_LOADER) {
+    if (loading || clanLoading) {
         return <AnimeLoading message="Syncing Bloodline" subMessage="Consulting the Elder Scrolls..." />;
     }
 
@@ -345,21 +332,16 @@ const ClanProfile = () => {
         return (
             <View className="flex-1 justify-center items-center bg-white dark:bg-[#0a0a0a] p-6">
                 <MaterialCommunityIcons name="sword-cross" size={64} color={APP_BLUE} />
-                <Text className="text-gray-500 dark:text-gray-400 text-center text-lg font-black uppercase mt-4">
-                    Rogue Ninja Detected
-                </Text>
-                <Text className="text-gray-400 text-center text-xs font-bold mt-2">
-                    You belong to no village. Join a clan to build your legacy.
-                </Text>
+                <Text className="text-gray-500 dark:text-gray-400 text-center text-lg font-black uppercase mt-4">Rogue Ninja Detected</Text>
             </View>
         );
     }
 
-    const listHeader = (
+    // --- Memoized Header ---
+    const listHeader = useMemo(() => (
         <View>
-            {/* Hidden Capture Layer for ViewShot */}
             <View style={{ position: 'absolute', left: -10000, opacity: 0 }} pointerEvents="none">
-                <ViewShot ref={clanCardRef} options={{ format: "png", quality: 1 }}>
+                <ViewShot ref={clanCardRef} options={{ format: "png", quality: 0.8 }}>
                     <ClanCard clan={fullData} isDark={isDark} forSnapshot={true} />
                 </ViewShot>
             </View>
@@ -381,28 +363,16 @@ const ClanProfile = () => {
                         <ClanCrest glowColor={activeGlowColor} rank={fullData?.rank || 1} size={120} />
                     </View>
 
-                    {/* Top Actions Column */}
                     <View className="absolute right-0 flex flex-col justify-between items-center gap-2">
-                        <TouchableOpacity
-                            onPress={() => setCardPreviewVisible(true)}
-                            className="p-3 bg-gray-100 dark:bg-zinc-800 rounded-full z-10 border border-gray-200 dark:border-zinc-700"
-                        >
-                            <Ionicons name="card-outline" size={24} color={APP_BLUE} />
-                        </TouchableOpacity>
-
-                        <TouchableOpacity
-                            onPress={() => setInventoryModalVisible(true)}
-                            className="p-3 bg-gray-100 dark:bg-zinc-800 rounded-full z-10 border border-gray-200 dark:border-zinc-700"
-                        >
-                            <MaterialCommunityIcons name="bag-personal-outline" size={24} color={APP_BLUE} />
-                        </TouchableOpacity>
-
-                        <TouchableOpacity
-                            onPress={() => setStoreModalVisible(true)}
-                            className="p-3 bg-gray-100 dark:bg-zinc-800 rounded-full z-10 border border-gray-200 dark:border-zinc-700"
-                        >
-                            <MaterialCommunityIcons name="storefront-outline" size={24} color={APP_BLUE} />
-                        </TouchableOpacity>
+                        {[
+                            { icon: "card-outline", onPress: () => setCardPreviewVisible(true), lib: Ionicons },
+                            { icon: "bag-personal-outline", onPress: () => setInventoryModalVisible(true), lib: MaterialCommunityIcons },
+                            { icon: "storefront-outline", onPress: () => setStoreModalVisible(true), lib: MaterialCommunityIcons }
+                        ].map((btn, i) => (
+                            <TouchableOpacity key={i} onPress={btn.onPress} className="p-3 bg-gray-100 dark:bg-zinc-800 rounded-full border border-gray-200 dark:border-zinc-700">
+                                <btn.lib name={btn.icon} size={24} color={APP_BLUE} />
+                            </TouchableOpacity>
+                        ))}
                     </View>
                 </View>
 
@@ -413,14 +383,12 @@ const ClanProfile = () => {
                                 value={editData.name}
                                 onChangeText={(t) => setEditData({ ...editData, name: t })}
                                 className="text-1xl font-black text-blue-500 text-center uppercase italic border-b border-blue-500 w-full"
-                                placeholder="Clan Name"
                             />
                             <TextInput
                                 value={editData.description}
                                 onChangeText={(t) => setEditData({ ...editData, description: t })}
                                 multiline
                                 className="text-gray-600 dark:text-gray-300 text-xs italic text-center p-2 border border-blue-200 rounded-lg"
-                                placeholder="Village Motto..."
                             />
                         </View>
                     ) : (
@@ -453,30 +421,12 @@ const ClanProfile = () => {
                 </View>
 
                 <View className="w-full mt-3">
-                    <Text className="text-[9px] font-black text-gray-400 uppercase tracking-widest mb-3 text-center">Clan Achievements</Text>
-                    <ScrollView
-                        horizontal
-                        showsHorizontalScrollIndicator={false}
-                        contentContainerStyle={{
-                            paddingHorizontal: 10,
-                            flexGrow: 1,
-                            justifyContent: fullData?.badges?.length > 0 ? 'flex-start' : 'center',
-                            alignItems: 'center'
-                        }}
-                    >
+                    <Text className="text-[9px] font-black text-gray-400 uppercase tracking-widest mb-3 text-center">Achievements</Text>
+                    <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={{ paddingHorizontal: 10, flexGrow: 1, justifyContent: 'center' }}>
                         {fullData?.badges?.length > 0 ? (
-                            fullData.badges.map((badge, idx) => (
-                                <ClanBadge key={`${badge}-${idx}`} badgeName={badge} size="md" />
-                            ))
+                            fullData.badges.map((badge, idx) => <ClanBadge key={idx} badgeName={badge} size="md" />)
                         ) : (
-                            <View className="items-center opacity-40 py-2">
-                                <View className="bg-gray-500/10 p-4 rounded-full mb-2">
-                                    <MaterialCommunityIcons name="shield-off-outline" size={24} color="#9ca3af" />
-                                </View>
-                                <Text className="text-[10px] font-black text-gray-400 uppercase tracking-widest">
-                                    No Achievements Yet
-                                </Text>
-                            </View>
+                            <Text className="text-[10px] text-gray-400">No Achievements Yet</Text>
                         )}
                     </ScrollView>
                 </View>
@@ -500,44 +450,32 @@ const ClanProfile = () => {
                         <Text style={{ color: activeTab === tab ? APP_BLUE : '#9ca3af' }} className={`font-black text-[8px] uppercase tracking-widest`}>
                             {tab}
                         </Text>
-                        {activeTab === tab && <View style={{ backgroundColor: APP_BLUE }} className="h-0.5 w-4 mt-1" />}
                     </TouchableOpacity>
                 ))}
             </View>
-
-            {/* Clan Card Preview Modal */}
-            <Modal visible={cardPreviewVisible} transparent animationType="slide">
-                <View className="flex-1 bg-black/95">
-                    <ScrollView contentContainerStyle={{ flexGrow: 1, justifyContent: 'center', alignItems: 'center', padding: 20 }}>
-                        <View className="w-full items-center">
-                            <View className="w-full flex-row justify-between items-center pt-10">
-                                <View>
-                                    <Text className="text-white font-black text-xl italic uppercase tracking-widest">Clan Scroll</Text>
-                                    <Text className="text-gray-500 font-bold text-[9px] uppercase tracking-[0.4em] mt-1">Official Manifest</Text>
-                                </View>
-                                <Pressable onPress={() => setCardPreviewVisible(false)} className="w-12 h-12 bg-white/10 rounded-full items-center justify-center">
-                                    <Ionicons name="close" size={28} color="white" />
-                                </Pressable>
-                            </View>
-                            <View style={{ transform: [{ scale: Math.min(1, (width - 40) / 380) }], width: 380, alignItems: 'center' }}>
-                                <ClanCard clan={fullData} isDark={isDark} forSnapshot={true} />
-                            </View>
-                            <View className="w-full">
-                                <TouchableOpacity
-                                    onPress={captureAndShare}
-                                    style={{ backgroundColor: APP_BLUE }}
-                                    className="flex-row items-center justify-center gap-3 w-full h-16 rounded-[30px] shadow-lg"
-                                >
-                                    <MaterialCommunityIcons name="share-variant" size={24} color="white" />
-                                    <Text className="text-white font-black uppercase tracking-[0.2em] text-sm italic">Dispatch Scroll</Text>
-                                </TouchableOpacity>
-                            </View>
-                        </View>
-                    </ScrollView>
-                </View>
-            </Modal>
         </View>
-    );
+    ), [fullData, activeTab, isEditing, editData, isDark, spin, pulseAnim]);
+
+    const renderItem = useCallback(({ item }) => {
+        if (activeTab === 'Scrolls') {
+            return (
+                <View className="px-6 mb-4">
+                    <View className="bg-white dark:bg-zinc-900 border border-gray-100 dark:border-zinc-800 p-5 rounded-2xl flex-row justify-between items-center">
+                        <Pressable onPress={() => DeviceEventEmitter.emit("navigateSafely", `/post/${item.slug || item._id}`)} className="flex-1 pr-4">
+                            <Text className="font-black text-sm uppercase tracking-tight text-gray-800 dark:text-gray-200" numberOfLines={1}>{item.title || item.message}</Text>
+                        </Pressable>
+                        {canManageClan && (
+                            <TouchableOpacity onPress={() => triggerAction("DELETE_POST", { postId: item._id })} className="p-3 bg-red-500/10 rounded-xl">
+                                <Ionicons name="trash-outline" size={18} color="#ef4444" />
+                            </TouchableOpacity>
+                        )}
+                    </View>
+                </View>
+            );
+        }
+        if (activeTab === 'Wars') return <WarHistoryItem war={item} clanTag={userClan.tag} />;
+        return null;
+    }, [activeTab, canManageClan]);
 
     return (
         <>
@@ -556,41 +494,16 @@ const ClanProfile = () => {
                                     <StatCard glowColor={activeGlowColor} label="World Rank" value={`#${fullData?.rank}`} icon="seal" />
                                     <StatCard glowColor={activeGlowColor} label="Shinobi Count" value={`${fullData?.members?.length}/${fullData?.maxSlots}`} icon="account-multiple" />
                                 </View>
-
-                                <Text className="text-black dark:text-white font-black text-xs mt-6 mb-4 uppercase tracking-widest">Village Expansion</Text>
-                                <View className="flex-row gap-x-2 mb-6">
-                                    <TouchableOpacity
-                                        onPress={handleShareClan}
-                                        style={{ backgroundColor: APP_BLUE }}
-                                        className="flex-1 p-4 rounded-3xl flex-row items-center justify-center gap-x-2 shadow-lg shadow-blue-500/40"
-                                    >
-                                        <Feather name="share-2" size={16} color="white" />
-                                        <Text className="text-white font-black text-[10px] uppercase italic">Summon Allies</Text>
-                                    </TouchableOpacity>
-
-                                    <TouchableOpacity
-                                        onPress={copyLinkToClipboard}
-                                        className="bg-gray-100 dark:bg-zinc-900 p-4 rounded-3xl border border-gray-200 dark:border-zinc-800"
-                                    >
-                                        <Feather name="copy" size={16} color={APP_BLUE} />
-                                    </TouchableOpacity>
-                                </View>
-
-                                <View className="gap-y-3 mb-6">
-                                    <ExpansionRow glowColor={APP_BLUE} icon="heart-plus-outline" label="Follow our Village" subLabel="Stay updated on our progress" />
-                                    <ExpansionRow glowColor={APP_BLUE} icon="feather" label="Join as an Author" subLabel="Write scrolls for the clan" />
-                                </View>
-
-                                <Text className="text-black dark:text-white font-black text-xs mt-2 mb-4 uppercase tracking-widest">Village Influence</Text>
-                                <View className="bg-gray-50 dark:bg-zinc-950 p-2 rounded-3xl border border-gray-100 dark:border-zinc-900">
+                                
+                                <View className="bg-gray-50 dark:bg-zinc-950 p-2 rounded-3xl border border-gray-100 dark:border-zinc-900 mt-6">
                                     <StatRow label="Sightings (Views)" value={fullData?.stats?.views} />
                                     <StatRow label="Respect (Likes)" value={fullData?.stats?.likes} />
                                     <StatRow label="Whispers (Comments)" value={fullData?.stats?.comments} />
                                     <StatRow label="Scroll Depth" value={`${fullData?.stats?.totalPosts} Posts`} highlight color={APP_BLUE} />
                                 </View>
 
-                                <TouchableOpacity onPress={handleLeaveClan} className="mt-8 bg-red-500/10 p-4 rounded-3xl items-center border border-red-500/20">
-                                    <Text className="text-red-500 font-black text-[10px] uppercase tracking-widest">Desert Village</Text>
+                                <TouchableOpacity onPress={handleLeaveClan} className="mt-8 bg-red-500/10 p-4 rounded-3xl items-center">
+                                    <Text className="text-red-500 font-black text-[10px] uppercase">Desert Village</Text>
                                 </TouchableOpacity>
                             </View>
                         )}
@@ -611,109 +524,45 @@ const ClanProfile = () => {
                                 ))}
                             </View>
                         )}
-
-                        {activeTab === 'Wars' && (
-                            <View className="px-6">
-                                <Text className="text-black dark:text-white font-black text-xs mb-4 uppercase tracking-widest italic">Great Ninja War Archives</Text>
-                                {loadingWars && <SyncLoading message="Loading Wars..." />}
-                                {warHistory.length === 0 && !loadingWars && (
-                                    <View className="p-10 bg-gray-50 dark:bg-zinc-900 rounded-[30px] items-center border border-dashed border-gray-200 dark:border-zinc-800">
-                                        <MaterialCommunityIcons name="sword-cross" size={32} color="#9ca3af" />
-                                        <Text className="text-[10px] font-black text-gray-400 uppercase mt-2">No past conflicts recorded</Text>
-                                    </View>
-                                )}
-                            </View>
-                        )}
-
-                        {activeTab === 'Kage Desk' && canManageClan && (
-                            <View className="px-6">
-                                <AdminToggle
-                                    label="Open Village Gates"
-                                    status={fullData.isRecruiting ? "OPEN" : "CLOSED"}
-                                    onPress={() => triggerAction("TOGGLE_RECRUIT")}
-                                    accent={APP_BLUE}
-                                />
-                                <View className="mt-8">
-                                    <Text className="text-black dark:text-white font-black text-xs mb-4 uppercase tracking-widest italic">Seekers of the Leaf</Text>
-                                    {fullData.joinRequests?.length > 0 ? (
-                                        fullData.joinRequests.map(req => (
-                                            <RequestItem
-                                                key={req.userId?._id || Math.random()}
-                                                user={req.userId}
-                                                onApprove={() => triggerAction("APPROVE_MEMBER", { userId: req.userId?._id })}
-                                                onDecline={() => triggerAction("DECLINE_MEMBER", { userId: req.userId?._id })}
-                                                accent={APP_BLUE}
-                                            />
-                                        ))
-                                    ) : (
-                                        <View className="p-12 items-center bg-gray-50 dark:bg-zinc-900/50 rounded-[40px] border border-dashed border-gray-100 dark:border-zinc-800">
-                                            <Feather name="user-plus" size={24} color="#4b5563" />
-                                            <Text className="text-gray-400 font-bold uppercase text-[9px] mt-4 tracking-widest">No seekers found</Text>
-                                        </View>
-                                    )}
-                                </View>
-                            </View>
-                        )}
                     </View>
                 }
-                renderItem={({ item }) => {
-                    if (activeTab === 'Scrolls') {
-                        return (
-                            <View className="px-6 mb-4">
-                                <View className="bg-white dark:bg-zinc-900 border border-gray-100 dark:border-zinc-800 p-5 rounded-2xl flex-row justify-between items-center">
-                                    <Pressable onPress={() => DeviceEventEmitter.emit("navigateSafely", `/post/${item.slug || item._id}`)} className="flex-1 pr-4">
-                                        <Text className="font-black text-sm uppercase tracking-tight text-gray-800 dark:text-gray-200" numberOfLines={1}>
-                                            {item.title || item.message}
-                                        </Text>
-                                        <Text className="text-[9px] font-bold text-blue-600 uppercase tracking-widest mt-1">
-                                            {new Date(item.createdAt).toLocaleDateString()}
-                                        </Text>
-                                    </Pressable>
-                                    {canManageClan && (
-                                        <TouchableOpacity onPress={() => handleDeletePost(item._id)} className="p-3 bg-red-500/10 rounded-xl">
-                                            <Ionicons name="trash-outline" size={18} color="#ef4444" />
-                                        </TouchableOpacity>
-                                    )}
-                                </View>
-                            </View>
-                        );
-                    }
-                    if (activeTab === 'Wars') {
-                        return <WarHistoryItem war={item} clanTag={userClan.tag} />;
-                    }
-                    return null;
-                }}
-                onEndReached={() => {
-                    if (activeTab === 'Scrolls' && !isReachingEnd && !isFetchingNextPage) {
-                        fetchPosts(page + 1);
-                    }
-                }}
+                renderItem={renderItem}
+                onEndReached={() => activeTab === 'Scrolls' && !isReachingEnd && fetchPosts(page + 1)}
                 onEndReachedThreshold={0.5}
+                initialNumToRender={10}
+                maxToRenderPerBatch={5}
+                windowSize={5}
+                removeClippedSubviews={true}
                 ListFooterComponent={() => (
                     <View style={{ paddingBottom: insets.bottom + 100 }}>
                         {isFetchingNextPage && <SyncLoading message="Loading more scrolls" />}
                     </View>
                 )}
             />
+
+            {/* Modals rendered separately to keep main thread light */}
             <ClanStoreModal fetchFullDetails={fetchFullDetails} isDark={isDark} onClose={() => setStoreModalVisible(false)} visible={storeModalVisible} />
-            <ClanInventoryModal
-                visible={inventoryModalVisible}
-                onClose={() => setInventoryModalVisible(false)}
-                clan={fullData}
-                isDark={isDark}
-                clanCoins={clanCoins}
-                user={user}
-                fetchFullDetails={fetchFullDetails}
-            />
+            <ClanInventoryModal visible={inventoryModalVisible} onClose={() => setInventoryModalVisible(false)} clan={fullData} isDark={isDark} user={user} fetchFullDetails={fetchFullDetails} />
+            
+            <Modal visible={cardPreviewVisible} transparent animationType="fade">
+                <View className="flex-1 bg-black/95">
+                    <ScrollView contentContainerStyle={{ flexGrow: 1, justifyContent: 'center', alignItems: 'center', padding: 20 }}>
+                        <Pressable onPress={() => setCardPreviewVisible(false)} className="absolute top-10 right-10 w-12 h-12 bg-white/10 rounded-full items-center justify-center z-50">
+                            <Ionicons name="close" size={28} color="white" />
+                        </Pressable>
+                        <ClanCard clan={fullData} isDark={isDark} forSnapshot={true} />
+                        <TouchableOpacity onPress={captureAndShare} style={{ backgroundColor: APP_BLUE }} className="flex-row items-center justify-center gap-3 w-full h-16 rounded-[30px] mt-10">
+                            <MaterialCommunityIcons name="share-variant" size={24} color="white" />
+                            <Text className="text-white font-black uppercase italic">Dispatch Scroll</Text>
+                        </TouchableOpacity>
+                    </ScrollView>
+                </View>
+            </Modal>
         </>
     );
 };
 
-// 🎨 --- RENDERER FOR BACKEND SVGS ---
-const RemoteSvgIcon = ({ xml, size = 50, color }) => {
-    if (!xml) return <MaterialCommunityIcons name="help-circle-outline" size={size} color={color || "gray"} />;
-    return <SvgXml xml={xml} width={size} height={size} color={color} />;
-};
+// --- Store & Inventory Modals ---
 
 const ClanStoreModal = ({ visible, fetchFullDetails, onClose, isDark }) => {
     const { coins, clanCoins, processTransaction, isProcessingTransaction } = useCoins();
@@ -723,11 +572,7 @@ const ClanStoreModal = ({ visible, fetchFullDetails, onClose, isDark }) => {
     const CustomAlert = useAlert();
 
     useEffect(() => {
-        if (visible) {
-            fetchStoreData();
-        } else {
-            setSelectedTheme(null);
-        }
+        if (visible) fetchStoreData();
     }, [visible]);
 
     const fetchStoreData = async () => {
@@ -751,12 +596,7 @@ const ClanStoreModal = ({ visible, fetchFullDetails, onClose, isDark }) => {
 
     const handlePurchase = async (item) => {
         const currentBalance = item.currency === 'CC' ? clanCoins : coins;
-        const currencyName = item.currency === 'CC' ? "ClanCoins" : "OreCoins";
-
-        if (currentBalance < item.price) {
-            CustomAlert("Insufficient Funds", `You need more ${currencyName}.`);
-            return;
-        }
+        if (currentBalance < item.price) return CustomAlert("Insufficient Funds", "Need more coins.");
 
         CustomAlert(
             "Confirm Purchase",
@@ -878,8 +718,6 @@ const ClanStoreModal = ({ visible, fetchFullDetails, onClose, isDark }) => {
         <Modal visible={visible} animationType="slide" transparent>
             <View className="flex-1 bg-black/60 justify-end">
                 <View className="bg-white dark:bg-[#0a0a0a] h-[85%] rounded-t-[40px] p-6 border-t-4 border-green-500">
-
-                    {/* Header */}
                     <View className="flex-row justify-between items-center mb-6">
                         <View>
                             <TouchableOpacity
@@ -907,10 +745,7 @@ const ClanStoreModal = ({ visible, fetchFullDetails, onClose, isDark }) => {
 
                     {/* Content */}
                     {loading ? (
-                        <View className="flex-1 justify-center items-center">
-                            <ActivityIndicator size="large" color="#22c55e" />
-                            <Text className="text-green-500 font-black uppercase text-[10px] mt-4 tracking-widest">Downloading Assets...</Text>
-                        </View>
+                        <SyncLoading message="Fetching Goods..." />
                     ) : (
                         <ScrollView showsVerticalScrollIndicator={false}>
                             {!selectedTheme ? (
@@ -966,13 +801,6 @@ const ClanStoreModal = ({ visible, fetchFullDetails, onClose, isDark }) => {
                             )}
                         </ScrollView>
                     )}
-
-                    {isProcessingTransaction && (
-                        <View className="absolute inset-0 bg-black/60 items-center justify-center rounded-t-[40px]">
-                            <ActivityIndicator size="large" color="#22c55e" />
-                            <Text className="text-green-500 font-black uppercase text-[10px] mt-4">Syncing with Chain...</Text>
-                        </View>
-                    )}
                 </View>
             </View>
         </Modal>
@@ -980,372 +808,80 @@ const ClanStoreModal = ({ visible, fetchFullDetails, onClose, isDark }) => {
 };
 
 const ClanInventoryModal = ({ visible, onClose, fetchFullDetails, clan, isDark, user }) => {
-
-    const [filter, setFilter] = useState('ALL');
     const [isUpdating, setIsUpdating] = useState(false);
     const CustomAlert = useAlert();
-    const getExpirationText = (expiry) => {
-        if (!expiry) return null;
-        const now = new Date();
-        const end = new Date(expiry);
-        const diff = end - now;
+    const inventory = clan?.specialInventory || [];
 
-        if (diff <= 0) return "Expired";
-
-        const days = Math.floor(diff / (1000 * 60 * 60 * 24));
-        if (days > 0) return `${days}d remaining`;
-
-        const hours = Math.floor(diff / (1000 * 60 * 60));
-        return `${hours}h remaining`;
-    };
-    // We use inventory as identified in your backend update
-    let inventory
-    if (clan) {
-        inventory = clan?.specialInventory || []
-    }
-
-    const categories = ['ALL', 'WATERMARK', 'BADGE', "BACKGROUND", 'GLOW', 'BORDER'];
     const handleEquipToggle = async (selectedItem) => {
-
-        if (isUpdating) return
-        setIsUpdating(true); // Triggers your loading animation
-
+        if (isUpdating) return;
+        setIsUpdating(true);
         try {
             const res = await apiFetch(`/clans/${clan.tag}`, {
                 method: 'PATCH',
-                headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({
-                    deviceId: user.deviceId,
-                    action: "EQUIP_ITEM",
-                    payload: { itemId: selectedItem.itemId }
-                })
+                body: JSON.stringify({ deviceId: user.deviceId, action: "EQUIP_ITEM", payload: { itemId: selectedItem.itemId } })
             });
-
-            const data = await res.json();
-
-            if (res.ok) {
-                // Re-fetch the clan details to update the UI globally
-                if (typeof fetchFullDetails === 'function') {
-                    fetchFullDetails();
-                }
-            } else {
-                throw new Error(data.message || "Jutsu failed to activate");
-            }
-        } catch (err) {
-            console.error("Equip Error:", err);
-            CustomAlert("Scroll Error", "Connection to the village lost.");
+            if (res.ok) fetchFullDetails();
         } finally {
             setIsUpdating(false);
         }
     };
 
-    const filteredInventory = filter === 'ALL'
-        ? inventory
-        : inventory.filter(item => item.category === filter);
-
     return (
         <Modal visible={visible} animationType="slide" transparent>
             <View className="flex-1 bg-black/60 justify-end">
                 <View className="bg-white dark:bg-[#0d1117] h-[85%] rounded-t-[40px] p-6 border-t-4 border-blue-500">
-
-                    {/* Header */}
                     <View className="flex-row justify-between items-center mb-4">
-                        <View>
-                            <Text className="text-2xl font-black uppercase italic dark:text-white">Arsenal</Text>
-                            <Text className="text-blue-500 font-black text-[10px] uppercase tracking-widest">
-                                {inventory.length} Collectibles Owned
-                            </Text>
-                        </View>
-                        <TouchableOpacity onPress={onClose}>
-                            <Ionicons name="close" size={28} color={isDark ? "white" : "black"} />
-                        </TouchableOpacity>
+                        <Text className="text-2xl font-black uppercase dark:text-white">Arsenal</Text>
+                        <TouchableOpacity onPress={onClose}><Ionicons name="close" size={28} color={isDark ? "white" : "black"} /></TouchableOpacity>
                     </View>
-
-                    {/* Category Tabs */}
-                    <View className="flex-row mb-6">
-                        <ScrollView horizontal showsHorizontalScrollIndicator={false}>
-                            {categories.map((cat) => (
-                                <TouchableOpacity
-                                    key={cat}
-                                    onPress={() => setFilter(cat)}
-                                    className={`mr-2 px-4 py-2 rounded-full border ${filter === cat ? 'bg-blue-500 border-blue-500' : 'bg-transparent border-gray-700'}`}
-                                >
-                                    <Text className={`text-[10px] font-black uppercase ${filter === cat ? 'text-white' : 'text-gray-500'}`}>
-                                        {cat}
-                                    </Text>
+                    <ScrollView showsVerticalScrollIndicator={false}>
+                        {inventory.map((item, idx) => (
+                            <View key={idx} className={`flex-row items-center p-4 rounded-3xl mb-3 border ${item.isEquipped ? 'bg-blue-500/10 border-blue-500' : 'bg-gray-50 dark:bg-[#161b22] border-gray-800'}`}>
+                                <View className="h-16 w-16 bg-black/20 items-center justify-center rounded-2xl mr-4">
+                                    <RemoteSvgIcon xml={item.visualConfig?.svgCode} color={item.visualConfig?.primaryColor} size={40} />
+                                </View>
+                                <View className="flex-1">
+                                    <Text className="font-black dark:text-white uppercase">{item.name}</Text>
+                                    <Text className="text-[9px] text-gray-500 uppercase">{item.category}</Text>
+                                </View>
+                                <TouchableOpacity onPress={() => handleEquipToggle(item)} className={`px-6 py-3 rounded-xl ${item.isEquipped ? 'bg-green-500' : 'bg-blue-600'}`}>
+                                    {isUpdating ? <ActivityIndicator size="small" color="white" /> : <Text className="text-white text-[10px] font-black">{item.isEquipped ? 'Active' : 'Equip'}</Text>}
                                 </TouchableOpacity>
-                            ))}
-                        </ScrollView>
-                    </View>
-
-                    {/* Inventory List */}
-                    <ScrollView showsVerticalScrollIndicator={false} contentContainerStyle={{ paddingBottom: 40 }}>
-                        {filteredInventory.length > 0 ? (
-                            filteredInventory.map((item, idx) => {
-                                const expiration = getExpirationText(item.expiresAt);
-                                const isExpired = expiration === "Expired";
-                                const isBorder = item.category === 'BORDER';
-                                const visual = item.visualConfig || {};
-
-                                const PreviewIcon = (
-                                    <View className={`w-20 h-20 bg-black/20 items-center justify-center rounded-2xl overflow-hidden ${isBorder ? '' : 'border border-white/5'}`}>
-                                        <RemoteSvgIcon xml={visual.svgCode} color={visual.primaryColor} size={60} />
-                                    </View>
-                                );
-
-                                return (
-                                    <View
-                                        key={item.itemId || idx}
-                                        className={`flex-row items-center p-4 rounded-3xl mb-3 border ${item.isEquipped
-                                            ? 'bg-blue-500/10 border-blue-500'
-                                            : 'bg-gray-50 dark:bg-[#161b22] border-gray-100 dark:border-gray-800'
-                                            } ${isExpired ? 'opacity-50' : ''}`}
-                                    >
-                                        {/* Icon Container */}
-                                        <View className="mr-4">
-                                            {isBorder ? (
-                                                <ClanBorder
-                                                    color={visual.primaryColor || visual.color || "#ff0000"}
-                                                    secondaryColor={visual.secondaryColor}
-                                                    animationType={visual.animationType}
-                                                    duration={visual.duration}
-                                                >
-                                                    <View className="h-10 flex justify-center items-center rounded-sm">
-                                                        <Text>Clan Banner</Text>
-                                                    </View>
-                                                </ClanBorder>
-                                            ) : (
-                                                PreviewIcon
-                                            )}
-                                        </View>
-
-                                        {/* Info Container */}
-                                        <View className="flex-1">
-                                            <Text className="font-black dark:text-white text-sm uppercase italic">
-                                                {item.name}
-                                            </Text>
-
-                                            <View className="flex-row mt-2 items-center">
-                                                <Text className="text-[9px] text-gray-500 uppercase font-bold tracking-widest">
-                                                    {item.category}
-                                                </Text>
-
-                                                {expiration && (
-                                                    <>
-                                                        <Text className="text-gray-600 dark:text-gray-400 text-[9px] mx-1">•</Text>
-                                                        <View className="flex-row items-center">
-                                                            <MaterialCommunityIcons
-                                                                name="clock-outline"
-                                                                size={10}
-                                                                color={isExpired ? "#ef4444" : "#6b7280"}
-                                                            />
-                                                            <Text className={`text-[9px] font-bold ml-1 ${isExpired ? 'text-red-500' : 'text-gray-500'}`}>
-                                                                {expiration}
-                                                            </Text>
-                                                        </View>
-                                                    </>
-                                                )}
-                                            </View>
-                                        </View>
-
-                                        {/* Action Button */}
-                                        {item.category !== "VERIFIED" && (
-                                            <TouchableOpacity
-                                                disabled={isUpdating}
-                                                onPress={() => handleEquipToggle(item)}
-                                                className={`px-6 py-3 rounded-xl ${item.isEquipped ? 'bg-green-500' : 'bg-blue-600'
-                                                    } ${isUpdating ? 'opacity-50' : ''}`}
-                                            >
-                                                {isUpdating ? (
-                                                    <ActivityIndicator size="small" color="white" />
-                                                ) : (
-                                                    <Text className="text-white text-[10px] font-black uppercase">
-                                                        {item.isEquipped ? 'Active' : 'Equip'}
-                                                    </Text>
-                                                )}
-                                            </TouchableOpacity>
-                                        )}
-
-                                        {/* Show 'Delete' or 'Expired' label if it's dead */}
-                                        {isExpired && (
-                                            <View className="px-4 py-2 bg-red-500/10 rounded-lg border border-red-500/20">
-                                                <Text className="text-red-500 text-[10px] font-black uppercase">Void</Text>
-                                            </View>
-                                        )}
-                                    </View>
-                                );
-                            })
-                        ) : (
-                            <View className="items-center mt-20 opacity-30">
-                                <MaterialCommunityIcons name="package-variant" size={80} color="gray" />
-                                <Text className="mt-4 font-black uppercase text-xs tracking-widest dark:text-white">
-                                    No {filter === 'ALL' ? '' : filter} items
-                                </Text>
                             </View>
-                        )}
+                        ))}
                     </ScrollView>
                 </View>
             </View>
         </Modal>
     );
 };
-// --- Sub Components
 
-const WarHistoryItem = ({ war, clanTag }) => {
+const WarHistoryItem = memo(({ war, clanTag }) => {
     const isWinner = war.winner === clanTag;
-    const isDraw = war.winner === "DRAW";
     const opponent = war.challengerTag === clanTag ? war.defenderTag : war.challengerTag;
-
-    // FIX: Use currentProgress as finalSnapshot is not in the response
     const challengerScore = war.currentProgress?.challengerScore || 0;
     const defenderScore = war.currentProgress?.defenderScore || 0;
 
     return (
         <View className="px-6 mb-4">
             <View className="bg-white dark:bg-zinc-900 border border-gray-100 dark:border-zinc-800 p-5 rounded-3xl">
-                <View className="flex-row justify-between items-center mb-4">
-                    <View className="flex-row items-center gap-x-2">
-                        <MaterialCommunityIcons
-                            name={isDraw ? "scale-balance" : (isWinner ? "trophy-outline" : "skull-outline")}
-                            size={20}
-                            color={isDraw ? "#9ca3af" : (isWinner ? "#eab308" : "#ef4444")}
-                        />
-                        <Text className={`font-black uppercase text-[10px] ${isDraw ? 'text-gray-400' : (isWinner ? 'text-yellow-500' : 'text-red-500')}`}>
-                            {isDraw ? "Stalemate" : (isWinner ? "Victory" : "Defeated")}
-                        </Text>
-                    </View>
-                    <Text className="text-gray-400 font-bold text-[8px] uppercase">
-                        {new Date(war.updatedAt).toLocaleDateString()}
-                    </Text>
-                </View>
-
-                <View className="flex-row justify-between items-center bg-gray-50 dark:bg-zinc-950 p-4 rounded-2xl border border-gray-100 dark:border-zinc-800">
+                <Text className={`font-black uppercase text-[10px] ${isWinner ? 'text-yellow-500' : 'text-red-500'}`}>
+                    {isWinner ? "Victory" : "Defeated"}
+                </Text>
+                <View className="flex-row justify-between items-center bg-gray-50 dark:bg-zinc-950 p-4 rounded-2xl mt-2">
                     <View className="items-center flex-1">
-                        <Text className="text-black dark:text-white font-black text-xs uppercase">{clanTag}</Text>
-                        <Text className="text-blue-500 font-black text-sm mt-1">
-                            {war.challengerTag === clanTag ? challengerScore : defenderScore}
-                        </Text>
+                        <Text className="dark:text-white font-black">{clanTag}</Text>
+                        <Text className="text-blue-500 font-bold">{war.challengerTag === clanTag ? challengerScore : defenderScore}</Text>
                     </View>
-                    <Text className="px-4 text-gray-400 font-black italic">VS</Text>
+                    <Text className="text-gray-400 italic">VS</Text>
                     <View className="items-center flex-1">
-                        <Text className="text-black dark:text-white font-black text-xs uppercase">{opponent}</Text>
-                        <Text className="text-gray-400 font-black text-sm mt-1">
-                            {war.challengerTag === clanTag ? defenderScore : challengerScore}
-                        </Text>
-                    </View>
-                </View>
-
-                <View className="mt-4 flex-row justify-between items-center">
-                    <View className="flex-row items-center gap-x-1">
-                        <MaterialCommunityIcons name="sword-cross" size={12} color="#6b7280" />
-                        <Text className="text-gray-500 font-bold text-[8px] uppercase tracking-widest">{war.warType} WAR</Text>
-                    </View>
-                    <View className="bg-blue-500/10 px-3 py-1 rounded-full border border-blue-500/20">
-                        <Text className="text-blue-500 font-black text-[9px] uppercase">
-                            Prize: {war.prizePool * 2} Points
-                        </Text>
+                        <Text className="dark:text-white font-black">{opponent}</Text>
+                        <Text className="text-gray-400 font-bold">{war.challengerTag === clanTag ? defenderScore : challengerScore}</Text>
                     </View>
                 </View>
             </View>
         </View>
     );
-};
-
-const ExpansionRow = ({ icon, glowColor, label, subLabel, onPress }) => (
-    <TouchableOpacity
-        onPress={onPress}
-        className="flex-row items-center p-4 bg-gray-50 dark:bg-zinc-900/40 rounded-2xl border border-gray-100 dark:border-zinc-800"
-    >
-        <View className="w-10 h-10 bg-white dark:bg-zinc-800 rounded-full items-center justify-center border border-gray-100 dark:border-zinc-700">
-            <MaterialCommunityIcons name={icon} size={20} color={glowColor} />
-        </View>
-        <View className="flex-1 ml-4">
-            <Text className="text-black dark:text-white font-black text-[10px] uppercase">{label}</Text>
-            <Text className="text-gray-400 text-[8px] font-bold uppercase">{subLabel}</Text>
-        </View>
-        <Feather name="chevron-right" size={16} color="#9ca3af" />
-    </TouchableOpacity>
-);
-
-const StatCard = ({ label, value, icon, isCoin, glowColor }) => (
-    <View className="w-[48%] bg-white dark:bg-zinc-900/50 p-5 rounded-[30px] mb-4 border border-gray-100 dark:border-zinc-800 shadow-sm">
-        <MaterialCommunityIcons name={icon} size={20} color={glowColor || "#3b82f6"} />
-        <Text className="text-gray-400 dark:text-gray-500 text-[9px] font-black uppercase tracking-widest mt-2">{label}</Text>
-        <View className="flex-row items-center mt-1">
-            <Text style={isCoin ? { color: "#9333ea" } : null} className="text-lg font-black mt-1 dark:text-white">{value?.toLocaleString() || 0} </Text>
-            {isCoin && <CoinIcon size={20} type="CC" />}
-        </View>
-    </View>
-);
-
-const StatRow = ({ label, value, highlight, color }) => (
-    <View className="flex-row justify-between px-4 py-4 border-b border-gray-100 dark:border-zinc-900/50 last:border-0">
-        <Text className="text-gray-500 dark:text-gray-400 font-bold text-[11px] uppercase">{label}</Text>
-        <Text className={`font-black text-xs ${highlight ? '' : 'text-black dark:text-white'}`} style={highlight ? { color: color } : {}}>
-            {value || 0}
-        </Text>
-    </View>
-);
-
-const MemberItem = ({ member, roleLabel, canManage, isLeader, onKick, onAppoint, accent }) => (
-    <View className="flex-row items-center mb-3 bg-white dark:bg-zinc-900/40 p-4 rounded-[24px] border border-gray-100 dark:border-zinc-800">
-        <Image source={{ uri: member.profilePic?.url }} className="w-12 h-12 rounded-full border-2 border-zinc-100 dark:border-zinc-800" />
-        <View className="flex-1 ml-4">
-            <Text className="text-black dark:text-white font-black uppercase text-xs tracking-tight">{member.username}</Text>
-            <Text style={{ color: accent }} className="text-[8px] font-black uppercase tracking-widest mt-0.5">{roleLabel}</Text>
-        </View>
-        <View className="flex-row gap-x-2">
-            {isLeader && roleLabel !== "Kage" && roleLabel !== "Jonin" && (
-                <TouchableOpacity onPress={onAppoint} className="bg-blue-500/10 px-4 py-2 rounded-xl border border-blue-500/20">
-                    <Text className="text-blue-600 dark:text-blue-400 font-black text-[9px] uppercase">Appoint Jonin</Text>
-                </TouchableOpacity>
-            )}
-            {canManage && (
-                <TouchableOpacity onPress={onKick} className="bg-red-500/10 px-4 py-2 rounded-xl">
-                    <Text className="text-red-600 dark:text-red-500 font-black text-[9px] uppercase">Banish</Text>
-                </TouchableOpacity>
-            )}
-        </View>
-    </View>
-);
-
-const AdminToggle = ({ label, status, onPress, accent }) => (
-    <TouchableOpacity
-        onPress={onPress}
-        className="p-6 bg-zinc-900 rounded-[30px] flex-row justify-between items-center border border-zinc-800 shadow-2xl"
-    >
-        <View>
-            <Text className="text-white font-black uppercase text-[10px] tracking-widest">{label}</Text>
-            <Text className="text-zinc-500 text-[8px] font-bold uppercase mt-1">Manage Gate Access</Text>
-        </View>
-        <View className={`px-4 py-2 rounded-xl ${status === 'OPEN' ? 'bg-green-500' : 'bg-red-500'}`}>
-            <Text className="text-white font-black text-[10px] uppercase">{status}</Text>
-        </View>
-    </TouchableOpacity>
-);
-
-const RequestItem = ({ user, onApprove, onDecline, accent }) => (
-    <View className="flex-row items-center mb-3 bg-white dark:bg-zinc-900 p-4 rounded-[24px] border border-gray-100 dark:border-zinc-800">
-        <Image source={{ uri: user?.profilePic?.url }} className="w-10 h-10 rounded-full" />
-        <View className="flex-1 ml-4">
-            <Text className="text-black dark:text-white font-black text-xs">{user?.username || 'Rogue'}</Text>
-            <Text className="text-gray-500 text-[8px] font-bold uppercase">Awaiting Authorization</Text>
-        </View>
-        <TouchableOpacity
-            onPress={onApprove}
-            style={{ backgroundColor: accent }}
-            className="px-5 py-2.5 rounded-2xl"
-        >
-            <Text className="text-white font-black text-[10px] uppercase italic">Accept</Text>
-        </TouchableOpacity>
-        <TouchableOpacity
-            onPress={onDecline}
-            style={{ backgroundColor: "red" }}
-            className="px-5 py-2.5 rounded-2xl ml-2"
-        >
-            <Text className="text-white font-black text-[10px] uppercase italic">Decline</Text>
-        </TouchableOpacity>
-    </View>
-);
+});
 
 export default ClanProfile;
