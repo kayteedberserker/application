@@ -468,12 +468,16 @@ export default function AuthorPage() {
                 contentContainerStyle={{ paddingBottom: insets.bottom + 100 }}
             />
 
-            <View style={{ position: 'absolute', left: -10000, opacity: 0 }} pointerEvents="none">
-                <ViewShot ref={playerCardRef} options={{ format: "png", quality: 1 }}>
-                    <PlayerCard author={author} totalPosts={totalPosts} isDark={isDark} />
-                </ViewShot>
-            </View>
+            {/* Hidden Capture Layer - Only rendered during preview for performance */}
+            {cardPreviewVisible && (
+                <View style={{ position: 'absolute', left: -10000, opacity: 0 }} pointerEvents="none">
+                    <ViewShot ref={playerCardRef} options={{ format: "png", quality: 1 }}>
+                        <PlayerCard author={author} totalPosts={totalPosts} isDark={isDark} />
+                    </ViewShot>
+                </View>
+            )}
 
+            {/* 🔹 Player Card Preview Modal */}
             <Modal visible={cardPreviewVisible} transparent animationType="slide">
                 <View className="flex-1 bg-black/95">
                     <ScrollView contentContainerStyle={{ flexGrow: 1, justifyContent: 'center', alignItems: 'center', padding: 20 }} showsVerticalScrollIndicator={false}>
@@ -488,11 +492,13 @@ export default function AuthorPage() {
                                 </Pressable>
                             </View>
 
-                            <View style={{ transform: [{ scale: Math.min(1, (width - 40) / 380) }], width: 380, alignItems: 'center' }}>
-                                <PlayerCard author={author} totalPosts={totalPosts} isDark={isDark} />
-                            </View>
+                            {cardPreviewVisible && (
+                                <View style={{ transform: [{ scale: Math.min(1, (width - 40) / 380) }], width: 380, alignItems: 'center' }}>
+                                    <PlayerCard author={author} totalPosts={totalPosts} isDark={isDark} />
+                                </View>
+                            )}
 
-                            <View className="w-full">
+                            <View className="w-full mt-6">
                                 <TouchableOpacity onPress={captureAndShare} style={{ backgroundColor: themeColor }} className="flex-row items-center justify-center gap-3 w-full h-16 rounded-[30px] shadow-lg">
                                     <MaterialCommunityIcons name="share-variant" size={24} color="white" />
                                     <Text className="text-white font-black uppercase tracking-[0.2em] text-sm italic">Share Identity</Text>
