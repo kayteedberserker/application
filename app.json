@@ -2,7 +2,7 @@
   "expo": {
     "name": "Oreblogda",
     "slug": "oreblogda",
-    "version": "1.9.9",
+    "version": "1.9.5",
     "orientation": "default",
     "icon": "./assets/images/myicon.png",
     "scheme": "oreblogda",
@@ -93,7 +93,8 @@
             "newArchEnabled": true,
             "minSdkVersion": 24,
             "launchMode": "singleTop",
-            "enableShrinkResourcesInReleaseBuilds": true
+            "enableShrinkResourcesInReleaseBuilds": true,
+            "enableMinifyInReleaseBuilds": true
           }
         }
       ],
@@ -102,6 +103,23 @@
     "experiments": {
       "typedRoutes": true,
       "reactCompiler": false
+    },
+    "extra": {
+      "router": {},
+      "eas": {
+        "projectId": "b6b7afd1-028a-425e-a84e-6a2af706a736"
+      }
+    },
+    "runtimeVersion": "v3_global",
+    "updates": {
+      "url": "https://u.exe.dev/b6b7afd1-028a-425e-a84e-6a2af706a736",
+      "enabled": true,
+      "checkAutomatically": "ON_LOAD",
+      "fallbackToCacheTimeout": 0
+    },
+    "owner": "oreblogda"
+  }
+}
     },
     "extra": {
       "router": {},
