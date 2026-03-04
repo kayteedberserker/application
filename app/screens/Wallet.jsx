@@ -526,7 +526,7 @@ const WalletPage = () => {
                 return (
                   <TouchableOpacity
                     key={pack.id}
-                    disabled={isLocked && !isOwned}
+                    
                     onPress={() => openPreview(pack, true)}
                     className={`mb-8 rounded-[35px] overflow-hidden border-2 ${isLocked ? 'opacity-60' : ''}`}
                     style={{ borderColor: cardColor, height: 240, backgroundColor: THEME.card }}
@@ -634,13 +634,13 @@ const WalletPage = () => {
 
                 <TouchableOpacity
                   onPress={handlePurchase}
-                  disabled={selectedPkg.isPurchased}
+                  disabled={selectedPkg.isPurchased || (isLocked && !isOwned) }
                   style={{ backgroundColor: selectedPkg.isPurchased ? THEME.success : THEME.accent }}
                   className="h-16 rounded-[20px] flex-row items-center justify-center shadow-2xl"
                 >
                   <MaterialCommunityIcons name={selectedPkg.isPurchased ? "check-all" : "shield-check"} size={24} color="white" />
                   <Text className="text-white font-black uppercase ml-3 tracking-[2px]">
-                    {selectedPkg.isPurchased ? "Bundle Already Deployed" : `Confirm ${isPreviewingPack ? (packages.find(p => p.product.identifier === selectedPkg.storeId)?.product.priceString || '...') : selectedPkg.product.priceString}`}
+                    {selectedPkg.isPurchased ? "Bundle Already Deployed" : isLocked ? "Requirements hasn't been met" : `Confirm ${isPreviewingPack ? (packages.find(p => p.product.identifier === selectedPkg.storeId)?.product.priceString || '...') : selectedPkg.product.priceString}`}
                   </Text>
                 </TouchableOpacity>
               </View>
