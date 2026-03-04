@@ -526,7 +526,7 @@ const WalletPage = () => {
                 return (
                   <TouchableOpacity
                     key={pack.id}
-                    disabled={!isLocked && !isOwned}
+                    disabled={isLocked && !isOwned}
                     onPress={() => openPreview(pack, true)}
                     className={`mb-8 rounded-[35px] overflow-hidden border-2 ${isLocked ? 'opacity-60' : ''}`}
                     style={{ borderColor: cardColor, height: 240, backgroundColor: THEME.card }}
