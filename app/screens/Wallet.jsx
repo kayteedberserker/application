@@ -4,17 +4,17 @@ import { useNavigation } from '@react-navigation/native';
 import { Canvas, Circle, Fill, Group, LinearGradient, Rect, vec } from "@shopify/react-native-skia";
 import { useCallback, useEffect, useRef, useState } from 'react';
 import {
-    Animated,
-    Dimensions,
-    Easing,
-    Modal,
-    Platform,
-    ScrollView,
-    StatusBar,
-    Text,
-    TouchableOpacity,
-    useColorScheme,
-    View
+  Animated,
+  Dimensions,
+  Easing,
+  Modal,
+  Platform,
+  ScrollView,
+  StatusBar,
+  Text,
+  TouchableOpacity,
+  useColorScheme,
+  View
 } from 'react-native';
 import Purchases from 'react-native-purchases';
 import { SafeAreaView } from 'react-native-safe-area-context';
@@ -270,7 +270,7 @@ const WalletPage = () => {
     const updatedRewards = activePullData.allRewards.map(reward => {
       if (reward.requiresPull) {
         const meta = reward.pullMetadata;
-        const numberSvgTag = `<text x="${meta.targetTextX}" y="${meta.targetTextY}" font-family="Arial, sans-serif" font-size="80" fill="${meta.primaryFill || "#00a86b"}" font-weight="bold">${generatedNumber}</text>`;
+        const numberSvgTag = `<text x="${meta.targetTextX}" y="${meta.targetTextY}" font-family="Arial, sans-serif" font-size="100" fill="${meta.primaryFill || "#00a86b"}" font-weight="bold">${generatedNumber}</text>`;
         
         // Inject tag before the closing </svg>
         const updatedSvg = reward.visualConfig.svgCode.replace('</svg>', `${numberSvgTag}</svg>`);
