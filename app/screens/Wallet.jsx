@@ -639,8 +639,8 @@ const WalletPage = () => {
                   className="h-16 rounded-[20px] flex-row items-center justify-center shadow-2xl"
                 >
                   <MaterialCommunityIcons name={selectedPkg.isPurchased ? "check-all" : "shield-check"} size={24} color="white" />
-                  <Text className="text-white font-black uppercase ml-1 text-[14px] tracking-[2px]">
-                    {selectedPkg.isPurchased ? "Bundle Already Deployed" : selectedPkg.isLocked ? "Requirements hasn't been met" : `Confirm ${isPreviewingPack ? (packages.find(p => p.product.identifier === selectedPkg.storeId)?.product.priceString || '...') : selectedPkg.product.priceString}`}
+                  <Text className="text-white font-black uppercase ml-1 text-[12px]">
+                    {selectedPkg.isPurchased ? "Bundle Already Deployed" : selectedPkg.isLocked ? "Requirements Not met" : `Confirm ${isPreviewingPack ? (packages.find(p => p.product.identifier === selectedPkg.storeId)?.product.priceString || '...') : selectedPkg.product.priceString}`}
                   </Text>
                 </TouchableOpacity>
               </View>
