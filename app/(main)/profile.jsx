@@ -312,7 +312,7 @@ const AuthorStoreModal = ({ visible, onClose, user, isDark, setInventory }) => {
               {!selectedTheme ? (
                 <View>
                   {/* STANDALONE ITEMS (e.g. Profile Boosts / One-offs) */}
-                  {catalog.standaloneItems?.length > 0 && (
+                  {catalog?.standaloneItems?.length > 0 && (
                     <View className="mb-8">
                       <Text className="text-gray-500 font-black uppercase text-xs mb-4 tracking-widest">Special Upgrades</Text>
                       {catalog.standaloneItems.map(item => renderStandaloneCard(item))}
