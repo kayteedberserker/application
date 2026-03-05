@@ -9,7 +9,19 @@ const VERSION_CHECK_URL = 'https://oreblogda.com/api/version';
 const INSTALLED_VERSION = Constants.expoConfig?.version || Constants.manifest?.version || '1.0.0';
 
 const isUpdateRequired = (installed, latest) => {
-  return null
+  if (!latest) return false;
+
+  const installedParts = installed.split('.').map(Number);
+  const latestParts = latest.split('.').map(Number);
+
+  for (let i = 0; i < Math.max(installedParts.length, latestParts.length); i++) {
+    const v1 = installedParts[i] || 0;
+    const v2 = latestParts[i] || 0;
+
+    if (v2 > v1) return true;
+    if (v2 < v1) return false;
+  }
+  return false;
 };
 
 export default function UpdateHandler() {
