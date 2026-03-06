@@ -6,6 +6,7 @@ import { useCallback, useEffect, useRef, useState } from 'react';
 import { ActivityIndicator, Clipboard, DeviceEventEmitter, FlatList, Modal, ScrollView, Text, TextInput, TouchableOpacity, View } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import ClanCrest from '../../components/ClanCrest';
+import CoinIcon from '../../components/ClanIcon';
 import { SyncLoading } from "../../components/SyncLoading";
 import { useCoins } from '../../context/CoinContext';
 import { useStreak } from "../../context/StreakContext";
@@ -571,7 +572,7 @@ const CreateClanModal = ({ visible, onClose, onSuccess, isDark, showAlert }) => 
                                 <ActivityIndicator color="#fff" />
                             ) : (
                                 <View className="flex-row items-center">
-                                    <Text className="text-white font-black text-xl uppercase tracking-tighter mr-2">Confirm Foundation</Text>
+                                    <Text className="text-white font-black text-xl uppercase tracking-tighter mr-2">Confirm Foundation 500 <CoinIcon size={22} type='OC' /></Text>
                                     <Ionicons name="chevron-forward" size={20} color="white" />
                                 </View>
                             )}

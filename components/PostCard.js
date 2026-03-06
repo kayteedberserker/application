@@ -1,6 +1,7 @@
 import { Feather, Ionicons, MaterialCommunityIcons } from "@expo/vector-icons";
 import AsyncStorage from "@react-native-async-storage/async-storage";
 import * as FileSystem from 'expo-file-system/legacy'; // Legacy import for SDK 54+
+import { Image } from "expo-image";
 import * as MediaLibrary from 'expo-media-library';
 import { useNavigation, usePathname, useRouter } from "expo-router";
 import { useVideoPlayer, VideoView } from "expo-video";
@@ -10,7 +11,6 @@ import {
   BackHandler,
   DeviceEventEmitter,
   Dimensions,
-  Image,
   Linking,
   Modal,
   Pressable,

@@ -1,6 +1,7 @@
 import { MaterialCommunityIcons } from "@expo/vector-icons";
+import { Image } from "expo-image";
 import { useEffect, useRef } from "react";
-import { Animated, Easing, Image, ScrollView, View } from "react-native";
+import { Animated, Easing, ScrollView, View } from "react-native";
 import Svg, { Defs, LinearGradient, Rect, Stop, SvgXml } from 'react-native-svg';
 import { ClanBadge } from "./ClanBadge";
 import ClanBorder from "./ClanBorder";

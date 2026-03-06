@@ -1,8 +1,9 @@
 import { Ionicons, MaterialCommunityIcons } from "@expo/vector-icons";
 import { useCallback, useEffect, useRef, useState } from "react";
-import { ActivityIndicator, Image, Platform, Text as RNText, View } from "react-native";
+import { ActivityIndicator, Platform, Text as RNText, View } from "react-native";
 import Animated, { FadeIn, FadeInDown } from "react-native-reanimated";
 // 🔹 LevelPlay imports
+import { Image } from "expo-image";
 import { LevelPlayNativeAd, LevelPlayNativeAdView } from "unity-levelplay-mediation";
 import { AdConfig } from "../utils/AdConfig";
 

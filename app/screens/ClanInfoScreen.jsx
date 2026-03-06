@@ -24,7 +24,6 @@ export default function ClanInfoScreen() {
       </View>
       <View className="items-end">
         <Text style={{ color: THEME.textSecondary }} className="text-[10px] font-bold">{threshold.toLocaleString()} XP</Text>
-        <Text style={{ color: "#10b981" }} className="text-[10px] font-black">+{allowance}/DAY</Text>
       </View>
     </View>
   );

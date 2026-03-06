@@ -1,10 +1,10 @@
 import { Ionicons } from "@expo/vector-icons";
+import { Image } from "expo-image";
 import { usePathname } from "expo-router";
 import { useEffect } from "react";
 import {
     ActivityIndicator,
     DeviceEventEmitter,
-    Image,
     TouchableOpacity,
     View
 } from "react-native";

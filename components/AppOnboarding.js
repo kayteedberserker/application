@@ -52,10 +52,24 @@ export default function AppOnboarding() {
         },
         {
             title: "CLAN_WARS",
-            desc: "The ultimate battlefield. Compete in CLAN WARS to show off whichs the best CLAN. Rank up to unlock titles like 'The Pirate King' and 'The Pillars' and other badges for your entire alliance.",
+            desc: "The ultimate battlefield. Compete in CLAN WARS to show off whichs the best CLAN. Rank up to unlock titles like 'The Pirate King' and 'The Pillars' for your entire alliance.",
             icon: "flash",
             color: "#f59e0b",
             intel: "WAR: TERRITORY_BATTLE"
+        },
+        {
+            title: "CLAN_COINS_&_TREASURY",
+            desc: "Amass wealth for your alliance! Use Clan Coins (CC) or OC to purchase legendary frames and premium status. Earn CC daily or through direct treasury boosts. Claim 10 OC daily and 50 every 7 days",
+            icon: "diamond",
+            color: "#fbbf24",
+            intel: "CURRENCY: CC_SYSTEM_LOADED"
+        },
+        {
+            title: "THE_BLACK_MARKET",
+            desc: "The marketplace is open. Spend your CC/OC on Phantom-class themes, limited-edition watermarks, and tactical clan boosts to dominate the leaderboards. There are different categories of products in the store...",
+            icon: "cart",
+            color: "#22d3ee",
+            intel: "STORE: MARKET_ACCESS_GRANTED"
         },
         {
             title: "ADVENTURE_AWAITS",
@@ -66,8 +80,8 @@ export default function AppOnboarding() {
         }
     ];
 
-    // These are the slides shown to users who already finished the old onboarding
-    const updateOnlyFeatures = allFeatures.slice(3, 5); // Just Clan and Clan Wars
+    // Show Clan, War, Coins, and Store to returning users (Index 3 to 6)
+    const updateOnlyFeatures = allFeatures.slice(3, 7); 
 
     const currentFeatures = isUpdateOnly ? updateOnlyFeatures : allFeatures;
 
@@ -79,15 +93,16 @@ export default function AppOnboarding() {
         try {
             const storedUser = await AsyncStorage.getItem("mobileUser");
             const hasSeenWelcome = await AsyncStorage.getItem("HAS_SEEN_WELCOME");
-            const hasSeenClanUpdate = await AsyncStorage.getItem("HAS_SEEN_CLAN_UPDATE");
+            // Latest version key
+            const hasSeenStoreUpdate = await AsyncStorage.getItem("HAS_SEEN_STORE_V4");
 
             if (storedUser !== null) {
                 if (hasSeenWelcome === null) {
                     // Brand new user: Show everything
                     setIsUpdateOnly(false);
                     setIsVisible(true);
-                } else if (hasSeenClanUpdate === null) {
-                    // Old user, hasn't seen clan stuff: Show update only
+                } else if (hasSeenStoreUpdate === null) {
+                    // Returning user needs to see the new Store/CC/War system
                     setIsUpdateOnly(true);
                     setIsVisible(true);
                 }
@@ -101,6 +116,8 @@ export default function AppOnboarding() {
         try {
             await AsyncStorage.setItem("HAS_SEEN_WELCOME", "true");
             await AsyncStorage.setItem("HAS_SEEN_CLAN_UPDATE", "true");
+            await AsyncStorage.setItem("HAS_SEEN_COINS_V3", "true");
+            await AsyncStorage.setItem("HAS_SEEN_STORE_V4", "true");
             setIsVisible(false);
         } catch (e) {
             console.log("Error saving onboarding state:", e);
@@ -165,7 +182,7 @@ export default function AppOnboarding() {
                         </View>
                         
                         <View>
-                           {isUpdateOnly && <Text style={{ fontSize: 9, color: '#f59e0b', fontWeight: 'bold' }}>[ NEW_UPDATE_V2 ]</Text>}
+                           {isUpdateOnly && <Text style={{ fontSize: 9, color: '#22d3ee', fontWeight: 'bold' }}>[ NEW_UPDATE_V4 ]</Text>}
                         </View>
 
                         <TouchableOpacity onPress={handleComplete}>
@@ -174,7 +191,7 @@ export default function AppOnboarding() {
                     </View>
 
                     <View>
-                        {/* Icon */}
+                        {/* Icon Container with Glow */}
                         <Animated.View key={`icon-${step}`} entering={FadeIn} style={{ marginBottom: 30, marginTop: 10 }}>
                             <View style={{ 
                                 width: 68, height: 68, borderRadius: 20, backgroundColor: '#000', 
@@ -226,14 +243,16 @@ export default function AppOnboarding() {
                                 justifyContent: 'center', gap: 10
                             }}
                         >
-                            <Text style={{ color: '#000', fontWeight: '900', fontSize: 14, letterSpacing: 2 }}>
-                                {step === currentFeatures.length - 1 ? "INITIALIZE_CORE" : "NEXT_SYNC_LEVEL"}
-                            </Text>
-                            <Ionicons 
-                                name={step === currentFeatures.length - 1 ? "flash" : "chevron-forward"} 
-                                size={20} 
-                                color="#000" 
-                            />
+                            <Animated.View entering={FadeIn} style={{ flexDirection: 'row', alignItems: 'center', gap: 10 }}>
+                                <Text style={{ color: '#000', fontWeight: '900', fontSize: 14, letterSpacing: 2 }}>
+                                    {step === currentFeatures.length - 1 ? "INITIALIZE_CORE" : "NEXT_SYNC_LEVEL"}
+                                </Text>
+                                <Ionicons 
+                                    name={step === currentFeatures.length - 1 ? "flash" : "chevron-forward"} 
+                                    size={20} 
+                                    color="#000" 
+                                />
+                            </Animated.View>
                         </TouchableOpacity>
                     </View>
                 </Animated.View>

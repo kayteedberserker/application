@@ -1,5 +1,6 @@
+import { Image } from "expo-image";
 import { useEffect, useMemo, useState } from "react";
-import { ActivityIndicator, Image, Pressable, View } from "react-native";
+import { ActivityIndicator, Pressable, View } from "react-native";
 import Animated, {
     Easing,
     interpolate,

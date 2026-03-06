@@ -1,6 +1,7 @@
 import { Feather, Ionicons, MaterialCommunityIcons } from "@expo/vector-icons";
 import AsyncStorage from "@react-native-async-storage/async-storage";
 import * as Clipboard from 'expo-clipboard';
+import { Image } from "expo-image";
 import { useRouter } from 'expo-router';
 import * as Sharing from 'expo-sharing'; // Ensure this is imported
 import { useEffect, useMemo, useRef, useState } from 'react';
@@ -11,7 +12,6 @@ import {
     Dimensions,
     Easing,
     FlatList,
-    Image,
     Modal,
     Pressable,
     ScrollView,

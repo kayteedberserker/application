@@ -1,5 +1,6 @@
 import { Ionicons } from "@expo/vector-icons";
 import AsyncStorage from '@react-native-async-storage/async-storage';
+import { Image } from "expo-image";
 import * as ImagePicker from 'expo-image-picker';
 import * as Notifications from 'expo-notifications';
 import { Link, useRouter } from "expo-router";
@@ -7,7 +8,6 @@ import { useEffect, useMemo, useRef, useState } from "react";
 import {
     ActivityIndicator,
     DeviceEventEmitter,
-    Image,
     Linking,
     Platform,
     ScrollView,
