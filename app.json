@@ -1,8 +1,8 @@
 {
   "expo": {
-    "name": "Oreblogda",
+    "name": "Oreblogda - Test Build",
     "slug": "oreblogda",
-    "version": "1.8.0",
+    "version": "1.9.9",
     "orientation": "default",
     "icon": "./assets/images/myicon.png",
     "scheme": "oreblogda",
@@ -29,6 +29,9 @@
       "googleServicesFile": "./google-services.json",
       "edgeToEdgeEnabled": true,
       "predictiveBackGestureEnabled": false,
+      "permissions": [
+        "com.android.vending.BILLING"
+      ],
       "intentFilters": [
         {
           "action": "VIEW",
@@ -36,9 +39,21 @@
           "data": [
             {
               "scheme": "https",
-              "host": "oreblogda.com",
-              "pathPrefix": "/"
+              "host": "oreblogda.com"
             },
+            {
+              "scheme": "http",
+              "host": "oreblogda.com"
+            }
+          ],
+          "category": [
+            "BROWSABLE",
+            "DEFAULT"
+          ]
+        },
+        {
+          "action": "VIEW",
+          "data": [
             {
               "scheme": "oreblogda"
             }
@@ -48,17 +63,14 @@
             "DEFAULT"
           ]
         }
-      ],
-      "config": {
-        "googleMobileAdsAppId": "ca-app-pub-8021671365048667~3586113443"
-      }
+      ]
     },
     "web": {
       "output": "static",
       "favicon": "./assets/images/myicon.png"
     },
     "plugins": [
-      "./withAdMediation.js",
+      "./withPurchases.js",
       "expo-router",
       [
         "expo-splash-screen",
@@ -66,48 +78,43 @@
           "image": "./assets/images/myicon.png",
           "imageWidth": 200,
           "resizeMode": "contain",
-          "backgroundColor": "#ffffff"
+          "backgroundColor": "#ffffff",
+          "dark": {
+            "image": "./assets/images/myicon.png",
+            "backgroundColor": "#050505"
+          }
         }
       ],
       "expo-secure-store",
-      [
-        "react-native-google-mobile-ads",
-        {
-          "androidAppId": "ca-app-pub-8021671365048667~3586113443",
-          "delayAppMeasurementInit": true
-        }
-      ],
       [
         "expo-build-properties",
         {
           "android": {
             "newArchEnabled": true,
             "minSdkVersion": 24,
-            "extraMavenRepos": [
-              "https://android-sdk.is.com/",
-              "https://unity3d.jfrog.io/artifactory/unity-ads-android-master"
-            ]
+            "launchMode": "singleTop"
           }
         }
-      ]
+      ],
+      "expo-video"
     ],
     "experiments": {
       "typedRoutes": true,
       "reactCompiler": false
     },
-    "extra": {
-      "router": {},
-      "eas": {
-        "projectId": "b22841d4-0736-4aa0-89d2-d9a48af0defc"
-      }
-    },
-    "runtimeVersion": "v2_global",
+    "runtimeVersion": "v4_global",
     "updates": {
       "url": "https://u.expo.dev/b22841d4-0736-4aa0-89d2-d9a48af0defc",
       "enabled": true,
       "checkAutomatically": "ON_LOAD",
       "fallbackToCacheTimeout": 0
     },
-    "owner": "oreblog"
+    "owner": "oreblog",
+    "extra": {
+      "router": {},
+      "eas": {
+        "projectId": "b22841d4-0736-4aa0-89d2-d9a48af0defc"
+      }
+    }
   }
 }
