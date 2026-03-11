@@ -1,24 +1,25 @@
-import { Feather, Ionicons, MaterialCommunityIcons } from "@expo/vector-icons";
-import AsyncStorage from "@react-native-async-storage/async-storage";
-import { Image } from "expo-image";
+import { Ionicons, MaterialCommunityIcons, Feather } from "@expo/vector-icons";
 import { useLocalSearchParams, useRouter } from "expo-router";
 import * as Sharing from "expo-sharing";
 import { useColorScheme } from "nativewind";
-import { useEffect, useRef, useState } from "react";
+import { useCallback, useEffect, useRef, useState, useMemo, memo } from "react";
 import {
   ActivityIndicator,
   Animated,
+  Image,
   Clipboard,
   DeviceEventEmitter,
   Dimensions,
   Easing,
-  FlatList,
   Modal,
   Pressable,
   ScrollView,
   TouchableOpacity,
   View
 } from "react-native";
+// ⚡️ Swapped FlashList for LegendList
+import { useMMKV } from 'react-native-mmkv';
+import { LegendList } from "@legendapp/list";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import Svg, { Defs, LinearGradient, Rect, Stop, SvgXml } from "react-native-svg";
 import ViewShot from "react-native-view-shot";
@@ -33,26 +34,58 @@ import { useAlert } from "../../../context/AlertContext";
 import { useUser } from "../../../context/UserContext";
 import apiFetch from "../../../utils/apiFetch";
 
+// ⚡️ Reanimated Imports
+import AnimatedReanimated, { useSharedValue, withRepeat, withTiming, useAnimatedStyle, interpolate } from "react-native-reanimated";
+
 const API_BASE = "https://oreblogda.com/api";
 const { width } = Dimensions.get('window');
 
 const CLAN_MEMORY_CACHE = {};
 const CLAN_POSTS_MEMORY_CACHE = {};
 
-const THEME = {
-  accent: "#3b82f6"
-};
+const THEME = { accent: "#3b82f6" };
 
-const getClanTierDetails = (title) => {
-  switch (title) {
-    case "The Akatsuki": return { rank: 6, color: '#ef4444' };
-    case "The Espada": return { rank: 5, color: '#e0f2fe' };
-    case "Phantom Troupe": return { rank: 4, color: '#a855f7' };
-    case "Upper Moon": return { rank: 3, color: '#60a5fa' };
-    case "Squad 13": return { rank: 2, color: '#10b981' };
-    default: return { rank: 1, color: '#94a3b8' };
+// ⚡️ Adjusted to use Number-based Ranks matching your ClanSchema
+const getClanTierDetails = (rankNumber) => {
+  switch (rankNumber) {
+    case 6: return { title: "The Akatsuki", color: '#ef4444' };
+    case 5: return { title: "The Espada", color: '#e0f2fe' };
+    case 4: return { title: "Phantom Troupe", color: '#a855f7' };
+    case 3: return { title: "Upper Moon", color: '#60a5fa' };
+    case 2: return { title: "Squad 13", color: '#10b981' };
+    default: return { title: "Wandering Ronin", color: '#94a3b8' };
   }
 };
+
+// ------------------------------------------------------------------
+// ⚡️ MOVED OUTSIDE: Isolated Reanimated Component
+// ------------------------------------------------------------------
+const AnimatedProgressBar = memo(({ scoreA, scoreB }) => {
+  const total = scoreA + scoreB || 1;
+  const pctA = (scoreA / total) * 100;
+  const glowValue = useSharedValue(0);
+
+  useEffect(() => {
+    glowValue.value = withRepeat(withTiming(1, { duration: 1500 }), -1, true);
+  }, []);
+
+  const glowStyle = useAnimatedStyle(() => ({
+    opacity: interpolate(glowValue.value, [0, 1], [0.6, 1]),
+  }));
+
+  return (
+    <View className="mt-6">
+      <View className="h-5 flex-row rounded-xl overflow-hidden bg-slate-200 dark:bg-slate-800 border border-slate-300 dark:border-slate-700">
+        <AnimatedReanimated.View className="h-full bg-blue-500" style={[{ width: `${pctA}%` }, pctA > 50 ? glowStyle : null]} />
+        <AnimatedReanimated.View className="h-full bg-red-600" style={[{ width: `${100 - pctA}%` }]} />
+      </View>
+      <View className="flex-row justify-between mt-2 px-1">
+        <Text className="text-blue-500 dark:text-blue-400 font-black italic text-lg">{Math.round(pctA)}%</Text>
+        <Text className="text-red-600 dark:text-red-500 font-black italic text-lg">{Math.round(100 - pctA)}%</Text>
+      </View>
+    </View>
+  );
+});
 
 export default function ClanPage() {
   const { tag } = useLocalSearchParams();
@@ -62,6 +95,8 @@ export default function ClanPage() {
   const insets = useSafeAreaInsets();
   const { colorScheme } = useColorScheme();
   const isDark = colorScheme === "dark";
+
+  const storage = useMMKV();
 
   const CACHE_KEY_CLAN = `clan_data_${tag}`;
   const CACHE_KEY_POSTS = `clan_posts_${tag}`;
@@ -119,44 +154,45 @@ export default function ClanPage() {
     return () => sub.remove();
   }, []);
 
-  const saveHeavyCache = async (key, data) => {
+  const saveHeavyCache = useCallback((key, data) => {
     try {
-      const cacheEntry = { data: data, timestamp: Date.now() };
-      await AsyncStorage.setItem(key, JSON.stringify(cacheEntry));
+      storage.set(key, JSON.stringify(data));
     } catch (e) { console.error("Cache Save Error", e); }
-  };
-  
+  }, [storage]);
+
   useEffect(() => {
-    const checkFollowStatus = async () => {
+    const checkFollowStatus = () => {
       if (!user) return;
       try {
-        const followedClansStr = await AsyncStorage.getItem('followed_clans');
-        const checkedClansStr = await AsyncStorage.getItem('checked_clans');
+        const followedClansStr = storage.getString('followed_clans');
+        const checkedClansStr = storage.getString('checked_clans');
         let followedClans = followedClansStr ? JSON.parse(followedClansStr) : [];
         let checkedClans = checkedClansStr ? JSON.parse(checkedClansStr) : [];
-        
+
         if (followedClans.includes(tag)) { setIsFollowing(true); return; }
         if (checkedClans.includes(tag)) { setIsFollowing(false); return; }
-        const res = await apiFetch(`/clans/follow?clanTag=${tag}&deviceId=${user.deviceId}`);
-        
-        if (res.ok) {
-          const data = await res.json()
-          if (data.isFollowing) {
-            setIsFollowing(true);
-            followedClans.push(tag);
-            await AsyncStorage.setItem('followed_clans', JSON.stringify(followedClans));
-          } else {
-            setIsFollowing(false);
-            checkedClans.push(tag);
-            await AsyncStorage.setItem('checked_clans', JSON.stringify(checkedClans));
-          }
-        }
+
+        apiFetch(`/clans/follow?clanTag=${tag}&deviceId=${user.deviceId}`)
+          .then(res => res.json())
+          .then(data => {
+            if (data.isFollowing) {
+              setIsFollowing(true);
+              followedClans.push(tag);
+              storage.set('followed_clans', JSON.stringify(followedClans));
+            } else {
+              setIsFollowing(false);
+              checkedClans.push(tag);
+              storage.set('checked_clans', JSON.stringify(checkedClans));
+            }
+          })
+          .catch(e => console.error("Follow status sync error", e));
+
       } catch (e) { console.error("Follow status sync error", e); }
     };
     checkFollowStatus();
-  }, [tag, user]);
+  }, [tag, user, storage]);
 
-  const fetchInitialData = async () => {
+  const fetchInitialData = useCallback(async () => {
     setLoading(true);
     setIsOffline(false);
     try {
@@ -187,9 +223,9 @@ export default function ClanPage() {
       setRefreshing(false);
       setTimeout(() => setIsInitialMount(false), 800);
     }
-  };
+  }, [tag, user?.deviceId, CACHE_KEY_CLAN, CACHE_KEY_POSTS, saveHeavyCache]);
 
-  const fetchMorePosts = async () => {
+  const fetchMorePosts = useCallback(async () => {
     if (!hasMore || loading || posts.length === 0 || isOffline) return;
     const nextPage = page + 1;
     setLoading(true);
@@ -206,20 +242,19 @@ export default function ClanPage() {
         setHasMore(data.posts.length >= 6);
       } else { setHasMore(false); }
     } catch (error) { console.error("Load more error:", error); } finally { setLoading(false); }
-  };
+  }, [hasMore, loading, posts.length, isOffline, page, tag, CACHE_KEY_POSTS]);
 
   useEffect(() => {
-    const init = async () => {
+    const init = () => {
       if (CLAN_MEMORY_CACHE[CACHE_KEY_CLAN]) {
         setIsInitialMount(false);
         fetchInitialData()
         return;
       }
       try {
-        const [cClan, cPosts] = await Promise.all([
-          AsyncStorage.getItem(CACHE_KEY_CLAN),
-          AsyncStorage.getItem(CACHE_KEY_POSTS)
-        ]);
+        const cClan = storage.getString(CACHE_KEY_CLAN);
+        const cPosts = storage.getString(CACHE_KEY_POSTS);
+
         if (cClan) {
           const parsed = JSON.parse(cClan);
           const clanData = parsed?.data || parsed;
@@ -233,11 +268,12 @@ export default function ClanPage() {
           CLAN_POSTS_MEMORY_CACHE[CACHE_KEY_POSTS] = postData;
           setIsInitialMount(false);
         }
-        fetchInitialData();
-      } catch (e) { fetchInitialData(); }
+      } catch (e) { console.error("MMKV Init Error", e); }
+
+      fetchInitialData();
     };
     init();
-  }, [tag, user?.deviceId]);
+  }, [tag, user?.deviceId, fetchInitialData, storage, CACHE_KEY_CLAN, CACHE_KEY_POSTS]);
 
   const performFollowAction = async (action) => {
     setLoadingFollow(true);
@@ -246,10 +282,10 @@ export default function ClanPage() {
         method: "POST",
         body: JSON.stringify({ clanTag: tag, deviceId: user.deviceId, action: action })
       });
-      
+
       if (res.ok) {
-        const followedClansStr = await AsyncStorage.getItem('followed_clans');
-        const checkedClansStr = await AsyncStorage.getItem('checked_clans');
+        const followedClansStr = storage.getString('followed_clans');
+        const checkedClansStr = storage.getString('checked_clans');
         let clanList = followedClansStr ? JSON.parse(followedClansStr) : [];
         let checkedList = checkedClansStr ? JSON.parse(checkedClansStr) : [];
 
@@ -264,23 +300,26 @@ export default function ClanPage() {
           if (!checkedList.includes(tag)) checkedList.push(tag);
           showAlert("UNFOLLOWED", `You have left ${clan?.name}.`);
         }
-        await AsyncStorage.setItem('followed_clans', JSON.stringify(clanList));
-        await AsyncStorage.setItem('checked_clans', JSON.stringify(checkedList));
+        storage.set('followed_clans', JSON.stringify(clanList));
+        storage.set('checked_clans', JSON.stringify(checkedList));
       }
       if (res.status == 419) {
-        const followedClansStr = await AsyncStorage.getItem('followed_clans');
-        const checkedClansStr = await AsyncStorage.getItem('checked_clans');
+        const followedClansStr = storage.getString('followed_clans');
+        const checkedClansStr = storage.getString('checked_clans');
         let clanList = followedClansStr ? JSON.parse(followedClansStr) : [];
         let checkedList = checkedClansStr ? JSON.parse(checkedClansStr) : [];
         showAlert("CLAN JOINED", `You are already following ${clan?.name}.`);
         setIsFollowing(true);
         if (!clanList.includes(tag)) clanList.push(tag);
         checkedList = checkedList.filter(t => t !== tag);
+
+        storage.set('followed_clans', JSON.stringify(clanList));
+        storage.set('checked_clans', JSON.stringify(checkedList));
       }
     } catch (err) { showAlert("CONNECTION ERROR", "Check your internet connection."); } finally { setLoadingFollow(false); }
   };
 
-  const handleFollow = async () => {
+  const handleFollow = () => {
     if (!user) { showAlert("AUTHENTICATION", "Log in to interact."); return; }
     if (isFollowing) {
       showAlert("LEAVE CLAN?", `Unfollow ${clan?.name}?`, [
@@ -316,20 +355,21 @@ export default function ClanPage() {
     } catch (error) { console.error("Capture Error:", error); }
   };
 
-  const ClanSkeleton = () => (
+  const ClanSkeleton = useCallback(() => (
     <View className="px-4 pt-20 pb-6 opacity-40">
       <View className="p-6 bg-gray-100 dark:bg-[#111] border border-gray-200 dark:border-gray-800 rounded-[40px] items-center">
         <Animated.View style={{ opacity: skeletonFade }} className="w-32 h-32 bg-gray-300 dark:bg-gray-800 rounded-full mb-6" />
         <Animated.View style={{ opacity: skeletonFade }} className="w-48 h-8 bg-gray-300 dark:bg-gray-800 rounded-lg mb-4" />
       </View>
     </View>
-  );
-  const RemoteSvgIcon = ({ xml, size = 50, color }) => {
+  ), [skeletonFade]);
+
+  const RemoteSvgIcon = useCallback(({ xml, size = 50, color }) => {
     if (!xml) return <MaterialCommunityIcons name="help-circle-outline" size={size} color="gray" />;
     return <SvgXml xml={xml} width={size} height={size} />;
-  };
+  }, []);
 
-  const ListHeader = () => {
+  const ListHeader = useCallback(() => {
     if (!clan && isOffline) return <ClanSkeleton />;
     if (!clan) return null;
 
@@ -337,10 +377,10 @@ export default function ClanPage() {
     const currentPoints = clan.totalPoints || 0;
     const progress = Math.min((currentPoints / nextMilestone) * 100, 100);
     const isVerified = clan.verifiedUntil && new Date(clan.verifiedUntil) > new Date();
-    const verifiedTier = clan.activeCustomizations?.verifiedTier
-    const verifiedColor = verifiedTier == "premium" ? "#facc15" : verifiedTier == "standard" ? "#ef4444" : "#3b82f6"
+    const verifiedTier = clan.activeCustomizations?.verifiedTier;
+    const verifiedColor = verifiedTier == "premium" ? "#facc15" : verifiedTier == "standard" ? "#ef4444" : "#3b82f6";
 
-    const rankInfo = getClanTierDetails(clan.rankTitle || "Wandering Ronin");
+    const rankInfo = getClanTierDetails(clan.rank || 1);
     const highlightColor = isVerified ? verifiedColor : (rankInfo.color || THEME.accent);
 
     const equippedGlow = clan.specialInventory?.find(i => i.category === 'GLOW' && i.isEquipped);
@@ -365,9 +405,9 @@ export default function ClanPage() {
         <View
           className="absolute"
           style={{
-            bottom: -10,
+            bottom: -20,
             right: -20,
-            opacity: watermarkVisual.opacity || 0.4,
+            opacity: 0.7,
             transform: [{ rotate: watermarkVisual.rotation || '-15deg' }]
           }}
           pointerEvents="none"
@@ -459,17 +499,21 @@ export default function ClanPage() {
                   </View>
 
                   {clan.badges?.length > 0 && (
-                    <View className="flex-row gap-2 mt-3">
+                    <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={{ gap: 3 }}>
                       {clan.badges.map((badgeName, idx) => (
                         <ClanBadge key={`${badgeName}-${idx}`} isClanPage={true} badgeName={badgeName} size="sm" />
                       ))}
-                    </View>
+                    </ScrollView>
                   )}
 
-                  <View className="flex-row items-center justify-between w-full mt-4 px-2">
+                  <View className="flex-row items-center justify-between w-full mt-4 p-3">
                     {clan.leader && (
                       <TouchableOpacity onPress={() => router.push(`/author/${clan.leader._id}`)} className="flex-row items-center gap-1.5 bg-gray-50 dark:bg-gray-900 p-1 pr-2 rounded-full border border-gray-100 dark:border-gray-800">
-                        <Image source={{ uri: clan.leader.profilePic?.url || "https://via.placeholder.com/150" }} className="w-6 h-6 rounded-full" />
+                        <Image
+                          source={{ uri: clan.leader.profilePic?.url || "https://oreblogda.com/default-avatar.png" }}
+                          contentFit="cover"
+                          style={{ width: 30, height: 30, borderRadius: 16 }}
+                        />
                         <Text className="text-[9px] font-bold dark:text-white">{clan.leader.username}</Text>
                       </TouchableOpacity>
                     )}
@@ -548,17 +592,21 @@ export default function ClanPage() {
                 </View>
 
                 {clan.badges?.length > 0 && (
-                  <View className="flex-row gap-2 mt-3">
+                  <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={{ gap: 3 }}>
                     {clan.badges.map((badgeName, idx) => (
                       <ClanBadge key={`${badgeName}-${idx}`} isClanPage={true} badgeName={badgeName} size="sm" />
                     ))}
-                  </View>
+                  </ScrollView>
                 )}
 
-                <View className="flex-row items-center justify-between w-full mt-4 px-2">
+                <View className="flex-row items-center justify-between w-full mt-4 p-3">
                   {clan.leader && (
                     <TouchableOpacity onPress={() => router.push(`/author/${clan.leader._id}`)} className="flex-row items-center gap-1.5 bg-gray-50 dark:bg-gray-900 p-1 pr-2 rounded-full border border-gray-100 dark:border-gray-800">
-                      <Image source={{ uri: clan.leader.profilePic?.url || "https://via.placeholder.com/150" }} className="w-6 h-6 rounded-full" />
+                      <Image
+                        source={{ uri: clan.leader.profilePic?.url || "https://oreblogda.com/default-avatar.png" }}
+                        contentFit="cover"
+                        style={{ width: 30, height: 30, borderRadius: 16 }}
+                      />
                       <Text className="text-[9px] font-bold dark:text-white">{clan.leader.username}</Text>
                     </TouchableOpacity>
                   )}
@@ -579,11 +627,18 @@ export default function ClanPage() {
         )}
       </View>
     );
-  };
+  }, [clan, isOffline, isDark, pulseAnim, spin, isFollowing, loadingFollow, actionLoading, showAlert, handleFollow, handleAuthorRequest, router]);
 
-  const renderItem = ({ item }) => (
-    <View className={'px-3'}><PostCard post={item} isFeed /></View>
-  );
+  const renderItem = useCallback(({ item }) => (
+    <View className="px-3">
+      <PostCard
+        post={item}
+        authorData={item.authorData}
+        clanData={item.clanData}
+        isFeed
+      />
+    </View>
+  ), [clan]);
 
   if (isInitialMount) {
     return <View style={{ backgroundColor: isDark ? "#050505" : "#ffffff" }} className="flex-1 items-center justify-center"><SyncLoading message='Decrypting Intel' /></View>
@@ -591,21 +646,49 @@ export default function ClanPage() {
 
   return (
     <View className="flex-1 bg-white dark:bg-[#0a0a0a]">
-      <FlatList
+      {/* ⚡️ Swapped to LegendList */}
+      <LegendList
         ref={scrollRef}
         data={posts}
         keyExtractor={(item) => item._id}
         renderItem={renderItem}
         ListHeaderComponent={ListHeader}
-        ListFooterComponent={<View className="py-10">{loading && <SyncLoading />}</View>}
+
+        // ⚡️ LegendList Settings
+        estimatedItemSize={500}
+        drawDistance={1000}
+        recycleItems={true}
+        contentContainerStyle={{ paddingBottom: insets.bottom + 100 }}
+
+        ListFooterComponent={
+          <View className="py-10">
+            {loading && <SyncLoading />}
+            {!hasMore && posts.length > 0 && (
+              <View className="items-center opacity-30">
+                <View className="h-[1px] w-24 bg-gray-500 mb-4" />
+                <Text className="text-[10px] font-mono uppercase tracking-[0.4em] dark:text-white">End_Of_Transmission</Text>
+              </View>
+            )}
+          </View>
+        }
         onEndReached={fetchMorePosts}
         onEndReachedThreshold={0.5}
         onRefresh={() => { setPage(1); fetchInitialData(); }}
         refreshing={refreshing}
-        contentContainerStyle={{ paddingBottom: insets.bottom + 100 }}
+        onScroll={(e) => { DeviceEventEmitter.emit("onScroll", e.nativeEvent.contentOffset.y); }}
+        scrollEventThrottle={16}
       />
 
-      {/* 🔹 Clan Card Preview Modal - Now only renders ClanCard when visible */}
+      {cardPreviewVisible && (
+        <View style={{ position: 'absolute', left: -10000, opacity: 0 }} pointerEvents="none">
+          <ViewShot ref={clanCardRef} options={{ format: "png", quality: 1 }}>
+            <View style={{ transform: [{ scale: Math.min(1, (width - 40) / 380) }], width: 380, alignItems: 'center' }}>
+              <ClanCard clan={clan} isDark={isDark} forSnapshot={true} />
+            </View>
+          </ViewShot>
+        </View>
+      )}
+
       <Modal visible={cardPreviewVisible} transparent animationType="slide">
         <View className="flex-1 bg-black/95">
           <ScrollView contentContainerStyle={{ flexGrow: 1, justifyContent: 'center', alignItems: 'center', padding: 20 }}>
@@ -620,19 +703,16 @@ export default function ClanPage() {
                 </Pressable>
               </View>
 
-              {/* Only rendered when modal is active */}
               {cardPreviewVisible && (
-                <ViewShot ref={clanCardRef} options={{ format: "png", quality: 1 }}>
-                  <View style={{ transform: [{ scale: Math.min(1, (width - 40) / 380) }], width: 380, alignItems: 'center' }}>
-                    <ClanCard clan={clan} isDark={isDark} forSnapshot={true} />
-                  </View>
-                </ViewShot>
+                <View style={{ transform: [{ scale: Math.min(1, (width - 40) / 380) }], width: 380, alignItems: 'center', marginTop: 30 }}>
+                  <ClanCard clan={clan} isDark={isDark} forSnapshot={true} />
+                </View>
               )}
 
-              <View className="w-full mt-6">
+              <View className="w-full mt-10">
                 <TouchableOpacity
                   onPress={captureAndShare}
-                  style={{ backgroundColor: clan ? getClanTierDetails(clan.rankTitle).color : '#3b82f6' }}
+                  style={{ backgroundColor: clan ? getClanTierDetails(clan.rank || 1).color : '#3b82f6' }}
                   className="flex-row items-center justify-center gap-3 w-full h-16 rounded-[30px] shadow-lg"
                 >
                   <MaterialCommunityIcons name="share-variant" size={24} color="white" />

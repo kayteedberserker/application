@@ -1,31 +1,35 @@
 import { Ionicons, MaterialCommunityIcons } from "@expo/vector-icons";
-import AsyncStorage from "@react-native-async-storage/async-storage";
 import { useLocalSearchParams, useRouter } from "expo-router";
 import * as Sharing from 'expo-sharing';
 import { useColorScheme } from "nativewind";
-import { useEffect, useRef, useState } from "react";
+import { useCallback, useEffect, useRef, useState, useMemo } from "react";
 import {
     Animated,
     DeviceEventEmitter,
     Dimensions,
     Easing,
-    FlatList,
     Modal,
     Pressable,
     ScrollView,
     TouchableOpacity,
     View
 } from "react-native";
+// ⚡️ Swapped FlashList for LegendList
+import { useMMKV } from 'react-native-mmkv';
+import { LegendList } from "@legendapp/list";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import Svg, { Defs, LinearGradient, Rect, Stop, SvgXml } from "react-native-svg";
 import ViewShot from "react-native-view-shot";
 import AuraAvatar from "../../../components/AuraAvatar";
-import ClanBorder from "../../../components/ClanBorder"; // Using the border component for authors too
+import ClanBorder from "../../../components/ClanBorder";
 import PlayerCard from "../../../components/PlayerCard";
 import PostCard from "../../../components/PostCard";
 import { SyncLoading } from "../../../components/SyncLoading";
 import { Text } from "../../../components/Text";
 import apiFetch from "../../../utils/apiFetch";
+
+// ⚡️ Imported PeakBadge
+import PeakBadge from "../../../components/PeakBadge"; 
 
 const API_BASE = "https://oreblogda.com/api";
 const { width } = Dimensions.get('window');
@@ -66,6 +70,9 @@ export default function AuthorPage() {
     const insets = useSafeAreaInsets();
     const { colorScheme } = useColorScheme();
     const isDark = colorScheme === "dark";
+
+    // ⚡️ Initialize MMKV Hook
+    const storage = useMMKV();
 
     const CACHE_KEY_AUTHOR = `author_data_${id}`;
     const CACHE_KEY_POSTS = `author_posts_${id}`;
@@ -127,25 +134,26 @@ export default function AuthorPage() {
         return () => sub.remove();
     }, []);
 
-    const saveHeavyCache = async (key, data) => {
+    // ⚡️ Synchronous MMKV Save
+    const saveHeavyCache = useCallback((key, data) => {
         try {
             const cacheEntry = { data: data, timestamp: Date.now() };
-            await AsyncStorage.setItem(key, JSON.stringify(cacheEntry));
+            storage.set(key, JSON.stringify(cacheEntry));
         } catch (e) { console.error("Cache Save Error", e); }
-    };
+    }, [storage]);
 
-    const fetchInitialData = async () => {
+    const fetchInitialData = useCallback(async () => {
         setLoading(true);
         setIsOffline(false);
         try {
             const [userRes, postRes] = await Promise.all([
-                apiFetch(`${API_BASE}/users/${id}`),
+                apiFetch(`/users/${id}`),
                 apiFetch(`/posts?author=${id}&page=1&limit=10`),
             ]);
 
             const userData = await userRes.json();
             const postData = await postRes.json();
-
+            
             if (userRes.ok) {
                 setAuthor(userData.user);
                 AUTHOR_MEMORY_CACHE[CACHE_KEY_AUTHOR] = userData.user;
@@ -165,9 +173,9 @@ export default function AuthorPage() {
             setLoading(false);
             setTimeout(() => setIsInitialMount(false), 800);
         }
-    };
+    }, [id, CACHE_KEY_AUTHOR, CACHE_KEY_POSTS, saveHeavyCache]);
 
-    const fetchMorePosts = async () => {
+    const fetchMorePosts = useCallback(async () => {
         if (!hasMore || loading || posts.length === 0 || isOffline) return;
         const nextPage = page + 1;
         setLoading(true);
@@ -185,20 +193,20 @@ export default function AuthorPage() {
                 setHasMore(data.posts.length >= 6);
             } else { setHasMore(false); }
         } catch (error) { console.error("Load more error:", error); } finally { setLoading(false); }
-    };
+    }, [hasMore, loading, posts.length, isOffline, page, id, CACHE_KEY_POSTS]);
 
+    // ⚡️ Synchronous Cache Initialization
     useEffect(() => {
-        const init = async () => {
+        const init = () => {
             if (AUTHOR_MEMORY_CACHE[CACHE_KEY_AUTHOR]) {
                 setIsInitialMount(false);
                 fetchInitialData();
                 return;
             }
             try {
-                const [cAuth, cPosts] = await Promise.all([
-                    AsyncStorage.getItem(CACHE_KEY_AUTHOR),
-                    AsyncStorage.getItem(CACHE_KEY_POSTS)
-                ]);
+                const cAuth = storage.getString(CACHE_KEY_AUTHOR);
+                const cPosts = storage.getString(CACHE_KEY_POSTS);
+                
                 if (cAuth) {
                     const parsed = JSON.parse(cAuth);
                     const authorData = parsed?.data || parsed;
@@ -212,11 +220,12 @@ export default function AuthorPage() {
                     AUTHOR_POSTS_MEMORY_CACHE[CACHE_KEY_POSTS] = postData;
                     setIsInitialMount(false);
                 }
-                fetchInitialData();
-            } catch (e) { fetchInitialData(); }
+            } catch (e) { console.error("MMKV Init Error", e); }
+            
+            fetchInitialData();
         };
         init();
-    }, [id]);
+    }, [id, CACHE_KEY_AUTHOR, CACHE_KEY_POSTS, fetchInitialData, storage]);
 
     const captureAndShare = async () => {
         try {
@@ -229,16 +238,27 @@ export default function AuthorPage() {
         } catch (error) { console.error("Capture Error:", error); }
     };
 
-    const AuthorSkeleton = () => (
+    const AuthorSkeleton = useCallback(() => (
         <View className="px-4 pt-20 pb-6 opacity-40">
             <View className="p-6 bg-gray-100 dark:bg-[#111] border border-gray-200 dark:border-gray-800 rounded-[40px] items-center">
                 <Animated.View style={{ opacity: skeletonFade }} className="w-32 h-32 bg-gray-300 dark:bg-gray-800 rounded-full mb-6" />
                 <Animated.View style={{ opacity: skeletonFade }} className="w-48 h-8 bg-gray-300 dark:bg-gray-800 rounded-lg mb-4" />
             </View>
         </View>
-    );
+    ), [skeletonFade]);
 
-    const ListHeader = () => {
+    const renderItem = useCallback(({ item }) => (
+        <View className="px-3">
+            <PostCard 
+                post={item} 
+                authorData={item.authorData}
+                clanData={item.clanData}  
+                isFeed 
+            />
+        </View>
+    ), [author]);
+
+    const ListHeader = useCallback(() => {
         if (!author && isOffline) return <AuthorSkeleton />;
         if (!author) return null;
 
@@ -264,7 +284,7 @@ export default function AuthorPage() {
             const iconSize = watermarkVisual.size || 220;
             const iconColor = watermarkVisual.color || (isDark ? 'white' : 'black');
             return (
-                <View className="absolute" style={{ bottom: -40, right: -40, opacity: watermarkVisual.opacity || 0.08, transform: [{ rotate: watermarkVisual.rotation || '-15deg' }] }} pointerEvents="none">
+                <View className="absolute" style={{ bottom: -20, right: -20, opacity: 0.7, transform: [{ rotate: watermarkVisual.rotation || '-15deg' }] }} pointerEvents="none">
                     {watermarkVisual.svgCode ? (
                         <SvgXml xml={watermarkVisual.svgCode.replace(/currentColor/g, iconColor)} width={iconSize} height={iconSize} />
                     ) : (
@@ -276,13 +296,23 @@ export default function AuthorPage() {
 
         const HeaderCard = (
             <View className="relative p-6 bg-white dark:bg-[#0a0a0a] shadow-2xl rounded-[25px] overflow-hidden">
-                <TouchableOpacity
-                    onPress={() => setCardPreviewVisible(true)}
-                    activeOpacity={0.7}
-                    className="absolute top-6 right-6 z-50 bg-gray-100/80 dark:bg-white/10 p-2.5 rounded-2xl border border-gray-200/50 dark:border-white/10"
-                >
-                    <Ionicons name="card-outline" size={20} color={isDark ? "white" : "black"} />
-                </TouchableOpacity>
+                
+                {/* ⚡️ Top Right Container: Card Button & Streak */}
+                <View className="absolute top-5 right-5 z-50 items-end gap-2">
+                    <TouchableOpacity
+                        onPress={() => setCardPreviewVisible(true)}
+                        activeOpacity={0.7}
+                        className="bg-gray-100/80 dark:bg-white/10 p-2 rounded-2xl border border-gray-200/50 dark:border-white/10"
+                    >
+                        <Ionicons name="card-outline" size={20} color={isDark ? "white" : "black"} />
+                    </TouchableOpacity>
+                    
+                    {/* ⚡️ Streak Moved to Top Right below Card */}
+                    <View className="flex-row items-center bg-orange-500/10 px-2 py-1 rounded-lg border border-orange-500/20">
+                        <Ionicons name="flame" size={12} color="#f97316" />
+                        <Text className="text-orange-500 font-black ml-1 text-[10px]">{author.lastStreak || "0"}</Text>
+                    </View>
+                </View>
 
                 <View className="absolute -top-10 -right-10 w-60 h-60 opacity-10 rounded-full blur-3xl" style={{ backgroundColor: themeColor }} />
                 <SpecialWatermark />
@@ -335,14 +365,17 @@ export default function AuthorPage() {
                     </View>
 
                     <View className="items-center w-full mt-2">
-                        <View className="flex-row items-center gap-2 mb-2">
-                            <Text style={{ textShadowColor: themeColor, textShadowOffset: { width: 0, height: 0 }, textShadowRadius: (auraRank <= 2 || activeGlowColor) ? 10 : 0 }} className="text-4xl font-black italic tracking-tighter uppercase text-gray-900 dark:text-white text-center">
+                        {/* ⚡️ Name & Peak Badge Layout */}
+                        <View className="flex-row items-center justify-center gap-3 mb-3">
+                            <Text style={{ textShadowColor: themeColor, textShadowOffset: { width: 0, height: 0 }, textShadowRadius: (auraRank <= 2 || activeGlowColor) ? 10 : 0 }} className="text-3xl font-black italic tracking-tighter uppercase text-gray-900 dark:text-white text-center">
                                 {author.username}
                             </Text>
-                            <View className="flex-row items-center bg-orange-500/10 px-2 py-1 rounded-lg">
-                                <Ionicons name="flame" size={16} color="#f97316" />
-                                <Text className="text-orange-500 font-black ml-1 text-xs">{author.lastStreak || "0"}</Text>
-                            </View>
+                            {/* ⚡️ Peak Badge Injected Next to Name */}
+                            {(author.peakLevel && author.peakLevel > 0) ? (
+                                <View className="-mt-1">
+                                    <PeakBadge level={author.peakLevel} size={28} />
+                                </View>
+                            ) : null}
                         </View>
 
                         <Text className="text-sm text-gray-500 dark:text-gray-400 text-center leading-relaxed font-medium px-8 italic mb-4">
@@ -412,11 +445,7 @@ export default function AuthorPage() {
                 </View>
             </View>
         );
-    };
-
-    const renderItem = ({ item }) => (
-        <View className={'px-3'}><PostCard post={item} isFeed /></View>
-    );
+    }, [author, isOffline, isDark, themeColor, pulseAnim, spin, activeGlowColor, aura, auraRank, totalPosts]);
 
     if (!author && isOffline) {
         return (
@@ -437,12 +466,20 @@ export default function AuthorPage() {
 
     return (
         <View className="flex-1 bg-white dark:bg-[#0a0a0a]">
-            <FlatList
+            {/* ⚡️ Swapped to LegendList */}
+            <LegendList
                 ref={scrollRef}
                 data={posts}
                 keyExtractor={(item) => item._id}
                 renderItem={renderItem}
                 ListHeaderComponent={ListHeader}
+                
+                // ⚡️ LegendList Performance Props
+                estimatedItemSize={500}
+                drawDistance={1000} // LegendList handles dynamic heights better with larger draw distances
+                recycleItems={true}
+                contentContainerStyle={{ paddingBottom: insets.bottom + 100 }}
+
                 ListFooterComponent={
                     <View className="py-10">
                         {isInitialMount &&
@@ -465,10 +502,8 @@ export default function AuthorPage() {
                 refreshing={refreshing}
                 onScroll={(e) => { DeviceEventEmitter.emit("onScroll", e.nativeEvent.contentOffset.y); }}
                 scrollEventThrottle={16}
-                contentContainerStyle={{ paddingBottom: insets.bottom + 100 }}
             />
 
-            {/* Hidden Capture Layer - Only rendered during preview for performance */}
             {cardPreviewVisible && (
                 <View style={{ position: 'absolute', left: -10000, opacity: 0 }} pointerEvents="none">
                     <ViewShot ref={playerCardRef} options={{ format: "png", quality: 1 }}>
@@ -477,7 +512,6 @@ export default function AuthorPage() {
                 </View>
             )}
 
-            {/* 🔹 Player Card Preview Modal */}
             <Modal visible={cardPreviewVisible} transparent animationType="slide">
                 <View className="flex-1 bg-black/95">
                     <ScrollView contentContainerStyle={{ flexGrow: 1, justifyContent: 'center', alignItems: 'center', padding: 20 }} showsVerticalScrollIndicator={false}>

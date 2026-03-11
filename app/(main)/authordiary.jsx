@@ -1,10 +1,9 @@
 import { Ionicons } from "@expo/vector-icons";
-import AsyncStorage from '@react-native-async-storage/async-storage';
 import { Image } from "expo-image";
 import * as ImagePicker from 'expo-image-picker';
 import * as Notifications from 'expo-notifications';
 import { Link, useRouter } from "expo-router";
-import { useEffect, useMemo, useRef, useState } from "react";
+import { useEffect, useMemo, useRef, useState, useCallback } from "react";
 import {
     ActivityIndicator,
     DeviceEventEmitter,
@@ -17,12 +16,17 @@ import {
 } from "react-native";
 import Toast from "react-native-toast-message";
 import useSWR from "swr";
+// ⚡️ Swapped to AsyncStorage
+import AsyncStorage from '@react-native-async-storage/async-storage';
+import * as FileSystem from 'expo-file-system';
+import * as MediaLibrary from 'expo-media-library';
+
 import AnimeLoading from "../../components/AnimeLoading";
 import CoinIcon from "../../components/ClanIcon";
 import { Text } from "../../components/Text";
 import THEME from "../../components/useAppTheme";
-import { useAlert } from "../../context/AlertContext"; // 🔹 ALERT CONTEXT IMPORT
-import { useClan } from "../../context/ClanContext"; // 🔹 CLAN CONTEXT IMPORTED
+import { useAlert } from "../../context/AlertContext"; 
+import { useClan } from "../../context/ClanContext"; 
 import { useCoins } from "../../context/CoinContext";
 import { useStreak } from "../../context/StreakContext";
 import { useUser } from "../../context/UserContext";
@@ -38,30 +42,26 @@ Notifications.setNotificationHandler({
 });
 
 const COOLDOWN_NOTIFICATION_KEY = "cooldown_notification_id";
-
 const API_BASE = "https://oreblogda.com/api";
 const fetcher = (url) => apiFetch(url).then((res) => res.json());
 
-// Helper to fetch total posts (logic kept separate, but result will be cached in component)
+// Helper to fetch total posts
 async function getUserTotalPosts(deviceId) {
     if (!deviceId) return 0;
     try {
         const res = await apiFetch(`/posts?author=${deviceId}`);
         if (!res.ok) throw new Error("Failed to fetch posts");
         const data = await res.json();
-
         return data?.total;
     } catch (err) {
         console.error("Error fetching total posts:");
-        return null; // Return null on error to signal we should keep using cache
+        return null;
     }
 }
 
 /* ===================== RANK SYSTEM HELPERS ===========*/
 const resolveUserRank = (totalPosts) => {
-    // Fallback if totalPosts is null/undefined
     const count = totalPosts || 0;
-
     const rankTitle =
         count >= 200 ? "Master_Writer" :
             count > 150 ? "Elite_Writer" :
@@ -92,29 +92,24 @@ const resolveUserRank = (totalPosts) => {
 export default function AuthorDiaryDashboard() {
     const CustomAlert = useAlert();
     const { user, loading: contextLoading } = useUser();
-    const { userClan, isInClan } = useClan(); // 🔹 GET CLAN INFO
-    const { streak } = useStreak();
+    const { userClan, isInClan } = useClan();
+    const { streak, refreshStreak } = useStreak();
     const fingerprint = user?.deviceId;
     const router = useRouter();
     const { coins, processTransaction, isProcessingTransaction } = useCoins();
 
-    // Use refs to store listeners so they can be cleaned up properly
     const notificationListener = useRef();
-
-    // 🔹 NEW: Ref for the message input to fix keyboard issue
     const messageInputRef = useRef(null);
 
     // Form & System States
     const [title, setTitle] = useState("");
     const [message, setMessage] = useState("");
 
-    // 🔹 Category States
+    // Category States
     const [category, setCategory] = useState("News");
     const [clanSubCategory, setClanSubCategory] = useState("General");
 
-    const [mediaUrl, setMediaUrl] = useState("");
     const [mediaUrlLink, setMediaUrlLink] = useState("");
-    const [mediaType, setMediaType] = useState("image");
     const [selection, setSelection] = useState({ start: 0, end: 0 });
     const [showPreview, setShowPreview] = useState(false);
     const [hasPoll, setHasPoll] = useState(false);
@@ -123,17 +118,8 @@ export default function AuthorDiaryDashboard() {
     const [uploading, setUploading] = useState(false);
     const [submitting, setSubmitting] = useState(false);
     const [timeLeft, setTimeLeft] = useState("");
-    const [additionalSlot, setAdditionalSlot] = useState(0); // For clan members with extra slots
-    useEffect(() => {
-        const checkAdditionalSlot = async () => {
-            const savedSlot = await AsyncStorage.getItem("additionalSlot");
-            if (savedSlot == 1) {
-                setAdditionalSlot(parseInt(savedSlot));
-            }
-        };
-        checkAdditionalSlot();
-        
-    }, [additionalSlot]);
+    const [additionalSlot, setAdditionalSlot] = useState(0); 
+
     // Rank & Post Limit State
     const [userRank, setUserRank] = useState({ rankTitle: "Novice_Researcher", rankIcon: "🛡️", postLimit: 2 });
     const [canPostAgain, setCanPostAgain] = useState(false);
@@ -141,33 +127,29 @@ export default function AuthorDiaryDashboard() {
     const [isLoadingNotifications, setIsLoadingNotifications] = useState(true);
     const [pickedImage, setPickedImage] = useState(false);
 
-    // 🔹 CACHING & OFFLINE STATES
-    const [isDraftRestoring, setIsDraftRestoring] = useState(true);
-    const [saveStatus, setSaveStatus] = useState("synced"); // 'synced' | 'saving'
+    // ⚡️ Draft restoring states
+    const [saveStatus, setSaveStatus] = useState("synced"); 
     const [lastSavedTime, setLastSavedTime] = useState("");
     const [isOfflineMode, setIsOfflineMode] = useState(false);
 
-    // Data Caches
     const [cachedTodayPosts, setCachedTodayPosts] = useState(null);
-    const [cachedRankData, setCachedRankData] = useState(null);
 
-    // 🔹 NEW: Mission Log Toggle
     const [showMissionLog, setShowMissionLog] = useState(false);
 
-    // Cache Keys
     const CACHE_KEY_TODAY = `CACHE_TODAY_POSTS_${fingerprint}`;
     const CACHE_KEY_RANK = `CACHE_RANK_${fingerprint}`;
+    const DRAFT_KEY = `draft_${fingerprint}`;
 
     // =================================================================
-    // 2. INITIALIZATION: RESTORE DRAFTS AND CACHED DATA
+    // 2. INITIALIZATION: RESTORE DRAFTS AND CACHED DATA (Async)
     // =================================================================
     useEffect(() => {
-        const prepare = async () => {
-            if (!fingerprint) return;
+        if (!fingerprint) return;
 
+        const restoreData = async () => {
             try {
                 // A. Restore Draft Form
-                const savedDraft = await AsyncStorage.getItem(`draft_${fingerprint}`);
+                const savedDraft = await AsyncStorage.getItem(DRAFT_KEY);
                 if (savedDraft) {
                     const data = JSON.parse(savedDraft);
                     if (data.title) setTitle(data.title);
@@ -181,26 +163,27 @@ export default function AuthorDiaryDashboard() {
 
                 // B. Restore Cached Posts
                 const savedPosts = await AsyncStorage.getItem(CACHE_KEY_TODAY);
-                
                 if (savedPosts) setCachedTodayPosts(JSON.parse(savedPosts));
 
                 // C. Restore Cached Rank
                 const savedRank = await AsyncStorage.getItem(CACHE_KEY_RANK);
-                
                 if (savedRank) {
                     const rankData = JSON.parse(savedRank);
-                    setCachedRankData(rankData);
                     setUserRank(resolveUserRank(rankData));
                 }
 
+                // D. Restore Extra Slot
+                const savedSlot = await AsyncStorage.getItem("additionalSlot");
+                if (savedSlot === "1") {
+                    setAdditionalSlot(1);
+                }
             } catch (err) {
                 console.error("Restoration Error:", err);
-            } finally {
-                setTimeout(() => setIsDraftRestoring(false), 500);
             }
         };
-        prepare();
-    }, [fingerprint]);
+
+        restoreData();
+    }, [fingerprint, DRAFT_KEY, CACHE_KEY_TODAY, CACHE_KEY_RANK]);
 
     // =================================================================
     // 3. DATA FETCHING (OPTIMIZED WITH SWR & CACHING)
@@ -212,13 +195,13 @@ export default function AuthorDiaryDashboard() {
             if (total !== null) {
                 const rank = resolveUserRank(total);
                 setUserRank(rank);
-                AsyncStorage.setItem(CACHE_KEY_RANK, JSON.stringify(total));
+                await AsyncStorage.setItem(CACHE_KEY_RANK, JSON.stringify(total));
             }
         };
         fetchTotalPosts();
-    }, [user?.deviceId]);
+    }, [user?.deviceId, CACHE_KEY_RANK]);
 
-    const { data: todayPostsData, mutate: mutateTodayPosts, error: swrError } = useSWR(
+    const { data: todayPostsData, mutate: mutateTodayPosts } = useSWR(
         user?.deviceId ? `/posts?author=${user.deviceId}&last24Hours=true` : null,
         fetcher,
         {
@@ -235,9 +218,8 @@ export default function AuthorDiaryDashboard() {
     const todayPosts = useMemo(() => {
         return todayPostsData?.posts || cachedTodayPosts?.posts || [];
     }, [todayPostsData, cachedTodayPosts]);
-    const todayPost = todayPosts[0] || null
-
-
+    
+    const todayPost = todayPosts[0] || null;
     const postsLast24h = todayPosts.length;
     const maxPostsToday = isInClan ? userRank.postLimit + 2 + additionalSlot : userRank.postLimit + additionalSlot;
 
@@ -245,7 +227,7 @@ export default function AuthorDiaryDashboard() {
     // 4. DRAFT AUTO-SAVE LOGIC
     // =================================================================
     useEffect(() => {
-        if (isDraftRestoring || !fingerprint) return;
+        if (!fingerprint) return;
 
         setSaveStatus("saving");
         const timer = setTimeout(async () => {
@@ -254,7 +236,8 @@ export default function AuthorDiaryDashboard() {
                 const draftData = {
                     title, message, category, clanSubCategory, hasPoll, pollOptions, timestamp: now
                 };
-                await AsyncStorage.setItem(`draft_${fingerprint}`, JSON.stringify(draftData));
+                // ⚡️ Async AsyncStorage Save
+                await AsyncStorage.setItem(DRAFT_KEY, JSON.stringify(draftData));
                 setLastSavedTime(now);
                 setSaveStatus("synced");
             } catch (err) {
@@ -263,9 +246,9 @@ export default function AuthorDiaryDashboard() {
         }, 1500);
 
         return () => clearTimeout(timer);
-    }, [title, message, category, clanSubCategory, hasPoll, pollOptions, fingerprint, isDraftRestoring]);
+    }, [title, message, category, clanSubCategory, hasPoll, pollOptions, fingerprint, DRAFT_KEY]);
 
-    const handleClearAll = () => {
+    const handleClearAll = useCallback(() => {
         CustomAlert(
             "Wipe Local Intel?",
             "This will permanently delete your current draft.",
@@ -276,23 +259,23 @@ export default function AuthorDiaryDashboard() {
                     style: "destructive",
                     onPress: async () => {
                         setTitle(""); setMessage(""); setCategory("News"); setHasPoll(false);
-                        setPollOptions(["", ""]); setMediaUrl(""); setMediaUrlLink(""); setPickedImage(false);
+                        setPollOptions(["", ""]); setMediaUrlLink(""); setPickedImage(false); setMediaList([]);
                         try {
-                            await AsyncStorage.removeItem(`draft_${fingerprint}`);
+                            await AsyncStorage.removeItem(DRAFT_KEY);
                             Toast.show({ type: 'info', text1: 'Intel cleared successfully.' });
                         } catch (e) { console.error("Clear error", e); }
                     }
                 }
             ]
         );
-    };
+    }, [CustomAlert, DRAFT_KEY]);
 
     // =================================================================
     // 5. NOTIFICATIONS & SYSTEM SETUP
     // =================================================================
     useEffect(() => {
         let isMounted = true;
-        async function registerForPushNotificationsAsync() {
+        async function setupPush() {
             const { status: existingStatus } = await Notifications.getPermissionsAsync();
             let finalStatus = existingStatus;
             if (existingStatus !== 'granted') {
@@ -301,8 +284,8 @@ export default function AuthorDiaryDashboard() {
             }
             if (isMounted) setIsLoadingNotifications(false);
         }
-        registerForPushNotificationsAsync();
-        notificationListener.current = Notifications.addNotificationReceivedListener(notification => { });
+        setupPush();
+        notificationListener.current = Notifications.addNotificationReceivedListener(() => { });
         return () => {
             isMounted = false;
             if (notificationListener.current) notificationListener.current.remove();
@@ -320,7 +303,6 @@ export default function AuthorDiaryDashboard() {
         }
     }, []);
 
-
     /* 🔹 UPDATED TIMER LOGIC WITH SPAM PROTECTION */
     useEffect(() => {
         let interval;
@@ -334,13 +316,9 @@ export default function AuthorDiaryDashboard() {
                 const referenceTime = new Date(post.statusChangedAt || post.updatedAt || post.createdAt).getTime();
                 let cooldownMs = 0;
 
-                if (post.status === 'approved') {
-                    cooldownMs = 24 * 60 * 60 * 1000;
-                } else if (post.status === 'rejected') {
-                    cooldownMs = 12 * 60 * 60 * 1000;
-                } else {
-                    return;
-                }
+                if (post.status === 'approved') cooldownMs = 24 * 60 * 60 * 1000;
+                else if (post.status === 'rejected') cooldownMs = 12 * 60 * 60 * 1000;
+                else return;
 
                 const endTime = referenceTime + cooldownMs;
                 if (endTime > now && endTime < minEndTime) {
@@ -354,28 +332,23 @@ export default function AuthorDiaryDashboard() {
         const targetTime = getNextUnlockTime();
 
         if ((postsLast24h >= 1) && targetTime) {
-
             const scheduleDoneNotification = async () => {
                 const now = Date.now();
                 const triggerInSeconds = Math.floor((targetTime - now) / 1000);
 
                 if (triggerInSeconds <= 0) return;
 
-                // 🚀 SPAM PREVENTION: Check if we already scheduled a notification for THIS target time
+                // 🚀 SPAM PREVENTION: Async AsyncStorage check
                 const lastScheduledStr = await AsyncStorage.getItem("LAST_SCHEDULED_TARGET");
                 const lastScheduledTarget = lastScheduledStr ? parseInt(lastScheduledStr) : 0;
 
-                if (Math.abs(lastScheduledTarget - targetTime) < 5000) {
-                    return;
-                }
+                if (Math.abs(lastScheduledTarget - targetTime) < 5000) return;
 
                 const existingId = await AsyncStorage.getItem(COOLDOWN_NOTIFICATION_KEY);
                 if (existingId) {
                     try {
                         await Notifications.cancelScheduledNotificationAsync(existingId);
-                    } catch (e) {
-                        console.log("Error cancelling:", e);
-                    }
+                    } catch (e) {}
                 }
 
                 try {
@@ -403,14 +376,11 @@ export default function AuthorDiaryDashboard() {
 
                     await AsyncStorage.setItem(COOLDOWN_NOTIFICATION_KEY, notificationId);
                     await AsyncStorage.setItem("LAST_SCHEDULED_TARGET", targetTime.toString());
-                } catch (error) {
-                    console.error("Failed to schedule notification:", error);
-                }
+                } catch (error) {}
             };
 
             scheduleDoneNotification();
 
-            // Timer Interval for UI
             const calculateTime = () => {
                 if (interval) clearInterval(interval);
                 interval = setInterval(() => {
@@ -439,9 +409,6 @@ export default function AuthorDiaryDashboard() {
         return () => { if (interval) clearInterval(interval); };
     }, [todayPosts, postsLast24h]);
 
-
-
-
     // =================================================================
     // 5. HELPER FUNCTIONS (Formatting, Uploading, etc)
     // =================================================================
@@ -449,34 +416,15 @@ export default function AuthorDiaryDashboard() {
     const removePollOption = (index) => setPollOptions(pollOptions.filter((_, i) => i !== index));
     const updatePollOption = (text, index) => { const newOptions = [...pollOptions]; newOptions[index] = text; setPollOptions(newOptions); };
 
-    // 🔹 UPDATED: sanitizeMessage for new syntax s(), h(), l(), link()
-    const sanitizeMessage = (text) => {
-        let cleaned = text;
-        return cleaned;
-    };
+    const sanitizeMessage = (text) => text;
 
-    // 🔹 UPDATED: insertTag for Smart Wrapping & Keyboard Fix
     const insertTag = (tagType) => {
         let tagOpen = "", tagClose = "";
-
-        // Define syntax
         switch (tagType) {
-            case 'section':
-                tagOpen = "s(";
-                tagClose = ")";
-                break;
-            case 'heading':
-                tagOpen = "h(";
-                tagClose = ")";
-                break;
-            case 'link':
-                tagOpen = "link(url)-text(";
-                tagClose = ")";
-                break;
-            case 'list':
-                tagOpen = "l(";
-                tagClose = ")";
-                break;
+            case 'section': tagOpen = "s("; tagClose = ")"; break;
+            case 'heading': tagOpen = "h("; tagClose = ")"; break;
+            case 'link': tagOpen = "link(url)-text("; tagClose = ")"; break;
+            case 'list': tagOpen = "l("; tagClose = ")"; break;
         }
 
         const before = message.substring(0, selection.start);
@@ -498,11 +446,11 @@ export default function AuthorDiaryDashboard() {
         }, 50);
     };
 
-    const [mediaList, setMediaList] = useState([]); // Array of {url, type}
+    const [mediaList, setMediaList] = useState([]);
     const pickImage = async () => {
-        const remainingSlots = 10 - mediaList.length;
+        const remainingSlots = 15 - mediaList.length;
         if (remainingSlots <= 0) {
-            CustomAlert("Limit Reached", "You can only upload a maximum of 5 media files.");
+            CustomAlert("Limit Reached", "You can only upload a maximum of 15 media files.");
             return;
         }
 
@@ -510,7 +458,7 @@ export default function AuthorDiaryDashboard() {
             mediaTypes: ImagePicker.MediaTypeOptions.All,
             allowsMultipleSelection: true,
             selectionLimit: remainingSlots,
-            quality: 0.5,
+            quality: 0.8,
         });
 
         if (!result.canceled) {
@@ -524,10 +472,10 @@ export default function AuthorDiaryDashboard() {
 
                 for (const selected of result.assets) {
                     const isVideo = selected.type === "video";
-                    const currentLimit = isVideo ? 15 * 1024 * 1024 : 5 * 1024 * 1024;
+                    const currentLimit = isVideo ? 25 * 1024 * 1024 : 5 * 1024 * 1024;
 
                     if (selected.fileSize > currentLimit) {
-                        CustomAlert("File Too Large", `Skipping ${selected.type}. Max: ${isVideo ? '15MB' : '5MB'}.`);
+                        CustomAlert("File Too Large", `Skipping ${selected.type}. Max: ${isVideo ? '25MB' : '5MB'}.`);
                         continue;
                     }
 
@@ -552,7 +500,6 @@ export default function AuthorDiaryDashboard() {
                         let finalUrl = cloudData.secure_url;
                         const transform = isVideo ? "q_auto,vc_auto" : "f_auto,q_auto";
                         finalUrl = finalUrl.replace("/upload/", `/upload/${transform}/`);
-
                         uploadedAssets.push({ url: finalUrl, type: isVideo ? "video" : "image" });
                     }
                 }
@@ -584,9 +531,7 @@ export default function AuthorDiaryDashboard() {
             return data;
         } catch (err) { console.error("Streak update error:", err); return null; }
     }
-    const { refreshStreak } = useStreak()
 
-    // 🔹 UPDATED: SUBMIT HANDLER
     const handleSubmit = async () => {
         if (!title.trim() || !message.trim()) { CustomAlert("Error", "Title and Message are required."); return; }
         if (isOfflineMode) { CustomAlert("Offline", "Cannot transmit data while offline."); return; }
@@ -621,10 +566,11 @@ export default function AuthorDiaryDashboard() {
             const data = await response.json();
             if (!response.ok) throw new Error(data.message || "Failed to create post");
 
-            await AsyncStorage.removeItem(`draft_${fingerprint}`);
+            await AsyncStorage.removeItem(DRAFT_KEY);
             DeviceEventEmitter.emit("POST_CREATED_SUCCESS");
             CustomAlert("Success", "Your entry has been submitted for approval!");
-            updateStreak(fingerprint)
+            updateStreak(fingerprint);
+            refreshStreak();
 
             // Reset States
             setMediaList([]);
@@ -633,10 +579,14 @@ export default function AuthorDiaryDashboard() {
             setMediaUrlLink("");
             setPickedImage(false);
             mutateTodayPosts();
-            if (todayPosts.length >= maxPostsToday && additionalSlot == 1) {
-                setAdditionalSlot(0)
-                let addnumber = 0
-                AsyncStorage.setItem("additionalSlot", addnumber.toString());
+            
+            // 🔹 FIX: Calculate base limit to know exactly when to clear the slot
+            const baseLimit = isInClan ? userRank.postLimit + 2 : userRank.postLimit;
+            
+            // If they have an extra slot AND this new post hits their newly extended limit
+            if (additionalSlot === 1 && (todayPosts.length + 1) >= (baseLimit + 1)) {
+                setAdditionalSlot(0);
+                await AsyncStorage.setItem("additionalSlot", "0");
             }
         } catch (err) { CustomAlert("Error", err.message) }
         finally { setSubmitting(false); }
@@ -741,16 +691,17 @@ export default function AuthorDiaryDashboard() {
         flushInlineBuffer("end");
         return <View className="px-4 py-1">{finalElements}</View>;
     };
+
     const handleAdditionalSlot = async () => {
         if (coins < 20) {
            CustomAlert("Insufficient OC", "You need 20 OC 🪙 to purchase additional slot. Check back daily!") 
+           return;
         }
         const result = await processTransaction("spend", 'extra_slot')
         if (result.success) {
             CustomAlert("Success", "Additional slot purchased!")
-            let addNumber = 1
-            await AsyncStorage.setItem(`additionalSlot`, addNumber.toString());
-            setAdditionalSlot(addNumber)
+            await AsyncStorage.setItem('additionalSlot', "1");
+            setAdditionalSlot(1);
         } else {
             CustomAlert("Error", result.error || "Failed to purchase additional slot.");
         }
@@ -815,10 +766,10 @@ export default function AuthorDiaryDashboard() {
         );
     };
 
-    if (contextLoading || submitting || isDraftRestoring) {
+    if (contextLoading || submitting) {
         return <AnimeLoading
-            message={submitting ? "Submitting" : uploading ? "Uploading" : isDraftRestoring ? "Restoring" : "Loading"}
-            subMessage={isDraftRestoring ? "Synchronizing core draft modules..." : "Fetching Otaku diary"}
+            message={submitting ? "Submitting" : uploading ? "Uploading" : "Loading"}
+            subMessage={"Fetching Otaku diary"}
         />
     }
 
@@ -1057,7 +1008,7 @@ export default function AuthorDiaryDashboard() {
                                     )}
                                 </View>
 
-                                <View className="space-y-4">
+                                <View className="space-y-4 mt-3">
                                     <TextInput
                                         placeholder="External Uplink (URL)"
                                         value={mediaUrlLink}
@@ -1080,7 +1031,7 @@ export default function AuthorDiaryDashboard() {
                                                             {item.type === "video" ? (
                                                                 <Ionicons name="videocam" size={30} color={THEME.accent} />
                                                             ) : (
-                                                                <Image source={{ uri: item.url }} className="w-full h-full" contentFit="cover" />
+                                                                <Image style={{width: "100%", height: "100%"}} source={{ uri: item.url }} contentFit="cover" />
                                                             )}
                                                         </View>
                                                         <TouchableOpacity
@@ -1121,7 +1072,7 @@ export default function AuthorDiaryDashboard() {
                                                 <View className="items-center">
                                                     <Ionicons name="cloud-upload-outline" size={24} color={pickedImage ? "#22c55e" : "#475569"} />
                                                     <Text className={`text-[10px] font-black uppercase mt-2 ${pickedImage ? 'text-green-500' : 'text-gray-500'}`}>
-                                                        {pickedImage ? "Assets Linked Successfully" : "Sync Local Media Files (Max 5)"}
+                                                        {pickedImage ? "Assets Linked Successfully" : "Sync Local Media Files (Max 15)"}
                                                     </Text>
                                                 </View>
                                             )}
@@ -1174,4 +1125,4 @@ export default function AuthorDiaryDashboard() {
             </ScrollView>
         </View>
     );
-    }
+}

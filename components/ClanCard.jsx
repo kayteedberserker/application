@@ -1,8 +1,16 @@
 import { MaterialCommunityIcons } from "@expo/vector-icons";
-import { Image } from "expo-image";
-import { useEffect, useRef } from "react";
-import { Animated, Easing, ScrollView, View } from "react-native";
+import { useEffect } from "react";
+import { Image, ScrollView, View } from "react-native";
 import Svg, { Defs, LinearGradient, Rect, Stop, SvgXml } from 'react-native-svg';
+import Animated, {
+  useSharedValue,
+  useAnimatedStyle,
+  withRepeat,
+  withTiming,
+  withSequence,
+  Easing
+} from 'react-native-reanimated';
+
 import { ClanBadge } from "./ClanBadge";
 import ClanBorder from "./ClanBorder";
 import ClanCrest from "./ClanCrest";
@@ -25,10 +33,11 @@ export default function ClanCard({ clan, isDark, THEME = { card: '#0a0a0a', text
 
   // --- Special Inventory & Logic extraction ---
   const isVerified = clan.verifiedUntil && new Date(clan.verifiedUntil) > new Date();
-  const verifiedTier = clan.activeCustomizations?.verifiedTier
-  const verifiedColor = verifiedTier == "premium" ? "#facc15" : verifiedTier == "standard" ? "#ef4444" : "#3b82f6"
+  const verifiedTier = clan.activeCustomizations?.verifiedTier;
+  const verifiedColor = verifiedTier == "premium" ? "#facc15" : verifiedTier == "standard" ? "#ef4444" : "#3b82f6";
   const rankInfo = getClanTierDetails(clan.rankTitle || "Wandering Ronin");
   const highlightColor = isVerified ? verifiedColor : (rankInfo.color || THEME.accent);
+  
   const equippedGlow = clan.specialInventory?.find(i => i.category === 'GLOW' && i.isEquipped);
   const activeGlowColor = equippedGlow?.visualConfig?.primaryColor || equippedGlow?.visualData?.glowColor || null;
 
@@ -49,31 +58,40 @@ export default function ClanCard({ clan, isDark, THEME = { card: '#0a0a0a', text
   const currentPoints = clan.totalPoints || 0;
   const progress = Math.min((currentPoints / nextMilestone) * 100, 100);
 
-  const pulseAnim = useRef(new Animated.Value(1)).current;
-  const rotationAnim = useRef(new Animated.Value(0)).current;
+  // ⚡️ Reanimated Shared Values
+  const pulseScale = useSharedValue(1);
+  const rotationDegrees = useSharedValue(0);
 
   useEffect(() => {
-    Animated.loop(
-      Animated.sequence([
-        Animated.timing(pulseAnim, { toValue: 1.1, duration: 2000, useNativeDriver: true }),
-        Animated.timing(pulseAnim, { toValue: 1, duration: 2000, useNativeDriver: true }),
-      ])
-    ).start();
+    // Pulse Animation (1 -> 1.1 -> 1 infinitely)
+    pulseScale.value = withRepeat(
+      withSequence(
+        withTiming(1.1, { duration: 2000 }),
+        withTiming(1, { duration: 2000 })
+      ),
+      -1, 
+      false 
+    );
 
-    Animated.loop(
-      Animated.timing(rotationAnim, {
-        toValue: 1,
+    // Rotation Animation (0 -> 360 infinitely)
+    rotationDegrees.value = withRepeat(
+      withTiming(360, {
         duration: 20000,
         easing: Easing.linear,
-        useNativeDriver: true
-      })
-    ).start();
+      }),
+      -1, 
+      false 
+    );
   }, []);
 
-  const spin = rotationAnim.interpolate({
-    inputRange: [0, 1],
-    outputRange: ['0deg', '360deg']
-  });
+  // ⚡️ UI Thread Animated Styles
+  const pulseStyle = useAnimatedStyle(() => ({
+    transform: [{ scale: pulseScale.value }]
+  }));
+
+  const rotationStyle = useAnimatedStyle(() => ({
+    transform: [{ rotate: `${rotationDegrees.value}deg` }]
+  }));
 
   const SpecialWatermark = () => {
     if (!equippedWatermark) return null;
@@ -87,7 +105,7 @@ export default function ClanCard({ clan, isDark, THEME = { card: '#0a0a0a', text
         style={{
           bottom: -20,
           right: -20,
-          opacity: watermarkVisual.opacity || 0.4,
+          opacity: 0.7,
           transform: [{ rotate: watermarkVisual.rotation || '-15deg' }]
         }}
         pointerEvents="none"
@@ -146,14 +164,22 @@ export default function ClanCard({ clan, isDark, THEME = { card: '#0a0a0a', text
       <View className="items-center z-10">
         <View className="relative items-center justify-center mb-4">
           <Animated.View
-            style={{
-              position: 'absolute', width: 140, height: 140, borderRadius: 100,
-              backgroundColor: activeGlowColor, opacity: 0.1,
-              transform: [{ scale: pulseAnim }]
-            }}
+            style={[
+              {
+                position: 'absolute', width: 140, height: 140, borderRadius: 100,
+                // ⚡️ Added fallback to highlightColor so it never sets `backgroundColor: null`
+                backgroundColor: activeGlowColor || highlightColor, 
+                opacity: 0.1
+              },
+              pulseStyle
+            ]}
           />
           <Animated.View
-            style={{ transform: [{ rotate: spin }], borderColor: `${activeGlowColor}40`, width: 160, height: 160 }}
+            style={[
+              // ⚡️ FIXED: Guaranteed a valid hex code before appending '40'
+              { borderColor: `${activeGlowColor || highlightColor}40`, width: 160, height: 160 },
+              rotationStyle
+            ]}
             className="absolute border border-dashed rounded-full"
           />
           <ClanCrest rank={clan.rank || 1} size={130} glowColor={activeGlowColor || verifiedColor} />
@@ -206,7 +232,7 @@ export default function ClanCard({ clan, isDark, THEME = { card: '#0a0a0a', text
         {/* Medals Container */}
         <View className="w-full flex-row justify-center items-center gap-2 mb-6">
           {clan.badges?.length > 0 ? (
-            <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={{ gap: 8 }}>
+            <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={{ gap: 3 }}>
               {clan.badges.map((badgeName, idx) => (
                 <ClanBadge key={`${badgeName}-${idx}`} isClanPage={true} badgeName={badgeName} size="sm" />
               ))}
@@ -220,7 +246,12 @@ export default function ClanCard({ clan, isDark, THEME = { card: '#0a0a0a', text
         <View className="w-full flex-row justify-center mb-8">
           {clan.leader && (
             <View className="flex-row items-center gap-3 bg-gray-50 dark:bg-gray-900 p-2 pr-4 rounded-full border border-gray-100 dark:border-gray-800">
-              <Image source={{ uri: clan.leader.profilePic?.url || "https://via.placeholder.com/150" }} className="w-8 h-8 rounded-full" />
+              {/* ⚡️ Fixed invisible image issue with explicit styling */}
+              <Image 
+                  source={{ uri: clan.leader.profilePic?.url || "https://oreblogda.com/default-avatar.png" }} 
+                  contentFit="cover"
+                  style={{ width: 32, height: 32, borderRadius: 16 }} 
+              />
               <View>
                 <Text className="text-[8px] font-black text-gray-400 uppercase tracking-tighter">Clan Leader</Text>
                 <Text className="text-xs font-bold dark:text-white">{clan.leader.username}</Text>
@@ -262,8 +293,7 @@ export default function ClanCard({ clan, isDark, THEME = { card: '#0a0a0a', text
   );
 }
 
-
 const RemoteSvgIcon = ({ xml, size = 50, color }) => {
     if (!xml) return <MaterialCommunityIcons name="help-circle-outline" size={size} color="gray" />;
     return <SvgXml xml={xml} width={size} height={size} />;
-  };
+};

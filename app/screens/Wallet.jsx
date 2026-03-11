@@ -1,9 +1,10 @@
 import { Ionicons, MaterialCommunityIcons } from '@expo/vector-icons';
-import AsyncStorage from '@react-native-async-storage/async-storage';
 import { useNavigation } from '@react-navigation/native';
 import { Canvas, Circle, Fill, Group, LinearGradient, Rect, vec } from "@shopify/react-native-skia";
+import { Image } from 'expo-image';
 import { useCallback, useEffect, useRef, useState } from 'react';
 import {
+  ActivityIndicator,
   Animated,
   Dimensions,
   Easing,
@@ -12,22 +13,28 @@ import {
   ScrollView,
   StatusBar,
   Text,
+  TextInput,
   TouchableOpacity,
   useColorScheme,
   View
 } from 'react-native';
+import { useMMKV } from 'react-native-mmkv';
 import Purchases from 'react-native-purchases';
-import { SafeAreaView } from 'react-native-safe-area-context';
+import { SafeAreaView, useSafeAreaInsets } from 'react-native-safe-area-context';
 import { SvgXml } from 'react-native-svg';
 import ClanBorder from '../../components/ClanBorder';
 import CoinIcon from '../../components/ClanIcon';
-import PullSpinModal from '../../components/PullSpinModal'; // NEW IMPORT
+import PullSpinModal from '../../components/PullSpinModal';
 import Topbar from '../../components/Topbar';
 import THEME from '../../components/useAppTheme';
+import { useAlert } from '../../context/AlertContext';
 import { useClan } from '../../context/ClanContext';
 import { useCoins } from '../../context/CoinContext';
 import { useUser } from '../../context/UserContext';
 import apiFetch from '../../utils/apiFetch';
+
+// ⚡️ Import the Peak Badge
+import PeakBadge from '../../components/PeakBadge'; 
 
 const { width, height } = Dimensions.get('window');
 const ITEM_WIDTH = (width - 60) / 3;
@@ -41,6 +48,23 @@ const CACHE_KEY = '@store_packages_cache';
 const VAULT_CACHE_KEY_AUTHOR = '@vault_packs_author_cache';
 const VAULT_CACHE_KEY_CLAN = '@vault_packs_clan_cache';
 const USER_STATS_CACHE_KEY = '@user_vault_stats_cache';
+const RECENT_USERS_KEY = '@wallet_recent_users';
+const RECENT_AMOUNTS_KEY = '@wallet_recent_amounts';
+
+// ⚡️ PEAK SYSTEM CONSTANTS
+const PEAK_THRESHOLDS = [1, 1000, 5000, 10000, 25000, 50000, 100000, 250000, 500000, 1000000];
+const PEAK_REWARDS = [
+  { level: 1, title: "Initiate Status", desc: "First purchase completed. Welcome to Peak." },
+  { level: 2, title: "Bronze Status", desc: "Peak Level 2 badge." },
+  { level: 3, title: "Bronze II Status", desc: "Peak Level 3 badge." },
+  { level: 4, title: "Silver Status", desc: "Peak Level 4 badge, Silver theme badge." },
+  { level: 5, title: "Silver II Status", desc: "Peak Level 5 badge." },
+  { level: 6, title: "Gold Status", desc: "Peak Level 6 badge." },
+  { level: 7, title: "Gold II Status", desc: "+5% Bonus to all daily OC claims." },
+  { level: 8, title: "Epic Status", desc: "Unlock animated profile VFX & Auras." },
+  { level: 9, title: "Epic II Status", desc: "Custom Epic Name Color." },
+  { level: 10, title: "Mythic Status", desc: "Absolute Peak. Unlocks all Mythic items." }
+];
 
 const RemoteSvgIcon = ({ xml, size = 50, color }) => {
   if (!xml) return <MaterialCommunityIcons name="help-circle-outline" size={size} color={color || "gray"} />;
@@ -48,16 +72,20 @@ const RemoteSvgIcon = ({ xml, size = 50, color }) => {
 };
 
 const WalletPage = () => {
+  const CustomAlert = useAlert();
+  const storage = useMMKV();
+  const insets = useSafeAreaInsets();
   const navigation = useNavigation();
   const { user } = useUser();
-  const { coins, clanCoins, processTransaction, isProcessingTransaction } = useCoins();
+  
+  const { coins, clanCoins, totalPurchasedCoins = 0, peakLevel = 0, processTransaction, isProcessingTransaction } = useCoins();
   const { cCoins, isLoading: clanLoading, userClan, clanRank } = useClan();
 
   const colorScheme = useColorScheme();
   const isDark = colorScheme === "dark";
 
   const [activeTab, setActiveTab] = useState('OC');
-  const [vaultTab, setVaultTab] = useState('AUTHOR'); // 'AUTHOR' | 'CLAN'
+  const [vaultTab, setVaultTab] = useState('AUTHOR'); 
   const [packages, setPackages] = useState([]);
 
   const [authorVaultPacks, setAuthorVaultPacks] = useState([]);
@@ -73,7 +101,15 @@ const WalletPage = () => {
   const [selectedPkg, setSelectedPkg] = useState(null);
   const [isPreviewingPack, setIsPreviewingPack] = useState(false);
 
-  // 🔹 PULL LOGIC STATES
+  const [shareModalVisible, setShareModalVisible] = useState(false);
+  const [searchQuery, setSearchQuery] = useState('');
+  const [searchResults, setSearchResults] = useState([]);
+  const [selectedRecipient, setSelectedRecipient] = useState(null);
+  const [transferAmount, setTransferAmount] = useState('');
+  const [isSearching, setIsSearching] = useState(false);
+  const [recentUsers, setRecentUsers] = useState([]);
+  const [recentAmounts, setRecentAmounts] = useState([]);
+
   const [pullModalVisible, setPullModalVisible] = useState(false);
   const [activePullData, setActivePullData] = useState(null);
 
@@ -81,6 +117,13 @@ const WalletPage = () => {
   const pulseValue = useRef(new Animated.Value(1)).current;
   const spinAnimInstance = useRef(null);
   const pulseAnimInstance = useRef(null);
+
+  useEffect(() => {
+    const cachedUsers = storage.getString(RECENT_USERS_KEY);
+    const cachedAmounts = storage.getString(RECENT_AMOUNTS_KEY);
+    if (cachedUsers) setRecentUsers(JSON.parse(cachedUsers));
+    if (cachedAmounts) setRecentAmounts(JSON.parse(cachedAmounts));
+  }, [storage]);
 
   useEffect(() => {
     const isLoading = isProcessingTransaction || clanLoading || isFetchingStore;
@@ -129,12 +172,10 @@ const WalletPage = () => {
     if (packages.length > 0 && authorVaultPacks.length > 0 && clanVaultPacks.length > 0 && !force) return;
     setIsFetchingStore(true);
     try {
-      const [cachedStore, cachedAuthorVault, cachedClanVault, cachedStats] = await Promise.all([
-        AsyncStorage.getItem(CACHE_KEY),
-        AsyncStorage.getItem(VAULT_CACHE_KEY_AUTHOR),
-        AsyncStorage.getItem(VAULT_CACHE_KEY_CLAN),
-        AsyncStorage.getItem(USER_STATS_CACHE_KEY)
-      ]);
+      const cachedStore = storage.getString(CACHE_KEY);
+      const cachedAuthorVault = storage.getString(VAULT_CACHE_KEY_AUTHOR);
+      const cachedClanVault = storage.getString(VAULT_CACHE_KEY_CLAN);
+      const cachedStats = storage.getString(USER_STATS_CACHE_KEY);
 
       if (cachedStore) setPackages(JSON.parse(cachedStore));
       if (cachedAuthorVault) setAuthorVaultPacks(JSON.parse(cachedAuthorVault));
@@ -155,7 +196,7 @@ const WalletPage = () => {
       if (offerings.current !== null) {
         const availablePkgs = offerings.current.availablePackages;
         setPackages(availablePkgs);
-        await AsyncStorage.setItem(CACHE_KEY, JSON.stringify(availablePkgs));
+        storage.set(CACHE_KEY, JSON.stringify(availablePkgs));
       }
 
       if (authorPackRes && authorPackRes.ok) {
@@ -164,8 +205,8 @@ const WalletPage = () => {
           setAuthorVaultPacks(packData.packs);
           const stats = { postCount: packData.meta.postCount, rankLevel: packData.meta.rankLevel };
           setUserStats(stats);
-          await AsyncStorage.setItem(VAULT_CACHE_KEY_AUTHOR, JSON.stringify(packData.packs));
-          await AsyncStorage.setItem(USER_STATS_CACHE_KEY, JSON.stringify(stats));
+          storage.set(VAULT_CACHE_KEY_AUTHOR, JSON.stringify(packData.packs));
+          storage.set(USER_STATS_CACHE_KEY, JSON.stringify(stats));
         }
       }
 
@@ -173,7 +214,7 @@ const WalletPage = () => {
         const clanData = await clanPackRes.json();
         if (clanData.success) {
           setClanVaultPacks(clanData.packs);
-          await AsyncStorage.setItem(VAULT_CACHE_KEY_CLAN, JSON.stringify(clanData.packs));
+          storage.set(VAULT_CACHE_KEY_CLAN, JSON.stringify(clanData.packs));
         }
       }
 
@@ -182,7 +223,7 @@ const WalletPage = () => {
     } finally {
       setIsFetchingStore(false);
     }
-  }, [packages.length, authorVaultPacks.length, clanVaultPacks.length]);
+  }, [packages.length, authorVaultPacks.length, clanVaultPacks.length, storage]);
 
   useEffect(() => { fetchOfferings(); }, []);
 
@@ -193,6 +234,78 @@ const WalletPage = () => {
       setMessage({ text: `+${targetDay === 7 ? 50 : 10} OC ACQUIRED`, type: 'success' });
       setTimeout(() => setMessage({ text: '', type: '' }), 3000);
     }
+  };
+
+  const handleSearchUsers = async (query) => {
+    setSearchQuery(query);
+    if (query.trim().length < 3) {
+      setSearchResults([]);
+      return;
+    }
+    setIsSearching(true);
+    try {
+      const res = await apiFetch(`/users/search?query=${query}`);
+      const data = await res.json();
+      if (data.success) {
+        setSearchResults(data.users.filter(u => u.deviceId !== user.deviceId));
+      }
+    } catch (e) {
+      console.error("Search error", e);
+    } finally {
+      setIsSearching(false);
+    }
+  };
+
+  const saveToRecents = (recipient, amount) => {
+    const updatedUsers = [recipient, ...recentUsers.filter(u => u._id !== recipient._id)].slice(0, 5);
+    setRecentUsers(updatedUsers);
+    storage.set(RECENT_USERS_KEY, JSON.stringify(updatedUsers));
+
+    const updatedAmounts = [amount, ...recentAmounts.filter(a => a !== amount)].slice(0, 5);
+    setRecentAmounts(updatedAmounts);
+    storage.set(RECENT_AMOUNTS_KEY, JSON.stringify(updatedAmounts));
+  };
+
+  const handleTransfer = async () => {
+    const amount = parseInt(transferAmount);
+    if (!selectedRecipient || isNaN(amount) || amount <= 0) {
+      setMessage({ text: 'INVALID TRANSMISSION DATA', type: 'error' });
+      return;
+    }
+    if (coins < amount) {
+      setMessage({ text: 'INSUFFICIENT OC RESERVES', type: 'error' });
+      return;
+    }
+
+    CustomAlert(
+      "Authorize Dispatch",
+      `Confirm transmission of ${amount} OC to ${selectedRecipient.username.toUpperCase()}?`,
+      [
+        { text: "Cancel", style: "cancel" },
+        {
+          text: "Confirm",
+          style: "default",
+          onPress: async () => {
+            const result = await processTransaction('transfer', 'send_oc', {
+              recipientId: selectedRecipient._id,
+              amount: amount
+            });
+
+            if (result.success) {
+              saveToRecents(selectedRecipient, amount);
+              setMessage({ text: `TRANSMISSION SUCCESS TO ${selectedRecipient.username.toUpperCase()}`, type: 'success' });
+              setShareModalVisible(false);
+              setSelectedRecipient(null);
+              setTransferAmount('');
+              setSearchQuery('');
+            } else {
+              setMessage({ text: result.error || 'LINK FAILED', type: 'error' });
+            }
+            setTimeout(() => setMessage({ text: '', type: '' }), 4000);
+          }
+        }
+      ]
+    );
   };
 
   const openPreview = (pkg, isPack = false) => {
@@ -217,11 +330,9 @@ const WalletPage = () => {
     try {
       const { customerInfo } = await Purchases.purchasePackage(pkgToBuy);
 
-      // Check if any reward requires a pull
       const pullReward = selectedPkg.rewards?.find(r => r.requiresPull);
 
       if (isPreviewingPack && pullReward) {
-        // Intercept for the pull spin
         setActivePullData({
           reward: pullReward,
           pkgToBuy: pkgToBuy,
@@ -229,7 +340,6 @@ const WalletPage = () => {
         });
         setPullModalVisible(true);
       } else {
-        // Proceed with standard purchase
         finalizePurchase(pkgToBuy, selectedPkg.rewards);
       }
     } catch (e) {
@@ -237,7 +347,6 @@ const WalletPage = () => {
     }
   };
 
-  // 🔹 FINAL STEP: SAVING TO DATABASE
   const finalizePurchase = async (pkgToBuy, rewardsArray) => {
     const action = isPreviewingPack ? 'purchase_pack' : 'buy_coins';
     const packIdentifier = pkgToBuy.product.identifier;
@@ -262,17 +371,14 @@ const WalletPage = () => {
     setTimeout(() => setMessage({ text: '', type: '' }), 4000);
   };
 
-  // 🔹 HANDLE SPIN COMPLETION
   const onPullComplete = (generatedNumber) => {
     setPullModalVisible(false);
     
-    // Create modified rewards array with injected number into SVG
     const updatedRewards = activePullData.allRewards.map(reward => {
       if (reward.requiresPull) {
         const meta = reward.pullMetadata;
         const numberSvgTag = `<text x="${meta.targetTextX}" y="${meta.targetTextY}" font-family="Arial, sans-serif" font-size="100" fill="${meta.primaryFill || "#00a86b"}" font-weight="bold">${generatedNumber}</text>`;
         
-        // Inject tag before the closing </svg>
         const updatedSvg = reward.visualConfig.svgCode.replace('</svg>', `${numberSvgTag}</svg>`);
         
         return {
@@ -285,7 +391,6 @@ const WalletPage = () => {
       return reward;
     });
 
-    // Save to DB
     finalizePurchase(activePullData.pkgToBuy, updatedRewards);
     setActivePullData(null);
   };
@@ -356,6 +461,14 @@ const WalletPage = () => {
     }
   };
 
+  // ⚡️ HELPER FOR PEAK PROGRESS BAR (Math Safe)
+  const currentTierMin = peakLevel === 0 ? 0 : (PEAK_THRESHOLDS[peakLevel - 1] || 0);
+  const nextTierMin = peakLevel === 0 ? 1 : (PEAK_THRESHOLDS[peakLevel] || PEAK_THRESHOLDS[PEAK_THRESHOLDS.length - 1]);
+  const progressBase = Math.max(0, totalPurchasedCoins - currentTierMin);
+  const progressGoal = Math.max(1, nextTierMin - currentTierMin); // Prevent divide by zero
+  const peakProgress = peakLevel === 10 ? 1 : Math.min(1, progressBase / progressGoal);
+  const coinsToNextPeak = peakLevel === 10 ? 0 : nextTierMin - totalPurchasedCoins;
+
   const spin = spinValue.interpolate({
     inputRange: [0, 1],
     outputRange: ['0deg', '360deg']
@@ -399,6 +512,7 @@ const WalletPage = () => {
       <Topbar isDark={isDark} />
 
       <ScrollView contentContainerStyle={{ paddingBottom: 100 }} className="p-5" showsVerticalScrollIndicator={false}>
+        
         {/* 🔹 BALANCE CARD */}
         <View className="mb-6 rounded-[35px] overflow-hidden h-fit" style={{ backgroundColor: THEME.card, borderWidth: 1, borderColor: THEME.border }}>
           <Canvas style={{ flex: 1, position: 'absolute', width: '100%', height: '100%' }}>
@@ -421,32 +535,42 @@ const WalletPage = () => {
             </View>
 
             {activeTab === 'OC' && (
-              <TouchableOpacity
-                onPress={handleClaimDaily}
-                disabled={!canClaimToday || isProcessingTransaction}
-                style={{ backgroundColor: canClaimToday ? THEME.accent : 'transparent', borderColor: canClaimToday ? THEME.accent : THEME.border, borderWidth: canClaimToday ? 0 : 2 }}
-                className="h-14 rounded-2xl flex-row items-center justify-center shadow-xl"
-              >
-                <MaterialCommunityIcons name={canClaimToday ? "lightning-bolt" : "lightning-bolt-outline"} size={22} color={canClaimToday ? "white" : THEME.textSecondary} />
-                <Text className="font-black uppercase text-[12px] ml-2 tracking-[2px]" style={{ color: canClaimToday ? "white" : THEME.textSecondary }}>
-                  {canClaimToday ? `Initiate Refuel` : "Depot Empty"}
-                </Text>
-              </TouchableOpacity>
+              <View className="flex-row gap-x-3">
+                <TouchableOpacity
+                  onPress={handleClaimDaily}
+                  disabled={!canClaimToday || isProcessingTransaction}
+                  style={{ backgroundColor: canClaimToday ? THEME.accent : 'transparent', borderColor: canClaimToday ? THEME.accent : THEME.border, borderWidth: canClaimToday ? 0 : 2 }}
+                  className="flex-1 h-14 rounded-2xl flex-row items-center justify-center shadow-xl"
+                >
+                  <MaterialCommunityIcons name={canClaimToday ? "lightning-bolt" : "lightning-bolt-outline"} size={22} color={canClaimToday ? "white" : THEME.textSecondary} />
+                  <Text className="font-black uppercase text-[12px] ml-2 tracking-[2px]" style={{ color: canClaimToday ? "white" : THEME.textSecondary }}>
+                    {canClaimToday ? `Initiate Refuel` : "Depot Empty"}
+                  </Text>
+                </TouchableOpacity>
+
+                <TouchableOpacity
+                  onPress={() => setShareModalVisible(true)}
+                  style={{ borderColor: THEME.accent, borderWidth: 1 }}
+                  className="w-14 h-14 rounded-2xl items-center justify-center bg-white/5"
+                >
+                  <Ionicons name="send-outline" size={24} color={THEME.accent} />
+                </TouchableOpacity>
+              </View>
             )}
           </View>
         </View>
 
         {/* 🔹 TABS */}
         <View className="flex-row mb-8 bg-black/5 dark:bg-white/5 p-1 rounded-[22px] border border-black/5 dark:border-white/5">
-          {['OC', 'CC', 'PACKS'].map((tab) => (
+          {['OC', 'PEAK', 'CC', 'PACKS'].map((tab) => (
             <TouchableOpacity
               key={tab}
               onPress={() => setActiveTab(tab)}
               className="flex-1 py-3.5 rounded-[18px] items-center justify-center"
               style={activeTab === tab ? { backgroundColor: THEME.accent } : {}}
             >
-              <Text style={{ color: activeTab === tab ? 'white' : THEME.textSecondary }} className="font-black uppercase text-[9px] tracking-[2.5px]">
-                {tab === 'OC' ? "Ore" : tab === 'CC' ? "Clan" : "Vault"}
+              <Text style={{ color: activeTab === tab ? 'white' : THEME.textSecondary }} className="font-black uppercase text-[9px] tracking-[1.5px]">
+                {tab === 'OC' ? "Ore" : tab === 'CC' ? "Clan" : tab === 'PACKS' ? "Vault" : "Peak"}
               </Text>
             </TouchableOpacity>
           ))}
@@ -457,6 +581,85 @@ const WalletPage = () => {
           {message.text !== '' && (
             <View style={{ backgroundColor: THEME.card, borderColor: message.type === 'error' ? THEME.danger : THEME.success }} className="mb-6 p-4 rounded-2xl border-b-2 flex-row items-center justify-center">
               <Text style={{ color: message.type === 'error' ? THEME.danger : THEME.success }} className="font-black uppercase text-[10px] tracking-[2px] italic">{message.text}</Text>
+            </View>
+          )}
+
+          {/* ⚡️ NEW: PEAK TAB UI */}
+          {activeTab === 'PEAK' && (
+            <View>
+              <View className="mb-6 px-1 flex-row items-end justify-between">
+                <Text style={{ color: THEME.text }} className="text-2xl font-black uppercase italic">Ascension</Text>
+                <Text style={{ color: THEME.accent }} className="text-[8px] font-black uppercase tracking-[2px]">Peak System</Text>
+              </View>
+
+              {/* Current Status Card */}
+              <View style={{ backgroundColor: THEME.card, borderColor: THEME.border, borderWidth: 1 }} className="p-8 rounded-[35px] items-center mb-8 shadow-sm">
+                <View className="mb-4">
+                  {peakLevel > 0 ? (
+                      <PeakBadge level={peakLevel} size={90} />
+                  ) : (
+                      <View style={{ width: 90, height: 90, justifyContent: 'center', alignItems: 'center', backgroundColor: THEME.border, borderRadius: 20 }}>
+                          <MaterialCommunityIcons name="lock" size={40} color={THEME.textSecondary} />
+                      </View>
+                  )}
+                </View>
+                <Text style={{ color: THEME.text }} className="text-2xl font-black uppercase tracking-tighter">
+                  {peakLevel > 0 ? `Level ${peakLevel}` : "Unranked"}
+                </Text>
+                <Text style={{ color: THEME.textSecondary }} className="text-[10px] font-bold uppercase tracking-widest mt-1 mb-8">
+                  Acquired: {totalPurchasedCoins.toLocaleString()} OC
+                </Text>
+
+                {/* Ascenscion Progress Bar */}
+                <View className="w-full">
+                  <View className="flex-row justify-between mb-2 px-1">
+                    <Text style={{ color: THEME.text }} className="text-[10px] font-black tracking-widest">
+                      {peakLevel === 0 ? 'LVL 0' : `LVL ${peakLevel}`}
+                    </Text>
+                    <Text style={{ color: THEME.text }} className="text-[10px] font-black tracking-widest">
+                      {peakLevel === 10 ? 'MAX' : `LVL ${peakLevel + 1}`}
+                    </Text>
+                  </View>
+                  <View style={{ backgroundColor: THEME.border }} className="h-3 rounded-full overflow-hidden">
+                    <View style={{ width: `${peakProgress * 100}%`, backgroundColor: THEME.accent }} className="h-full rounded-full" />
+                  </View>
+                  {peakLevel < 10 ? (
+                    <Text style={{ color: THEME.accent }} className="text-[9px] font-bold uppercase tracking-widest mt-3 text-center">
+                      {coinsToNextPeak.toLocaleString()} OC to next rank
+                    </Text>
+                  ) : (
+                    <Text style={{ color: THEME.success }} className="text-[9px] font-bold uppercase tracking-widest mt-3 text-center">
+                      Maximum Peak Achieved
+                    </Text>
+                  )}
+                </View>
+              </View>
+
+              {/* Peak Perks / Rules */}
+              <Text style={{ color: THEME.textSecondary }} className="font-black text-[11px] uppercase mb-4 tracking-widest px-1">Tier Rewards</Text>
+              <View className="gap-3">
+                {PEAK_REWARDS.map((tier, index) => {
+                  const isUnlocked = peakLevel >= tier.level;
+                  return (
+                    <View key={index} style={{ backgroundColor: THEME.card, borderColor: isUnlocked ? THEME.accent : THEME.border, borderWidth: 1, opacity: isUnlocked ? 1 : 0.5 }} className="p-4 rounded-2xl flex-row items-center justify-between">
+                      <View className="flex-row items-center flex-1 pr-4">
+                        <View className="w-10 items-center justify-center mr-2">
+                          <Text style={{ color: isUnlocked ? THEME.accent : THEME.textSecondary }} className="font-black text-lg italic">L.{tier.level}</Text>
+                        </View>
+                        <View className="flex-1">
+                          <Text style={{ color: THEME.text }} className="font-black uppercase text-[11px] mb-1">{tier.title}</Text>
+                          <Text style={{ color: THEME.textSecondary }} className="text-[9px] font-bold tracking-tight leading-tight">{tier.desc}</Text>
+                        </View>
+                      </View>
+                      {isUnlocked ? (
+                        <MaterialCommunityIcons name="check-decagram" size={24} color={THEME.accent} />
+                      ) : (
+                        <MaterialCommunityIcons name="lock" size={20} color={THEME.textSecondary} />
+                      )}
+                    </View>
+                  );
+                })}
+              </View>
             </View>
           )}
 
@@ -526,7 +729,6 @@ const WalletPage = () => {
                 return (
                   <TouchableOpacity
                     key={pack.id}
-                    
                     onPress={() => openPreview(pack, true)}
                     className={`mb-8 rounded-[35px] overflow-hidden border-2 ${isLocked ? 'opacity-60' : ''}`}
                     style={{ borderColor: cardColor, height: 240, backgroundColor: THEME.card }}
@@ -649,6 +851,111 @@ const WalletPage = () => {
         </View>
       </Modal>
 
+      {/* 🔹 TRANSFER MODAL */}
+      <Modal visible={shareModalVisible} animationType="slide" transparent>
+        <View className="flex-1 bg-black/80 justify-end">
+          <View style={{ backgroundColor: THEME.bg, borderTopLeftRadius: 40, borderTopRightRadius: 40 }} className="h-[85%] p-8">
+            <View className="flex-row justify-between items-center mb-6">
+              <View>
+                <Text style={{ color: THEME.text }} className="text-2xl font-black italic uppercase">Dispatch Energy</Text>
+                <Text style={{ color: THEME.accent }} className="text-[8px] font-black uppercase tracking-widest mt-1">Peer-to-Peer Transfer</Text>
+              </View>
+              <TouchableOpacity onPress={() => setShareModalVisible(false)}>
+                <Ionicons name="close-circle" size={32} color={THEME.textSecondary} />
+              </TouchableOpacity>
+            </View>
+
+            <View className="mb-4">
+              <TextInput
+                style={{ backgroundColor: THEME.card, color: THEME.text, borderColor: THEME.border, borderWidth: 1 }}
+                className="h-14 rounded-2xl px-5 font-bold"
+                placeholder="Search username..."
+                placeholderTextColor={THEME.textSecondary}
+                value={searchQuery}
+                onChangeText={handleSearchUsers}
+              />
+            </View>
+
+            {selectedRecipient ? (
+              <View style={{ backgroundColor: THEME.card, borderColor: THEME.accent }} className="p-4 rounded-2xl border-2 flex-row items-center justify-between mb-6">
+                <View className="flex-row gap-4 items-center">
+                  <Image source={{ uri: selectedRecipient.profilePic?.url }} style={{ width: 40, height: 40, borderRadius: 20 }} className="mr-3 border border-white/10" contentFit="cover" />
+                  <Text style={{ color: THEME.text }} className="font-black uppercase text-xs">{selectedRecipient.username}</Text>
+                </View>
+                <TouchableOpacity onPress={() => setSelectedRecipient(null)}>
+                  <Ionicons name="remove-circle" size={20} color={THEME.danger} />
+                </TouchableOpacity>
+              </View>
+            ) : (
+              <View className="flex-1 mb-4">
+                {searchQuery.length === 0 && recentUsers.length > 0 && (
+                  <View className="mb-4">
+                    <Text style={{ color: THEME.textSecondary }} className="font-black text-[9px] uppercase mb-3 tracking-widest">Recent Allies</Text>
+                    <ScrollView horizontal showsHorizontalScrollIndicator={false}>
+                      <View className="flex-row gap-4">
+                        {recentUsers.map(u => (
+                          <TouchableOpacity key={u._id} onPress={() => setSelectedRecipient(u)} className="items-center">
+                            <Image source={{ uri: u.profilePic?.url }} style={{ width: 56, height: 56, borderRadius: 28 }} className="border-2 border-white/10 mb-1" contentFit="cover" />
+                            <Text style={{ color: THEME.text }} className="text-[8px] font-bold uppercase">{u.username.slice(0, 8)}</Text>
+                          </TouchableOpacity>
+                        ))}
+                      </View>
+                    </ScrollView>
+                  </View>
+                )}
+                {isSearching ? <ActivityIndicator color={THEME.accent} /> : (
+                  <ScrollView showsVerticalScrollIndicator={false}>
+                    {searchResults.map(u => (
+                      <TouchableOpacity key={u._id} onPress={() => setSelectedRecipient(u)} className="py-4 border-b border-white/5 flex-row items-center justify-between">
+                        <View className="flex-row gap-4 items-center">
+                          <Image source={{ uri: u.profilePic?.url }} style={{ width: 40, height: 40, borderRadius: 20 }} className="mr-3" contentFit="cover" />
+                          <Text style={{ color: THEME.text }} className="font-black uppercase text-[11px]">{u.username}</Text>
+                        </View>
+                        <Ionicons name="add-circle-outline" size={18} color={THEME.accent} />
+                      </TouchableOpacity>
+                    ))}
+                  </ScrollView>
+                )}
+              </View>
+            )}
+
+            <View className="mb-6">
+              <Text style={{ color: THEME.textSecondary }} className="font-black text-[9px] uppercase mb-3 tracking-widest">Amount</Text>
+              {recentAmounts.length > 0 && (
+                <View className="flex-row gap-2 mb-4">
+                  {recentAmounts.map(a => (
+                    <TouchableOpacity key={a} onPress={() => setTransferAmount(a.toString())} className="px-4 py-2 rounded-full border border-white/10 bg-white/5">
+                      <Text style={{ color: THEME.text }} className="text-[10px] font-black">{a}</Text>
+                    </TouchableOpacity>
+                  ))}
+                </View>
+              )}
+              <View className="flex-row items-center">
+                <TextInput
+                  style={{ backgroundColor: THEME.card, color: THEME.text, borderColor: THEME.border, borderWidth: 1 }}
+                  className="flex-1 h-14 rounded-2xl px-5 font-black text-xl"
+                  placeholder="0"
+                  placeholderTextColor={THEME.textSecondary}
+                  keyboardType="number-pad"
+                  value={transferAmount}
+                  onChangeText={setTransferAmount}
+                />
+                <View className="ml-4"><CoinIcon type="OC" size={32} /></View>
+              </View>
+            </View>
+
+            <TouchableOpacity
+              onPress={handleTransfer}
+              disabled={isProcessingTransaction || !selectedRecipient}
+              style={{ backgroundColor: selectedRecipient ? THEME.accent : THEME.border }}
+              className="h-16 rounded-2xl items-center justify-center shadow-2xl"
+            >
+              <Text className="text-white font-black uppercase tracking-[2px] text-xs">Authorize Dispatch</Text>
+            </TouchableOpacity>
+          </View>
+        </View>
+      </Modal>
+
       {/* 🔹 PULL SPIN MODAL */}
       {activePullData && (
         <PullSpinModal 
@@ -683,4 +990,4 @@ const WalletPage = () => {
   );
 };
 
-export default WalletPage;
+export default WalletPage

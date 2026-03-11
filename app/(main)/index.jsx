@@ -1,13 +1,12 @@
+import { useLocalSearchParams } from "expo-router";
 import { useColorScheme } from "nativewind";
 import { memo, useCallback, useEffect, useRef, useState } from 'react';
-import { ActivityIndicator, Animated, DeviceEventEmitter, FlatList, Platform, View, useWindowDimensions } from 'react-native';
+import { ActivityIndicator, DeviceEventEmitter, View } from 'react-native';
 import { useSafeAreaInsets } from "react-native-safe-area-context";
+import PagerView from 'react-native-pager-view';
 import PostsViewer from "./../../components/PostViewer";
 import { Text } from "./../../components/Text";
 import CategoryPage from "./categories/[id]";
-
-// 🚀 FIX: Create the Animated version of FlatList
-const AnimatedFlatList = Animated.createAnimatedComponent(FlatList);
 
 const CHANNELS = [
     { id: 'all', title: 'Global', type: 'feed' },
@@ -19,115 +18,75 @@ const CHANNELS = [
     { id: 'gaming', title: 'Gaming', type: 'category' },
 ];
 
-const Scene = memo(({ item, pageWidth }) => {
-    return (
-        <View style={{ width: pageWidth, flex: 1 }}>
-            <View className="flex-1">
-                {item.type === 'feed' ? (
-                    <PostsViewer />
-                ) : (
-                    <CategoryPage forcedId={item.id} />
-                )}
-            </View>
-            
-            <View 
-                pointerEvents="none" 
-                style={{ position: 'absolute', top: 0, left: 0, right: 0, bottom: 0, zIndex: -1 }}
-                className="items-center justify-center bg-[#050505]"
-            >
-                <ActivityIndicator size="small" color="#2563eb" />
-                <Text className="text-[10px] text-blue-600/30 font-bold uppercase mt-2 tracking-widest">
-                    Initializing Sector...
-                </Text>
-            </View>
+const Scene = memo(({ item }) => (
+    <View style={{ flex: 1 }}>
+        <View className="flex-1 z-10 bg-transparent">
+            {item.type === 'feed' ? <PostsViewer /> : <CategoryPage forcedId={item.id} />}
         </View>
-    );
-}, (prevProps, nextProps) => {
-    return prevProps.pageWidth === nextProps.pageWidth && prevProps.item.id === nextProps.item.id;
-});
+        <View 
+            pointerEvents="none" 
+            style={{ position: 'absolute', inset: 0, zIndex: -1 }}
+            className="items-center justify-center bg-[#050505]"
+        >
+            <ActivityIndicator size="small" color="#2563eb" />
+        </View>
+    </View>
+), (p, n) => p.item.id === n.item.id);
 
 export default function HomePage() {
     const insets = useSafeAreaInsets();
     const { colorScheme } = useColorScheme();
     const isDark = colorScheme === "dark";
-    const { width: windowWidth } = useWindowDimensions();
     
-    const flatListRef = useRef(null);
-    const scrollX = useRef(new Animated.Value(0)).current;
+    const pagerRef = useRef(null);
+    const { initialSector } = useLocalSearchParams(); // ⚡️ Listen for incoming redirect
     const [activeTitle, setActiveTitle] = useState(CHANNELS[0].title); 
 
+    // Handle internal swipes/taps
     useEffect(() => {
         const sub = DeviceEventEmitter.addListener("scrollToIndex", (index) => {
-            flatListRef.current?.scrollToIndex({ index, animated: true });
+            pagerRef.current?.setPage(index); 
         });
         return () => sub.remove();
     }, []);
 
-    const renderItem = useCallback(({ item }) => (
-        <Scene key={item.id} item={item} pageWidth={windowWidth} />
-    ), [windowWidth]);
-
-    const viewabilityConfig = useRef({
-        itemVisiblePercentThreshold: 60,
-        minimumViewTime: 50 
-    }).current;
-
-    const onViewableItemsChanged = useRef(({ viewableItems }) => {
-        if (viewableItems.length > 0) {
-            const newItem = viewableItems[0];
-            const newIndex = newItem.index;
-            if (newIndex !== null && newIndex !== undefined) {
-                setActiveTitle(CHANNELS[newIndex].title);
-                DeviceEventEmitter.emit("pageSwiped", newIndex);
-            }
+    // ⚡️ Handle cross-page navigation via params
+    useEffect(() => {
+        if (initialSector) {
+            const index = parseInt(initialSector);
+            // Slight delay ensures the PagerView is native-ready
+            const timer = setTimeout(() => {
+                pagerRef.current?.setPage(index);
+                setActiveTitle(CHANNELS[index].title);
+                DeviceEventEmitter.emit("pageSwiped", index);
+            }, 100);
+            return () => clearTimeout(timer);
         }
-    }).current;
+    }, [initialSector]);
 
-    const getItemLayout = useCallback((_, index) => ({
-        length: windowWidth,
-        offset: windowWidth * index,
-        index,
-    }), [windowWidth]);
+    const onPageSelected = useCallback((e) => {
+        const newIndex = e.nativeEvent.position;
+        setActiveTitle(CHANNELS[newIndex].title);
+        DeviceEventEmitter.emit("pageSwiped", newIndex);
+    }, []);
 
     return (
         <View className={`flex-1 ${isDark ? "bg-[#050505]" : "bg-white"}`}>
-            <View 
-                pointerEvents="none"
-                className="absolute -top-20 -left-20 w-64 h-64 bg-blue-600/10 rounded-full blur-3xl" 
-            />
+            <PagerView
+                ref={pagerRef}
+                style={{ flex: 1 }}
+                initialPage={0}
+                onPageSelected={onPageSelected}
+                overdrag={false} 
+                offscreenPageLimit={1} 
+            >
+                {CHANNELS.map((item) => (
+                    <View key={item.id} style={{ flex: 1 }} collapsable={false}>
+                        <Scene item={item} />
+                    </View>
+                ))}
+            </PagerView>
 
-            <AnimatedFlatList
-                ref={flatListRef}
-                data={CHANNELS}
-                renderItem={renderItem}
-                keyExtractor={(item) => item.id}
-                horizontal
-                pagingEnabled
-                showsHorizontalScrollIndicator={false}
-                onViewableItemsChanged={onViewableItemsChanged}
-                viewabilityConfig={viewabilityConfig}
-                getItemLayout={getItemLayout}
-                
-                // Optimized Props
-                windowSize={2}
-                initialNumToRender={1}
-                maxToRenderPerBatch={1}
-                removeClippedSubviews={Platform.OS === 'android'} 
-                scrollEventThrottle={16}
-                decelerationRate="fast"
-                
-                snapToInterval={windowWidth}
-                snapToAlignment="start"
-                disableIntervalMomentum={true}
-                
-                // 🚀 This now works because we use AnimatedFlatList
-                onScroll={Animated.event(
-                    [{ nativeEvent: { contentOffset: { x: scrollX } } }],
-                    { useNativeDriver: true }
-                )}
-            />
-
-            {/* Neural Link Footer */}
             <View 
                 className="absolute left-6 flex-row items-center gap-2"
                 style={{ bottom: insets.bottom + 5, opacity: 0.3 }}
@@ -139,5 +98,5 @@ export default function HomePage() {
                 </Text>
             </View>
         </View>
-    ); 
+    );
 }

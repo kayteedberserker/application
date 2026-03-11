@@ -1,8 +1,7 @@
 import { MaterialCommunityIcons } from '@expo/vector-icons';
-import AsyncStorage from "@react-native-async-storage/async-storage";
 import { useLocalSearchParams, useRouter } from 'expo-router';
 import { useColorScheme } from 'nativewind';
-import { useEffect, useRef, useState } from 'react';
+import { useEffect, useRef, useState, useCallback } from 'react';
 import { DeviceEventEmitter, Dimensions, ScrollView, TouchableOpacity, View } from 'react-native';
 import Animated, {
   Easing,
@@ -12,6 +11,9 @@ import Animated, {
   withTiming
 } from 'react-native-reanimated';
 import { useSafeAreaInsets } from "react-native-safe-area-context";
+// ⚡️ Swapped to MMKV
+import { useMMKV } from 'react-native-mmkv';
+
 import CommentSection from "../../../components/CommentSection";
 import PostCard from "../../../components/PostCard";
 import { SyncLoading } from '../../../components/SyncLoading';
@@ -19,29 +21,27 @@ import { Text } from '../../../components/Text';
 import apiFetch from "../../../utils/apiFetch";
 
 const { width } = Dimensions.get('window');
-const API_URL = "https://oreblogda.com";
 
 export default function PostDetailScreen() {
   // 🔔 Extracts both 'discussion' (from web link) and 'commentId' (from notification)
   const { id, discussion, commentId, comment } = useLocalSearchParams();
-  const targetCommentId = discussion || commentId || comment
-  
+  const targetCommentId = discussion || commentId || comment;
 
   const { colorScheme } = useColorScheme();
   const insets = useSafeAreaInsets();
   const router = useRouter();
   const isDark = colorScheme === "dark";
 
+  // ⚡️ Initialize Storage Hook
+  const storage = useMMKV();
+
   const [post, setPost] = useState(null);
   const [loading, setLoading] = useState(true);
   const [isOffline, setIsOffline] = useState(false);
-  const [similarPosts, setSimilarPosts] = useState([]);
-  const [discussionId, setDiscussionId] = useState()
+  const [discussionId, setDiscussionId] = useState();
   const scrollRef = useRef(null);
-  const commentSectionY = useRef(0); // Track Y position for scrolling
+  const commentSectionY = useRef(0);
 
-  // Ref to prevent double fetching of similar posts (cache vs network)
-  const lastFetchedCategory = useRef(null);
   const CACHE_KEY = `post_detail_${id}`;
 
   // --- 1. ANIMATION HOOKS ---
@@ -56,56 +56,53 @@ export default function PostDetailScreen() {
       -1,
       false
     );
-  }, []);
+  }, [streamX]);
 
-  // --- 2. DATA FETCHING LOGIC (Cache + Network) ---
-  const fetchPostData = async () => {
+  // --- 2. DATA FETCHING LOGIC (MMKV Cache + Network) ---
+  const fetchPostData = useCallback(async () => {
+    setLoading(true);
     try {
-      // Step A: Load from Cache immediately
-      const cached = await AsyncStorage.getItem(CACHE_KEY);
+      // Step A: Load from MMKV immediately (Synchronous)
+      const cached = storage.getString(CACHE_KEY);
       if (cached) {
         const cachedData = JSON.parse(cached);
         setPost(cachedData);
-        setLoading(false);
-        if (cachedData.category) handleSimilarPosts(cachedData.category);
+        setLoading(false); // UI shows instantly
       }
 
-      // Step B: Fetch from Network
+      // Step B: Fetch from Network (which now includes Author/Clan data)
       const res = await apiFetch(`/posts/${id}`);
       if (!res.ok) throw new Error("Network response was not ok");
 
       const data = await res.json();
 
-      // Step C: Update State & Cache
+      // Step C: Update State & MMKV Cache
       setPost(data);
       setIsOffline(false);
-      await AsyncStorage.setItem(CACHE_KEY, JSON.stringify(data));
+      storage.set(CACHE_KEY, JSON.stringify(data));
 
-      handleSimilarPosts(data.category);
       handleViewIncrement(data._id);
 
     } catch (error) {
       console.log("Fetch error:", error);
-      const hasCache = await AsyncStorage.getItem(CACHE_KEY);
+      const hasCache = storage.getString(CACHE_KEY);
       if (!hasCache) {
         setIsOffline(true);
       }
     } finally {
       setLoading(false);
     }
-  };
+  }, [id, CACHE_KEY, storage]);
 
   useEffect(() => {
     if (id) {
-      lastFetchedCategory.current = null;
       fetchPostData();
     }
-  }, [id]);
+  }, [id, fetchPostData]);
 
   // 🎯 AUTO-SCROLL LOGIC: Triggers when comment data is targeted via link/notif
   useEffect(() => {
     if (targetCommentId && !loading) {
-      // Small timeout to allow the layout to finalize after loading stops
       const timer = setTimeout(() => {
         if (commentSectionY.current > 0) {
           scrollRef.current?.scrollTo({
@@ -118,23 +115,9 @@ export default function PostDetailScreen() {
     }
   }, [targetCommentId, loading]);
 
-  const handleSimilarPosts = async (category) => {
-    if (!category || lastFetchedCategory.current === category) return;
-
-    try {
-      lastFetchedCategory.current = category;
-      const res = await apiFetch(`${API_URL}/api/posts?category=${category}&limit=6`);
-      const data = await res.json();
-      const filtered = (data.posts || []).filter((p) => p._id !== id);
-      setSimilarPosts(filtered);
-    } catch (e) {
-      console.log("Similar posts error", e);
-    }
-  };
-
   const handleViewIncrement = async (postId) => {
     try {
-      await apiFetch(`${API_URL}/api/posts/${postId}`, {
+      await apiFetch(`/posts/${postId}`, {
         method: "PATCH",
         body: JSON.stringify({ action: "view" }),
       });
@@ -144,7 +127,6 @@ export default function PostDetailScreen() {
   const handleRefresh = () => {
     setLoading(true);
     setIsOffline(false);
-    lastFetchedCategory.current = null;
     fetchPostData();
   };
 
@@ -160,7 +142,6 @@ export default function PostDetailScreen() {
         animated: true
       });
       setDiscussionId(data.discussionId)
-
     });
 
     return () => {
@@ -266,6 +247,9 @@ export default function PostDetailScreen() {
         <View className="mb-8 relative">
           <PostCard
             post={post}
+            // ⚡️ INJECTING BACKEND PROPS
+            authorData={post.authorData}
+            clanData={post.clanData}
             isFeed={false}
             posts={[post]}
             setPosts={() => { }}
@@ -300,7 +284,6 @@ export default function PostDetailScreen() {
               mutatePost={() => { }}
               isOffline={isOffline}
               discussionIdfromPage={discussionId}
-            // This is now dynamically fed by useLocalSearchParams inside CommentSection
             />
           </View>
         </View>

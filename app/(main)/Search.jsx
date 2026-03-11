@@ -1,12 +1,11 @@
 import { Ionicons, MaterialCommunityIcons } from "@expo/vector-icons";
-import AsyncStorage from '@react-native-async-storage/async-storage';
-import { Image } from "expo-image";
+import { useMMKV } from "react-native-mmkv";
 import { useRouter } from "expo-router";
 import { useCallback, useEffect, useMemo, useState } from "react";
 import {
     ActivityIndicator,
+    Image,
     DeviceEventEmitter,
-    FlatList,
     ScrollView,
     StatusBar,
     TextInput,
@@ -14,14 +13,17 @@ import {
     useColorScheme,
     View
 } from "react-native";
+// ⚡️ Swapped FlashList for LegendList
+import { LegendList } from "@legendapp/list"; 
 import Animated, { FadeIn, FadeInDown, Layout } from "react-native-reanimated";
 import { SafeAreaView } from 'react-native-safe-area-context';
 import ClanCrest from '../../components/ClanCrest';
 import { Text } from "../../components/Text";
 import apiFetch from "../../utils/apiFetch";
 
-// 🔹 IMPORT YOUR AD COMPONENTS
 import { SyncLoading } from "../../components/SyncLoading";
+// ⚡️ Imported PeakBadge
+import PeakBadge from "../../components/PeakBadge";
 
 // --- HELPER: RESOLVE WRITER RANK ---
 const resolveUserRank = (totalPosts) => {
@@ -36,8 +38,6 @@ const resolveUserRank = (totalPosts) => {
 
 // --- AUTHOR CARD COMPONENT ---
 const AuthorCard = ({ author, isDark }) => {
-    const router = useRouter();
-
     const getAuraVisuals = (rank) => {
         if (!rank || rank > 10 || rank <= 0) return { color: isDark ? '#1e293b' : '#cbd5e1', label: 'OPERATIVE', icon: 'target' };
         switch (rank) {
@@ -80,6 +80,12 @@ const AuthorCard = ({ author, isDark }) => {
                                 <Text numberOfLines={1} className={`font-black italic uppercase tracking-tighter text-lg ${isDark ? 'text-white' : 'text-black'}`}>
                                     {author.username}
                                 </Text>
+                                {/* ⚡️ Peak Badge Next to Name */}
+                                {(author.peakLevel && author.peakLevel > 0) ? (
+                                    <View className="ml-1">
+                                        <PeakBadge level={author.peakLevel} size={20} />
+                                    </View>
+                                ) : null}
                             </View>
                             <View style={{ backgroundColor: `${tier.color}20`, borderColor: `${tier.color}40` }} className="px-2 py-0.5 rounded-md border flex-row items-center gap-1">
                                 <MaterialCommunityIcons name={tier.icon} size={8} color={tier.color} />
@@ -150,7 +156,7 @@ const ClanCard = ({ clan, isDark }) => {
 
                 <View className="p-4 flex-row items-center">
                     <View className="mr-4 items-center justify-center">
-                        <ClanCrest rank={clan.rank || 1} size={70} />
+                        <ClanCrest rank={clan.rank || 1} isFeed={true} size={70} />
                         <View className="mt-2 bg-zinc-900/80 px-2 py-0.5 rounded-full border border-zinc-800">
                              <Text className="text-zinc-400 text-[8px] font-bold uppercase">
                                 LVL {clan.rank || 1}
@@ -259,6 +265,7 @@ const PostSearchCard = ({ item, isDark }) => {
 };
 
 const SearchScreen = () => {
+    const storage = useMMKV();
     const router = useRouter();
     const systemTheme = useColorScheme(); 
     const isDark = systemTheme === 'dark';
@@ -276,20 +283,31 @@ const SearchScreen = () => {
     const [hasMore, setHasMore] = useState(true);
 
     useEffect(() => {
-        loadRecentSearches();
-    }, []);
+        try {
+            const saved = storage.getString('recent_searches');
+            if (saved) setRecentSearches(JSON.parse(saved));
+        } catch (e) {
+            console.error("Cache load error:", e);
+        }
+    }, [storage]);
 
-    const loadRecentSearches = async () => {
-        const saved = await AsyncStorage.getItem('recent_searches');
-        if (saved) setRecentSearches(JSON.parse(saved));
-    };
-
-    const saveSearch = async (text) => {
+    // ⚡️ FIX: Removed recentSearches from dependency array to break the infinite loop!
+    const saveSearch = useCallback((text) => {
         if (!text || text.length < 2) return;
-        const updated = [text, ...recentSearches.filter(s => s !== text)].slice(0, 5);
-        setRecentSearches(updated);
-        await AsyncStorage.setItem('recent_searches', JSON.stringify(updated));
-    };
+
+        setRecentSearches(prevSearches => {
+            // Minor optimization: don't save again if it's already the very first item
+            if (prevSearches[0] === text) return prevSearches;
+
+            const updated = [text, ...prevSearches.filter(s => s !== text)].slice(0, 5);
+            try {
+                storage.set('recent_searches', JSON.stringify(updated));
+            } catch (e) {
+                console.error("Cache save error:", e);
+            }
+            return updated;
+        });
+    }, [storage]);
 
     const performSearch = useCallback(async (text, pageNum = 1, shouldAppend = false) => {
         if (text.length < 2) {
@@ -312,7 +330,6 @@ const SearchScreen = () => {
                     posts: shouldAppend ? [...prev.posts, ...data.posts] : (data.posts || [])
                 }));
                 setHasMore(data.pagination?.hasNextPage);
-                if (pageNum === 1) saveSearch(text);
             } else {
                 setIsOffline(true);
             }
@@ -323,15 +340,20 @@ const SearchScreen = () => {
             setLoading(false);
             setLoadingMore(false);
         }
-    }, [recentSearches]);
+    }, []);
 
     useEffect(() => {
         const delayDebounceFn = setTimeout(() => {
             setPage(1);
-            performSearch(query, 1, false);
+            if (query.length >= 2) {
+                performSearch(query, 1, false);
+                saveSearch(query);
+            } else {
+                setResults({ authors: [], clans: [], posts: [] });
+            }
         }, 400);
         return () => clearTimeout(delayDebounceFn);
-    }, [query]);
+    }, [query, performSearch, saveSearch]);
 
     const handleLoadMore = () => {
         if (!loadingMore && hasMore && query.length > 1 && !isOffline) {
@@ -348,11 +370,7 @@ const SearchScreen = () => {
             ...(activeTab === 'all' || activeTab === 'posts' ? results.posts : [])
         ];
 
-        const processed = [];
-        rawResults.forEach((item, index) => {
-            processed.push(item);
-        });
-        return processed;
+        return rawResults;
     }, [results, activeTab]);
 
     const renderItem = ({ item }) => {
@@ -462,27 +480,33 @@ const SearchScreen = () => {
                                 </TouchableOpacity>
                             </Animated.View>
                         ) : (
-                            <FlatList
-                                data={listData}
-                                keyExtractor={(item) => item._id}
-                                renderItem={renderItem}
-                                keyboardShouldPersistTaps="handled" 
-                                onEndReached={handleLoadMore}
-                                onEndReachedThreshold={0.5}
-                                ListFooterComponent={() => loadingMore ? (
-                                    <View className="py-6">
-                                        <ActivityIndicator color="#2563eb" />
-                                    </View>
-                                ) : null}
-                                ListEmptyComponent={() => (
-                                    <View className="mt-20 items-center opacity-40">
-                                        <Ionicons name="scan-outline" size={80} color={isDark ? "#3f3f46" : "#d1d5db"} />
-                                        <Text className="text-zinc-500 font-black mt-4 text-center tracking-widest uppercase text-xs">No matching frequencies detected.</Text>
-                                    </View>
-                                )}
-                                showsVerticalScrollIndicator={false}
-                                contentContainerStyle={{ paddingBottom: 60 }}
-                            />
+                            <View style={{ flex: 1 }}> 
+                                {/* ⚡️ Swapped to LegendList */}
+                                <LegendList
+                                    data={listData}
+                                    keyExtractor={(item, index) => item._id || index.toString()}
+                                    renderItem={renderItem}
+                                    estimatedItemSize={180} 
+                                    drawDistance={1000}
+                                    recycleItems={true}
+                                    keyboardShouldPersistTaps="handled" 
+                                    onEndReached={handleLoadMore}
+                                    onEndReachedThreshold={0.5}
+                                    ListFooterComponent={() => loadingMore ? (
+                                        <View className="py-6">
+                                            <ActivityIndicator color="#2563eb" />
+                                        </View>
+                                    ) : null}
+                                    ListEmptyComponent={() => (
+                                        <View className="mt-20 items-center opacity-40">
+                                            <Ionicons name="scan-outline" size={80} color={isDark ? "#3f3f46" : "#d1d5db"} />
+                                            <Text className="text-zinc-500 font-black mt-4 text-center tracking-widest uppercase text-xs">No matching frequencies detected.</Text>
+                                        </View>
+                                    )}
+                                    showsVerticalScrollIndicator={false}
+                                    contentContainerStyle={{ paddingBottom: 60 }}
+                                />
+                            </View>
                         )}
                     </View>
                 </>

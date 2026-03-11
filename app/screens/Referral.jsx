@@ -1,5 +1,5 @@
 import { Ionicons, MaterialCommunityIcons } from "@expo/vector-icons";
-import AsyncStorage from "@react-native-async-storage/async-storage";
+import { useMMKV } from "react-native-mmkv"; // 🔹 Swapped to MMKV
 import { useCallback, useEffect, useState } from "react";
 import {
     Clipboard,
@@ -19,6 +19,9 @@ import apiFetch from "../../utils/apiFetch";
 const CACHE_KEY = "referral_dashboard_cache";
 
 export default function ReferralDashboard() {
+    // 🔹 Strictly use the useMMKV hook
+    const storage = useMMKV();
+
     const { user } = useUser();
     const [copied, setCopied] = useState(false);
     const [refreshing, setRefreshing] = useState(false);
@@ -29,26 +32,10 @@ export default function ReferralDashboard() {
         invitedUsers: []
     });
 
-    // 1. Load from AsyncStorage on Mount (The Cache)
-    useEffect(() => {
-        const loadCache = async () => {
-            try {
-                const cached = await AsyncStorage.getItem(CACHE_KEY);
-                if (cached) {
-                    setDbData(JSON.parse(cached));
-                }
-            } catch (e) {
-                console.error("Cache load failed", e);
-            }
-        };
-        loadCache();
-        fetchLatestData(); // Background fetch immediately after
-    }, []);
-
     const referralLink = `https://play.google.com/store/apps/details?id=com.kaytee.oreblogda&referrer=${dbData.referralCode}`;
 
     // 2. Fetch from DB & Save to Cache
-    const fetchLatestData = async () => {
+    const fetchLatestData = useCallback(async () => {
         try {
             if (user?.deviceId) {
                 const res = await apiFetch(`https://oreblogda.com/api/users/me?fingerprint=${user.deviceId}`);
@@ -59,8 +46,8 @@ export default function ReferralDashboard() {
                         invitedUsers: response.invitedUsers || []
                     };
                     setDbData(newData);
-                    // Update Cache
-                    await AsyncStorage.setItem(CACHE_KEY, JSON.stringify(newData));
+                    // 🔹 Update MMKV Cache Synchronously
+                    storage.set(CACHE_KEY, JSON.stringify(newData));
                 }
             }
         } catch (error) {
@@ -68,12 +55,27 @@ export default function ReferralDashboard() {
         } finally {
             setRefreshing(false);
         }
-    };
+    }, [user?.deviceId, user?.referralCode, storage]);
+
+    // 1. Load from MMKV on Mount (The Cache)
+    useEffect(() => {
+        try {
+            // 🔹 Instant synchronous load
+            const cached = storage.getString(CACHE_KEY);
+            if (cached) {
+                setDbData(JSON.parse(cached));
+            }
+        } catch (e) {
+            console.error("Cache load failed", e);
+        }
+        
+        fetchLatestData(); // Background fetch immediately after
+    }, [fetchLatestData, storage]);
 
     const onRefresh = useCallback(() => {
         setRefreshing(true);
         fetchLatestData();
-    }, [user?.deviceId]);
+    }, [fetchLatestData]);
 
     const copyToClipboard = () => {
         Clipboard.setString(dbData.referralCode);
@@ -172,7 +174,6 @@ export default function ReferralDashboard() {
                 </View>
 
                 <View className="flex-row mb-10">
-                    {/* Fixed Icon for Aura: Star-Four-Points aligns much better with spirit/aura energy */}
                     <RewardCard icon="star-four-points" title="+20 Aura" sub="Soul Perk" color="#eab308" />
                     <RewardCard isCoin={true} title="+50 0C" sub="OC " color="#eab308" />
                     <RewardCard icon="fire" title="2X Boost" sub="72hr Overdrive" color="#ef4444" />

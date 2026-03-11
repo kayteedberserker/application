@@ -1,9 +1,11 @@
 import { Ionicons } from '@expo/vector-icons';
-import AsyncStorage from '@react-native-async-storage/async-storage';
+import { useMMKV } from 'react-native-mmkv';
 import { useRouter } from 'expo-router';
 import { useColorScheme } from "nativewind";
 import { useCallback, useEffect, useRef, useState } from 'react';
-import { ActivityIndicator, Clipboard, DeviceEventEmitter, FlatList, Modal, ScrollView, Text, TextInput, TouchableOpacity, View } from 'react-native';
+import { ActivityIndicator, Clipboard, DeviceEventEmitter, Modal, ScrollView, Text, TextInput, TouchableOpacity, View } from 'react-native';
+// ⚡️ Swapped FlashList for LegendList
+import { LegendList } from "@legendapp/list"; 
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import ClanCrest from '../../components/ClanCrest';
 import CoinIcon from '../../components/ClanIcon';
@@ -13,7 +15,6 @@ import { useStreak } from "../../context/StreakContext";
 import { useUser } from "../../context/UserContext";
 import apiFetch from '../../utils/apiFetch';
 
-// 🧠 Tier 1: Memory Cache (Instant load when navigating back/forth)
 let CLANS_MEMORY_CACHE = [];
 let USER_STATS_MEMORY_CACHE = null;
 
@@ -23,6 +24,7 @@ const MIN_POSTS_REQUIRED = 25;
 const MIN_STREAK_REQUIRED = 5;
 
 export default function ClanDiscover() {
+    const storage = useMMKV();
     const { colorScheme } = useColorScheme();
     const isDark = colorScheme === "dark";
     const router = useRouter();
@@ -31,7 +33,6 @@ export default function ClanDiscover() {
     const { user } = useUser();
     const { streak: streakData } = useStreak();
 
-    // 🔹 Initialize state with Memory Cache for 0ms UI pop
     const [clans, setClans] = useState(CLANS_MEMORY_CACHE);
     const [userPostCount, setUserPostCount] = useState(USER_STATS_MEMORY_CACHE?.posts || 0);
     
@@ -46,24 +47,24 @@ export default function ClanDiscover() {
     const [alertConfig, setAlertConfig] = useState({ visible: false, title: '', message: '', type: 'error' });
 
     const searchTimeout = useRef(null);
+    const scrollRef = useRef(null); // Added reference for the list
 
     const showAlert = (title, message, type = 'error') => {
         setAlertConfig({ visible: true, title, message, type });
     };
 
-    // 🛡️ Save to AsyncStorage (Tier 2)
-    const saveToDisk = async (key, data) => {
+    const saveToDisk = useCallback((key, data) => {
         try {
-            await AsyncStorage.setItem(key, JSON.stringify({
+            storage.set(key, JSON.stringify({
                 data,
                 timestamp: Date.now()
             }));
         } catch (e) {
             console.error("Cache Save Error", e);
         }
-    };
+    }, [storage]);
 
-    const fetchClans = async (pageNum = 1, searchQuery = '', isRefreshing = false) => {
+    const fetchClans = useCallback(async (pageNum = 1, searchQuery = '', isRefreshing = false) => {
         if (pageNum > 1) setLoadingMore(true);
         else if (!isRefreshing && clans.length === 0) setLoading(true);
 
@@ -73,12 +74,9 @@ export default function ClanDiscover() {
             
             if (res.ok) {
                 const newClans = data.clans || [];
-                console.log(newClans);
                 
                 setClans(prev => {
                     const updatedList = isRefreshing || pageNum === 1 ? newClans : [...prev, ...newClans];
-                    
-                    // 💾 Update Tier 1 & Tier 2 for global list (no search)
                     if (!searchQuery && pageNum === 1) {
                         CLANS_MEMORY_CACHE = updatedList;
                         saveToDisk(CLANS_CACHE_KEY, updatedList);
@@ -95,7 +93,7 @@ export default function ClanDiscover() {
             setLoading(false);
             setLoadingMore(false);
         }
-    };
+    }, [clans.length, saveToDisk, user?.deviceId]);
 
     const fetchUserPostCount = useCallback(async () => {
         if (!user?.deviceId) return;
@@ -104,52 +102,44 @@ export default function ClanDiscover() {
             const data = await res.json();
             if (data.total !== undefined) {
                 setUserPostCount(data.total);
-                // 💾 Update Tiers
                 USER_STATS_MEMORY_CACHE = { posts: data.total };
                 saveToDisk(USER_STATS_CACHE_KEY, { posts: data.total });
             }
         } catch (err) {
             console.error("Failed to fetch user post count:", err);
         }
-    }, [user?.deviceId]);
+    }, [saveToDisk, user?.deviceId]);
 
-    // ⚡ HYBRID INIT: Memory -> Disk -> API
     useEffect(() => {
-        const init = async () => {
-            // 1. Check Disk if Memory is empty
-            if (CLANS_MEMORY_CACHE.length === 0) {
-                const cached = await AsyncStorage.getItem(CLANS_CACHE_KEY);
-                if (cached) {
-                    const parsed = JSON.parse(cached);
-                    CLANS_MEMORY_CACHE = parsed.data || [];
-                    setClans(CLANS_MEMORY_CACHE);
-                }
+        if (CLANS_MEMORY_CACHE.length === 0) {
+            const cached = storage.getString(CLANS_CACHE_KEY);
+            if (cached) {
+                const parsed = JSON.parse(cached);
+                CLANS_MEMORY_CACHE = parsed.data || [];
+                setClans(CLANS_MEMORY_CACHE);
             }
+        }
 
-            if (!USER_STATS_MEMORY_CACHE) {
-                const cachedStats = await AsyncStorage.getItem(USER_STATS_CACHE_KEY);
-                if (cachedStats) {
-                    const parsed = JSON.parse(cachedStats);
-                    USER_STATS_MEMORY_CACHE = parsed.data;
-                    setUserPostCount(USER_STATS_MEMORY_CACHE.posts);
-                }
+        if (!USER_STATS_MEMORY_CACHE) {
+            const cachedStats = storage.getString(USER_STATS_CACHE_KEY);
+            if (cachedStats) {
+                const parsed = JSON.parse(cachedStats);
+                USER_STATS_MEMORY_CACHE = parsed.data;
+                setUserPostCount(USER_STATS_MEMORY_CACHE.posts);
             }
+        }
 
-            // 2. Background Revalidate
-            fetchClans(1, search, true);
-            fetchUserPostCount();
-        };
-        init();
-    }, [fetchUserPostCount]);
+        fetchClans(1, search, true);
+        fetchUserPostCount();
+    }, [fetchUserPostCount, storage]);
 
-    // 🔹 Handle Search with Debounce
     useEffect(() => {
         if (searchTimeout.current) clearTimeout(searchTimeout.current);
         searchTimeout.current = setTimeout(() => {
             fetchClans(1, search, true);
         }, 500);
         return () => clearTimeout(searchTimeout.current);
-    }, [search]);
+    }, [search, fetchClans]);
 
     const handleLoadMore = () => {
         if (!loadingMore && hasMore && !loading) {
@@ -169,6 +159,17 @@ export default function ClanDiscover() {
             setCreateModalVisible(true);
         }
     };
+
+    // ⚡️ Memoized render function for LegendList
+    const renderItem = useCallback(({ item, index }) => (
+        <ClanCard
+            clan={item}
+            lbRank={item.lbRank || index + 1}
+            isDark={isDark}
+            refreshClans={onRefresh}
+            showAlert={showAlert}
+        />
+    ), [isDark, onRefresh]);
 
     return (
         <View className={`flex-1 ${isDark ? "bg-black" : "bg-zinc-50"}`} style={{ paddingTop: insets.top }}>
@@ -214,30 +215,32 @@ export default function ClanDiscover() {
                     <SyncLoading message='Scanning Records...' />
                 </View>
             ) : (
-                <FlatList
-                    data={clans}
-                    keyExtractor={(item) => item.tag}
-                    renderItem={({ item, index }) => (
-                        <ClanCard
-                            clan={item}
-                            lbRank={item.lbRank || index + 1}
-                            isDark={isDark}
-                            refreshClans={onRefresh}
-                            showAlert={showAlert}
-                        />
-                    )}
-                    contentContainerStyle={{ paddingHorizontal: 24, paddingBottom: 120, paddingTop: 10 }}
-                    showsVerticalScrollIndicator={false}
-                    onRefresh={onRefresh}
-                    refreshing={loading && clans.length > 0}
-                    onEndReached={handleLoadMore}
-                    onEndReachedThreshold={0.5}
-                    ListFooterComponent={() => loadingMore ? (
-                        <View className="py-10"><ActivityIndicator color="#2563eb" /></View>
-                    ) : (
-                        <View className="h-20" />
-                    )}
-                />
+                <View style={{ flex: 1 }}>
+                    {/* ⚡️ LegendList Implementation */}
+                    <LegendList
+                        ref={scrollRef}
+                        data={clans}
+                        keyExtractor={(item) => item.tag}
+                        renderItem={renderItem}
+                        
+                        // ⚡️ LegendList Props
+                        estimatedItemSize={450} // Rough estimate of a ClanCard
+                        drawDistance={1000} // Keeps rendering smooth
+                        recycleItems={true} // Super important for complex cards like ClanCards
+                        
+                        contentContainerStyle={{ paddingHorizontal: 24, paddingBottom: 120, paddingTop: 10 }}
+                        showsVerticalScrollIndicator={false}
+                        onRefresh={onRefresh}
+                        refreshing={loading && clans.length > 0}
+                        onEndReached={handleLoadMore}
+                        onEndReachedThreshold={0.5}
+                        ListFooterComponent={() => loadingMore ? (
+                            <View className="py-10"><ActivityIndicator color="#2563eb" /></View>
+                        ) : (
+                            <View className="h-20" />
+                        )}
+                    />
+                </View>
             )}
 
             {/* MODALS */}
@@ -267,6 +270,8 @@ export default function ClanDiscover() {
         </View>
     );
 }
+
+// ... CustomAlert, RequirementModal, ClanCard components remain unchanged
 
 const CustomAlert = ({ config, onClose, isDark }) => {
     if (!config.visible) return null;
@@ -336,9 +341,14 @@ const RequirementModal = ({ visible, onClose, stats, isDark }) => {
 };
 
 const ClanCard = ({ clan, lbRank, isDark, refreshClans, showAlert }) => {
+    const storage = useMMKV();
+
     const { user } = useUser();
     const [actionLoading, setActionLoading] = useState(false);
     const [copied, setCopied] = useState(false);
+    // Move isFollowing to state to ensure re-renders inside LegendList cells
+    const [isFollowing, setIsFollowing] = useState(false);
+
     const getRankInfo = (rank) => {
         const ranks = {
             6: { title: "The Akatsuki", color: "#2563eb" }, 
@@ -350,11 +360,22 @@ const ClanCard = ({ clan, lbRank, isDark, refreshClans, showAlert }) => {
         };
         return ranks[rank] || ranks[1];
     };
+    
     const equippedGlow = clan.specialInventory?.find(i => i.category === 'GLOW' && i.isEquipped);
-  const activeGlowColor = equippedGlow?.visualConfig?.primaryColor || equippedGlow?.visualData?.glowColor || null;
-    console.log(equippedGlow, clan);
+    const activeGlowColor = equippedGlow?.visualConfig?.primaryColor || equippedGlow?.visualData?.glowColor || null;
     
     const rankInfo = getRankInfo(clan.rank);
+
+    // Load initial follow state on mount
+    useEffect(() => {
+        const followedClans = storage.getString('followed_clans');
+        if (followedClans) {
+            const parsed = JSON.parse(followedClans);
+            if (parsed.includes(clan.tag)) {
+                setIsFollowing(true);
+            }
+        }
+    }, [clan.tag, storage]);
 
     const copyToClipboard = () => {
         Clipboard.setString(clan.tag);
@@ -371,9 +392,11 @@ const ClanCard = ({ clan, lbRank, isDark, refreshClans, showAlert }) => {
                 body: JSON.stringify({ clanTag: clan.tag, deviceId: user.deviceId, action: "follow" })
             });
             if (res.ok) {
-                const followedClans = await AsyncStorage.getItem('followed_clans');
+                const followedClans = storage.getString('followed_clans');
                 let clanList = followedClans ? JSON.parse(followedClans) : [];
-                await AsyncStorage.setItem('followed_clans', JSON.stringify(clanList));
+                clanList.push(clan.tag);
+                storage.set('followed_clans', JSON.stringify(clanList));
+                setIsFollowing(true);
                 refreshClans();
             } else {
                 const data = await res.json();
@@ -411,7 +434,7 @@ const ClanCard = ({ clan, lbRank, isDark, refreshClans, showAlert }) => {
         <TouchableOpacity
             activeOpacity={0.9}
             onPress={() => DeviceEventEmitter.emit("navigateSafely", `/clans/${clan.tag}`)}
-            className={`w-full rounded-[40px] border mb-6 overflow-hidden ${isDark ? "bg-zinc-900 border-zinc-800" : "bg-white border-zinc-200 shadow-xl shadow-zinc-200"}`}
+            className={`w-full rounded-[40px] border mb-6 overflow-hidden relative ${isDark ? "bg-zinc-900 border-zinc-800" : "bg-white border-zinc-200 shadow-xl shadow-zinc-200"}`}
             style={{ height: 400 }}
         >
             {/* Top Stats Row */}
@@ -428,9 +451,7 @@ const ClanCard = ({ clan, lbRank, isDark, refreshClans, showAlert }) => {
 
             {/* Avatar & Info Section */}
             <View className="items-center px-6">
-                
-            <ClanCrest glowColor={activeGlowColor} rank={clan?.rank} size={120}/>
-
+                <ClanCrest glowColor={activeGlowColor} rank={clan?.rank} size={120}/>
 
                 <Text numberOfLines={1} className={`text-2xl mt-3 font-black text-center tracking-tight ${isDark ? "text-white" : "text-zinc-900"}`}>{clan.name}</Text>
                 
@@ -458,11 +479,14 @@ const ClanCard = ({ clan, lbRank, isDark, refreshClans, showAlert }) => {
             <View className="mt-auto flex-row p-5 gap-3 border-t border-zinc-500/10 bg-zinc-500/5">
                 <TouchableOpacity 
                     onPress={handleFollow} 
-                    disabled={actionLoading} 
-                    className="flex-1 h-12 bg-blue-600 rounded-2xl flex-row items-center justify-center shadow-md shadow-blue-600/20"
+                    disabled={actionLoading || isFollowing} 
+                    className={`flex-1 h-12 rounded-2xl flex-row items-center justify-center shadow-md ${isFollowing ? 'bg-zinc-800' : 'bg-blue-600 shadow-blue-600/20'}`}
                 >
                     {actionLoading ? <ActivityIndicator size="small" color="white" /> : (
-                        <><Ionicons name="heart" size={16} color="white" /><Text className="text-white font-bold text-[12px] ml-2 uppercase">Follow</Text></>
+                        <>
+                            <Ionicons name={isFollowing ? "checkmark-circle" : "heart"} size={16} color="white" />
+                            <Text className="text-white font-bold text-[12px] ml-2 uppercase">{isFollowing ? "Following" : "Follow"}</Text>
+                        </>
                     )}
                 </TouchableOpacity>
                 
@@ -485,13 +509,14 @@ const CreateClanModal = ({ visible, onClose, onSuccess, isDark, showAlert }) => 
     const [name, setName] = useState('');
     const [desc, setDesc] = useState('');
     const [isCreating, setIsCreating] = useState(false);
-    const { coins, processTransaction, isProcessingTransaction } = useCoins(); 
+    const { coins, processTransaction } = useCoins(); 
 
     const handleCreate = async () => {
         if (!name || !user) return;
         setIsCreating(true);
         if (coins < 500) {
             showAlert("Insufficient OC", "You need 500 OC 🪙 to create a clan. Visit Store to purchase OC!");
+            setIsCreating(false);
             return;
         }
         try {
@@ -564,7 +589,7 @@ const CreateClanModal = ({ visible, onClose, onSuccess, isDark, showAlert }) => 
                         </View>
 
                         <TouchableOpacity
-                            className={`bg-blue-600 p-7 rounded-[35px] items-center mb-12 shadow-2xl shadow-blue-600/50 ${isCreating ? 'opacity-70' : ''}`}
+                            className={`bg-blue-600 p-5 px-6 rounded-[35px] items-center mb-12 shadow-2xl shadow-blue-600/50 ${isCreating ? 'opacity-70' : ''}`}
                             onPress={handleCreate}
                             disabled={isCreating}
                         >
@@ -572,7 +597,8 @@ const CreateClanModal = ({ visible, onClose, onSuccess, isDark, showAlert }) => 
                                 <ActivityIndicator color="#fff" />
                             ) : (
                                 <View className="flex-row items-center">
-                                    <Text className="text-white font-black text-xl uppercase tracking-tighter mr-2">Confirm Foundation 500 <CoinIcon size={22} type='OC' /></Text>
+                                    <Text className="text-white font-black text-[18px] uppercase tracking-tighter mr-2">Confirm Foundation 500</Text>
+                                    <CoinIcon size={22} type='OC' />
                                     <Ionicons name="chevron-forward" size={20} color="white" />
                                 </View>
                             )}

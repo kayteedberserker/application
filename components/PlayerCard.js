@@ -1,9 +1,11 @@
 import { Ionicons, MaterialCommunityIcons } from "@expo/vector-icons";
 import { View } from 'react-native';
 import Svg, { Defs, LinearGradient, Rect, Stop, SvgXml } from "react-native-svg";
-import AuraAvatar from "./AuraAvatar"; // Ensure path is correct
-import ClanBorder from "./ClanBorder"; // Added ClanBorder for consistent styling
-import { Text } from "./Text"; // Ensure path is correct
+import AuraAvatar from "./AuraAvatar"; 
+import ClanBorder from "./ClanBorder"; 
+import { Text } from "./Text"; 
+// ⚡️ Imported Peak Badge
+import PeakBadge from "./PeakBadge";
 
 // Utility logic kept inside the component for portability
 const getAuraTier = (rank) => {
@@ -73,7 +75,7 @@ export default function PlayerCard({ author, totalPosts, isDark }) {
     const iconSize = watermarkVisual.size || 220;
     const iconColor = watermarkVisual.color || (isDark ? 'white' : 'black');
     return (
-      <View className="absolute" style={{ bottom: -40, right: -40, opacity: watermarkVisual.opacity || 0.08, transform: [{ rotate: watermarkVisual.rotation || '-15deg' }] }} pointerEvents="none">
+      <View className="absolute" style={{ bottom: -20, right: -20, opacity: 0.7, transform: [{ rotate: watermarkVisual.rotation || '-15deg' }] }} pointerEvents="none">
         {watermarkVisual.svgCode ? (
           <SvgXml xml={watermarkVisual.svgCode.replace(/currentColor/g, iconColor)} width={iconSize} height={iconSize} />
         ) : (
@@ -156,7 +158,9 @@ export default function PlayerCard({ author, totalPosts, isDark }) {
         </View>
 
         <View className="items-center w-full mt-4">
-          <View className="flex-row items-center gap-2.5 mb-2">
+          
+          {/* ⚡️ Peak Badge & Username Row */}
+          <View className="flex-row items-center gap-2 mb-2">
             <Text
               style={{
                 textShadowColor: themeColor,
@@ -167,7 +171,16 @@ export default function PlayerCard({ author, totalPosts, isDark }) {
             >
               {author.username}
             </Text>
-            <View className="flex-row items-center bg-orange-500/10 px-2.5 py-1 rounded-lg">
+
+            {/* Render PeakBadge inline if the author has a Peak Level > 0 */}
+            {(author.peakLevel && author.peakLevel > 0) ? (
+                <View className="-mt-1 ml-2">
+                    <PeakBadge level={author.peakLevel} size={28} />
+                </View>
+            ) : null}
+
+            {/* Streak Counter moved to the right of the name/badge */}
+            <View className="flex-row items-center bg-orange-500/10 px-2.5 py-1 rounded-lg ml-1">
               <Ionicons name="flame" size={18} color="#f97316" />
               <Text className="text-orange-500 font-black ml-1 text-sm">{author.lastStreak || "0"}</Text>
             </View>
@@ -227,7 +240,7 @@ export default function PlayerCard({ author, totalPosts, isDark }) {
         </View>
       </View>
 
-      {/* Bottom ID Strip - Now with last 11 chars */}
+      {/* Bottom ID Strip */}
       <View className="mt-8 pt-5 border-t border-dashed border-gray-200 dark:border-gray-800 flex-row justify-between items-center relative z-10">
         <View className="flex-row gap-1">
           <View className="w-4 h-1 bg-gray-200 dark:bg-gray-800 rounded-full" />

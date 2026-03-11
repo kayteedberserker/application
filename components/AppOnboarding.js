@@ -1,5 +1,5 @@
 import { Ionicons, MaterialCommunityIcons } from '@expo/vector-icons';
-import AsyncStorage from "@react-native-async-storage/async-storage";
+import { useMMKV } from "react-native-mmkv";
 import { useEffect, useState } from "react";
 import {
     Dimensions,
@@ -17,6 +17,9 @@ import { Text } from "./Text";
 const { height } = Dimensions.get('window');
 
 export default function AppOnboarding() {
+    // 🔹 Strictly use useMMKV hook for the storage instance
+    const storage = useMMKV();
+
     const [isVisible, setIsVisible] = useState(false);
     const [step, setStep] = useState(0);
     const [isUpdateOnly, setIsUpdateOnly] = useState(false);
@@ -71,6 +74,14 @@ export default function AppOnboarding() {
             color: "#22d3ee",
             intel: "STORE: MARKET_ACCESS_GRANTED"
         },
+        // ⚡️ NEW: The Peak System Slide
+        {
+            title: "THE_PEAK_SYSTEM",
+            desc: "Support the network and ascend! Purchasing OC contributes to your total Peak Level. Reach higher Peak Tiers to unlock exclusive 3D crests, daily claim bonuses, and elite status on the leaderboards.",
+            icon: "rocket", 
+            color: "#ec4899", // Magenta/Pink to make it pop
+            intel: "STATUS: ASCENSION_PROTOCOL"
+        },
         {
             title: "ADVENTURE_AWAITS",
             desc: "Your Mana is full. Your connection is established. The world is waiting for your story, Hero. Go beyond, Plus Ultra!",
@@ -80,8 +91,8 @@ export default function AppOnboarding() {
         }
     ];
 
-    // Show Clan, War, Coins, and Store to returning users (Index 3 to 6)
-    const updateOnlyFeatures = allFeatures.slice(3, 7); 
+    // ⚡️ Show ONLY the new Peak System and Adventure Awaits for returning users
+    const updateOnlyFeatures = allFeatures.slice(7, 9); 
 
     const currentFeatures = isUpdateOnly ? updateOnlyFeatures : allFeatures;
 
@@ -89,20 +100,20 @@ export default function AppOnboarding() {
         checkOnboardingStatus();
     }, []);
 
-    const checkOnboardingStatus = async () => {
+    const checkOnboardingStatus = () => {
         try {
-            const storedUser = await AsyncStorage.getItem("mobileUser");
-            const hasSeenWelcome = await AsyncStorage.getItem("HAS_SEEN_WELCOME");
-            // Latest version key
-            const hasSeenStoreUpdate = await AsyncStorage.getItem("HAS_SEEN_STORE_V4");
+            // 🔹 Synchronous check with MMKV
+            const storedUser = storage.getString("mobileUser");
+            const hasSeenWelcome = storage.getString("HAS_SEEN_WELCOME");
+            const hasSeenPeakUpdate = storage.getString("HAS_SEEN_PEAK_V5"); // ⚡️ New Tracker
 
-            if (storedUser !== null) {
-                if (hasSeenWelcome === null) {
+            if (storedUser !== undefined && storedUser !== null) {
+                if (!hasSeenWelcome) {
                     // Brand new user: Show everything
                     setIsUpdateOnly(false);
                     setIsVisible(true);
-                } else if (hasSeenStoreUpdate === null) {
-                    // Returning user needs to see the new Store/CC/War system
+                } else if (!hasSeenPeakUpdate) {
+                    // Returning user needs to see the new Peak system
                     setIsUpdateOnly(true);
                     setIsVisible(true);
                 }
@@ -112,12 +123,14 @@ export default function AppOnboarding() {
         }
     };
 
-    const handleComplete = async () => {
+    const handleComplete = () => {
         try {
-            await AsyncStorage.setItem("HAS_SEEN_WELCOME", "true");
-            await AsyncStorage.setItem("HAS_SEEN_CLAN_UPDATE", "true");
-            await AsyncStorage.setItem("HAS_SEEN_COINS_V3", "true");
-            await AsyncStorage.setItem("HAS_SEEN_STORE_V4", "true");
+            // 🔹 Synchronous update to MMKV
+            storage.set("HAS_SEEN_WELCOME", "true");
+            storage.set("HAS_SEEN_CLAN_UPDATE", "true");
+            storage.set("HAS_SEEN_COINS_V3", "true");
+            storage.set("HAS_SEEN_STORE_V4", "true");
+            storage.set("HAS_SEEN_PEAK_V5", "true"); // ⚡️ Marks the update as seen
             setIsVisible(false);
         } catch (e) {
             console.log("Error saving onboarding state:", e);
@@ -181,8 +194,8 @@ export default function AppOnboarding() {
                             )}
                         </View>
                         
-                        <View>
-                           {isUpdateOnly && <Text style={{ fontSize: 9, color: '#22d3ee', fontWeight: 'bold' }}>[ NEW_UPDATE_V4 ]</Text>}
+                        <View style={{ alignItems: 'center' }}>
+                           {isUpdateOnly && <Text style={{ fontSize: 9, color: '#22d3ee', fontWeight: 'bold' }}>[ NEW_UPDATE_V5 ]</Text>}
                         </View>
 
                         <TouchableOpacity onPress={handleComplete}>
@@ -197,7 +210,8 @@ export default function AppOnboarding() {
                                 width: 68, height: 68, borderRadius: 20, backgroundColor: '#000', 
                                 borderWidth: 1, borderColor: currentFeatures[step].color, 
                                 justifyContent: 'center', alignItems: 'center',
-                                shadowColor: currentFeatures[step].color, shadowOpacity: 0.3, shadowRadius: 15
+                                shadowColor: currentFeatures[step].color, shadowOpacity: 0.3, shadowRadius: 15,
+                                elevation: 5
                             }}>
                                 {currentFeatures[step].icon === "auto-fix" ? (
                                      <MaterialCommunityIcons name="auto-fix" size={34} color={currentFeatures[step].color} />

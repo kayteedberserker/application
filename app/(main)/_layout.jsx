@@ -1,5 +1,6 @@
 import { Ionicons, MaterialCommunityIcons } from "@expo/vector-icons";
-import AsyncStorage from "@react-native-async-storage/async-storage";
+// ⚡️ Swapped to MMKV
+import { useMMKV } from "react-native-mmkv";
 import { Redirect, Stack, usePathname, useRouter } from "expo-router";
 import { useColorScheme as useNativeWind } from "nativewind";
 import { useEffect, useRef, useState } from "react";
@@ -30,7 +31,22 @@ export default function MainLayout() {
     const router = useRouter();
     const pathname = usePathname();
     const insets = useSafeAreaInsets(); 
-    const [isActive, setIsActive] = useState(false); // 🔹 Used for dynamic tab bar styling
+    const [isActive, setIsActive] = useState(false);
+    
+    // ⚡️ New state to prevent Layout Shift
+    const [safeAreaReady, setSafeAreaReady] = useState(false);
+    
+    // ⚡️ Initialize Storage
+    const storage = useMMKV();
+
+    // ⚡️ Wait for safe area layout to resolve before unmounting loading screen
+    useEffect(() => {
+        // A tiny timeout ensures the native UI thread has completely finished its layout pass
+        const timer = setTimeout(() => {
+            setSafeAreaReady(true);
+        }, 150);
+        return () => clearTimeout(timer);
+    }, [insets.top]); // Triggers calculation based on the device's notch/status bar
     
     useEffect(() => {
         if (pathname === "/Search" || pathname === "/" || pathname === "/authordiary" || pathname === "/profile") {
@@ -71,7 +87,7 @@ export default function MainLayout() {
             duration: 300,
             useNativeDriver: true,
         }).start();
-    }, [pathname]);
+    }, [pathname, navY]);
 
     useEffect(() => {
         Animated.spring(animValue, {
@@ -80,7 +96,7 @@ export default function MainLayout() {
             friction: 8,
             tension: 40,
         }).start();
-    }, [showClanMenu]);
+    }, [showClanMenu, animValue]);
 
     useEffect(() => {
         Animated.loop(
@@ -99,13 +115,11 @@ export default function MainLayout() {
         ).start();
     }, [eventPulse]);
 
+    // ⚡️ SYNCHRONOUS USER CHECK: Instantly loads, no async/await needed!
     useEffect(() => {
-        const checkUser = async () => {
-            const storedUser = await AsyncStorage.getItem("mobileUser") || null;
-            setIsUserAuthenticated(!!storedUser);
-        };
-        checkUser();
-    }, []);
+        const storedUser = storage.getString("mobileUser");
+        setIsUserAuthenticated(!!storedUser);
+    }, [storage]);
 
     useEffect(() => {
         if (user?.deviceId) {
@@ -125,7 +139,7 @@ export default function MainLayout() {
         if (systemScheme) {
             setColorScheme(systemScheme);
         }
-    }, [systemScheme]);
+    }, [systemScheme, setColorScheme]);
 
     useEffect(() => {
         const subscription = DeviceEventEmitter.addListener("onScroll", (offsetY) => {
@@ -152,12 +166,12 @@ export default function MainLayout() {
             setLastOffset(offsetY);
         });
         return () => subscription.remove();
-    }, [lastOffset, isNavVisible]);
+    }, [lastOffset, isNavVisible, navY]);
 
-    // 3. HANDLERS
-    const handleClanPress = async () => {
+    // ⚡️ SYNCHRONOUS CLAN CHECK: Replaced async/await
+    const handleClanPress = () => {
         try {
-            const userClanData = await AsyncStorage.getItem('userClan');
+            const userClanData = storage.getString('userClan');
             if (userClanData) {
                 setUserInClan(true);
             }
@@ -205,7 +219,8 @@ export default function MainLayout() {
         DeviceEventEmitter.emit("navigateSafely", route);
     };
     
-    if (contextLoading) {
+    // ⚡️ UPDATED: Now blocks rendering until BOTH context and safeArea are ready
+    if (contextLoading || !safeAreaReady) {
         return <AnimeLoading message="LOADING_PAGE" subMessage="Syncing Account" />;
     }
 
@@ -217,7 +232,8 @@ export default function MainLayout() {
         <View style={{ flex: 1, backgroundColor: isDark ? "#000" : "#fff" }}>
             <StatusBar barStyle={isDark ? "light-content" : "dark-content"} />
 
-            <SafeAreaView
+            {/* ⚡️ REMOVED initialWindowMetrics from here (it belongs in RootLayout's SafeAreaProvider) */}
+            <SafeAreaView 
                 edges={['top', 'left', 'right']}
                 style={{
                     zIndex: 100,
@@ -352,11 +368,11 @@ export default function MainLayout() {
 
             <View 
                 style={[styles.container, { bottom: insets.bottom + 22 }]}
-                pointerEvents="box-none" // 🔹 Allows touches to pass through the container to the background, but buttons inside still work
+                pointerEvents="box-none" 
             >
                 {/* ⚔️ WAR PAGE BUTTON */}
                 <Animated.View 
-                    pointerEvents={showClanMenu ? "auto" : "none"} // 🔹 FIX: Button only exists for touch when menu is open
+                    pointerEvents={showClanMenu ? "auto" : "none"} 
                     style={{ opacity: opacityClan, transform: [{ translateY: translateY_3 }, { scale }], marginBottom: 10 }}
                 >
                     <TouchableOpacity 
@@ -372,7 +388,7 @@ export default function MainLayout() {
                 {/* 🛡️ CLAN PROFILE BUTTON */}
                 {userInClan && (
                     <Animated.View 
-                        pointerEvents={showClanMenu ? "auto" : "none"} // 🔹 FIX: Button only exists for touch when menu is open
+                        pointerEvents={showClanMenu ? "auto" : "none"} 
                         style={{ opacity: opacityClan, transform: [{ translateY: translateY_2 }, { scale }], marginBottom: 10 }}
                     >
                         <TouchableOpacity 
@@ -388,7 +404,7 @@ export default function MainLayout() {
 
                 {/* 🔍 DISCOVER BUTTON */}
                 <Animated.View 
-                    pointerEvents={showClanMenu ? "auto" : "none"} // 🔹 FIX: Button only exists for touch when menu is open
+                    pointerEvents={showClanMenu ? "auto" : "none"} 
                     style={{ opacity: opacityClan, transform: [{ translateY: translateY_1 }, { scale }], marginBottom: 12 }}
                 >
                     <TouchableOpacity 
@@ -459,7 +475,7 @@ const styles = StyleSheet.create({
     mainFab: { width: 48, height: 48, borderRadius: 18, justifyContent: "center", alignItems: "center", elevation: 8, shadowColor: "#000", shadowOffset: { width: 0, height: 4 }, shadowOpacity: 0.3, shadowRadius: 4.65 },
     subFab: { width: 45, height: 45, borderRadius: 15, justifyContent: "center", alignItems: "center", elevation: 5, shadowColor: "#000", shadowOffset: { width: 0, height: 2 }, shadowOpacity: 0.25, shadowRadius: 3.84 },
     eventButtonContainer: { position: 'absolute', right: 12, top: '45%', zIndex: 998 },
-    eventButton: { width: 50, height: 50, borderRadius: 25, justifyContent: 'center', alignItems: 'center', elevation: 10, shadowOffset: { width: 0, height: 4 }, shadowOpacity: 0.4, shadowRadius: 5, borderWidth: 2 },
+    eventButton: { width: 40, height: 40, borderRadius: 25, justifyContent: 'center', alignItems: 'center', elevation: 10, shadowOffset: { width: 0, height: 4 }, shadowOpacity: 0.4, shadowRadius: 5, borderWidth: 2 },
     eventBadge: { position: 'absolute', top: -6, left: -8, borderRadius: 12, paddingHorizontal: 6, paddingVertical: 2, borderWidth: 1.5 },
-    eventBadgeText: { fontSize: 8, color: '#ffffff', fontWeight: '900' }
+    eventBadgeText: { fontSize: 6, color: '#ffffff', fontWeight: '900' }
 });

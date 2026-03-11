@@ -1,5 +1,5 @@
 import { MaterialCommunityIcons } from '@expo/vector-icons';
-import AsyncStorage from '@react-native-async-storage/async-storage';
+import { useMMKV } from 'react-native-mmkv';
 import { useEffect, useState } from 'react';
 import { DeviceEventEmitter, Dimensions, Linking, Modal, Pressable, TouchableOpacity, View } from 'react-native';
 import Animated, {
@@ -24,6 +24,9 @@ const STORAGE_KEYS = {
 const MILESTONES = [2, 5, 10, 15, 20, 30, 40, 50];
 
 export default function ReviewGate() {
+    // 🔹 Strictly use useMMKV hook for the storage instance
+    const storage = useMMKV();
+
     const [visible, setVisible] = useState(false);
     const pulse = useSharedValue(1);
     const PLAY_STORE_URL = "https://play.google.com/store/apps/details?id=com.kaytee.oreblogda";
@@ -48,21 +51,25 @@ export default function ReviewGate() {
         }
     }, [visible]);
 
-    const checkEligibility = async () => {
-        const alreadyReviewed = await AsyncStorage.getItem(STORAGE_KEYS.HAS_REVIEWED);
-        if (alreadyReviewed === 'true') return;
+    const checkEligibility = () => {
+        // 🔹 Synchronous check with MMKV
+        const alreadyReviewed = storage.getBoolean(STORAGE_KEYS.HAS_REVIEWED);
+        if (alreadyReviewed === true) return;
 
-        const currentCountStr = await AsyncStorage.getItem(STORAGE_KEYS.POST_COUNT) || "0";
-        const newCount = parseInt(currentCountStr) + 1;
-        await AsyncStorage.setItem(STORAGE_KEYS.POST_COUNT, newCount.toString());
+        // 🔹 Synchronous count management
+        const currentCount = storage.getNumber(STORAGE_KEYS.POST_COUNT) || 0;
+        const newCount = currentCount + 1;
+        
+        storage.set(STORAGE_KEYS.POST_COUNT, newCount);
 
         if (MILESTONES.includes(newCount)) {
             setTimeout(() => setVisible(true), 1200);
         }
     };
 
-    const handleRateNow = async () => {
-        await AsyncStorage.setItem(STORAGE_KEYS.HAS_REVIEWED, 'true');
+    const handleRateNow = () => {
+        // 🔹 Synchronous update to MMKV
+        storage.set(STORAGE_KEYS.HAS_REVIEWED, true);
         setVisible(false);
         Linking.openURL(PLAY_STORE_URL);
     };

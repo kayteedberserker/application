@@ -1,39 +1,40 @@
 import apiFetch from "@/utils/apiFetch";
-import AsyncStorage from "@react-native-async-storage/async-storage";
+import { useMMKV } from 'react-native-mmkv';
 import { createContext, useContext, useEffect, useRef, useState } from "react";
-import { DeviceEventEmitter } from "react-native"; // 🔹 Added for signaling
+import { DeviceEventEmitter } from "react-native"; 
 import { useUser } from "./UserContext";
 
 const ClanContext = createContext();
 
 export const ClanProvider = ({ children }) => {
+    // 🔹 Strictly use the useMMKV hook for the storage instance
+    const storage = useMMKV();
+
     const { user } = useUser();
     const [userClan, setUserClan] = useState(null);
     const [allClans, setAllClans] = useState([]);
     const [isLoading, setIsLoading] = useState(true);
-    const [warActionsCount, setWarActionsCount] = useState(0); // 🔹 Tracks total pending/negotiations
+    const [warActionsCount, setWarActionsCount] = useState(0); 
     const hasSynced = useRef(false);
-    const [fullData, setFullData] = useState()
-    const [cCoins, setClanCoins] = useState(0)
-    const [clanRank, setClanRank] = useState(0)
-    // 1. Initial Load from AsyncStorage
+    const [fullData, setFullData] = useState();
+    const [cCoins, setClanCoins] = useState(0);
+    const [clanRank, setClanRank] = useState(0);
+
+    // 1. Initial Load from MMKV (Synchronous)
     useEffect(() => {
-        const loadStoredClan = async () => {
-            try {
-                const stored = await AsyncStorage.getItem("userClan");
-                if (stored) {
-                    setUserClan(JSON.parse(stored));
-                }
-            } catch (e) {
-                console.error("Failed to load clan from storage", e);
-            } finally {
-                if (!user?.deviceId) {
-                    setIsLoading(false);
-                }
+        try {
+            const stored = storage.getString("userClan");
+            if (stored) {
+                setUserClan(JSON.parse(stored));
             }
-        };
-        loadStoredClan();
-    }, []);
+        } catch (e) {
+            console.error("Failed to load clan from MMKV", e);
+        } finally {
+            if (!user?.deviceId) {
+                setIsLoading(false);
+            }
+        }
+    }, [storage]);
 
     // 2. Sync with Backend ONLY ONCE when deviceId is found
     useEffect(() => {
@@ -44,6 +45,7 @@ export const ClanProvider = ({ children }) => {
             setIsLoading(false);
         }
     }, [user?.deviceId]);
+
     // 3. 🛡️ Check for War Notifications periodically or on refresh
     const checkWarNotifications = async (clanTag) => {
         if (!clanTag) return;
@@ -79,28 +81,29 @@ export const ClanProvider = ({ children }) => {
     };
 
     const fetchFullDetails = async () => {
+        if (!userClan || !user?.deviceId) return;
 
-        if (!userClan) {
-            return
-        }
         try {
             const res = await apiFetch(`/clans/${userClan.tag}?deviceId=${user.deviceId}`);
             const data = await res.json();
-            setFullData(data?.joinRequests.length);
-            setClanCoins(data?.spendablePoints || 0)
-            setClanRank(data?.rank)
+            setFullData(data?.joinRequests?.length || 0);
+            setClanCoins(data?.spendablePoints || 0);
+            setClanRank(data?.rank);
         } catch (err) {
             console.error("Fetch Details Error:", err);
         }
     };
+
     useEffect(() => {
         if (userClan) {
             fetchFullDetails();
         }
-        }, [userClan]);
+    }, [userClan]);
 
     const refreshClanStatus = async (deviceId) => {
         if (!deviceId) return;
+        
+        // 🔹 Triggering loading animation for the sync process
         setIsLoading(true);
         try {
             const response = await apiFetch(`/clans?fingerprint=${deviceId}`);
@@ -108,14 +111,18 @@ export const ClanProvider = ({ children }) => {
 
             if (data.userInClan) {
                 setUserClan(data.userClan);
-                setClanRank(data.rank)
-                await AsyncStorage.setItem("userClan", JSON.stringify(data.userClan));
-                // 🔹 Trigger notification check once clan is confirmed
+                setClanRank(data.rank);
+                
+                // 🔹 MMKV storage update
+                storage.set("userClan", JSON.stringify(data.userClan));
+                
                 checkWarNotifications(data.userClan.tag);
             } else {
                 setUserClan(null);
                 setWarActionsCount(0);
-                await AsyncStorage.removeItem("userClan");
+                
+                // 🔹 MMKV storage removal
+                storage.delete("userClan");
             }
 
             if (data.clans) {
@@ -128,10 +135,10 @@ export const ClanProvider = ({ children }) => {
         }
     };
 
-    const clearClanData = async () => {
+    const clearClanData = () => {
         setUserClan(null);
         setWarActionsCount(0);
-        await AsyncStorage.removeItem("userClan");
+        storage.delete("userClan");
     };
 
     // Helper values
@@ -149,8 +156,8 @@ export const ClanProvider = ({ children }) => {
                 clanRank,
                 fullData,
                 cCoins,
-                warActionsCount, // 🔴 Exported for global Red Dot
-                checkWarNotifications: () => checkWarNotifications(userClan?.tag), // 🔄 Manual trigger
+                warActionsCount,
+                checkWarNotifications: () => checkWarNotifications(userClan?.tag),
                 refreshClanStatus: () => refreshClanStatus(user?.deviceId),
                 clearClanData,
                 isInClan: !!userClan,

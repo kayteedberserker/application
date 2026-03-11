@@ -1,11 +1,9 @@
 import { Ionicons, MaterialCommunityIcons } from '@expo/vector-icons';
-import AsyncStorage from '@react-native-async-storage/async-storage';
 import { useColorScheme as useNativeWind } from "nativewind";
-import { useEffect, useState } from 'react';
+import { useCallback, useEffect, useState, useMemo } from 'react';
 import {
     DeviceEventEmitter,
     Dimensions,
-    FlatList,
     Modal,
     ScrollView,
     TextInput,
@@ -20,6 +18,10 @@ import Animated, {
     withTiming
 } from 'react-native-reanimated';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
+// ⚡️ Swapped FlashList for LegendList
+import { LegendList } from "@legendapp/list";
+import { useMMKV } from 'react-native-mmkv';
+
 import ClanCrest from '../../components/ClanCrest';
 import { SyncLoading } from '../../components/SyncLoading';
 import { Text } from '../../components/Text';
@@ -29,10 +31,6 @@ import { useCoins } from '../../context/CoinContext';
 import apiFetch from '../../utils/apiFetch';
 
 const { width } = Dimensions.get('window');
-
-// 🧠 Tier 1: Memory Cache (Persists while app is open, even when navigating away)
-let WARS_MEMORY_CACHE = {};
-let PROFILE_MEMORY_CACHE = {};
 
 const WAR_METRICS = [
     { id: 'POINTS', label: 'Points', icon: 'star-circle' },
@@ -46,91 +44,130 @@ const TABS = [
     { id: 'NEGOTIATING', label: 'Deals', icon: 'handshake' },
 ];
 
+// Profile cache can stay global
+let PROFILE_MEMORY_CACHE = {};
+
 const ClanWarPage = () => {
     const CustomAlert = useAlert();
     const insets = useSafeAreaInsets();
-    const { userClan, isInClan, canManageClan } = useClan();
+    const { userClan, canManageClan } = useClan();
     const { colorScheme } = useNativeWind();
     const isDark = colorScheme === "dark";
 
+    const storage = useMMKV();
+
     const [activeTab, setActiveTab] = useState('ACTIVE');
 
-    // Initialize state from Memory Cache if available
-    const cacheKeyWars = userClan?.tag ? `WARS_${userClan.tag}_${activeTab}` : null;
+    // ⚡️ Cache Keys
+    const activeKey = 'WARS_GLOBAL_ACTIVE';
+    const pendingKey = userClan?.tag ? `WARS_${userClan.tag}_PENDING` : null;
+    const negotiatingKey = userClan?.tag ? `WARS_${userClan.tag}_NEGOTIATING` : null;
     const cacheKeyProfile = userClan?.tag ? `CLAN_PROFILE_${userClan.tag}` : null;
 
-    const [wars, setWars] = useState(cacheKeyWars ? (WARS_MEMORY_CACHE[cacheKeyWars] || []) : []);
-    const [clanPoints, setClanPoints] = useState(cacheKeyProfile ? (PROFILE_MEMORY_CACHE[cacheKeyProfile] || 0) : 0);
+    // ⚡️ 3 Separate State Buckets (Instantly populated from MMKV on mount)
+    const [warData, setWarData] = useState(() => {
+        try {
+            const aStr = storage.getString(activeKey);
+            const pStr = pendingKey ? storage.getString(pendingKey) : null;
+            const nStr = negotiatingKey ? storage.getString(negotiatingKey) : null;
+            return {
+                ACTIVE: aStr ? JSON.parse(aStr) : [],
+                PENDING: pStr ? JSON.parse(pStr) : [],
+                NEGOTIATING: nStr ? JSON.parse(nStr) : []
+            };
+        } catch (e) {
+            return { ACTIVE: [], PENDING: [], NEGOTIATING: [] };
+        }
+    });
 
-    const [loading, setLoading] = useState(!wars.length); // Only full-screen load if memory is empty
+    const [pages, setPages] = useState({ ACTIVE: 1, PENDING: 1, NEGOTIATING: 1 });
+    const [totalPages, setTotalPages] = useState({ ACTIVE: 1, PENDING: 1, NEGOTIATING: 1 });
+
+    const [clanPoints, setClanPoints] = useState(cacheKeyProfile && PROFILE_MEMORY_CACHE[cacheKeyProfile] ? PROFILE_MEMORY_CACHE[cacheKeyProfile] : 0);
+
     const [refreshing, setRefreshing] = useState(false);
     const [isOffline, setIsOffline] = useState(false);
 
-    const [pendingCount, setPendingCount] = useState(0);
-    const [negotiationCount, setNegotiationCount] = useState(0);
+    const [pendingCount, setPendingCount] = useState(warData.PENDING.length);
+    const [negotiationCount, setNegotiationCount] = useState(warData.NEGOTIATING.length);
 
     const [showCreateModal, setShowCreateModal] = useState(false);
     const [isNegotiatingMode, setIsNegotiatingMode] = useState(false);
     const [editingWarId, setEditingWarId] = useState(null);
-
-    const [page, setPage] = useState(1);
-    const [totalPages, setTotalPages] = useState(1);
 
     const [targetTag, setTargetTag] = useState('');
     const [stake, setStake] = useState('');
     const [duration, setDuration] = useState(3);
     const [winCondition, setWinCondition] = useState('FULL');
     const [selectedMetric, setSelectedMetric] = useState('POINTS');
-    const { coins, processTransaction, isProcessingTransaction } = useCoins();
+    const { coins, processTransaction } = useCoins();
 
-    // 🛡️ Tier 2 Save: To Disk
-    const saveHeavyCache = async (key, data) => {
+    // ⚡️ Focused Fetch Logic: Only updates the specific bucket requested
+    const fetchWars = useCallback(async (tabToFetch, pageNum = 1) => {
+        if (tabToFetch !== 'ACTIVE' && !userClan?.tag) return;
+
         try {
-            await AsyncStorage.setItem(key, JSON.stringify(data));
+            const tagQuery = (tabToFetch !== 'ACTIVE' && userClan?.tag) ? `&tag=${userClan.tag}` : '';
+            const url = `/clans/wars?status=${tabToFetch}${tagQuery}&page=${pageNum}&limit=10`;
+            
+            const res = await apiFetch(url);
+
+            if (res.ok) {
+                const data = await res.json();
+                
+                // Update State Bucket
+                setWarData(prev => {
+                    const updatedArray = pageNum === 1 ? data.wars : [...prev[tabToFetch], ...data.wars];
+                    
+                    // Update Disk Cache (Page 1 only)
+                    if (pageNum === 1) {
+                        const key = tabToFetch === 'ACTIVE' ? activeKey : tabToFetch === 'PENDING' ? pendingKey : negotiatingKey;
+                        if (key) storage.set(key, JSON.stringify(updatedArray));
+                    }
+                    
+                    return { ...prev, [tabToFetch]: updatedArray };
+                });
+
+                // Update Pagination Trackers
+                setTotalPages(prev => ({ ...prev, [tabToFetch]: data.totalPages }));
+                setPages(prev => ({ ...prev, [tabToFetch]: pageNum }));
+                
+                setIsOffline(false);
+            } else {
+                setIsOffline(true);
+            }
         } catch (e) {
-            console.error("Disk Cache Error", e);
+            console.error(e);
+            setIsOffline(true);
         }
-    };
+    }, [userClan?.tag, activeKey, pendingKey, negotiatingKey, storage]);
 
-    const fetchInitialData = async (isBackground = false) => {
-        if (!isBackground && wars.length === 0) setLoading(true);
-
-        // ⚡ Tiered Init: Attempt Disk load if Memory was empty
-        if (userClan?.tag && wars.length === 0) {
-            try {
-                const [cachedWars, cachedPoints] = await Promise.all([
-                    AsyncStorage.getItem(cacheKeyWars),
-                    AsyncStorage.getItem(cacheKeyProfile)
-                ]);
-
-                if (cachedWars) {
-                    const parsed = JSON.parse(cachedWars);
-                    setWars(parsed);
-                    WARS_MEMORY_CACHE[cacheKeyWars] = parsed;
-                }
+    const fetchClanProfile = useCallback(async () => {
+        if (!userClan?.tag) return;
+        try {
+            // Also grab profile from MMKV on mount
+            if (cacheKeyProfile && !PROFILE_MEMORY_CACHE[cacheKeyProfile]) {
+                const cachedPoints = storage.getString(cacheKeyProfile);
                 if (cachedPoints) {
-                    const parsed = JSON.parse(cachedPoints);
-                    setClanPoints(parsed);
-                    PROFILE_MEMORY_CACHE[cacheKeyProfile] = parsed;
+                    setClanPoints(JSON.parse(cachedPoints));
                 }
-            } catch (e) { console.error("Init Cache Load Error", e); }
-        }
+            }
 
-        await Promise.all([
-            fetchWars(1),
-            fetchClanProfile(),
-            updateIndicators()
-        ]);
+            const res = await apiFetch(`/clans/${userClan.tag}`);
+            if (res.ok) {
+                const data = await res.json();
+                const points = data.totalPoints || 0;
+                setClanPoints(points);
 
-        setLoading(false);
-        setRefreshing(false);
-    };
+                if (cacheKeyProfile) {
+                    PROFILE_MEMORY_CACHE[cacheKeyProfile] = points;
+                    storage.set(cacheKeyProfile, JSON.stringify(points));
+                }
+            }
+        } catch (e) { console.error(e); }
+    }, [userClan?.tag, cacheKeyProfile, storage]);
 
-    useEffect(() => {
-        fetchInitialData(wars.length > 0);
-    }, [activeTab, userClan?.tag]);
-
-    const updateIndicators = async () => {
+    const updateIndicators = useCallback(async () => {
         if (!userClan?.tag) return;
         try {
             const [pRes, nRes] = await Promise.all([
@@ -146,56 +183,30 @@ const ClanWarPage = () => {
                 setNegotiationCount(d.totalWars);
             }
         } catch (e) { console.error(e); }
-    }
+    }, [userClan?.tag]);
 
-    const fetchWars = async (pageNum = 1) => {
-        if (!userClan?.tag) return;
-        try {
-            const url = `/clans/wars?status=${activeTab}&tag=${userClan.tag}&page=${pageNum}&limit=10`;
-            const res = await apiFetch(url);
+    // ⚡️ Background Sync when tab changes
+    useEffect(() => {
+        // Silently fetch fresh data for the active tab in the background
+        fetchWars(activeTab, 1);
 
-            if (res.ok) {
-                const data = await res.json();
-                const newWars = pageNum === 1 ? data.wars : [...wars, ...data.wars];
-
-                setWars(newWars);
-                setTotalPages(data.totalPages);
-                setPage(pageNum);
-                setIsOffline(false);
-
-                // 💾 Update Memory (Tier 1) & Disk (Tier 2)
-                if (pageNum === 1) {
-                    WARS_MEMORY_CACHE[cacheKeyWars] = data.wars;
-                    saveHeavyCache(cacheKeyWars, data.wars);
-                }
-            } else {
-                setIsOffline(true);
-            }
-        } catch (e) {
-            console.error(e);
-            setIsOffline(true);
+        // Pre-fetch metrics and profile info independently
+        if (userClan?.tag) {
+            fetchClanProfile();
+            updateIndicators();
         }
-    };
+    }, [activeTab, userClan?.tag, fetchWars, fetchClanProfile, updateIndicators]);
 
-    const fetchClanProfile = async () => {
-        if (!userClan?.tag) return;
-        try {
-            const res = await apiFetch(`/clans/${userClan.tag}`);
-            if (res.ok) {
-                const data = await res.json();
-                const points = data.totalPoints || 0;
-                setClanPoints(points);
-
-                // 💾 Update Memory & Disk
-                PROFILE_MEMORY_CACHE[cacheKeyProfile] = points;
-                saveHeavyCache(cacheKeyProfile, points);
-            }
-        } catch (e) { console.error(e); }
+    const handleRefresh = async () => {
+        setRefreshing(true);
+        await fetchWars(activeTab, 1);
+        if (userClan?.tag) await updateIndicators();
+        setRefreshing(false);
     };
 
     const handleLoadMore = () => {
-        if (page < totalPages && !isOffline) {
-            fetchWars(page + 1);
+        if (pages[activeTab] < totalPages[activeTab] && !isOffline) {
+            fetchWars(activeTab, pages[activeTab] + 1);
         }
     };
 
@@ -222,16 +233,16 @@ const ClanWarPage = () => {
             if (response.ok) {
                 CustomAlert("Success", "War is now ACTIVE!");
                 setActiveTab('ACTIVE');
-                fetchInitialData(true);
+                // Refresh both the Inbox and the Live tab
+                fetchWars('ACTIVE', 1);
+                fetchWars('PENDING', 1);
+                updateIndicators();
             } else {
                 const err = await response.json();
                 CustomAlert("Failed", err.message || "Could not accept war");
             }
-        } catch (error) {
-            console.error(error);
-        } finally {
-            setRefreshing(false);
-        }
+        } catch (error) { console.error(error); } 
+        finally { setRefreshing(false); }
     };
 
     const handleDeclineWar = async (warId) => {
@@ -253,16 +264,14 @@ const ClanWarPage = () => {
 
                             if (response.ok) {
                                 CustomAlert("Declined", "Challenge has been dismissed.");
-                                fetchInitialData(true);
+                                fetchWars(activeTab, 1);
+                                updateIndicators();
                             } else {
                                 const err = await response.json();
                                 CustomAlert("Error", err.message || "Could not decline war");
                             }
-                        } catch (error) {
-                            console.error(error);
-                        } finally {
-                            setRefreshing(false);
-                        }
+                        } catch (error) { console.error(error); } 
+                        finally { setRefreshing(false); }
                     }
                 }
             ]
@@ -310,17 +319,15 @@ const ClanWarPage = () => {
                 setStake('');
                 setIsNegotiatingMode(false);
                 CustomAlert("Success", isNegotiatingMode ? "Counter-offer sent!" : "Challenge Sent!");
-                fetchInitialData(true);
+                fetchWars('NEGOTIATING', 1);
+                updateIndicators();
             } else {
                 const err = await response.json();
-                processTransaction('refund', 'clan_war'); // Refund OC on failure
+                processTransaction('refund', 'clan_war'); 
                 CustomAlert("Error", err.message || "Action failed, OC refunded");
             }
-        } catch (error) {
-            console.error(error);
-        } finally {
-            setRefreshing(false);
-        }
+        } catch (error) { console.error(error); } 
+        finally { setRefreshing(false); }
     };
 
     const navigateToClan = (tag) => {
@@ -363,7 +370,7 @@ const ClanWarPage = () => {
 
     const PendingRequestCard = ({ item }) => {
         const isNegotiation = item.status === 'NEGOTIATING';
-        const amIChallenger = item.challengerTag === userClan.tag;
+        const amIChallenger = item.challengerTag === userClan?.tag;
         const opponent = amIChallenger ? item.defenderTag : item.challengerTag;
         const isWaitingForOpponent = item.lastUpdatedByCustomTag === userClan?.tag;
 
@@ -437,7 +444,7 @@ const ClanWarPage = () => {
         <View className="bg-white dark:bg-slate-900/90 border border-slate-100 dark:border-slate-800 rounded-[32px] p-6 mb-6 mx-5 shadow-sm">
             <View className="flex-row justify-between items-center mb-2">
                 <TouchableOpacity onPress={() => navigateToClan(item.challengerTag)} className="items-center">
-                    <ClanCrest rank={item.challengerRank || 1} size={80} />
+                    <ClanCrest rank={item.challengerRank || 1} isFeed={true} size={80} />
                     <Text className="text-blue-600 dark:text-blue-400 font-black text-[10px] uppercase mt-2">{item.challengerTag}</Text>
                 </TouchableOpacity>
                 <View className="items-center">
@@ -447,7 +454,7 @@ const ClanWarPage = () => {
                     </View>
                 </View>
                 <TouchableOpacity onPress={() => navigateToClan(item.defenderTag)} className="items-center">
-                    <ClanCrest rank={item.defenderRank || 1} size={80} />
+                    <ClanCrest rank={item.defenderRank || 1} isFeed={true} size={80} />
                     <Text className="text-red-600 dark:text-red-500 font-black text-[10px] uppercase mt-2">{item.defenderTag}</Text>
                 </TouchableOpacity>
             </View>
@@ -465,11 +472,15 @@ const ClanWarPage = () => {
         </View>
     );
 
+    // ⚡️ Memoized render function for LegendList
+    const renderItem = useCallback(({ item }) => {
+        return activeTab === 'ACTIVE' 
+            ? <WarCard item={item} /> 
+            : <PendingRequestCard item={item} />;
+    }, [activeTab, canManageClan, userClan]);
 
     return (
         <View style={{ paddingTop: insets.top }} className="flex-1 bg-white dark:bg-slate-950">
-            {refreshing && <SyncLoading />}
-
             <View className="px-6 py-4 flex-row justify-between items-center">
                 <View>
                     <Text className="text-slate-950 dark:text-white text-4xl font-black italic tracking-tighter uppercase">Clan Wars</Text>
@@ -481,19 +492,21 @@ const ClanWarPage = () => {
                     </View>
                 </View>
 
-                <TouchableOpacity
-                    onPress={() => {
-                        setIsNegotiatingMode(false);
-                        setEditingWarId(null);
-                        setTargetTag('');
-                        setStake('');
-                        setSelectedMetric('POINTS');
-                        canManageClan ? setShowCreateModal(true) : CustomAlert("Restricted", "Leaders only.");
-                    }}
-                    className={`${canManageClan ? 'bg-red-600' : 'bg-slate-200 dark:bg-slate-800'} w-14 h-14 rounded-[20px] items-center justify-center border-b-4 ${canManageClan ? 'border-red-800' : 'border-slate-300 dark:border-slate-900'} active:border-b-0`}
-                >
-                    <MaterialCommunityIcons name={canManageClan ? "sword-cross" : "lock"} size={28} color={canManageClan ? "white" : (isDark ? "white" : "black")} />
-                </TouchableOpacity>
+                {userClan?.tag && (
+                    <TouchableOpacity
+                        onPress={() => {
+                            setIsNegotiatingMode(false);
+                            setEditingWarId(null);
+                            setTargetTag('');
+                            setStake('');
+                            setSelectedMetric('POINTS');
+                            canManageClan ? setShowCreateModal(true) : CustomAlert("Restricted", "Leaders only.");
+                        }}
+                        className={`${canManageClan ? 'bg-red-600' : 'bg-slate-200 dark:bg-slate-800'} w-14 h-14 rounded-[20px] items-center justify-center border-b-4 ${canManageClan ? 'border-red-800' : 'border-slate-300 dark:border-slate-900'} active:border-b-0`}
+                    >
+                        <MaterialCommunityIcons name={canManageClan ? "sword-cross" : "lock"} size={28} color={canManageClan ? "white" : (isDark ? "white" : "black")} />
+                    </TouchableOpacity>
+                )}
             </View>
 
             {isOffline && (
@@ -524,28 +537,39 @@ const ClanWarPage = () => {
                 ))}
             </View>
 
-            <FlatList
-                data={wars}
-                keyExtractor={item => item.warId}
-                renderItem={({ item }) => (
-                    activeTab === 'ACTIVE'
-                        ? <WarCard item={item} />
-                        : <PendingRequestCard item={item} />
-                )}
-                onRefresh={() => fetchInitialData(true)}
-                refreshing={refreshing}
-                onEndReached={handleLoadMore}
-                onEndReachedThreshold={0.5}
-                contentContainerStyle={{ paddingBottom: 100 }}
-                ListEmptyComponent={
-                    <View className="items-center mt-32 opacity-20">
-                        <MaterialCommunityIcons name="sword-cross" size={80} color={isDark ? "#64748b" : "#94a3b8"} />
-                        <Text className="text-slate-500 mt-4 font-black italic uppercase text-center px-10">
-                            {isOffline ? 'No cached wars found' : 'The battlefield is silent.'}
-                        </Text>
-                    </View>
-                }
-            />
+            {warData[activeTab].length === 0 && refreshing ? (
+                 <View className="flex-1 justify-center items-center">
+                     <SyncLoading message="Scouting Battlefield..." />
+                 </View>
+            ) : (
+                // ⚡️ Swapped to LegendList
+                <LegendList
+                    data={warData[activeTab]}
+                    keyExtractor={item => item.warId || item._id}
+                    renderItem={renderItem}
+                    
+                    // ⚡️ LegendList Performance Props
+                    estimatedItemSize={250}
+                    drawDistance={1000} // Pre-renders further ahead
+                    recycleItems={true} // Essential for dynamic layout lists
+                    
+                    onRefresh={handleRefresh}
+                    refreshing={refreshing}
+                    onEndReached={handleLoadMore}
+                    onEndReachedThreshold={0.5}
+                    contentContainerStyle={{ paddingBottom: 100 }}
+                    ListEmptyComponent={
+                        <View className="items-center mt-32 opacity-40 px-10">
+                            <MaterialCommunityIcons name={activeTab === 'ACTIVE' ? "sword-cross" : "sleep"} size={80} color={isDark ? "#64748b" : "#94a3b8"} />
+                            <Text className="text-slate-500 dark:text-slate-400 mt-4 font-black italic uppercase text-center text-xs">
+                                {isOffline ? 'No cached records found' : 
+                                 !userClan?.tag && activeTab !== 'ACTIVE' ? 'You must be aligned with a clan to access this sector.' :
+                                 'The battlefield is currently silent.'}
+                            </Text>
+                        </View>
+                    }
+                />
+            )}
 
             <Modal visible={showCreateModal} animationType="slide" transparent={true} statusBarTranslucent>
                 <View className="flex-1 bg-black/90 justify-end">

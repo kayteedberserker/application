@@ -22,12 +22,14 @@ import { useUser } from "../context/UserContext";
 import apiFetch from "../utils/apiFetch";
 import CoinIcon from "./ClanIcon";
 import { Text } from "./Text";
+import PeakBadge from "./PeakBadge"; // ⚡️ Imported PeakBadge
 
 const TopBar = ({ isDark }) => {
     const CustomAlert = useAlert();
     const { streak, loading, refreshStreak } = useStreak();
     const { user, refreshUser } = useUser();
-    const { coins, clanCoins, processTransaction, isProcessingTransaction } = useCoins(); 
+    // ⚡️ Pull peakLevel from CoinContext
+    const { coins, clanCoins, peakLevel, processTransaction, isProcessingTransaction } = useCoins(); 
     const pathName = usePathname();
 
     const pulse = useSharedValue(1);
@@ -114,44 +116,48 @@ const TopBar = ({ isDark }) => {
     if (pathName == "/Search") return null; 
 
     return (
-        <View className={`flex-row items-center justify-between px-2 h-16 ${
+        <View className={`flex-row items-center justify-between px-1 pl-4 h-14 ${ // ⚡️ Reduced px to 1, height to 14
             isDark ? "bg-[#050505] border-b border-blue-900/30" : "bg-white border-b border-gray-200"
         }`}>
+            {/* ⚡️ Slightly smaller logo to save width */}
             <Image
                 source={logoSrc}
-                style={{ width: 90, height: 32, resizeMode: "contain" }}
+                style={{ width: 84, height: 40, resizeMode: "contain" }}
             />
 
-            <View className="flex-row items-center gap-1.5">
+            <View className="flex-row items-center gap-1"> {/* ⚡️ Tighter gap */}
 
-                {/* 🪙 COIN HUD */}
+                {/* 🪙 COIN & PEAK HUD (Combined) */}
                 <TouchableOpacity 
                     onPress={() => DeviceEventEmitter.emit("navigateSafely", "/screens/Wallet")}
-                    className={`flex-row items-center px-2 py-1.5 gap-2 rounded-xl border ${
+                    className={`flex-row items-center pl-1.5 pr-2 py-1 gap-1.5 rounded-xl border ${ // ⚡️ Tighter padding
                         isDark ? "bg-white/5 border-white/10" : "bg-gray-50 border-gray-200"
                     }`}
                 >
-                    <View className="flex-row items-center gap-1.5">
-                        <View className="flex-col items-end">
-                            <View className="flex-row items-center">
-                                <Text className="text-yellow-500 font-black text-[12px] mr-1">{coins || 0}</Text>
-                                {isProcessingTransaction ? <ActivityIndicator size={10} color="#ca8a04" /> : <CoinIcon type="OC" size={12} />}
+                    {/* ⚡️ Insert Peak Badge right next to the coin balance if they have one */}
+                    {peakLevel > 0 && (
+                        <View className="mr-0.5">
+                            <PeakBadge level={peakLevel} size={20} />
+                        </View>
+                    )}
+
+                    <View className="flex-col items-end justify-center">
+                        <View className="flex-row items-center">
+                            <Text className="text-yellow-500 font-black text-[11px] mr-1">{coins || 0}</Text>
+                            {isProcessingTransaction ? <ActivityIndicator size={10} color="#ca8a04" /> : <CoinIcon type="OC" size={14} />}
+                        </View>
+                        {/* ⚡️ Only show Clan coins if there is NO peak badge (to save space) */}
+                        {clanCoins > 0 && (
+                            <View className="flex-row items-center mt-[1px]">
+                                <Text style={{color: isDark ? "#c084fc" : "#9333ea"}} className="font-black text-[11px] mr-1">{clanCoins}</Text>
+                                <CoinIcon type="CC" size={14} />
                             </View>
-                            {clanCoins > 0 && (
-                                <View className="flex-row items-center -mt-0.5">
-                                    <Text style={{color: isDark ? "#c084fc" : "#9333ea"}} className="font-black text-[12px] mr-1">{clanCoins}</Text>
-                                    <CoinIcon type="CC" size={12} />
-                                </View>
-                            )}
-                        </View>
-                        <View className="bg-yellow-500 rounded-lg p-0.5 shadow-sm">
-                            <Ionicons name="add" size={12} color="black" />
-                        </View>
+                        )}
                     </View>
                 </TouchableOpacity>
 
                 {/* 🔥 STREAK HUD */}
-                {!loading && (
+                {streak && (
                     <TouchableOpacity
                         disabled={(!showRestoreUI && !hasActiveStreak) || isProcessingTransaction}
                         onPress={showRestoreUI ? handleRestoreStreak : () => CustomAlert("Streak", "Stay active to grow your streak!")}
@@ -159,7 +165,7 @@ const TopBar = ({ isDark }) => {
                     >
                         <Animated.View 
                             style={showRestoreUI ? urgentButtonStyle : {}}
-                            className={`px-1 py-1.5 rounded-xl flex-row items-center border-2 ${
+                            className={`px-1.5 py-1 rounded-xl flex-row items-center border-2 ${ // ⚡️ Tighter padding
                                 showRestoreUI 
                                     ? "bg-red-500/20 border-red-500 animate-pulse" 
                                     : isZeroStreak 
@@ -174,41 +180,42 @@ const TopBar = ({ isDark }) => {
                                     <Animated.View style={healthyFlameStyle}>
                                         <Ionicons
                                             name={showRestoreUI ? "bonfire-outline" : "flame"}
-                                            size={showRestoreUI ? 18 : 16}
+                                            size={showRestoreUI ? 16 : 14} // ⚡️ Smaller flame
                                             color={showRestoreUI ? "#ef4444" : isZeroStreak ? "#9ca3af" : "#f97316"}
                                         />
                                     </Animated.View>
                                 </View>
                             )}
 
-                            <View className="flex-row items-center">
-                                <Text className={`text-[15px] font-black leading-none ${
-                                    showRestoreUI ? 'text-red-500 text-lg' : isZeroStreak ? 'text-gray-400' : isDark ? 'text-white' : 'text-black'
+                            <View className="flex-row items-center ml-0.5">
+                                <Text className={`text-[13px] font-black leading-none ${ // ⚡️ Slightly smaller text
+                                    showRestoreUI ? 'text-red-500 text-base' : isZeroStreak ? 'text-gray-400' : isDark ? 'text-white' : 'text-black'
                                 }`}>
                                     {showRestoreUI ? streak.recoverableStreak : (streak?.streak || 0)}
                                 </Text>
                             </View>
 
                             {showRestoreUI && !isProcessingTransaction && (
-                                <View className="bg-red-500 rounded-full h-2 w-2 absolute -top-1 -right-1 border border-white" />
+                                <View className="bg-red-500 rounded-full h-1.5 w-1.5 absolute -top-1 -right-1 border border-white" />
                             )}
                         </Animated.View>
                     </TouchableOpacity>
                 )}
 
-                <View className="flex-row items-center gap-2">
+                {/* ACTION BUTTONS */}
+                <View className="flex-row items-center gap-1"> {/* ⚡️ Tighter gap */}
                     <TouchableOpacity
                         onPress={() => DeviceEventEmitter.emit("navigateSafely", "/screens/Leaderboard")}
-                        className={`p-2 rounded-xl border ${isDark ? "bg-white/5 border-white/10" : "bg-gray-50 border-gray-200"}`}
+                        className={`p-1.5 rounded-xl border ${isDark ? "bg-white/5 border-white/10" : "bg-gray-50 border-gray-200"}`} // ⚡️ Smaller padding
                     >
-                        <Ionicons name="trophy-outline" size={18} color={isDark ? "#60a5fa" : "#111827"} />
+                        <Ionicons name="trophy-outline" size={16} color={isDark ? "#60a5fa" : "#111827"} />
                     </TouchableOpacity>
 
                     <TouchableOpacity
                         onPress={() => DeviceEventEmitter.emit("navigateSafely", "/screens/MoreOptions")}
-                        className={`p-2 rounded-xl border ${isDark ? "bg-white/5 border-white/10" : "bg-gray-50 border-gray-200"}`}
+                        className={`p-1.5 rounded-xl border ${isDark ? "bg-white/5 border-white/10" : "bg-gray-50 border-gray-200"}`} // ⚡️ Smaller padding
                     >
-                        <Ionicons name="grid-outline" size={18} color={isDark ? "#60a5fa" : "#111827"} />
+                        <Ionicons name="grid-outline" size={16} color={isDark ? "#60a5fa" : "#111827"} />
                     </TouchableOpacity>
                 </View>
             </View>

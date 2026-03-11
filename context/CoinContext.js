@@ -1,4 +1,4 @@
-import AsyncStorage from '@react-native-async-storage/async-storage';
+import { useMMKV } from 'react-native-mmkv';
 import { createContext, useCallback, useContext, useEffect, useState } from 'react';
 import apiFetch from '../utils/apiFetch';
 import { useClan } from './ClanContext';
@@ -8,69 +8,119 @@ const CoinContext = createContext();
 
 const STORAGE_KEYS = {
     COINS: 'cached_user_coins',
-    CLAN_COINS: 'cached_clan_coins'
+    CLAN_COINS: 'cached_clan_coins',
+    TOTAL_PURCHASED: 'cached_total_purchased',
+    PEAK_LEVEL: 'cached_peak_level'
+};
+
+// ⚡️ Define the thresholds for Peak Levels based on total purchased coins
+const calculatePeakLevel = (totalPurchased) => {
+    if (totalPurchased < 1000) return 1;
+    if (totalPurchased < 5000) return 2;
+    if (totalPurchased < 10000) return 3;
+    if (totalPurchased < 25000) return 4;
+    if (totalPurchased < 50000) return 5;
+    if (totalPurchased < 100000) return 6;
+    if (totalPurchased < 250000) return 7;
+    if (totalPurchased < 500000) return 8;
+    if (totalPurchased < 1000000) return 9;
+    return 10; // Max level
 };
 
 export const CoinProvider = ({ children }) => {
+    // 🔹 useMMKV hook for synchronous storage instance
+    const storage = useMMKV();
+
     const { user } = useUser();
     const { userClan, cCoins } = useClan();
+    
     const [clanCoins, setClanCoins] = useState(0);
     const [coins, setCoins] = useState(0);
+    const [totalPurchasedCoins, setTotalPurchasedCoins] = useState(0);
+    const [peakLevel, setPeakLevel] = useState(0);
+    
     const [isProcessingTransaction, setIsProcessingTransaction] = useState(false);
 
-    // 🔹 Hydration: Load cached values immediately on mount
+    // 🔹 Hydration: Synchronous load from MMKV immediately on mount
     useEffect(() => {
-        const hydrateStorage = async () => {
-            try {
-                const [cachedCoins, cachedClanCoins] = await Promise.all([
-                    AsyncStorage.getItem(STORAGE_KEYS.COINS),
-                    AsyncStorage.getItem(STORAGE_KEYS.CLAN_COINS)
-                ]);
-                
-                if (cachedCoins !== null) setCoins(Number(cachedCoins));
-                if (cachedClanCoins !== null) setClanCoins(Number(cachedClanCoins));
-            } catch (e) {
-                console.error("Failed to hydrate coins from storage", e);
+        try {
+            const cachedCoins = storage.getString(STORAGE_KEYS.COINS);
+            const cachedClanCoins = storage.getString(STORAGE_KEYS.CLAN_COINS);
+            const cachedTotalPurchased = storage.getString(STORAGE_KEYS.TOTAL_PURCHASED);
+            const cachedPeakLevel = storage.getString(STORAGE_KEYS.PEAK_LEVEL);
+            
+            if (cachedCoins !== undefined && cachedCoins !== null) {
+                setCoins(Number(cachedCoins));
             }
-        };
-        hydrateStorage();
-    }, []);
+            if (cachedClanCoins !== undefined && cachedClanCoins !== null) {
+                setClanCoins(Number(cachedClanCoins));
+            }
+            if (cachedTotalPurchased !== undefined && cachedTotalPurchased !== null) {
+                setTotalPurchasedCoins(Number(cachedTotalPurchased));
+            }
+            if (cachedPeakLevel !== undefined && cachedPeakLevel !== null) {
+                setPeakLevel(Number(cachedPeakLevel));
+            }
+        } catch (e) {
+            console.error("Failed to hydrate coins from MMKV", e);
+        }
+    }, [storage]);
 
-    const updateCoins = async (newVal) => {
+    const updateCoins = (newVal) => {
         setCoins(newVal);
-        await AsyncStorage.setItem(STORAGE_KEYS.COINS, String(newVal));
+        storage.set(STORAGE_KEYS.COINS, String(newVal));
     };
 
-    const updateClanCoins = async (newVal) => {
+    const updateClanCoins = (newVal) => {
         setClanCoins(newVal);
-        await AsyncStorage.setItem(STORAGE_KEYS.CLAN_COINS, String(newVal));
+        storage.set(STORAGE_KEYS.CLAN_COINS, String(newVal));
+    };
+
+    const updateTotalPurchased = (newTotal) => {
+        setTotalPurchasedCoins(newTotal);
+        storage.set(STORAGE_KEYS.TOTAL_PURCHASED, String(newTotal));
+
+        // ⚡️ Automatically calculate and cache the new Peak Level
+        const newPeakLevel = calculatePeakLevel(newTotal);
+        setPeakLevel(newPeakLevel);
+        storage.set(STORAGE_KEYS.PEAK_LEVEL, String(newPeakLevel));
     };
 
     useEffect(() => {
         if (user?.coins !== undefined) {
             updateCoins(user.coins);
         }
-    }, [user?.coins]);
+        if (user?.totalPurchasedCoins !== undefined) {
+            updateTotalPurchased(user.totalPurchasedCoins);
+        }
+    }, [user?.coins, user?.totalPurchasedCoins]);
 
     const fetchCoins = useCallback(async () => {
-        const stored = await AsyncStorage.getItem("mobileUser");
+        // Use the hook instance to get user data
+        const stored = storage.getString("mobileUser");
+        if (!stored) return;
+        
         let parsedUser = JSON.parse(stored);
         if (!parsedUser?.deviceId) return;
 
         try {
+            // Loading animation should be active while this fetch is pending
             const response = await apiFetch(`/mobile/coins/transaction?deviceId=${parsedUser.deviceId}`);
             const data = await response.json();
             if (data.success) {
-                await updateCoins(data.balance || 0);
+                updateCoins(data.balance || 0);
+                if (data.totalPurchasedCoins !== undefined) {
+                    updateTotalPurchased(data.totalPurchasedCoins);
+                }
             }
         } catch (error) {
             console.error("Failed to fetch coins:", error);
         }
-    }, []);
+    }, [storage]);
 
     const fetchClanCoins = async () => {
         if (!userClan) return;
-        await updateClanCoins(cCoins);
+        updateClanCoins(cCoins);
     };
 
     useEffect(() => {
@@ -82,7 +132,6 @@ export const CoinProvider = ({ children }) => {
 
         setIsProcessingTransaction(true);
 
-        // Determine currency
         const isClanCoin = extraData?.currency === 'CC' || extraData === 'CC';
         const endpoint = isClanCoin ? "/mobile/coins/clan" : "/mobile/coins/transaction";
 
@@ -93,8 +142,10 @@ export const CoinProvider = ({ children }) => {
                 type,
             };
 
-            // Handle Item Purchases or Pack Rewards
             if (typeof extraData === 'object' && extraData !== null) {
+                // 🔹 FIX: We add a 'payload' key so the backend can find recipientId/amount
+                requestBody.payload = extraData; 
+
                 Object.assign(requestBody, {
                     itemId: extraData.itemId,
                     price: extraData.price,
@@ -102,7 +153,7 @@ export const CoinProvider = ({ children }) => {
                     category: extraData.category,
                     visualConfig: extraData.visualData || extraData.visualConfig,
                     coinType: extraData.currency,
-                    rewards: extraData.rewards // Added for vault packs
+                    rewards: extraData.rewards 
                 });
             }
 
@@ -119,10 +170,16 @@ export const CoinProvider = ({ children }) => {
 
             if (data.success) {
                 if (isClanCoin) {
-                    await updateClanCoins(data.newClanBalance ?? data.newBalance ?? 0);
+                    updateClanCoins(data.newClanBalance ?? data.newBalance ?? 0);
                 } else {
-                    await updateCoins(data.newBalance || 0);
+                    updateCoins(data.newBalance || 0);
                 }
+
+                // Update Total Purchased if returned
+                if (data.totalPurchasedCoins !== undefined) {
+                    updateTotalPurchased(data.totalPurchasedCoins);
+                }
+
                 setIsProcessingTransaction(false);
                 return { success: true, balance: data.newBalance, inventory: data.inventory };
             } else {
@@ -143,6 +200,8 @@ export const CoinProvider = ({ children }) => {
         <CoinContext.Provider value={{
             coins,
             clanCoins,
+            totalPurchasedCoins, // Exported for use
+            peakLevel,           // Exported for use
             processTransaction,
             isProcessingTransaction,
             fetchCoins

@@ -1,18 +1,18 @@
 import { MaterialCommunityIcons } from '@expo/vector-icons';
-import AsyncStorage from "@react-native-async-storage/async-storage";
 import { useColorScheme } from "nativewind";
-import { memo, useCallback, useEffect, useMemo, useRef, useState } from "react"; 
+import { useCallback, useEffect, useMemo, useRef, useState } from "react"; 
 import {
     Animated,
     AppState,
     DeviceEventEmitter,
     Dimensions,
     Easing,
-    FlatList,
-    Platform,
     RefreshControl,
     View
 } from "react-native";
+// ⚡️ Swapped FlashList for LegendList
+import { useMMKV } from 'react-native-mmkv';
+import { LegendList } from "@legendapp/list"; 
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import useSWRInfinite from "swr/infinite";
 import AnimeLoading from "../../../components/AnimeLoading"; 
@@ -26,31 +26,13 @@ const LIMIT = 10;
 
 const fetcher = (url) => apiFetch(url).then(res => res.json());
 
-// 🧠 Tier 1: Memory Cache & Session Tracking
 const CATEGORY_MEMORY_CACHE = {};
-const CATEGORIES_SYNCED_THIS_SESSION = new Set(); // 👈 Tracks which folders have been updated since app launch
-
-const saveHeavyCache = async (key, data) => {
-    try {
-        const cacheEntry = {
-            data: data,
-            timestamp: Date.now(),
-        };
-        await AsyncStorage.setItem(key, JSON.stringify(cacheEntry));
-    } catch (e) {
-        console.error("Cache Save Error", e);
-    }
-};
-
-const CategoryItemRow = memo(({ item, index, posts, mutate }) => {
-    return (
-        <View className="px-4">
-            <PostCard post={item} isFeed posts={posts} setPosts={mutate} />
-        </View>
-    );
-});
+const CATEGORIES_SYNCED_THIS_SESSION = new Set(); 
 
 export default function CategoryPage({ forcedId }) {
+    // ⚡️ Initialize Storage Hook
+    const storage = useMMKV();
+    
     const id = forcedId;
     const insets = useSafeAreaInsets();
     const { colorScheme } = useColorScheme();
@@ -74,13 +56,23 @@ export default function CategoryPage({ forcedId }) {
     const [refreshing, setRefreshing] = useState(false);
     const scrollRef = useRef(null);
 
-    // Initial Cache Hydration
+    // ⚡️ Synchronous Cache Saver
+    const saveHeavyCache = useCallback((key, data) => {
+        try {
+            const cacheEntry = { data: data, timestamp: Date.now() };
+            storage.set(key, JSON.stringify(cacheEntry));
+        } catch (e) {
+            console.error("Cache Save Error", e);
+        }
+    }, [storage]);
+
+    // ⚡️ Synchronous Cache Loader
     useEffect(() => {
         let isMounted = true;
-        const prepare = async () => {
+        const prepare = () => {
             try {
                 if (!CATEGORY_MEMORY_CACHE[CACHE_KEY]) {
-                    const local = await AsyncStorage.getItem(CACHE_KEY);
+                    const local = storage.getString(CACHE_KEY);
                     if (local && isMounted) {
                         const parsed = JSON.parse(local);
                         if (parsed?.data && Array.isArray(parsed.data)) {
@@ -98,7 +90,7 @@ export default function CategoryPage({ forcedId }) {
         };
         prepare();
         return () => { isMounted = false; };
-    }, [id, CACHE_KEY]);
+    }, [id, CACHE_KEY, storage]);
 
     useEffect(() => {
         const animation = Animated.loop(
@@ -121,7 +113,6 @@ export default function CategoryPage({ forcedId }) {
         revalidateOnFocus: false, 
         revalidateOnReconnect: true,
         revalidateIfStale: false, 
-        // ✨ Only revalidate on mount if this specific category hasn't synced this session
         revalidateOnMount: !CATEGORIES_SYNCED_THIS_SESSION.has(CACHE_KEY), 
         dedupingInterval: 10000,
         fallbackData: cachedData || undefined,
@@ -159,7 +150,7 @@ export default function CategoryPage({ forcedId }) {
     const loadMore = useCallback(() => {
         if (isLoading || isValidating || isOfflineMode) return;
         setSize(size + 1);
-    }, [isLoading, isValidating, isOfflineMode, size]);
+    }, [isLoading, isValidating, isOfflineMode, size, setSize]);
 
     const hasMore = data ? data[data.length - 1]?.posts?.length === LIMIT : false;
 
@@ -170,8 +161,16 @@ export default function CategoryPage({ forcedId }) {
         return () => sub.remove();
     }, []);
 
-    const renderItem = useCallback(({ item, index }) => (
-        <CategoryItemRow item={item} index={index} posts={posts} mutate={mutate} />
+    // ⚡️ Memoized renderItem feeding the Backend Props into PostCard
+    const renderItem = useCallback(({ item }) => (
+        <PostCard 
+            post={item} 
+            authorData={item.authorData} 
+            clanData={item.clanData} 
+            isFeed 
+            posts={posts} 
+            setPosts={mutate} 
+        />
     ), [posts, mutate]);
 
     const ListHeader = useMemo(() => (
@@ -186,7 +185,6 @@ export default function CategoryPage({ forcedId }) {
                 <Text className={`text-4xl font-[900] italic tracking-tighter uppercase ${isDark ? "text-white" : "text-gray-900"}`}>
                     Folder: <Text className={isOfflineMode ? "text-orange-500" : "text-blue-600"}>{categoryName}</Text>
                 </Text>
-                {/* 🛠 FIXED: Changed <div> to <View> */}
                 <View className={`absolute -bottom-2 left-0 h-[2px] w-20 ${isOfflineMode ? 'bg-orange-500' : 'bg-blue-600'}`} />
             </View>
         </View>
@@ -204,13 +202,23 @@ export default function CategoryPage({ forcedId }) {
                 style={{ width: width * 0.7, height: width * 0.7, backgroundColor: isOfflineMode ? '#f97316' : (isDark ? '#2563eb' : '#3b82f6') }}
             />
 
-            <FlatList
+            {/* ⚡️ Swapped to LegendList */}
+            <LegendList
                 ref={scrollRef}
                 data={posts}
                 keyExtractor={(item) => item._id}
                 renderItem={renderItem}
                 ListHeaderComponent={ListHeader}
-                contentContainerStyle={{ paddingTop: insets.top + 20, paddingBottom: insets.bottom + 100 }}
+                
+                // ⚡️ LegendList Performance Props
+                estimatedItemSize={500}
+                drawDistance={1000} // Much better pre-rendering radius for dynamic media heights
+                recycleItems={true} // Essential for list speed
+                contentContainerStyle={{ 
+                    paddingHorizontal: 16, 
+                    paddingTop: insets.top + 20, 
+                    paddingBottom: insets.bottom + 100 
+                }}
                 
                 refreshControl={
                     <RefreshControl
@@ -221,7 +229,7 @@ export default function CategoryPage({ forcedId }) {
                     />
                 }
 
-                ListFooterComponent={() => (
+                ListFooterComponent={
                     <View className="py-12 items-center justify-center min-h-[140px]">
                         {(isLoading || (isValidating && size > 1)) && !refreshing ? (
                             <SyncLoading />
@@ -232,16 +240,11 @@ export default function CategoryPage({ forcedId }) {
                             </View>
                         ) : null}
                     </View>
-                )}
+                }
                 onEndReached={loadMore}
                 onEndReachedThreshold={0.5}
                 onScroll={(e) => DeviceEventEmitter.emit("onScroll", e.nativeEvent.contentOffset.y)}
-                scrollEventThrottle={32}
-                
-                removeClippedSubviews={Platform.OS === 'android'}
-                initialNumToRender={4}
-                maxToRenderPerBatch={3}
-                windowSize={3}
+                scrollEventThrottle={16}
             />
 
             <View

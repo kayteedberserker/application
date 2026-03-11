@@ -2,7 +2,6 @@ import FontAwesome from '@expo/vector-icons/FontAwesome';
 import Ionicons from '@expo/vector-icons/Ionicons';
 import MaterialCommunityIcons from '@expo/vector-icons/MaterialCommunityIcons';
 import notifee, { AndroidImportance, EventType } from '@notifee/react-native';
-import AsyncStorage from '@react-native-async-storage/async-storage';
 import Constants from 'expo-constants';
 import { useFonts } from "expo-font";
 import * as Linking from 'expo-linking';
@@ -12,9 +11,11 @@ import * as Updates from 'expo-updates';
 import { useColorScheme } from "nativewind";
 import { useCallback, useEffect, useRef, useState } from "react";
 import { AppState, BackHandler, DeviceEventEmitter, InteractionManager, Platform, StatusBar, View } from "react-native";
-import Purchases from 'react-native-purchases'; // 🔹 Added RevenueCat Import
-import { SafeAreaProvider } from "react-native-safe-area-context";
+import Purchases from 'react-native-purchases'; 
+// ⚡️ Imported initialWindowMetrics to prevent Layout Shift
+import { SafeAreaProvider, initialWindowMetrics, useSafeAreaInsets } from "react-native-safe-area-context";
 import Toast from 'react-native-toast-message';
+import { useMMKV } from 'react-native-mmkv';
 
 import AnimeLoading from "../components/AnimeLoading";
 import ReviewGate from "../components/ReviewGate";
@@ -33,7 +34,7 @@ let LAST_PROCESSED_URL = null;
 
 // 🔹 REVENUECAT KEYS
 const REVENUE_CAT_API_KEYS = {
-    ios: "goog_your_ios_key_here", // Replace with actual iOS key if needed
+    ios: "goog_your_ios_key_here", 
     android: "goog_cypWcXGzLgDujHkFvHTcUoqUNQi"
 };
 
@@ -95,28 +96,39 @@ function RootLayoutContent() {
     const pathname = usePathname();
     const { user } = useUser();
     
-    // Check if the navigation tree is fully mounted and ready
+    // ⚡️ Pulling insets to verify they have loaded
+    const insets = useSafeAreaInsets();
+    
+    const storage = useMMKV();
+    
     const rootNavigationState = useRootNavigationState();
     const isNavigationReady = rootNavigationState?.key != null;
 
     const [isSyncing, setIsSyncing] = useState(true);
     const [isUpdating, setIsUpdating] = useState(false);
     const [appReady, setAppReady] = useState(false);
+    // ⚡️ New state to hold loading screen until layout is fully calculated
+    const [safeAreaReady, setSafeAreaReady] = useState(false);
 
-    // Refs to track state inside listeners
     const appReadyRef = useRef(false);
-
     const pendingNavigation = useRef(null);
     const appState = useRef(AppState.currentState);
 
-    // Sync refs with state
     useEffect(() => { appReadyRef.current = appReady; }, [appReady]);
+
+    // ⚡️ Wait for safe area layout to resolve before unmounting loading screen
+    useEffect(() => {
+        // A tiny timeout ensures the native UI thread has completely finished its layout pass
+        const timer = setTimeout(() => {
+            setSafeAreaReady(true);
+        }, 150);
+        return () => clearTimeout(timer);
+    }, [insets.top]); // Adding insets.top ensures it reacts to notch/status bar changes
 
     // 🔹 REVENUECAT INITIALIZATION LOGIC
     useEffect(() => {
         const setupRevenueCat = async () => {
             try {
-                // Check if already configured to avoid "Duplicate Call" warnings
                 const isConfigured = await Purchases.isConfigured();
                 
                 if (!isConfigured) {
@@ -128,7 +140,6 @@ function RootLayoutContent() {
                     console.log("✅ RevenueCat: Configuration Complete");
                 }
 
-                // Sync user identity if logged in
                 if (user?.uid || user?.id) {
                     await Purchases.logIn(user.uid || user.id);
                     console.log("👤 RevenueCat: User Sync Successful");
@@ -141,37 +152,39 @@ function RootLayoutContent() {
         setupRevenueCat();
     }, [user?.uid, user?.id]);
 
+    // ⚡️ CACHE JANITOR (Now 100% Synchronous & Fast using MMKV)
     useEffect(() => {
-        const runCacheJanitor = async () => {
+        const runCacheJanitor = () => {
             try {
-                const allKeys = await AsyncStorage.getAllKeys();
+                const allKeys = storage.getAllKeys();
                 const targetPrefixes = ["POSTS_CACHE_", "CATEGORY_CACHE_", "clan_posts_", "WARS_", "CLAN_PROFILE_", "auth_cache_"];
                 const expiredTime = 48 * 60 * 60 * 1000;
                 const now = Date.now();
                 const keysToReview = allKeys.filter(key => targetPrefixes.some(prefix => key.startsWith(prefix)));
 
                 for (const key of keysToReview) {
-                    const value = await AsyncStorage.getItem(key);
+                    const value = storage.getString(key);
                     if (!value) continue;
                     try {
                         const parsed = JSON.parse(value);
                         if (parsed && typeof parsed === 'object' && parsed.timestamp) {
                             if (now - parsed.timestamp > expiredTime) {
-                                await AsyncStorage.removeItem(key);
+                                storage.delete(key);
                                 console.log(`🧹 Janitor: Cleared expired cache: ${key}`);
                             }
                         }
                     } catch (e) {
-                        await AsyncStorage.removeItem(key);
+                        storage.delete(key); // Delete if unparseable/corrupted
                     }
                 }
             } catch (err) {
                 console.error("Janitor failed:", err);
             }
         };
+        
         const timeout = setTimeout(runCacheJanitor, 30000);
         return () => clearTimeout(timeout);
-    }, []);
+    }, [storage]);
 
     const currentPathRef = useRef(pathname);
     useEffect(() => {
@@ -188,9 +201,9 @@ function RootLayoutContent() {
         if (IS_NAVIGATING_GLOBAL || LAST_PROCESSED_NOTIF_ID === currentNotifId) {
             return;
         }
-        // 4. Check Readiness (Queue if not ready)
+        
         if (!appReadyRef.current) {
-            console.log("⏳ [processRouting] App/Ads not ready. Queuing request...");
+            console.log("⏳ [processRouting] App not ready. Queuing request...");
             pendingNavigation.current = data;
             return;
         }
@@ -260,27 +273,22 @@ function RootLayoutContent() {
             navSub.remove();
             backHandler.remove();
         };
-    }, []);
+    }, [router]);
 
-    // 🔹 INITIALIZATION (AD-FREE)
     useEffect(() => {
         if (Platform.OS === 'web') {
             setAppReady(true);
             return;
         }
-
-        // We no longer need LevelPlay.init here.
-        // Just set the app to ready once this effect runs.
         setAppReady(true);
     }, []);
 
-    // 🔹 FLUSH PENDING NAVIGATION (Now waits for router to be ready too)
+    // 🔹 FLUSH PENDING NAVIGATION
     useEffect(() => {
         if (appReady && pendingNavigation.current) {
             console.log("🔄 Flushing pending navigation...");
             const data = pendingNavigation.current;
             pendingNavigation.current = null;
-            // Delay slightly to ensure UI has cleanly mounted before we push
             setTimeout(() => processRouting(data), 150);
         }
     }, [appReady, processRouting]);
@@ -315,7 +323,7 @@ function RootLayoutContent() {
 
         const subscription = Linking.addEventListener('url', (event) => handleUrl(event.url));
         return () => subscription.remove();
-    }, [isUpdating, processRouting]);
+    }, [isUpdating, processRouting, router]);
 
     useEffect(() => {
         async function onFetchUpdateAsync() {
@@ -412,8 +420,8 @@ function RootLayoutContent() {
         };
     }, [isUpdating, handleNotifeeInteraction, handleNotificationNavigation]);
 
-    // --- 🔹 LOADING UI ---
-    if (!fontsLoaded || isUpdating || !appReady) {
+    // ⚡️ UPDATED LOADING UI: Now holds until safeAreaReady is true
+    if (!fontsLoaded || isUpdating || !appReady || !safeAreaReady) {
         return (
             <AnimeLoading
                 message={isUpdating ? "UPDATING_CORE" : "LOADING_PAGE"}
@@ -440,7 +448,8 @@ function RootLayoutContent() {
 
 export default function RootLayout() {
     return (
-        <SafeAreaProvider>
+        // ⚡️ Added initialMetrics to prevent visual jitter on first frame
+        <SafeAreaProvider initialMetrics={initialWindowMetrics}>
             <UserProvider>
                 <StreakProvider>
                     <ClanProvider>

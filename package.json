@@ -11,13 +11,13 @@
   },
   "dependencies": {
     "@expo/vector-icons": "^15.0.3",
+    "@legendapp/list": "^2.0.19",
     "@notifee/react-native": "^9.1.8",
     "@react-native-async-storage/async-storage": "^2.2.0",
     "@react-native-picker/picker": "2.11.1",
     "@react-navigation/bottom-tabs": "^7.4.0",
     "@react-navigation/elements": "^2.9.3",
     "@react-navigation/native": "^7.1.8",
-    "@shopify/flash-list": "^2.3.0",
     "@shopify/react-native-skia": "^2.5.1",
     "eas": "^0.1.0",
     "eas-cli": "^16.28.0",
@@ -51,8 +51,8 @@
     "expo-video": "~3.0.16",
     "expo-web-browser": "^15.0.10",
     "nativewind": "^4.2.1",
-    "react": "^19.1.4",
-    "react-dom": "^19.1.4",
+    "react": "19.1.0",
+    "react-dom": "19.1.0",
     "react-native": "^0.81.5",
     "react-native-copilot": "^3.3.3",
     "react-native-css-interop": "^0.2.1",
@@ -60,8 +60,9 @@
     "react-native-image-pan-zoom": "^2.1.12",
     "react-native-image-viewing": "^0.2.2",
     "react-native-mmkv": "^4.2.0",
+    "react-native-nitro-modules": "^0.35.0",
+    "react-native-pager-view": "^6.9.1",
     "react-native-purchases": "^9.10.3",
-    "react-native-purchases-ui": "^9.10.3",
     "react-native-reanimated": "~4.1.1",
     "react-native-safe-area-context": "~5.6.0",
     "react-native-screens": "~4.16.0",
@@ -72,6 +73,8 @@
     "react-native-webview": "13.15.0",
     "react-native-worklets": "0.5.1",
     "react-native-youtube-iframe": "^2.4.1",
+    "react-test-renderer": "19.1.0",
+    "rive-react-native": "^9.8.1",
     "swr": "^2.3.8",
     "tailwindcss": "^3.4.17"
   },
@@ -82,7 +85,9 @@
     "eslint-config-expo": "^10.0.0",
     "typescript": "^5.9.3"
   },
-  "overrides": {},
+  "overrides": {
+    "react-native-renderer": "19.1.4"
+  },
   "private": true,
   "optionalDependencies": {
     "lightningcss-linux-x64-gnu": "^1.30.2"

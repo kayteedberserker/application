@@ -1,5 +1,5 @@
 import { Ionicons, MaterialCommunityIcons } from "@expo/vector-icons";
-import AsyncStorage from "@react-native-async-storage/async-storage";
+import { useMMKV } from "react-native-mmkv"; // 🔹 Swapped to MMKV
 import { useColorScheme as useNativeWind } from "nativewind";
 import { useCallback, useEffect, useState } from "react";
 import {
@@ -22,6 +22,9 @@ import apiFetch from "../../utils/apiFetch";
 const CACHE_KEY = "referral_event_cache_v4";
 
 export default function ReferralScreen() {
+    // 🔹 Strictly use the useMMKV hook
+    const storage = useMMKV();
+
     const { colorScheme } = useNativeWind();
     const isDark = colorScheme === "dark";
     const { user } = useUser();
@@ -46,7 +49,7 @@ export default function ReferralScreen() {
         { id: 3, title: "Legendary Sannin", reward: "$100", color: "#fbbf24", icon: "crown" },
     ];
 
-    const fetchReferralData = async (isBackground = false) => {
+    const fetchReferralData = useCallback(async (isBackground = false) => {
         // Show loading if it's the first time or not a background refresh
         if (!isBackground && data.leaderboard.length === 0) setLoading(true);
 
@@ -67,7 +70,8 @@ export default function ReferralScreen() {
                     progress: result.progress
                 };
                 setData(updatedData);
-                await AsyncStorage.setItem(CACHE_KEY, JSON.stringify(updatedData));
+                // 🔹 Synchronous Cache Save
+                storage.set(CACHE_KEY, JSON.stringify(updatedData));
             }
         } catch (error) {
             console.error("Failed to fetch event data:", error);
@@ -75,22 +79,21 @@ export default function ReferralScreen() {
             setLoading(false);
             setRefreshing(false);
         }
-    };
+    }, [data.leaderboard.length, storage]);
 
+    // 🔹 Synchronous Initial Load
     useEffect(() => {
-        const loadInitialData = async () => {
-            try {
-                const cached = await AsyncStorage.getItem(CACHE_KEY);
-                if (cached) {
-                    setData(JSON.parse(cached));
-                }
-                fetchReferralData(true);
-            } catch (e) {
-                fetchReferralData();
+        try {
+            const cached = storage.getString(CACHE_KEY);
+            if (cached) {
+                setData(JSON.parse(cached));
             }
-        };
-        loadInitialData();
-    }, []);
+        } catch (e) {
+            console.log("Cache parse error:", e);
+        }
+        // Fetch fresh data in the background
+        fetchReferralData(true);
+    }, [fetchReferralData, storage]);
 
     const copyToClipboard = () => {
         Clipboard.setString(referralCode);
@@ -111,7 +114,7 @@ export default function ReferralScreen() {
     const onRefresh = useCallback(() => {
         setRefreshing(true);
         fetchReferralData(true);
-    }, []);
+    }, [fetchReferralData]);
 
     // 🔹 LOADING STATE
     if (loading) {

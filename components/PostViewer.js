@@ -1,18 +1,18 @@
 import { MaterialCommunityIcons } from '@expo/vector-icons';
-import AsyncStorage from "@react-native-async-storage/async-storage";
 import { useColorScheme } from "nativewind";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import {
     Animated,
     AppState,
     DeviceEventEmitter,
-    Dimensions,
     Easing,
-    FlatList,
     InteractionManager,
     RefreshControl,
     View
 } from "react-native";
+// ⚡️ LegendList: The JS-native high-performance list
+import { LegendList } from "@legendapp/list"; 
+import { useMMKV } from 'react-native-mmkv'; 
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import useSWRInfinite from "swr/infinite";
 import apiFetch from "../utils/apiFetch";
@@ -23,17 +23,14 @@ import { Text } from "./Text";
 
 const fetcher = (url) => apiFetch(url).then(res => res.json());
 
-const { width } = Dimensions.get('window');
 const LIMIT = 15;
 const CACHE_KEY = "POSTS_CACHE_V1";
 
-// 🧠 Global Session Tracker (Safe Object)
 const SESSION_STATE = {
     memoryCache: null,
     hasFetched: false
 };
 
-// 🔹 Helper: Fisher-Yates Shuffle
 const shuffleArray = (array) => {
     const newArr = [...array];
     for (let i = newArr.length - 1; i > 0; i--) {
@@ -43,19 +40,9 @@ const shuffleArray = (array) => {
     return newArr;
 };
 
-const saveHeavyCache = async (key, data) => {
-    try {
-        const cacheEntry = {
-            data: data,
-            timestamp: Date.now(),
-        };
-        await AsyncStorage.setItem(key, JSON.stringify(cacheEntry));
-    } catch (e) {
-        console.error("Cache Save Error", e);
-    }
-};
-
 export default function PostsViewer() {
+    const storage = useMMKV(); 
+    
     const scrollRef = useRef(null);
     const insets = useSafeAreaInsets();
     const { colorScheme } = useColorScheme();
@@ -68,17 +55,27 @@ export default function PostsViewer() {
     const [isOfflineMode, setIsOfflineMode] = useState(false);
     const [refreshing, setRefreshing] = useState(false);
 
-    // 🔹 Ref to store shuffled batches so they don't re-shuffle on every render
     const shuffledPagesRef = useRef({});
-
     const pulseAnim = useRef(new Animated.Value(0)).current;
+
+    const saveHeavyCache = useCallback((data) => {
+        try {
+            const cacheEntry = {
+                data: data,
+                timestamp: Date.now(),
+            };
+            storage.set(CACHE_KEY, JSON.stringify(cacheEntry));
+        } catch (e) {
+            console.error("MMKV Save Error", e);
+        }
+    }, [storage]);
 
     useEffect(() => {
         let isMounted = true;
-        const prepare = async () => {
+        const prepare = () => {
             try {
                 if (!SESSION_STATE.memoryCache) {
-                    const local = await AsyncStorage.getItem(CACHE_KEY);
+                    const local = storage.getString(CACHE_KEY);
                     if (local && isMounted) {
                         const parsed = JSON.parse(local);
                         if (parsed && Array.isArray(parsed.data)) {
@@ -88,7 +85,7 @@ export default function PostsViewer() {
                     }
                 }
             } catch (e) {
-                console.error("Cache load error", e);
+                console.error("MMKV load error", e);
             }
 
             InteractionManager.runAfterInteractions(() => {
@@ -96,29 +93,19 @@ export default function PostsViewer() {
                     setReady(true);
                     setTimeout(() => {
                         if (isMounted) setCanFetch(true);
-                    }, 600);
+                    }, 400); 
                 }
             });
         };
         prepare();
         return () => { isMounted = false; };
-    }, []);
+    }, [storage]);
 
     useEffect(() => {
         const animation = Animated.loop(
             Animated.sequence([
-                Animated.timing(pulseAnim, {
-                    toValue: 1,
-                    duration: 1500,
-                    easing: Easing.linear,
-                    useNativeDriver: true,
-                }),
-                Animated.timing(pulseAnim, {
-                    toValue: 0,
-                    duration: 1500,
-                    easing: Easing.linear,
-                    useNativeDriver: true,
-                })
+                Animated.timing(pulseAnim, { toValue: 1, duration: 1500, easing: Easing.linear, useNativeDriver: true }),
+                Animated.timing(pulseAnim, { toValue: 0, duration: 1500, easing: Easing.linear, useNativeDriver: true })
             ])
         );
         animation.start();
@@ -144,7 +131,7 @@ export default function PostsViewer() {
             setRefreshing(false);
             SESSION_STATE.memoryCache = newData;
             SESSION_STATE.hasFetched = true;
-            saveHeavyCache(CACHE_KEY, newData);
+            saveHeavyCache(newData); 
         },
         onError: () => {
             setIsOfflineMode(true);
@@ -154,11 +141,11 @@ export default function PostsViewer() {
 
     const handleRefresh = useCallback(async () => {
         setRefreshing(true);
-        // Clear shuffle cache on refresh
         shuffledPagesRef.current = {};
         SESSION_STATE.hasFetched = false;
         await mutate();
     }, [mutate]);
+
     const [visibleIds, setVisibleIds] = useState(new Set());
 
     const onViewableItemsChanged = useRef(({ viewableItems }) => {
@@ -166,11 +153,8 @@ export default function PostsViewer() {
         setVisibleIds(newVisible);
     }).current;
 
-    const viewabilityConfig = useRef({
-        itemVisiblePercentThreshold: 60,
-    }).current;
+    const viewabilityConfig = useRef({ itemVisiblePercentThreshold: 60 }).current;
 
-    // 🛠️ UPDATED: Stable Frontend Shuffle Logic
     const posts = useMemo(() => {
         const sourceData = data || cachedData;
         if (!sourceData || !Array.isArray(sourceData)) return [];
@@ -180,10 +164,8 @@ export default function PostsViewer() {
 
         sourceData.forEach((page, index) => {
             if (page?.posts && Array.isArray(page.posts)) {
-                // Use the ID of the first post as a key to cache the shuffle for this page
                 const pageKey = page.posts[0]?._id || `page-${index}`;
 
-                // If we haven't shuffled this batch yet, shuffle it and save it
                 if (!shuffledPagesRef.current[pageKey]) {
                     shuffledPagesRef.current[pageKey] = shuffleArray(page.posts);
                 }
@@ -211,32 +193,27 @@ export default function PostsViewer() {
         return () => sub.remove();
     }, []);
 
-    const loadMore = () => {
+    const loadMore = useCallback(() => {
         if (!hasMore || isValidating || !ready || isLoading || isOfflineMode) return;
         setSize(size + 1);
-    };
+    }, [hasMore, isValidating, ready, isLoading, isOfflineMode, size, setSize]);
 
-    // 🔹 Loading Animation maintained per instructions
-    if (!ready || (isLoading && posts.length === 0)) {
-        return <AnimeLoading message="Loading Posts" subMessage="Prepping Otaku content" />
-    }
-
-    const renderItem = ({ item }) => {
+    const renderItem = useCallback(({ item }) => {
         return (
-            <View key={item._id}>
-                <PostCard
-                    post={item}
-                    isFeed
-                    posts={posts}
-                    setPosts={mutate}
-                    syncing={!SESSION_STATE.hasFetched || isValidating}
-                    isVisible={visibleIds.has(item._id)}
-                />
-            </View>
+            <PostCard
+                post={item}
+                authorData={item.authorData} 
+                clanData={item.clanData}
+                isFeed
+                posts={posts}
+                setPosts={mutate}
+                syncing={!SESSION_STATE.hasFetched || isValidating}
+                isVisible={visibleIds.has(item._id)}
+            />
         );
-    };
+    }, [posts, visibleIds, isValidating, mutate]);
 
-    const ListHeader = () => (
+    const ListHeader = useCallback(() => (
         <View className="mb-10 pb-2">
             <View className="flex-row items-center gap-3 mb-1">
                 <View className={`h-2 w-2 rounded-full ${isOfflineMode ? 'bg-orange-500' : 'bg-blue-600'}`} />
@@ -251,11 +228,16 @@ export default function PostsViewer() {
                 <View className={`h-[2px] w-24 mt-2 ${isOfflineMode ? 'bg-orange-500' : 'bg-blue-600'}`} />
             </View>
         </View>
-    );
+    ), [isOfflineMode, isDark]);
+
+    // Requirement: Show loading animation when loading
+    if (!ready || (isLoading && posts.length === 0)) {
+        return <AnimeLoading message="Loading Posts" subMessage="Prepping Otaku content" />
+    }
 
     return (
         <View className={`flex-1 ${isDark ? "bg-[#050505]" : "bg-white"}`}>
-            <FlatList
+            <LegendList
                 ref={scrollRef}
                 data={posts}
                 keyExtractor={(item) => item._id}
@@ -266,6 +248,12 @@ export default function PostsViewer() {
                     paddingBottom: insets.bottom + 120,
                 }}
                 renderItem={renderItem}
+                
+                // PERFORMANCE TUNING FOR DEV MODE
+                estimatedItemSize={600} 
+                drawDistance={2000} // Pre-renders more items in Dev to ensure zero blanking
+                recycleItems={true} // Reuses views similar to FlashList but with JS logic
+                
                 onViewableItemsChanged={onViewableItemsChanged}
                 viewabilityConfig={viewabilityConfig}
                 onEndReached={loadMore}
@@ -281,20 +269,15 @@ export default function PostsViewer() {
                         progressBackgroundColor={isDark ? "#1a1a1a" : "#ffffff"}
                     />
                 }
-                removeClippedSubviews={true}
-                initialNumToRender={5}
-                maxToRenderPerBatch={5}
-                windowSize={3}
-                updateCellsBatchingPeriod={100}
                 onScroll={(e) => {
                     const offsetY = e.nativeEvent.contentOffset.y;
                     DeviceEventEmitter.emit("onScroll", offsetY);
                 }}
-                scrollEventThrottle={32}
+                scrollEventThrottle={16} 
                 ListFooterComponent={
                     <View className="py-12 items-center justify-center min-h-[140px]">
                         {(isLoading || (isValidating && size > 1)) ? (
-                            <SyncLoading />
+                            <SyncLoading /> // Required loading animation
                         ) : !hasMore && posts.length > 0 ? (
                             <Text className="text-[10px] font-[900] uppercase tracking-[0.5em] text-gray-400">
                                 End of Transmission

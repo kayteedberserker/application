@@ -1,5 +1,5 @@
 import { Ionicons } from "@expo/vector-icons";
-import AsyncStorage from "@react-native-async-storage/async-storage";
+import { useMMKV } from "react-native-mmkv"; // 🔹 Swapped to MMKV
 import * as Application from 'expo-application';
 import Constants from "expo-constants";
 import * as Notifications from "expo-notifications";
@@ -42,6 +42,9 @@ const ANIME_LIST = [
 const GENRE_LIST = ["Shonen", "Seinen", "Romance", "Isekai", "Psychological", "Ecchi", "Action", "Slice of Life", "Manga", "Fantasy", "Sci-Fi", "Comedy", "Manhwa"];
 
 export default function FirstLaunchScreen() {
+  // 🔹 Strictly use the useMMKV hook for the storage instance
+  const storage = useMMKV();
+
   const CustomAlert = useAlert();
   const router = useRouter();
   const isMounted = useRef(true);
@@ -73,31 +76,41 @@ export default function FirstLaunchScreen() {
 
   useEffect(() => {
     isMounted.current = true;
-    (async () => {
-      try {
-        const storedUser = await AsyncStorage.getItem("mobileUser");
-        if (storedUser && isMounted.current) {
-          const parsed = JSON.parse(storedUser);
-          setUser(parsed);
-          router.replace("/profile");
-          return;
-        }
 
-        if (Platform.OS === 'android') {
-          try {
-            const installReferrer = await Application.getInstallReferrerAsync();
-            const isInvalid = !installReferrer || installReferrer.includes("google-play") || installReferrer.includes("(not%20set)");
-            if (!isInvalid && isMounted.current) {
-              setReferrerCode(installReferrer);
-              setIsAutoReferrer(true);
-            }
-          } catch (refErr) { console.log("Referrer not available:", refErr); }
+    // 1. Synchronous Check: If user exists, redirect instantly
+    try {
+      const storedUser = storage.getString("mobileUser");
+      if (storedUser && isMounted.current) {
+        const parsed = JSON.parse(storedUser);
+        setUser(parsed);
+        router.replace("/profile");
+        return; // Exit early, no need to check referrer
+      }
+    } catch (e) {
+      console.error("MMKV read error", e);
+    }
+
+    // 2. Asynchronous Check: Get Android install referrer for new users
+    const checkReferrer = async () => {
+      if (Platform.OS === 'android') {
+        try {
+          const installReferrer = await Application.getInstallReferrerAsync();
+          const isInvalid = !installReferrer || installReferrer.includes("google-play") || installReferrer.includes("(not%20set)");
+          if (!isInvalid && isMounted.current) {
+            setReferrerCode(installReferrer);
+            setIsAutoReferrer(true);
+          }
+        } catch (refErr) { 
+          console.log("Referrer not available:", refErr); 
         }
-      } catch (e) { console.error("Storage error", e); }
-      setLoading(false);
-    })();
+      }
+      if (isMounted.current) setLoading(false);
+    };
+
+    checkReferrer();
+
     return () => { isMounted.current = false; };
-  }, []);
+  }, [router, setUser, storage]);
 
   async function registerForPushNotificationsAsync() {
     if (Platform.OS === "web") return null;
@@ -164,14 +177,12 @@ export default function FirstLaunchScreen() {
             favCharacter: favCharacter.trim()
           }
         }),
-      }
-      );
+      });
 
       const data = await res.json();
       if (!res.ok) throw new Error(data.message || "Operation failed");
 
       // 🔹 Construct the user object
-      // If recovering, we use preferences returned from the backend
       const userData = {
         deviceId: targetId,
         username: data.user?.username || username.trim(),
@@ -185,8 +196,10 @@ export default function FirstLaunchScreen() {
         }
       };
 
-      await AsyncStorage.setItem("mobileUser", JSON.stringify(userData));
+      // 🔹 Synchronous MMKV set
+      storage.set("mobileUser", JSON.stringify(userData));
       setUser(userData);
+      
       if (refreshStreak) refreshStreak();
       setTimeout(() => router.replace("/profile"), 100);
 
