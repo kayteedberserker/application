@@ -5,61 +5,64 @@ import apiFetch, { syncApiUser } from "../utils/apiFetch";
 const UserContext = createContext();
 
 export const UserProvider = ({ children }) => {
-  // 🔹 Use ONLY useMMKV hook to get the storage instance
   const storage = useMMKV();
   
-  const [user, setUser] = useState(null);
-  const [loading, setLoading] = useState(true);
-  const hasFetched = useRef(false); // 🔹 Prevents repeated fetching
+  // ⚡️ 1. SYNCHRONOUS INIT: Instantly load user from cache on Frame 1
+  const [user, setUser] = useState(() => {
+    try {
+      const stored = storage.getString("mobileUser");
+      if (stored) {
+        const parsedUser = JSON.parse(stored);
+        syncApiUser(parsedUser); // ⚡️ Instantly feed headers to apiFetch!
+        return parsedUser;
+      }
+    } catch (e) {
+      console.error("Failed to parse user from MMKV", e);
+    }
+    return null;
+  });
 
-  // Helper to update both state and MMKV storage
+  // ⚡️ 2. NO INITIAL FREEZE: Only show loading if there is literally NO user cached
+  const [loading, setLoading] = useState(() => {
+    const stored = storage.getString("mobileUser");
+    return !stored; // Returns false if user exists, true if brand new user
+  });
+
+  const hasFetched = useRef(false); 
+
   const updateUserData = (newData) => {
     setUser(newData);
     storage.set("mobileUser", JSON.stringify(newData));
-    syncApiUser(newData); // 2. ADD THIS LINE HERE!
+    syncApiUser(newData); 
   };
 
   useEffect(() => {
-    const loadAndSyncUser = async () => {
-      let currentUser = null;
-
-      try {
-        // 🔹 Manually get and parse using the useMMKV instance
-        const stored = storage.getString("mobileUser");
-        if (stored) {
-          currentUser = JSON.parse(stored);
-          setUser(currentUser);
-        }
-      } catch (e) {
-        console.error("Failed to parse user from MMKV", e);
-      }
-
-      // 🔹 Exit if already done or no deviceId to sync with
-      if (hasFetched.current || !currentUser?.deviceId) {
+    const backgroundSyncUser = async () => {
+      // Exit if already done or no deviceId to sync with
+      if (hasFetched.current || !user?.deviceId) {
         setLoading(false);
         return;
       }
 
-      // Only sync if data is missing (like referralCode)
-      if (!currentUser.referralCode) {
-        hasFetched.current = true; // 🔹 Mark as fetched immediately
-        setLoading(true);
-
+      // ⚡️ 3. SILENT BACKGROUND SYNC: Fetch missing data without blocking the UI
+      if (!user.referralCode) {
+        hasFetched.current = true; 
+        
+        // 🚨 Notice we removed setLoading(true) from here! It runs invisibly now.
         try {
-          // Trigger the network request - anything including loading should have the animation
-          const res = await apiFetch(`https://oreblogda.com/api/users/me?fingerprint=${currentUser.deviceId}`);
+          const res = await apiFetch(`/users/me?fingerprint=${user.deviceId}`);
           
           if (res.ok) {
             const dbUser = await res.json();
             const updatedUser = {
-              ...currentUser,
+              ...user,
               country: dbUser.country || "Unknown",
-              username: dbUser.username || currentUser.username,
-              referralCode: dbUser.referralCode || currentUser.referralCode,
-              invitedUsers: dbUser.invitedUsers || currentUser.invitedUsers || [],
+              username: dbUser.username || user.username,
+              referralCode: dbUser.referralCode || user.referralCode,
+              invitedUsers: dbUser.invitedUsers || user.invitedUsers || [],
             };
 
-            // 🔹 Update state and MMKV manually
+            // Update state and MMKV silently
             updateUserData(updatedUser);
           }
         } catch (fetchErr) {
@@ -72,14 +75,11 @@ export const UserProvider = ({ children }) => {
       }
     };
 
-    loadAndSyncUser();
-  }, [storage]); // Depend on storage instance from useMMKV
+    backgroundSyncUser();
+  }, [user?.deviceId]); // Only re-run if deviceId changes
 
   return (
     <UserContext.Provider value={{ user, setUser: updateUserData, loading }}>
-      {/* Note: Since loading is managed here, ensure your UI 
-          displays the loading animation when 'loading' is true. 
-      */}
       {children}
     </UserContext.Provider>
   );
