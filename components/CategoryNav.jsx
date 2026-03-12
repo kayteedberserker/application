@@ -45,7 +45,7 @@ const NavPill = memo(({ item, index, isActive, isDark, onPress }) => {
             )}
         </TouchableOpacity>
     );
-});
+}, (prevProps, nextProps) => prevProps.isActive === nextProps.isActive && prevProps.isDark === nextProps.isDark);
 
 export default function CategoryNav({ isDark }) {
     const [activeIndex, setActiveIndex] = useState(0);
@@ -55,7 +55,6 @@ export default function CategoryNav({ isDark }) {
     const router = useRouter();
     const navListRef = useRef(null);
 
-    // Sync active index when swiping
     useEffect(() => {
         const sub = DeviceEventEmitter.addListener("pageSwiped", (index) => {
             if (activeIndexRef.current !== index) {
@@ -69,7 +68,7 @@ export default function CategoryNav({ isDark }) {
                         } else {
                             navListRef.current.scrollToOffset({ offset: 0, animated: true });
                         }
-                    } catch (err) { /* index not in view yet */ }
+                    } catch (err) { /* ignore scroll errors */ }
                 }
             }
         });
@@ -94,13 +93,11 @@ export default function CategoryNav({ isDark }) {
         setActiveIndex(actualSwiperIndex);
         activeIndexRef.current = actualSwiperIndex;
 
-        // ⚡️ Fix: Expo Router root path detection
         const isHome = pathname === "/" || pathname === "/index";
 
         if (isHome) {
             DeviceEventEmitter.emit("scrollToIndex", actualSwiperIndex);
         } else {
-            // ⚡️ Fix: Use Params to navigate back to Home and set the index
             router.replace({
                 pathname: "/",
                 params: { initialSector: actualSwiperIndex }
@@ -133,8 +130,20 @@ export default function CategoryNav({ isDark }) {
                 extraData={activeIndex} 
                 showsHorizontalScrollIndicator={false}
                 style={{ width: '100%' }}
-                contentContainerStyle={{ paddingHorizontal: 15, alignItems: 'center' }}
+                // ⚡️ KEY CHANGE: flexGrow and justifyContent: center
+                contentContainerStyle={{ 
+                    paddingHorizontal: 15, 
+                    alignItems: 'center',
+                    flexGrow: 1, 
+                    justifyContent: 'center' 
+                }}
                 renderItem={renderItem}
+                // Prevents layout jumping when scrolling to index
+                onScrollToIndexFailed={(info) => {
+                    setTimeout(() => {
+                        navListRef.current?.scrollToIndex({ index: info.index, animated: true, viewPosition: 0.5 });
+                    }, 100);
+                }}
             />
         </View>
     );
