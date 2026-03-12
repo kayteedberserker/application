@@ -10,10 +10,10 @@ import { Stack, usePathname, useRootNavigationState, useRouter } from "expo-rout
 import * as Updates from 'expo-updates';
 import { useColorScheme } from "nativewind";
 import { useCallback, useEffect, useRef, useState } from "react";
-import { AppState, BackHandler, DeviceEventEmitter, InteractionManager, Platform, StatusBar, View } from "react-native";
+import { AppState, BackHandler, DeviceEventEmitter, Platform, StatusBar, View } from "react-native";
 import Purchases from 'react-native-purchases'; 
-// ⚡️ Imported initialWindowMetrics to prevent Layout Shift
-import { SafeAreaProvider, initialWindowMetrics, useSafeAreaInsets } from "react-native-safe-area-context";
+// ⚡️ Only need initialWindowMetrics to prevent Layout Shift
+import { SafeAreaProvider, initialWindowMetrics } from "react-native-safe-area-context";
 import Toast from 'react-native-toast-message';
 import { useMMKV } from 'react-native-mmkv';
 
@@ -41,7 +41,7 @@ const REVENUE_CAT_API_KEYS = {
 // 🔹 NOTIFICATION HANDLER
 Notifications.setNotificationHandler({
     handleNotification: async (notification) => {
-        const { title, body, data } = notification.request.content;
+        const { data } = notification.request.content;
         const groupId = data?.groupId;
 
         if (Platform.OS === 'android' && groupId) {
@@ -96,34 +96,18 @@ function RootLayoutContent() {
     const pathname = usePathname();
     const { user } = useUser();
     
-    // ⚡️ Pulling insets to verify they have loaded
-    const insets = useSafeAreaInsets();
-    
     const storage = useMMKV();
     
     const rootNavigationState = useRootNavigationState();
     const isNavigationReady = rootNavigationState?.key != null;
 
-    const [isSyncing, setIsSyncing] = useState(true);
     const [isUpdating, setIsUpdating] = useState(false);
     const [appReady, setAppReady] = useState(false);
-    // ⚡️ New state to hold loading screen until layout is fully calculated
-    const [safeAreaReady, setSafeAreaReady] = useState(false);
 
     const appReadyRef = useRef(false);
     const pendingNavigation = useRef(null);
-    const appState = useRef(AppState.currentState);
 
     useEffect(() => { appReadyRef.current = appReady; }, [appReady]);
-
-    // ⚡️ Wait for safe area layout to resolve before unmounting loading screen
-    useEffect(() => {
-        // A tiny timeout ensures the native UI thread has completely finished its layout pass
-        const timer = setTimeout(() => {
-            setSafeAreaReady(true);
-        }, 150);
-        return () => clearTimeout(timer);
-    }, [insets.top]); // Adding insets.top ensures it reacts to notch/status bar changes
 
     // 🔹 REVENUECAT INITIALIZATION LOGIC
     useEffect(() => {
@@ -174,7 +158,7 @@ function RootLayoutContent() {
                             }
                         }
                     } catch (e) {
-                        storage.delete(key); // Delete if unparseable/corrupted
+                        storage.delete(key); 
                     }
                 }
             } catch (err) {
@@ -349,10 +333,11 @@ function RootLayoutContent() {
         ...FontAwesome.font,
     });
 
+    // ⚡️ COMPLETELY REMOVED INTERACTION MANAGER
     useEffect(() => {
         if (!fontsLoaded || isUpdating) return;
 
-        const task = InteractionManager.runAfterInteractions(async () => {
+        const setupNotifications = async () => {
             if (Platform.OS === 'android') {
                 await notifee.createChannel({
                     id: 'default',
@@ -363,16 +348,16 @@ function RootLayoutContent() {
 
             const token = await registerForPushNotificationsAsync();
             if (token && user?.deviceId) {
+                // Fire and forget, don't await this
                 apiFetch("https://oreblogda.com/api/users/update-push-token", {
                     method: 'POST',
                     headers: { 'Content-Type': 'application/json' },
                     body: JSON.stringify({ deviceId: user.deviceId, pushToken: token })
                 }).catch(() => { });
             }
-            setIsSyncing(false);
-        });
+        };
 
-        return () => task.cancel();
+        setupNotifications();
     }, [fontsLoaded, user?.deviceId, isUpdating]);
 
     // 🔹 NOTIFICATION LISTENERS
@@ -420,8 +405,9 @@ function RootLayoutContent() {
         };
     }, [isUpdating, handleNotifeeInteraction, handleNotificationNavigation]);
 
-    // ⚡️ UPDATED LOADING UI: Now holds until safeAreaReady is true
-    if (!fontsLoaded || isUpdating || !appReady || !safeAreaReady) {
+    // ⚡️ REMOVED contextLoading and safeAreaReady blocks!
+    // The safe area layout jump is fixed purely by the initialWindowMetrics prop below.
+    if (!fontsLoaded || isUpdating || !appReady) {
         return (
             <AnimeLoading
                 message={isUpdating ? "UPDATING_CORE" : "LOADING_PAGE"}
@@ -448,7 +434,7 @@ function RootLayoutContent() {
 
 export default function RootLayout() {
     return (
-        // ⚡️ Added initialMetrics to prevent visual jitter on first frame
+        // ⚡️ This is what fixes the layout shift natively, instantly.
         <SafeAreaProvider initialMetrics={initialWindowMetrics}>
             <UserProvider>
                 <StreakProvider>
