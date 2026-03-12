@@ -6,7 +6,6 @@ import {
     AppState,
     DeviceEventEmitter,
     Easing,
-    InteractionManager,
     RefreshControl,
     View
 } from "react-native";
@@ -31,15 +30,6 @@ const SESSION_STATE = {
     hasFetched: false
 };
 
-const shuffleArray = (array) => {
-    const newArr = [...array];
-    for (let i = newArr.length - 1; i > 0; i--) {
-        const j = Math.floor(Math.random() * (i + 1));
-        [newArr[i], newArr[j]] = [newArr[j], newArr[i]];
-    }
-    return newArr;
-};
-
 export default function PostsViewer() {
     const storage = useMMKV(); 
     
@@ -47,15 +37,28 @@ export default function PostsViewer() {
     const insets = useSafeAreaInsets();
     const { colorScheme } = useColorScheme();
     const isDark = colorScheme === "dark";
-    const appState = useRef(AppState.currentState);
 
-    const [ready, setReady] = useState(false);
-    const [canFetch, setCanFetch] = useState(false);
-    const [cachedData, setCachedData] = useState(SESSION_STATE.memoryCache);
+    // ⚡️ Synchronous Cache Initialization (Instantly available on Frame 1)
+    const [cachedData, setCachedData] = useState(() => {
+        if (SESSION_STATE.memoryCache) return SESSION_STATE.memoryCache;
+        try {
+            const local = storage.getString(CACHE_KEY);
+            if (local) {
+                const parsed = JSON.parse(local);
+                if (parsed && Array.isArray(parsed.data)) {
+                    SESSION_STATE.memoryCache = parsed.data;
+                    return parsed.data;
+                }
+            }
+        } catch (e) {
+            console.error("MMKV load error", e);
+        }
+        return undefined;
+    });
+
     const [isOfflineMode, setIsOfflineMode] = useState(false);
     const [refreshing, setRefreshing] = useState(false);
 
-    const shuffledPagesRef = useRef({});
     const pulseAnim = useRef(new Animated.Value(0)).current;
 
     const saveHeavyCache = useCallback((data) => {
@@ -71,37 +74,6 @@ export default function PostsViewer() {
     }, [storage]);
 
     useEffect(() => {
-        let isMounted = true;
-        const prepare = () => {
-            try {
-                if (!SESSION_STATE.memoryCache) {
-                    const local = storage.getString(CACHE_KEY);
-                    if (local && isMounted) {
-                        const parsed = JSON.parse(local);
-                        if (parsed && Array.isArray(parsed.data)) {
-                            setCachedData(parsed.data);
-                            SESSION_STATE.memoryCache = parsed.data;
-                        }
-                    }
-                }
-            } catch (e) {
-                console.error("MMKV load error", e);
-            }
-
-            InteractionManager.runAfterInteractions(() => {
-                if (isMounted) {
-                    setReady(true);
-                    setTimeout(() => {
-                        if (isMounted) setCanFetch(true);
-                    }, 400); 
-                }
-            });
-        };
-        prepare();
-        return () => { isMounted = false; };
-    }, [storage]);
-
-    useEffect(() => {
         const animation = Animated.loop(
             Animated.sequence([
                 Animated.timing(pulseAnim, { toValue: 1, duration: 1500, easing: Easing.linear, useNativeDriver: true }),
@@ -112,20 +84,18 @@ export default function PostsViewer() {
         return () => animation.stop();
     }, [pulseAnim]);
 
+    // ⚡️ No more artificial delays. Just fetch the next page.
     const getKey = (pageIndex, previousPageData) => {
-        if (!ready || !canFetch) return null;
         if (previousPageData && previousPageData.posts?.length < LIMIT) return null;
         return `/posts?page=${pageIndex + 1}&limit=${LIMIT}`;
     };
 
     const { data, size, setSize, isLoading, isValidating, mutate } = useSWRInfinite(getKey, fetcher, {
-        refreshInterval: 0,
-        revalidateOnFocus: false,
+        revalidateOnFocus: true, // Re-fetch if they leave the app and come back
         revalidateOnReconnect: true,
-        revalidateIfStale: false,
-        revalidateOnMount: !SESSION_STATE.hasFetched,
-        dedupingInterval: 10000,
-        fallbackData: cachedData || undefined,
+        // ⚡️ CRITICAL FIX: Forces SWR to fetch in the background even if fallbackData is present
+        revalidateIfStale: true, 
+        fallbackData: cachedData,
         onSuccess: (newData) => {
             setIsOfflineMode(false);
             setRefreshing(false);
@@ -141,7 +111,6 @@ export default function PostsViewer() {
 
     const handleRefresh = useCallback(async () => {
         setRefreshing(true);
-        shuffledPagesRef.current = {};
         SESSION_STATE.hasFetched = false;
         await mutate();
     }, [mutate]);
@@ -155,6 +124,7 @@ export default function PostsViewer() {
 
     const viewabilityConfig = useRef({ itemVisiblePercentThreshold: 60 }).current;
 
+    // ⚡️ Removed buggy shuffling logic. Flattens and dedupes the feed smoothly.
     const posts = useMemo(() => {
         const sourceData = data || cachedData;
         if (!sourceData || !Array.isArray(sourceData)) return [];
@@ -162,17 +132,9 @@ export default function PostsViewer() {
         const orderedList = [];
         const seenIds = new Set();
 
-        sourceData.forEach((page, index) => {
+        sourceData.forEach((page) => {
             if (page?.posts && Array.isArray(page.posts)) {
-                const pageKey = page.posts[0]?._id || `page-${index}`;
-
-                if (!shuffledPagesRef.current[pageKey]) {
-                    shuffledPagesRef.current[pageKey] = shuffleArray(page.posts);
-                }
-
-                const shuffledBatch = shuffledPagesRef.current[pageKey];
-
-                shuffledBatch.forEach((p) => {
+                page.posts.forEach((p) => {
                     if (p?._id && !seenIds.has(p._id)) {
                         seenIds.add(p._id);
                         orderedList.push(p);
@@ -194,9 +156,9 @@ export default function PostsViewer() {
     }, []);
 
     const loadMore = useCallback(() => {
-        if (!hasMore || isValidating || !ready || isLoading || isOfflineMode) return;
+        if (!hasMore || isValidating || isLoading || isOfflineMode) return;
         setSize(size + 1);
-    }, [hasMore, isValidating, ready, isLoading, isOfflineMode, size, setSize]);
+    }, [hasMore, isValidating, isLoading, isOfflineMode, size, setSize]);
 
     const renderItem = useCallback(({ item }) => {
         return (
@@ -230,8 +192,8 @@ export default function PostsViewer() {
         </View>
     ), [isOfflineMode, isDark]);
 
-    // Requirement: Show loading animation when loading
-    if (!ready || (isLoading && posts.length === 0)) {
+    // Prevent rendering blank lists during initial fetch if cache is totally empty
+    if (isLoading && posts.length === 0) {
         return <AnimeLoading message="Loading Posts" subMessage="Prepping Otaku content" />
     }
 
@@ -249,10 +211,10 @@ export default function PostsViewer() {
                 }}
                 renderItem={renderItem}
                 
-                // PERFORMANCE TUNING FOR DEV MODE
+                // PERFORMANCE TUNING
                 estimatedItemSize={600} 
-                drawDistance={2000} // Pre-renders more items in Dev to ensure zero blanking
-                recycleItems={true} // Reuses views similar to FlashList but with JS logic
+                drawDistance={2000} 
+                recycleItems={true} 
                 
                 onViewableItemsChanged={onViewableItemsChanged}
                 viewabilityConfig={viewabilityConfig}
@@ -277,7 +239,7 @@ export default function PostsViewer() {
                 ListFooterComponent={
                     <View className="py-12 items-center justify-center min-h-[140px]">
                         {(isLoading || (isValidating && size > 1)) ? (
-                            <SyncLoading /> // Required loading animation
+                            <SyncLoading /> 
                         ) : !hasMore && posts.length > 0 ? (
                             <Text className="text-[10px] font-[900] uppercase tracking-[0.5em] text-gray-400">
                                 End of Transmission
