@@ -33,20 +33,8 @@ export default function MainLayout() {
     const insets = useSafeAreaInsets(); 
     const [isActive, setIsActive] = useState(false);
     
-    // ⚡️ New state to prevent Layout Shift
-    const [safeAreaReady, setSafeAreaReady] = useState(false);
-    
     // ⚡️ Initialize Storage
     const storage = useMMKV();
-
-    // ⚡️ Wait for safe area layout to resolve before unmounting loading screen
-    useEffect(() => {
-        // A tiny timeout ensures the native UI thread has completely finished its layout pass
-        const timer = setTimeout(() => {
-            setSafeAreaReady(true);
-        }, 150);
-        return () => clearTimeout(timer);
-    }, [insets.top]); // Triggers calculation based on the device's notch/status bar
     
     useEffect(() => {
         if (pathname === "/Search" || pathname === "/" || pathname === "/authordiary" || pathname === "/profile") {
@@ -219,8 +207,8 @@ export default function MainLayout() {
         DeviceEventEmitter.emit("navigateSafely", route);
     };
     
-    // ⚡️ UPDATED: Now blocks rendering until BOTH context and safeArea are ready
-    if (contextLoading || !safeAreaReady) {
+    // ⚡️ REVERTED: Just check contextLoading. The initialWindowMetrics handles the layout shift safely!
+    if (contextLoading) {
         return <AnimeLoading message="LOADING_PAGE" subMessage="Syncing Account" />;
     }
 
@@ -232,7 +220,6 @@ export default function MainLayout() {
         <View style={{ flex: 1, backgroundColor: isDark ? "#000" : "#fff" }}>
             <StatusBar barStyle={isDark ? "light-content" : "dark-content"} />
 
-            {/* ⚡️ REMOVED initialWindowMetrics from here (it belongs in RootLayout's SafeAreaProvider) */}
             <SafeAreaView 
                 edges={['top', 'left', 'right']}
                 style={{
