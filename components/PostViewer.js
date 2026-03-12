@@ -3,7 +3,6 @@ import { useColorScheme } from "nativewind";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import {
     Animated,
-    AppState,
     DeviceEventEmitter,
     Easing,
     RefreshControl,
@@ -73,6 +72,8 @@ export default function PostsViewer() {
         }
     }, [storage]);
 
+    // Removed the buggy prepare() useEffect entirely! MMKV handles this in the useState now.
+
     useEffect(() => {
         const animation = Animated.loop(
             Animated.sequence([
@@ -84,16 +85,15 @@ export default function PostsViewer() {
         return () => animation.stop();
     }, [pulseAnim]);
 
-    // ⚡️ No more artificial delays. Just fetch the next page.
+    // ⚡️ No more 'ready' or 'canFetch' locks. It fires immediately.
     const getKey = (pageIndex, previousPageData) => {
         if (previousPageData && previousPageData.posts?.length < LIMIT) return null;
         return `/posts?page=${pageIndex + 1}&limit=${LIMIT}`;
     };
 
     const { data, size, setSize, isLoading, isValidating, mutate } = useSWRInfinite(getKey, fetcher, {
-        revalidateOnFocus: true, // Re-fetch if they leave the app and come back
+        revalidateOnFocus: true, 
         revalidateOnReconnect: true,
-        // ⚡️ CRITICAL FIX: Forces SWR to fetch in the background even if fallbackData is present
         revalidateIfStale: true, 
         fallbackData: cachedData,
         onSuccess: (newData) => {
@@ -124,7 +124,6 @@ export default function PostsViewer() {
 
     const viewabilityConfig = useRef({ itemVisiblePercentThreshold: 60 }).current;
 
-    // ⚡️ Removed buggy shuffling logic. Flattens and dedupes the feed smoothly.
     const posts = useMemo(() => {
         const sourceData = data || cachedData;
         if (!sourceData || !Array.isArray(sourceData)) return [];
