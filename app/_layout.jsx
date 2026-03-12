@@ -95,6 +95,7 @@ function RootLayoutContent() {
     const router = useRouter();
     const pathname = usePathname();
     const { user } = useUser();
+    const [minLoadDone, setMinLoadDone] = useState(false);
     
     const storage = useMMKV();
     
@@ -106,7 +107,10 @@ function RootLayoutContent() {
 
     const appReadyRef = useRef(false);
     const pendingNavigation = useRef(null);
-
+useEffect(() => {
+    const t = setTimeout(() => setMinLoadDone(true), 2000);
+    return () => clearTimeout(t);
+  }, []);
     useEffect(() => { appReadyRef.current = appReady; }, [appReady]);
 
     // 🔹 REVENUECAT INITIALIZATION LOGIC
@@ -407,10 +411,10 @@ function RootLayoutContent() {
 
     // ⚡️ REMOVED contextLoading and safeAreaReady blocks!
     // The safe area layout jump is fixed purely by the initialWindowMetrics prop below.
-    if (!fontsLoaded || isUpdating || !appReady) {
+    if (!fontsLoaded || isUpdating || !appReady || !minLoadDone) {
         return (
             <AnimeLoading
-                message={isUpdating ? "UPDATING_CORE" : "LOADING_PAGE"}
+               message={isUpdating ? "UPDATING_CORE" : "LOADING_PAGE"}
                 subMessage={isUpdating ? "Updating system configurations..." : "Fetching Otaku Archives"}
             />
         );
