@@ -18,20 +18,47 @@ const CHANNELS = [
     { id: 'gaming', title: 'Gaming', type: 'category' },
 ];
 
-const Scene = memo(({ item }) => (
-    <View style={{ flex: 1 }}>
-        <View className="flex-1 z-10 bg-transparent">
-            {item.type === 'feed' ? <PostsViewer /> : <CategoryPage forcedId={item.id} />}
+// ⚡️ LAZY LOADED SCENE: Only mounts if it is near the active screen
+const Scene = memo(({ item, index, activeIndex }) => {
+    const [hasLoaded, setHasLoaded] = useState(false);
+
+    // If this scene is the active one, or immediately adjacent (left/right), load it.
+    // Once it loads, it stays loaded so swiping back is instant.
+    if (!hasLoaded && Math.abs(activeIndex - index) <= 1) {
+        setHasLoaded(true);
+    }
+
+    return (
+        <View style={{ flex: 1 }}>
+            <View className="flex-1 z-10 bg-transparent">
+                {/* ⚡️ Only mount the heavy list if it is inside our lazy window */}
+                {hasLoaded ? (
+                    item.type === 'feed' ? <PostsViewer /> : <CategoryPage forcedId={item.id} />
+                ) : null}
+            </View>
+            
+            {/* Show loading indicator ONLY if the heavy list hasn't mounted yet */}
+            {!hasLoaded && (
+                <View 
+                    pointerEvents="none" 
+                    style={{ position: 'absolute', inset: 0, zIndex: -1 }}
+                    className="items-center justify-center bg-[#050505]"
+                >
+                    <ActivityIndicator size="small" color="#2563eb" />
+                </View>
+            )}
         </View>
-        <View 
-            pointerEvents="none" 
-            style={{ position: 'absolute', inset: 0, zIndex: -1 }}
-            className="items-center justify-center bg-[#050505]"
-        >
-            <ActivityIndicator size="small" color="#2563eb" />
-        </View>
-    </View>
-), (p, n) => p.item.id === n.item.id);
+    );
+}, (prevProps, nextProps) => {
+    // ⚡️ AGGRESSIVE MEMOIZATION:
+    // If the scene has already been loaded, tell React to NEVER re-render it from here.
+    // The LegendList inside will handle its own internal renders.
+    const prevInWindow = Math.abs(prevProps.activeIndex - prevProps.index) <= 1;
+    const nextInWindow = Math.abs(nextProps.activeIndex - nextProps.index) <= 1;
+    
+    if (prevInWindow) return true; // Block re-render if it was already loaded
+    return prevInWindow === nextInWindow; // Only re-render when it enters the window
+});
 
 export default function HomePage() {
     const insets = useSafeAreaInsets();
@@ -39,25 +66,27 @@ export default function HomePage() {
     const isDark = colorScheme === "dark";
     
     const pagerRef = useRef(null);
-    const { initialSector } = useLocalSearchParams(); // ⚡️ Listen for incoming redirect
+    const { initialSector } = useLocalSearchParams(); 
+    
     const [activeTitle, setActiveTitle] = useState(CHANNELS[0].title); 
+    // ⚡️ Track numeric index to drive the Lazy Window
+    const [activeIndex, setActiveIndex] = useState(0); 
 
-    // Handle internal swipes/taps
     useEffect(() => {
         const sub = DeviceEventEmitter.addListener("scrollToIndex", (index) => {
             pagerRef.current?.setPage(index); 
+            setActiveIndex(index);
         });
         return () => sub.remove();
     }, []);
 
-    // ⚡️ Handle cross-page navigation via params
     useEffect(() => {
         if (initialSector) {
             const index = parseInt(initialSector);
-            // Slight delay ensures the PagerView is native-ready
             const timer = setTimeout(() => {
                 pagerRef.current?.setPage(index);
                 setActiveTitle(CHANNELS[index].title);
+                setActiveIndex(index);
                 DeviceEventEmitter.emit("pageSwiped", index);
             }, 100);
             return () => clearTimeout(timer);
@@ -67,6 +96,7 @@ export default function HomePage() {
     const onPageSelected = useCallback((e) => {
         const newIndex = e.nativeEvent.position;
         setActiveTitle(CHANNELS[newIndex].title);
+        setActiveIndex(newIndex); // ⚡️ Update the window position
         DeviceEventEmitter.emit("pageSwiped", newIndex);
     }, []);
 
@@ -80,9 +110,10 @@ export default function HomePage() {
                 overdrag={false} 
                 offscreenPageLimit={1} 
             >
-                {CHANNELS.map((item) => (
+                {CHANNELS.map((item, index) => (
                     <View key={item.id} style={{ flex: 1 }} collapsable={false}>
-                        <Scene item={item} />
+                        {/* ⚡️ Pass index and activeIndex to power the Lazy Engine */}
+                        <Scene item={item} index={index} activeIndex={activeIndex} />
                     </View>
                 ))}
             </PagerView>
