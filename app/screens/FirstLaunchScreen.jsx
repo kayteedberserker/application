@@ -100,8 +100,8 @@ export default function FirstLaunchScreen() {
             setReferrerCode(installReferrer);
             setIsAutoReferrer(true);
           }
-        } catch (refErr) { 
-          console.log("Referrer not available:", refErr); 
+        } catch (refErr) {
+          console.log("Referrer not available:", refErr);
         }
       }
       if (isMounted.current) setLoading(false);
@@ -155,7 +155,7 @@ export default function FirstLaunchScreen() {
 
   const handleAction = async () => {
     if (isProcessing) return;
-    setIsProcessing(true);
+    setIsProcessing(true); // 🔹 This triggers your loading animation
 
     try {
       const currentDeviceId = await getFingerprint();
@@ -179,6 +179,9 @@ export default function FirstLaunchScreen() {
         }),
       });
 
+      // 🔹 Basic check for the raw response before parsing JSON
+      if (!res) throw new Error("No response from server.");
+
       const data = await res.json();
       if (!res.ok) throw new Error(data.message || "Operation failed");
 
@@ -199,13 +202,26 @@ export default function FirstLaunchScreen() {
       // 🔹 Synchronous MMKV set
       storage.set("mobileUser", JSON.stringify(userData));
       setUser(userData);
-      
+
       if (refreshStreak) refreshStreak();
       setTimeout(() => router.replace("/profile"), 100);
 
     } catch (err) {
-      notify("Authentication Error", err.message);
-      setIsProcessing(false);
+      // 🛡️ HANDLED: Check for the Android 7 SSL Error specifically
+      if (err.message && err.message.includes("NETWORK_SECURITY_OUTDATED")) {
+        notify(
+          "Device Incompatible",
+          "Your Android version's security is too outdated to connect to our servers. Please update your system or use a newer device."
+        );
+      } else if (err.message && err.message.includes("Network request failed")) {
+        // Fallback for general network failures
+        notify("Connection Error", "The server could not be reached. Check your internet or VPN.");
+      } else {
+        // General errors (username taken, etc.)
+        notify("Authentication Error", err.message);
+      }
+
+      setIsProcessing(false); // 🔹 Stop the loading animation
     }
   };
 

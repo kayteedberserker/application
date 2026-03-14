@@ -79,7 +79,7 @@ const WalletPage = () => {
   const { user } = useUser();
   
   const { coins, clanCoins, totalPurchasedCoins = 0, peakLevel = 0, processTransaction, isProcessingTransaction } = useCoins();
-  const { cCoins, isLoading: clanLoading, userClan, clanRank } = useClan();
+  const { cCoins, isLoading: clanLoading, userClan, clanRank, isInClan } = useClan();
 
   const colorScheme = useColorScheme();
   const isDark = colorScheme === "dark";
@@ -118,12 +118,22 @@ const WalletPage = () => {
   const spinAnimInstance = useRef(null);
   const pulseAnimInstance = useRef(null);
 
+  // ⚡️ DYNAMIC TABS BASED ON CLAN STATUS
+  const TABS = isInClan ? ['OC', 'PEAK', 'CC', 'PACKS'] : ['OC', 'PEAK', 'PACKS'];
+
   useEffect(() => {
     const cachedUsers = storage.getString(RECENT_USERS_KEY);
     const cachedAmounts = storage.getString(RECENT_AMOUNTS_KEY);
     if (cachedUsers) setRecentUsers(JSON.parse(cachedUsers));
     if (cachedAmounts) setRecentAmounts(JSON.parse(cachedAmounts));
   }, [storage]);
+
+  useEffect(() => {
+    // Failsafe: If activeTab is CC but user somehow leaves their clan
+    if (!isInClan && activeTab === 'CC') {
+      setActiveTab('OC');
+    }
+  }, [isInClan]);
 
   useEffect(() => {
     const isLoading = isProcessingTransaction || clanLoading || isFetchingStore;
@@ -239,7 +249,7 @@ const WalletPage = () => {
   const handleSearchUsers = async (query) => {
     setSearchQuery(query);
     if (query.trim().length < 3) {
-      setSearchResults([]);
+      searchResults.length > 0 && setSearchResults([]);
       return;
     }
     setIsSearching(true);
@@ -465,7 +475,7 @@ const WalletPage = () => {
   const currentTierMin = peakLevel === 0 ? 0 : (PEAK_THRESHOLDS[peakLevel - 1] || 0);
   const nextTierMin = peakLevel === 0 ? 1 : (PEAK_THRESHOLDS[peakLevel] || PEAK_THRESHOLDS[PEAK_THRESHOLDS.length - 1]);
   const progressBase = Math.max(0, totalPurchasedCoins - currentTierMin);
-  const progressGoal = Math.max(1, nextTierMin - currentTierMin); // Prevent divide by zero
+  const progressGoal = Math.max(1, nextTierMin - currentTierMin);
   const peakProgress = peakLevel === 10 ? 1 : Math.min(1, progressBase / progressGoal);
   const coinsToNextPeak = peakLevel === 10 ? 0 : nextTierMin - totalPurchasedCoins;
 
@@ -560,9 +570,9 @@ const WalletPage = () => {
           </View>
         </View>
 
-        {/* 🔹 TABS */}
+        {/* 🔹 DYNAMIC TABS (Hides CC if !isInClan) */}
         <View className="flex-row mb-8 bg-black/5 dark:bg-white/5 p-1 rounded-[22px] border border-black/5 dark:border-white/5">
-          {['OC', 'PEAK', 'CC', 'PACKS'].map((tab) => (
+          {TABS.map((tab) => (
             <TouchableOpacity
               key={tab}
               onPress={() => setActiveTab(tab)}
@@ -584,7 +594,7 @@ const WalletPage = () => {
             </View>
           )}
 
-          {/* ⚡️ NEW: PEAK TAB UI */}
+          {/* ⚡️ PEAK TAB UI */}
           {activeTab === 'PEAK' && (
             <View>
               <View className="mb-6 px-1 flex-row items-end justify-between">
@@ -694,6 +704,28 @@ const WalletPage = () => {
                   <Text style={{ color: THEME.accent }} className="text-[8px] font-black uppercase tracking-[2px]">Rank-Locked Equipment</Text>
                 </View>
 
+                {/* 🛡️ CLAN RECRUITMENT BANNER (Shown if not in a clan) */}
+                {!isInClan && (
+                  <View style={{ backgroundColor: THEME.card, borderColor: THEME.border, borderWidth: 1 }} className="mt-6 p-6 rounded-[28px] items-center shadow-lg">
+                    <View className="w-16 h-16 rounded-full items-center justify-center mb-4" style={{ backgroundColor: THEME.bg }}>
+                      <MaterialCommunityIcons name="shield-search" size={32} color={THEME.accent} />
+                    </View>
+                    <Text style={{ color: THEME.text }} className="font-black text-lg uppercase italic text-center">No Syndicate Assigned</Text>
+                    <Text style={{ color: THEME.textSecondary }} className="text-[10px] font-bold uppercase tracking-widest text-center mt-2 mb-6 px-4">
+                      Join a clan to unlock the CC Store and access exclusive tactical Vault equipment.
+                    </Text>
+                    <TouchableOpacity
+                      onPress={() => navigation.navigate('discovery')}
+                      style={{ backgroundColor: THEME.accent }}
+                      className="h-14 rounded-2xl flex-row items-center justify-center w-full shadow-lg"
+                    >
+                      <MaterialCommunityIcons name="radar" size={20} color="white" />
+                      <Text className="text-white font-black uppercase text-[12px] ml-2 tracking-widest">Discover Clans</Text>
+                    </TouchableOpacity>
+                  </View>
+                )}
+
+                {/* 🛡️ AUTHOR / CLAN TOGGLE (Shown only if in a clan) */}
                 {userClan && (
                   <View className="flex-row mt-4 bg-black/5 dark:bg-white/5 rounded-2xl p-1 border border-black/5 dark:border-white/5">
                     <TouchableOpacity
@@ -990,4 +1022,4 @@ const WalletPage = () => {
   );
 };
 
-export default WalletPage
+export default WalletPage;

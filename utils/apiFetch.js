@@ -1,6 +1,8 @@
+import { Platform } from 'react-native';
+
 const APP_SECRET = process.env.EXPO_PUBLIC_APP_SECRET || "thisismyrandomsuperlongsecretkey";
 
-// 🔹 Store the user in blazing-fast memory (RAM). No hooks, no , no MMKV needed here!
+// 🔹 Store the user in blazing-fast memory (RAM).
 let activeUser = null;
 
 // 🔹 This function will be used by UserContext to feed data into this file
@@ -51,10 +53,30 @@ export const apiFetch = async (endpoint, options = {}) => {
     headers["Content-Type"] = "application/json";
   }
 
-  return fetch(url, {
-    ...options,
-    headers,
-  });
+  try {
+    const response = await fetch(url, {
+      ...options,
+      headers,
+    });
+    return response;
+  } catch (error) {
+    // 🛡️ SECURITY & VERSION CHECK
+    // Android 7 is API level 24/25. If it fails here, it's almost certainly an SSL issue.
+    if (
+      error.message.includes("Network request failed") && 
+      Platform.OS === 'android' && 
+      Platform.Version <= 25
+    ) {
+      console.error("Detected Android 7 SSL Security Conflict");
+      throw new Error(
+        "NETWORK_SECURITY_OUTDATED: Your Android version (7.0/7.1) is missing modern security certificates. " +
+        "Please update your system or use a newer device to connect to Oreblogda."
+      );
+    }
+
+    // Rethrow the error for other cases
+    throw error;
+  }
 };
 
 export default apiFetch;
