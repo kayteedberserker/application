@@ -182,7 +182,7 @@ const ClanProfile = () => {
         equippedGlow = fullData.specialInventory?.find(i => i.category === 'GLOW' && i.isEquipped) || {};
         verifiedTier = fullData.activeCustomizations?.verifiedTier;
     }
-    const verifiedColor = verifiedTier == "premium" ? "#facc15" : verifiedTier == "standard" ? "#ef4444" : "#3b82f6";
+    const verifiedColor = verifiedTier == "premium" ? "#facc15" : verifiedTier == "standard" ? "#ef4444" : "basic" ? "#3b82f6" : null
     const activeGlowColor = equippedGlow?.visualConfig?.primaryColor || equippedGlow?.visualData?.glowColor || null;
     const APP_BLUE = activeGlowColor || verifiedColor || "#3b82f6";
 
