@@ -34,7 +34,7 @@ export default function ClanCard({ clan, isDark, THEME = { card: '#0a0a0a', text
   // --- Special Inventory & Logic extraction ---
   const isVerified = clan.verifiedUntil && new Date(clan.verifiedUntil) > new Date();
   const verifiedTier = clan.activeCustomizations?.verifiedTier;
-  const verifiedColor = verifiedTier == "premium" ? "#facc15" : verifiedTier == "standard" ? "#ef4444" : "basic" ? "#3b82f6" : null
+  const verifiedColor = verifiedTier === "premium" ? "#facc15" : verifiedTier === "standard" ? "#ef4444" : verifiedTier === "basic" ? "#3b82f6" : "";
   const rankInfo = getClanTierDetails(clan.rankTitle || "Wandering Ronin");
   const highlightColor = isVerified ? verifiedColor : (rankInfo.color || THEME.accent);
   
