@@ -1,6 +1,5 @@
-import AsyncStorage from '@react-native-async-storage/async-storage'; // ⚡️ Added for migration
+import AsyncStorage from '@react-native-async-storage/async-storage'; 
 import { Ionicons, MaterialCommunityIcons } from "@expo/vector-icons";
-// ⚡️ Swapped to MMKV
 import { useMMKV } from "react-native-mmkv";
 import { Redirect, Stack, usePathname, useRouter } from "expo-router";
 import { useColorScheme as useNativeWind } from "nativewind";
@@ -26,7 +25,6 @@ import CategoryNav from "./../../components/CategoryNav";
 import TopBar from "./../../components/Topbar";
 
 export default function MainLayout() {
-    // 1. ALL HOOKS
     const { colorScheme, setColorScheme } = useNativeWind();
     const systemScheme = useSystemScheme();
     const router = useRouter();
@@ -54,15 +52,18 @@ export default function MainLayout() {
     
     const navY = useRef(new Animated.Value(0)).current;
     
-    // ⚡️ Grabbed setUser to update global state during migration
     const { user, setUser, contextLoading } = useUser(); 
     const animValue = useRef(new Animated.Value(0)).current;
     const eventPulse = useRef(new Animated.Value(1)).current;
 
-    const [isUserAuthenticated, setIsUserAuthenticated] = useState(null);
+    // ⚡️ PERFORMANCE BOOST: Check MMKV synchronously right on mount. 
+    // This skips the 'null' state entirely for existing users, making it instant!
+    const [isUserAuthenticated, setIsUserAuthenticated] = useState(() => {
+        return storage.getString("mobileUser") ? true : null;
+    });
+
     const [userInClan, setUserInClan] = useState(false);
 
-    // 🔹 Tab Config
     const tabs = [
         { id: 'home', label: 'HOME', icon: 'home', route: '/', color: '#3b82f6', match: (p) => p === "/" || p.startsWith("/categories") },
         { id: 'search', label: 'SEARCH', icon: 'search', route: '/Search', color: '#a855f7', match: (p) => p === "/Search" },
@@ -70,7 +71,6 @@ export default function MainLayout() {
         { id: 'profile', label: 'PROFILE', icon: 'person', route: '/profile', color: '#f59e0b', match: (p) => p === "/profile" },
     ];
 
-    // 2. EFFECTS
     useEffect(() => {
         setIsNavVisible(true);
         Animated.timing(navY, {
@@ -106,26 +106,18 @@ export default function MainLayout() {
         ).start();
     }, [eventPulse]);
 
-    // ⚡️ THE GATEKEEPER MIGRATION PROTOCOL
+    // ⚡️ THE MIGRATION PROTOCOL (Only runs if MMKV was empty on mount)
     useEffect(() => {
+        if (isUserAuthenticated !== null) return; // Skip if already resolved synchronously
+
         const checkAuthAndMigrate = async () => {
             try {
-                // 1. Check MMKV (Fastest path for regular users)
-                const storedUser = storage.getString("mobileUser");
-                if (storedUser) {
-                    setIsUserAuthenticated(true);
-                    return;
-                }
-
-                // 2. 🛡️ MIGRATION: MMKV is empty, check legacy AsyncStorage
+                // 🛡️ MIGRATION: MMKV was empty, check legacy AsyncStorage
                 const legacyUserStr = await AsyncStorage.getItem("mobileUser");
                 if (legacyUserStr) {
                     console.log("Gatekeeper: Migrating veteran operative to MMKV...");
                     
-                    // Copy to new fast storage
                     storage.set("mobileUser", legacyUserStr);
-                    
-                    // Update global context so the rest of the app knows who they are
                     const parsed = JSON.parse(legacyUserStr);
                     setUser(parsed); 
                     
@@ -133,7 +125,7 @@ export default function MainLayout() {
                     return;
                 }
 
-                // 3. Completely new user or cleared data
+                // Completely new user or cleared data
                 setIsUserAuthenticated(false);
             } catch (e) {
                 console.error("Gatekeeper migration error:", e);
@@ -142,7 +134,7 @@ export default function MainLayout() {
         };
 
         checkAuthAndMigrate();
-    }, [setUser, storage]);
+    }, [isUserAuthenticated, setUser, storage]);
 
     useEffect(() => {
         if (user?.deviceId) {
@@ -241,13 +233,13 @@ export default function MainLayout() {
         DeviceEventEmitter.emit("navigateSafely", route);
     };
     
-    // ⚡️ REVERTED: Just check contextLoading. The initialWindowMetrics handles the layout shift safely!
+    // ⚡️ YOUR EXACT PREFERRED LOGIC: Allows the Stack to mount in the background, preventing the freeze!
     if (contextLoading) {
         return <AnimeLoading tipType={"general"} message="LOADING_PAGE" subMessage="Syncing Account" />;
     }
 
-    // Now it only redirects if we are 100% sure they are not in MMKV AND not in AsyncStorage
-    if (!isUserAuthenticated) {
+    // Only triggers redirect if they definitively fail both MMKV and AsyncStorage checks
+    if (isUserAuthenticated === false) {
         return <Redirect href="/screens/FirstLaunchScreen" />;
     }
 
