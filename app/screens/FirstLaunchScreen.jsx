@@ -1,5 +1,6 @@
+import AsyncStorage from '@react-native-async-storage/async-storage';
 import { Ionicons } from "@expo/vector-icons";
-import { useMMKV } from "react-native-mmkv"; // 🔹 Swapped to MMKV
+import { useMMKV } from "react-native-mmkv"; 
 import * as Application from 'expo-application';
 import Constants from "expo-constants";
 import * as Notifications from "expo-notifications";
@@ -29,20 +30,19 @@ import { getFingerprint } from "../../utils/device";
 const { width } = Dimensions.get('window');
 const FORBIDDEN_NAMES = ["admin", "system", "the admin", "the system", "administrator", "moderator"];
 
-// 🔹 Top 25 Curated Anime (Shonen, Seinen, Shojo, New & Old Gen)
+// 🔹 Top 25 Curated Anime
 const ANIME_LIST = [
-  "Naruto", "One Piece", "Bleach", "Dragon Ball Z", "Hunter x Hunter", // The Titans
-  "JJK", "Solo Leveling", "My Hero Academia", "Hell's Paradise", "Demon Slayer", "AOT", "Chainsaw Man",      // New Gen Hits
-  "Death Note", "Fullmetal Alchemist", "Code Geass", "Steins;Gate",    // Masterpieces
-  "Berserk", "Vinland Saga", "Monster", "Vagabond",                   // Peak Seinen
-  "Baki", "Nana", "Horimiya", "Fruits Basket", "Ouran High",               // Iconic Shojo
-  "Haikyuu", "Blue Lock", "One Punch Man"                             // Hype/Sports
+  "Naruto", "One Piece", "Bleach", "Dragon Ball Z", "Hunter x Hunter", 
+  "JJK", "Solo Leveling", "My Hero Academia", "Hell's Paradise", "Demon Slayer", "AOT", "Chainsaw Man",      
+  "Death Note", "Fullmetal Alchemist", "Code Geass", "Steins;Gate",    
+  "Berserk", "Vinland Saga", "Monster", "Vagabond",                   
+  "Baki", "Nana", "Horimiya", "Fruits Basket", "Ouran High",               
+  "Haikyuu", "Blue Lock", "One Punch Man"                             
 ];
 
 const GENRE_LIST = ["Shonen", "Seinen", "Romance", "Isekai", "Psychological", "Ecchi", "Action", "Slice of Life", "Manga", "Fantasy", "Sci-Fi", "Comedy", "Manhwa"];
 
 export default function FirstLaunchScreen() {
-  // 🔹 Strictly use the useMMKV hook for the storage instance
   const storage = useMMKV();
 
   const CustomAlert = useAlert();
@@ -77,21 +77,38 @@ export default function FirstLaunchScreen() {
   useEffect(() => {
     isMounted.current = true;
 
-    // 1. Synchronous Check: If user exists, redirect instantly
-    try {
-      const storedUser = storage.getString("mobileUser");
-      if (storedUser && isMounted.current) {
-        const parsed = JSON.parse(storedUser);
-        setUser(parsed);
-        router.replace("/profile");
-        return; // Exit early, no need to check referrer
-      }
-    } catch (e) {
-      console.error("MMKV read error", e);
-    }
+    const checkAndMigrateStorage = async () => {
+      try {
+        // 1. Check MMKV first (Fastest)
+        const storedUser = storage.getString("mobileUser");
+        if (storedUser && isMounted.current) {
+          const parsed = JSON.parse(storedUser);
+          setUser(parsed);
+          router.replace("/profile");
+          return; // Exit early
+        }
 
-    // 2. Asynchronous Check: Get Android install referrer for new users
-    const checkReferrer = async () => {
+        // 2. ⚡️ THE MIGRATION PROTOCOL ⚡️
+        // If MMKV is empty, check if the old AsyncStorage has their data
+        const legacyUserStr = await AsyncStorage.getItem("mobileUser");
+        if (legacyUserStr && isMounted.current) {
+          console.log("Migrating veteran operative to MMKV...");
+          
+          // Copy data to the new MMKV vault
+          storage.set("mobileUser", legacyUserStr);
+          
+          const parsed = JSON.parse(legacyUserStr);
+          setUser(parsed);
+          
+          // Redirect them instantly without logging them out
+          router.replace("/profile");
+          return; 
+        }
+      } catch (e) {
+        console.error("Storage migration error", e);
+      }
+
+      // 3. Asynchronous Check: Get Android install referrer for NEW users
       if (Platform.OS === 'android') {
         try {
           const installReferrer = await Application.getInstallReferrerAsync();
@@ -104,10 +121,11 @@ export default function FirstLaunchScreen() {
           console.log("Referrer not available:", refErr);
         }
       }
+      
       if (isMounted.current) setLoading(false);
     };
 
-    checkReferrer();
+    checkAndMigrateStorage();
 
     return () => { isMounted.current = false; };
   }, [router, setUser, storage]);
@@ -138,7 +156,6 @@ export default function FirstLaunchScreen() {
     if (step === 1) {
       if (isRecoveryMode) {
         if (!recoverId.trim()) return notify("Required", "Please enter your Recovery ID.");
-        // 🔹 Recovery Mode skips affinity steps and triggers the action immediately
         handleAction();
         return;
       }
@@ -155,7 +172,7 @@ export default function FirstLaunchScreen() {
 
   const handleAction = async () => {
     if (isProcessing) return;
-    setIsProcessing(true); // 🔹 This triggers your loading animation
+    setIsProcessing(true);
 
     try {
       const currentDeviceId = await getFingerprint();
@@ -179,13 +196,11 @@ export default function FirstLaunchScreen() {
         }),
       });
 
-      // 🔹 Basic check for the raw response before parsing JSON
       if (!res) throw new Error("No response from server.");
 
       const data = await res.json();
       if (!res.ok) throw new Error(data.message || "Operation failed");
 
-      // 🔹 Construct the user object
       const userData = {
         deviceId: targetId,
         username: data.user?.username || username.trim(),
@@ -199,7 +214,6 @@ export default function FirstLaunchScreen() {
         }
       };
 
-      // 🔹 Synchronous MMKV set
       storage.set("mobileUser", JSON.stringify(userData));
       setUser(userData);
 
@@ -207,25 +221,20 @@ export default function FirstLaunchScreen() {
       setTimeout(() => router.replace("/profile"), 100);
 
     } catch (err) {
-      // 🛡️ HANDLED: Check for the Android 7 SSL Error specifically
       if (err.message && err.message.includes("NETWORK_SECURITY_OUTDATED")) {
         notify(
           "Device Incompatible",
           "Your Android version's security is too outdated to connect to our servers. Please update your system or use a newer device."
         );
       } else if (err.message && err.message.includes("Network request failed")) {
-        // Fallback for general network failures
         notify("Connection Error", "The server could not be reached. Check your internet or VPN.");
       } else {
-        // General errors (username taken, etc.)
         notify("Authentication Error", err.message);
       }
-
-      setIsProcessing(false); // 🔹 Stop the loading animation
+      setIsProcessing(false);
     }
   };
 
-  // Filter the list based on search query
   const filteredAnimes = ANIME_LIST.filter(anime =>
     anime.toLowerCase().includes(searchQuery.toLowerCase())
   );
@@ -266,14 +275,26 @@ export default function FirstLaunchScreen() {
         {step === 1 && (
           <View>
             {isRecoveryMode ? (
-              <TextInput
-                style={{ backgroundColor: THEME.card, borderColor: '#a855f7', color: THEME.text }}
-                className="w-full border-2 rounded-2xl px-6 py-5 mb-4 font-black italic"
-                placeholder="ENTER RECOVERY ID..."
-                placeholderTextColor={THEME.textSecondary + '80'}
-                value={recoverId}
-                onChangeText={setRecoverId}
-              />
+              <View>
+                  <TextInput
+                    style={{ backgroundColor: THEME.card, borderColor: '#a855f7', color: THEME.text }}
+                    className="w-full border-2 rounded-2xl px-6 py-5 mb-2 font-black italic"
+                    placeholder="ENTER RECOVERY ID..."
+                    placeholderTextColor={THEME.textSecondary + '80'}
+                    value={recoverId}
+                    onChangeText={setRecoverId}
+                  />
+                  
+                  {/* ⚡️ NEW: Contact Support Link */}
+                  <TouchableOpacity 
+                    onPress={() => router.push("screens/Contact")} 
+                    className="self-end mb-4 px-2"
+                  >
+                      <RNText style={{ color: THEME.textSecondary }} className="text-[9px] font-bold uppercase tracking-widest border-b border-gray-500/30 pb-0.5">
+                          Lost your ID? Contact Support
+                      </RNText>
+                  </TouchableOpacity>
+              </View>
             ) : (
               <>
                 <TextInput
@@ -299,7 +320,8 @@ export default function FirstLaunchScreen() {
                 />
               </>
             )}
-            <TouchableOpacity onPress={() => setIsRecoveryMode(!isRecoveryMode)} className="mt-2 items-center">
+            
+            <TouchableOpacity onPress={() => setIsRecoveryMode(!isRecoveryMode)} className="mt-4 items-center bg-black/5 dark:bg-white/5 py-3 rounded-xl border border-black/5 dark:border-white/10">
               <RNText style={{ color: THEME.accent }} className="text-[10px] font-bold uppercase tracking-widest">
                 {isRecoveryMode ? "Create New Instead" : "Switch to Recovery Mode"}
               </RNText>
@@ -312,7 +334,6 @@ export default function FirstLaunchScreen() {
           <View>
             <Text style={{ color: THEME.textSecondary }} className="font-black uppercase text-[10px] mb-4 tracking-widest">Local Database Filter</Text>
 
-            {/* 🔹 Local Search Input */}
             <View className="mb-6 relative">
               <TextInput
                 style={{ backgroundColor: THEME.card, borderColor: THEME.border, color: THEME.text }}

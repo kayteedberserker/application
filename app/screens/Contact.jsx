@@ -50,9 +50,17 @@ export default function Contact() {
       } else {
         setStatus({ loading: false, success: "", error: data.error || "Something went wrong." });
       }
-    } catch {
+    } catch (err) {
       setStatus({ loading: false, success: "", error: "Network error, check your connection." });
     }
+  };
+
+  // ⚡️ DYNAMIC PLACEHOLDER LOGIC
+  const getMessagePlaceholder = () => {
+    if (form.type === "Account Recovery") {
+      return "ENTER EXACT CALLSIGN (USERNAME), CLAN NAME, APPROXIMATE OC BALANCE, OR ANY SPECIFIC DETAILS TO VERIFY YOUR IDENTITY...";
+    }
+    return "TYPE YOUR MESSAGE HERE...";
   };
 
   return (
@@ -83,7 +91,7 @@ export default function Contact() {
           </View>
 
           <Text style={{ color: THEME.textSecondary || '#64748b' }} className="font-medium mb-10 leading-6 px-1">
-            Have a bug to report or a suggestion for the community? Initiate an uplink and our THE SYSTEM will decrypt your message.
+            Have a bug to report or need to recover your identity? Initiate an uplink and THE SYSTEM will decrypt your message.
           </Text>
 
           {/* --- Form Fields --- */}
@@ -128,6 +136,8 @@ export default function Contact() {
                   style={{ color: THEME.text }}
                 >
                   <Picker.Item label="General Inquiry" value="General" color={Platform.OS === 'ios' ? THEME.text : undefined} />
+                  {/* ⚡️ ADDED ACCOUNT RECOVERY OPTION */}
+                  <Picker.Item label="Account Recovery" value="Account Recovery" color={Platform.OS === 'ios' ? THEME.text : undefined} />
                   <Picker.Item label="Community Join Request" value="Community" color={Platform.OS === 'ios' ? THEME.text : undefined} />
                   <Picker.Item label="Bug Report" value="Bug" color={Platform.OS === 'ios' ? THEME.text : undefined} />
                   <Picker.Item label="Suggestion" value="Suggestion" color={Platform.OS === 'ios' ? THEME.text : undefined} />
@@ -142,7 +152,7 @@ export default function Contact() {
               <TextInput
                 value={form.message}
                 onChangeText={(v) => handleChange("message", v)}
-                placeholder="TYPE YOUR MESSAGE HERE..."
+                placeholder={getMessagePlaceholder()} // ⚡️ DYNAMIC PLACEHOLDER APPLIED
                 placeholderTextColor={THEME.textSecondary + '80' || "#334155"}
                 multiline
                 numberOfLines={6}
