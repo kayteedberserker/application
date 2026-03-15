@@ -342,11 +342,10 @@ const RequirementModal = ({ visible, onClose, stats, isDark }) => {
 
 const ClanCard = ({ clan, lbRank, isDark, refreshClans, showAlert }) => {
     const storage = useMMKV();
-
     const { user } = useUser();
+    
     const [actionLoading, setActionLoading] = useState(false);
     const [copied, setCopied] = useState(false);
-    // Move isFollowing to state to ensure re-renders inside LegendList cells
     const [isFollowing, setIsFollowing] = useState(false);
 
     const getRankInfo = (rank) => {
@@ -363,15 +362,14 @@ const ClanCard = ({ clan, lbRank, isDark, refreshClans, showAlert }) => {
     
     const equippedGlow = clan.specialInventory?.find(i => i.category === 'GLOW' && i.isEquipped);
     const activeGlowColor = equippedGlow?.visualConfig?.primaryColor || equippedGlow?.visualData?.glowColor || null;
-    
     const rankInfo = getRankInfo(clan.rank);
 
-    // Load initial follow state on mount
+    // ⚡️ SILENT BACKGROUND CHECK (Reads from fast RAM instead of spamming Server)
     useEffect(() => {
-        const followedClans = storage.getString('followed_clans');
-        if (followedClans) {
-            const parsed = JSON.parse(followedClans);
-            if (parsed.includes(clan.tag)) {
+        const followedClansStr = storage.getString('followed_clans');
+        if (followedClansStr) {
+            const clanList = JSON.parse(followedClansStr);
+            if (clanList.includes(clan.tag)) {
                 setIsFollowing(true);
             }
         }
@@ -383,29 +381,63 @@ const ClanCard = ({ clan, lbRank, isDark, refreshClans, showAlert }) => {
         setTimeout(() => setCopied(false), 2000);
     };
 
-    const handleFollow = async () => {
+    // ⚡️ YOUR EXACT FUNCTION ADDED HERE
+    const performFollowAction = async (action) => {
         if (!user) return;
         setActionLoading(true);
+        
         try {
-            const res = await apiFetch("/clans/follow", {
+            const res = await apiFetch(`/clans/follow`, {
                 method: "POST",
-                body: JSON.stringify({ clanTag: clan.tag, deviceId: user.deviceId, action: "follow" })
+                body: JSON.stringify({ clanTag: clan.tag, deviceId: user.deviceId, action: action })
             });
+
+            const followedClansStr = storage.getString('followed_clans');
+            const checkedClansStr = storage.getString('checked_clans');
+            let clanList = followedClansStr ? JSON.parse(followedClansStr) : [];
+            let checkedList = checkedClansStr ? JSON.parse(checkedClansStr) : [];
+
             if (res.ok) {
-                const followedClans = storage.getString('followed_clans');
-                let clanList = followedClans ? JSON.parse(followedClans) : [];
-                clanList.push(clan.tag);
+                if (action === "follow") {
+                    setIsFollowing(true);
+                    if (!clanList.includes(clan.tag)) clanList.push(clan.tag);
+                    checkedList = checkedList.filter(t => t !== clan.tag);
+                    showAlert("CLAN JOINED", `You are now following ${clan?.name}.`, "success");
+                } else {
+                    setIsFollowing(false);
+                    clanList = clanList.filter(t => t !== clan.tag);
+                    if (!checkedList.includes(clan.tag)) checkedList.push(clan.tag);
+                    showAlert("UNFOLLOWED", `You have left ${clan?.name}.`, "success");
+                }
                 storage.set('followed_clans', JSON.stringify(clanList));
-                setIsFollowing(true);
-                refreshClans();
-            } else {
-                const data = await res.json();
-                showAlert("ACTION FAILED", data.message || "Could not follow clan.");
+                storage.set('checked_clans', JSON.stringify(checkedList));
+                
+                // Refresh the global list to update follower counts instantly
+                if (refreshClans) refreshClans();
             }
-        } catch (err) {
-            showAlert("CONNECTION ERROR", "Backend is not responding.");
-        } finally {
-            setActionLoading(false);
+            
+            // 🛡️ THE 419 SYNC: If the server says we are already following, force sync the UI and Cache
+            if (res.status === 419) {
+                setIsFollowing(true);
+                if (!clanList.includes(clan.tag)) clanList.push(clan.tag);
+                checkedList = checkedList.filter(t => t !== clan.tag);
+
+                storage.set('followed_clans', JSON.stringify(clanList));
+                storage.set('checked_clans', JSON.stringify(checkedList));
+                
+                showAlert("CLAN JOINED", `You are already following ${clan?.name}.`, "success");
+            }
+
+            // Catch actual failures (not 419)
+            if (!res.ok && res.status !== 419) {
+                const data = await res.json();
+                showAlert("ACTION FAILED", data.message || "Action could not be completed.");
+            }
+
+        } catch (err) { 
+            showAlert("CONNECTION ERROR", "Check your internet connection."); 
+        } finally { 
+            setActionLoading(false); 
         }
     };
 
@@ -452,14 +484,9 @@ const ClanCard = ({ clan, lbRank, isDark, refreshClans, showAlert }) => {
             {/* Avatar & Info Section */}
             <View className="items-center px-6">
                 <ClanCrest glowColor={activeGlowColor} rank={clan?.rank} size={120}/>
-
                 <Text numberOfLines={1} className={`text-2xl mt-3 font-black text-center tracking-tight ${isDark ? "text-white" : "text-zinc-900"}`}>{clan.name}</Text>
                 
-                {/* 🏷️ Styled Clan Tag + Copy Button */}
-                <TouchableOpacity 
-                    onPress={copyToClipboard}
-                    className="flex-row items-center mt-1 bg-zinc-500/5 px-3 py-1 rounded-full active:opacity-50"
-                >
+                <TouchableOpacity onPress={copyToClipboard} className="flex-row items-center mt-1 bg-zinc-500/5 px-3 py-1 rounded-full active:opacity-50">
                     <Text className="text-zinc-500 text-[10px] font-bold tracking-widest uppercase">#{clan.tag}</Text>
                     <Ionicons name={copied ? "checkmark" : "copy-outline"} size={10} color={copied ? "#10b981" : "#71717a"} style={{ marginLeft: 6 }} />
                 </TouchableOpacity>
@@ -475,11 +502,11 @@ const ClanCard = ({ clan, lbRank, isDark, refreshClans, showAlert }) => {
                 </View>
             </View>
 
-            {/* Actions Section - Sleeker Buttons */}
+            {/* Actions Section */}
             <View className="mt-auto flex-row p-5 gap-3 border-t border-zinc-500/10 bg-zinc-500/5">
                 <TouchableOpacity 
-                    onPress={handleFollow} 
-                    disabled={actionLoading || isFollowing} 
+                    onPress={() => performFollowAction(isFollowing ? "unfollow" : "follow")} 
+                    disabled={actionLoading} 
                     className={`flex-1 h-12 rounded-2xl flex-row items-center justify-center shadow-md ${isFollowing ? 'bg-zinc-800' : 'bg-blue-600 shadow-blue-600/20'}`}
                 >
                     {actionLoading ? <ActivityIndicator size="small" color="white" /> : (

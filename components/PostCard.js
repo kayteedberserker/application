@@ -142,7 +142,6 @@ const LightboxVideoPlayer = ({ uri }) => {
     );
 };
 
-// ⚡️ MODAL COMPONENT (Kept clean)
 const MediaModal = ({ isOpen, onClose, mediaItems, currentIndex, setCurrentIndex, handleDownload, isDownloading, isMediaSaved }) => {
     const [assetLoading, setAssetLoading] = useState(false);
 
@@ -232,7 +231,6 @@ const MediaModal = ({ isOpen, onClose, mediaItems, currentIndex, setCurrentIndex
     );
 };
 
-// ⚡️ FIX 3: Extracted Clan Header to pure Memo component
 const MemoizedClanHeader = memo(({ clanInfo, postId }) => {
     if (!clanInfo) return null;
 
@@ -241,7 +239,6 @@ const MemoizedClanHeader = memo(({ clanInfo, postId }) => {
     const verifiedColor = verifiedTier === "premium" ? "#facc15" : verifiedTier === "standard" ? "#ef4444" : verifiedTier === "basic" ? "#3b82f6" : "";
     const highlightColor = isVerified ? verifiedColor : THEME.accent;
 
-    // ⚡️ Only show the FIRST equipped badge for Clan
     const equippedBadges = clanInfo.specialInventory?.filter(i => i.category === 'BADGE' && i.isEquipped) || [];
     const displayBadge = equippedBadges.length > 0 ? equippedBadges[0] : null;
 
@@ -366,7 +363,7 @@ const PostCardComponent = ({ post, authorData, clanData, setPosts, isFeed, hideM
         postsCount: 0, 
         equippedGlow: null, 
         equippedBadges: [],
-        peakLevel: 0 // Default fallback for the new feature
+        peakLevel: 0 
     };
     const clanInfo = clanData || null;
 
@@ -444,6 +441,7 @@ const PostCardComponent = ({ post, authorData, clanData, setPosts, isFeed, hideM
         handleView();
     }, [post?._id, user?.deviceId, syncing, storage]);
 
+    // ⚡️ FIX 1: ERROR-CHECKED LIKE FUNCTION
     const handleLike = async () => {
         if (liked || !user) {
             if (!user) {
@@ -452,32 +450,66 @@ const PostCardComponent = ({ post, authorData, clanData, setPosts, isFeed, hideM
             }
             return;
         }
+        
         const fingerprint = user?.deviceId;
+        const previousData = postData; // Save state for rollback
+
+        // Optimistic UI Update
+        setLiked(true);
+        mutate({ ...postData, likes: [...(postData?.likes || []), { fingerprint }] }, false);
+        
         try {
-            setLiked(true);
-            mutate({ ...postData, likes: [...(postData?.likes || []), { fingerprint }] }, false);
-            
-            apiFetch(`/posts/${post?._id}`, {
+            const res = await apiFetch(`/posts/${post?._id}`, {
                 method: "PATCH",
                 body: JSON.stringify({ action: "like", fingerprint }),
             });
             
+            if (!res.ok) throw new Error("Server rejected like request");
+            
+            // Only persist to local storage if successful
             const savedLikesStr = storage.getString('user_likes');
             const likedList = savedLikesStr ? JSON.parse(savedLikesStr) : [];
             if (!likedList.includes(post?._id)) {
                 likedList.push(post?._id);
                 storage.set('user_likes', JSON.stringify(likedList));
             }
-        } catch (err) { console.error("Local like logic failed", err); }
+        } catch (err) {
+            console.error("Network Like Logic Failed", err);
+            // 🚨 ROLLBACK IF IT FAILS
+            setLiked(false);
+            mutate(previousData, false);
+            CustomAlert("Sync Error", "Could not register your like. Please check your connection.");
+        }
     };
 
+    // ⚡️ FIX 2: CACHED AND ERROR-CHECKED SHARE FUNCTION
     const handleNativeShare = async () => {
         try {
             const url = `https://oreblogda.com/post/${post?.slug || post?._id}`;
-            await Share.share({ message: `Check out this post on Oreblogda: ${post?.title}\n${url}` });
-            apiFetch(`/posts/${post?._id}`, { method: "PATCH", body: JSON.stringify({ action: "share", fingerprint: user?.deviceId }) });
-            mutate();
-        } catch (error) { console.error("Share error", error); }
+            const shareResult = await Share.share({ message: `Check out this post on Oreblogda: ${post?.title}\n${url}` });
+            
+            // Proceed only if the user actually followed through with the share action
+            if (shareResult.action === Share.sharedAction) {
+                const sharedStr = storage.getString('user_shares');
+                const sharedList = sharedStr ? JSON.parse(sharedStr) : [];
+
+                // Skip API call if they already shared this post
+                if (!sharedList.includes(post?._id)) {
+                    const res = await apiFetch(`/posts/${post?._id}`, { 
+                        method: "PATCH", 
+                        body: JSON.stringify({ action: "share", fingerprint: user?.deviceId }) 
+                    });
+                    
+                    if (res.ok) {
+                        sharedList.push(post?._id);
+                        storage.set('user_shares', JSON.stringify(sharedList));
+                        mutate(); 
+                    }
+                }
+            }
+        } catch (error) { 
+            console.error("Share error", error); 
+        }
     };
 
     const handleDownloadMedia = async () => {
@@ -525,7 +557,6 @@ const PostCardComponent = ({ post, authorData, clanData, setPosts, isFeed, hideM
 
     const activeGlowColor = author.equippedGlow?.visualConfig?.primaryColor || author.equippedGlow?.visualConfig?.glowColor || null;
 
-    // ⚡️ Only show ONE specific custom badge (the first equipped one)
     const customBadge = author.equippedBadges?.length > 0 ? author.equippedBadges[0] : null;
 
     const renderContent = useMemo(() => {
@@ -634,7 +665,6 @@ const PostCardComponent = ({ post, authorData, clanData, setPosts, isFeed, hideM
 
             <View className={`${similarPosts ? "p-3" : "p-4"} px-2`}>
                 <View className="mb-5">
-                    {/* Clan Header Memo Component */}
                     {isClanPost && clanInfo && (
                         <MemoizedClanHeader clanInfo={clanInfo} postId={post._id} />
                     )}
@@ -663,29 +693,20 @@ const PostCardComponent = ({ post, authorData, clanData, setPosts, isFeed, hideM
                             </View>
                         </View>
 
-                        {/* ⚡️ RE-LAYOUT: View Count on top, Badges directly beneath */}
                         <View className="items-end">
-                            {/* 1. View Count Container */}
                             <View className="shrink-0 flex-row items-center gap-2 bg-gray-50 dark:bg-gray-800/50 px-3 py-1.5 rounded-full border border-gray-100 dark:border-gray-700">
                                 <View className="w-1.5 h-1.5 bg-green-500 rounded-full" />
                                 <Text className="text-[10px] font-black text-gray-900 dark:text-white uppercase tracking-widest">{formatViews(totalViews)}</Text>
                             </View>
 
-                            {/* 2. Space for Two Badges */}
                             <View className="flex-row items-center gap-2 mt-2">
-                                {/* Custom Equipped Badge */}
                                 {customBadge && (
                                     <View className="bg-white/5 p-1 rounded-full border border-white/10 items-center justify-center">
                                         <RemoteSvgIcon xml={customBadge.visualConfig?.svgCode || customBadge.visualData?.svgCode} size={25} />
                                     </View>
                                 )}
                                 
-                                {/* New Dynamic Peak Level Badge */}
                                 {author.peakLevel > 0 ? <View className="flex-row items-center gap-1 bg-purple-500/10 px-2 py-1 rounded-full border border-purple-500/30">
-                                    {/* <MaterialCommunityIcons name="lightning-bolt" size={12} color="#a855f7" />
-                                    <Text className="text-[9px] font-black text-purple-500 uppercase tracking-widest">
-                                        Peak {author.peakLevel || 1}
-                                    </Text> */}
                                     <PeakBadge level={author.peakLevel} size={25} />
                                 </View> : ""}
                             </View>
@@ -748,7 +769,6 @@ const PostCardComponent = ({ post, authorData, clanData, setPosts, isFeed, hideM
                 )}
             </View>
 
-            {/* ⚡️ FIX 1: Only mount the heavy modal when absolutely needed */}
             {lightbox.open && (
                 <MediaModal 
                     isOpen={lightbox.open} 

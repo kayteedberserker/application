@@ -390,7 +390,7 @@ const ClanProfile = () => {
     };
 
     if (loading || clanLoading) {
-        return <AnimeLoading message="Syncing Bloodline" subMessage="Consulting the Elder Scrolls..." />;
+        return <AnimeLoading tipType={"clan"} message="Syncing Bloodline" subMessage="Consulting the Elder Scrolls..." />;
     }
 
     if (!userClan) {

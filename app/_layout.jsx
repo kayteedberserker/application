@@ -11,7 +11,7 @@ import * as Updates from 'expo-updates';
 import { useColorScheme } from "nativewind";
 import { useCallback, useEffect, useRef, useState } from "react";
 import { AppState, BackHandler, DeviceEventEmitter, Platform, StatusBar, View } from "react-native";
-import Purchases from 'react-native-purchases'; 
+import Purchases from 'react-native-purchases';
 // ⚡️ Only need initialWindowMetrics to prevent Layout Shift
 import { SafeAreaProvider, initialWindowMetrics } from "react-native-safe-area-context";
 import Toast from 'react-native-toast-message';
@@ -34,7 +34,7 @@ let LAST_PROCESSED_URL = null;
 
 // 🔹 REVENUECAT KEYS
 const REVENUE_CAT_API_KEYS = {
-    ios: "goog_your_ios_key_here", 
+    ios: "goog_your_ios_key_here",
     android: "goog_cypWcXGzLgDujHkFvHTcUoqUNQi"
 };
 
@@ -96,9 +96,9 @@ function RootLayoutContent() {
     const pathname = usePathname();
     const { user } = useUser();
     const [minLoadDone, setMinLoadDone] = useState(false);
-    
+
     const storage = useMMKV();
-    
+
     const rootNavigationState = useRootNavigationState();
     const isNavigationReady = rootNavigationState?.key != null;
 
@@ -107,10 +107,10 @@ function RootLayoutContent() {
 
     const appReadyRef = useRef(false);
     const pendingNavigation = useRef(null);
-useEffect(() => {
-    const t = setTimeout(() => setMinLoadDone(true), 2000);
-    return () => clearTimeout(t);
-  }, []);
+    useEffect(() => {
+        const t = setTimeout(() => setMinLoadDone(true), 3000);
+        return () => clearTimeout(t);
+    }, []);
     useEffect(() => { appReadyRef.current = appReady; }, [appReady]);
 
     // 🔹 REVENUECAT INITIALIZATION LOGIC
@@ -118,7 +118,7 @@ useEffect(() => {
         const setupRevenueCat = async () => {
             try {
                 const isConfigured = await Purchases.isConfigured();
-                
+
                 if (!isConfigured) {
                     if (Platform.OS === 'ios') {
                         await Purchases.configure({ apiKey: REVENUE_CAT_API_KEYS.ios });
@@ -144,32 +144,50 @@ useEffect(() => {
     useEffect(() => {
         const runCacheJanitor = () => {
             try {
+                // Ensure storage is fully loaded before running
+                if (!storage) return;
+
                 const allKeys = storage.getAllKeys();
                 const targetPrefixes = ["POSTS_CACHE_", "CATEGORY_CACHE_", "clan_posts_", "WARS_", "CLAN_PROFILE_", "auth_cache_"];
-                const expiredTime = 48 * 60 * 60 * 1000;
+                const expiredTime = 48 * 60 * 60 * 1000; // 48 hours
                 const now = Date.now();
+
                 const keysToReview = allKeys.filter(key => targetPrefixes.some(prefix => key.startsWith(prefix)));
 
                 for (const key of keysToReview) {
                     const value = storage.getString(key);
+
+                    // If it's already empty (from our fallback), skip it!
                     if (!value) continue;
+
                     try {
                         const parsed = JSON.parse(value);
                         if (parsed && typeof parsed === 'object' && parsed.timestamp) {
                             if (now - parsed.timestamp > expiredTime) {
-                                storage.delete(key);
+                                // 🛡️ SAFE DELETE: Try standard delete, fallback to empty string
+                                try {
+                                    storage.delete(key);
+                                } catch (e) {
+                                    storage.set(key, "");
+                                }
                                 console.log(`🧹 Janitor: Cleared expired cache: ${key}`);
                             }
                         }
                     } catch (e) {
-                        storage.delete(key); 
+                        // 🛡️ If JSON is corrupted, wipe it safely
+                        try {
+                            storage.delete(key);
+                        } catch (fallbackErr) {
+                            storage.set(key, "");
+                        }
                     }
                 }
             } catch (err) {
-                console.error("Janitor failed:", err);
+                console.error("Janitor failed to run:", err);
             }
         };
-        
+
+        // Run Janitor 30 seconds after app load so it doesn't slow down the UI
         const timeout = setTimeout(runCacheJanitor, 30000);
         return () => clearTimeout(timeout);
     }, [storage]);
@@ -189,7 +207,7 @@ useEffect(() => {
         if (IS_NAVIGATING_GLOBAL || LAST_PROCESSED_NOTIF_ID === currentNotifId) {
             return;
         }
-        
+
         if (!appReadyRef.current) {
             console.log("⏳ [processRouting] App not ready. Queuing request...");
             pendingNavigation.current = data;
@@ -414,7 +432,8 @@ useEffect(() => {
     if (!fontsLoaded || isUpdating || !appReady || !minLoadDone) {
         return (
             <AnimeLoading
-               message={isUpdating ? "UPDATING_CORE" : "LOADING_PAGE"}
+                tipType={"general"}
+                message={isUpdating ? "UPDATING_CORE" : "LOADING_PAGE"}
                 subMessage={isUpdating ? "Updating system configurations..." : "Fetching Otaku Archives"}
             />
         );

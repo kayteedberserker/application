@@ -230,7 +230,7 @@ export default function FirstLaunchScreen() {
     anime.toLowerCase().includes(searchQuery.toLowerCase())
   );
 
-  if (loading) return <AnimeLoading message="Checking Session" subMessage="Initializing Neural Link" />;
+  if (loading) return <AnimeLoading tipType={"general"} message="Checking Session" subMessage="Initializing Neural Link" />;
 
   return (
     <View style={{ flex: 1, backgroundColor: THEME.bg }} className="px-8 pt-20">

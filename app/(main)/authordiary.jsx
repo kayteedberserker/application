@@ -768,6 +768,7 @@ export default function AuthorDiaryDashboard() {
 
     if (contextLoading || submitting) {
         return <AnimeLoading
+            tipType={"post"}
             message={submitting ? "Submitting" : uploading ? "Uploading" : "Loading"}
             subMessage={"Fetching Otaku diary"}
         />

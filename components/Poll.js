@@ -1,9 +1,10 @@
 import { MaterialCommunityIcons } from "@expo/vector-icons";
-import { usePathname, useRouter } from "expo-router"; // Added useRouter for navigation
+import { usePathname, useRouter } from "expo-router"; 
 import { useEffect, useState } from "react";
 import { DeviceEventEmitter, Pressable, View } from "react-native";
 import Toast from "react-native-toast-message";
 import useSWR from "swr";
+import { useMMKV } from "react-native-mmkv"; // ⚡️ Correct Hook Import
 import { useUser } from "../context/UserContext";
 import apiFetch from "../utils/apiFetch";
 import { Text } from "./Text";
@@ -13,14 +14,16 @@ const API_URL = "https://oreblogda.com";
 const fetcher = (url) => apiFetch(url).then(res => res.json());
 
 export default function Poll({ poll, postId, readOnly = false }) {
+    const storage = useMMKV(); // ⚡️ Initialized safely inside the component
     const { user } = useUser();
     const pathname = usePathname();
     const router = useRouter();
+    
     const [selectedOptions, setSelectedOptions] = useState([]);
     const [submitted, setSubmitted] = useState(false);
     const [loading, setLoading] = useState(false);
 
-    // ✅ Route Check: Determine if we show the full poll or the truncated feed version
+    // ✅ Route Check
     const isPostPage = pathname.includes("post/");
 
     // --- SWR: live post (poll source of truth) ---
@@ -36,19 +39,33 @@ export default function Poll({ poll, postId, readOnly = false }) {
 
     const livePoll = data?.poll || poll;
 
-    // Determine which options to show
     const displayOptions = isPostPage 
         ? livePoll.options 
         : livePoll.options?.slice(0, 2);
     
     const hasMoreOptions = !isPostPage && livePoll.options?.length > 2;
 
-    // --- Detect if this device already voted ---
+    // --- 🛡️ TWO-LAYER VOTE DETECTION ---
     useEffect(() => {
-        if (user?.deviceId && livePoll?.voters?.includes(user.deviceId)) {
+        if (!postId) return;
+
+        const localVoteKey = `voted_poll_${postId}`;
+        
+        // 1. Check local fast-memory first
+        const hasVotedLocally = storage.getBoolean(localVoteKey);
+
+        // 2. Check server truth
+        const hasVotedOnServer = user?.deviceId && livePoll?.voters?.includes(user.deviceId);
+
+        if (hasVotedLocally || hasVotedOnServer) {
             setSubmitted(true);
+            
+            // Auto-sync: Rewrite local cache if the server knows they voted but cache is empty
+            if (hasVotedOnServer && !hasVotedLocally) {
+                storage.set(localVoteKey, true);
+            }
         }
-    }, [livePoll?.voters, user?.deviceId]);
+    }, [livePoll?.voters, user?.deviceId, postId, storage]);
 
     const handleOptionChange = (optionIndex) => {
         if (readOnly || submitted) return;
@@ -73,6 +90,11 @@ export default function Poll({ poll, postId, readOnly = false }) {
         }
 
         setLoading(true);
+        const localVoteKey = `voted_poll_${postId}`;
+
+        // ⚡️ INSTANT LOCK: Lock the UI and save locally immediately
+        setSubmitted(true);
+        storage.set(localVoteKey, true);
 
         // --- Optimistic UI update ---
         const optimisticPoll = {
@@ -104,19 +126,21 @@ export default function Poll({ poll, postId, readOnly = false }) {
 
             if (!res.ok) {
                 if (result.message === "Already voted") {
-                    setSubmitted(true);
                     Toast.show({ type: "info", text1: "You’ve already voted!" });
                 } else {
                     throw new Error(result.message || "Vote failed");
                 }
             } else {
-                setSubmitted(true);
                 Toast.show({ type: "success", text1: "Vote submitted!" });
             }
 
             mutate();
 
         } catch (err) {
+            // 🚨 REVERT IF FAILED: Unlock UI and set local memory to false
+            setSubmitted(false);
+            storage.set(localVoteKey, false); // ⚡️ The safe alternative to .delete()
+            
             Toast.show({ type: "error", text1: "Vote failed, retrying…" });
             mutate();
         } finally {

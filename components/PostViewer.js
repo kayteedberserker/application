@@ -193,7 +193,7 @@ export default function PostsViewer() {
 
     // Prevent rendering blank lists during initial fetch if cache is totally empty
     if (isLoading && posts.length === 0) {
-        return <AnimeLoading message="Loading Posts" subMessage="Prepping Otaku content" />
+        return <AnimeLoading tipType={"post"} message="Loading Posts" subMessage="Prepping Otaku content" />
     }
 
     return (

@@ -191,7 +191,7 @@ export default function CategoryPage({ forcedId }) {
     ), [isOfflineMode, isDark, categoryName]);
 
     if (!ready || (isLoading && posts.length === 0)) {
-        return <AnimeLoading message={`Decoding ${categoryName}`} subMessage="Accessing encrypted anime archives..." />
+        return <AnimeLoading tipType={"post"} message={`Decoding ${categoryName}`} subMessage="Accessing encrypted anime archives..." />
     }
 
     return (

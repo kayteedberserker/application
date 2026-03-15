@@ -35,6 +35,7 @@ import apiFetch from '../../utils/apiFetch';
 
 // ⚡️ Import the Peak Badge
 import PeakBadge from '../../components/PeakBadge'; 
+import AnimeLoading from '../../components/AnimeLoading';
 
 const { width, height } = Dimensions.get('window');
 const ITEM_WIDTH = (width - 60) / 3;
@@ -112,6 +113,12 @@ const WalletPage = () => {
 
   const [pullModalVisible, setPullModalVisible] = useState(false);
   const [activePullData, setActivePullData] = useState(null);
+  const [minLoadDone, setMinLoadDone] = useState(false);
+  useEffect(() => {
+        const t = setTimeout(() => setMinLoadDone(true), 3000);
+        return () => clearTimeout(t);
+    }, []);
+
 
   const spinValue = useRef(new Animated.Value(0)).current;
   const pulseValue = useRef(new Animated.Value(1)).current;
@@ -470,7 +477,16 @@ const WalletPage = () => {
       );
     }
   };
-
+  
+  if (!minLoadDone) {
+        return (
+            <AnimeLoading
+                tipType={"wallet"}
+                message={"LOADING_WALLET"}
+                subMessage={"Loading Author Account"}
+            />
+        );
+    }
   // ⚡️ HELPER FOR PEAK PROGRESS BAR (Math Safe)
   const currentTierMin = peakLevel === 0 ? 0 : (PEAK_THRESHOLDS[peakLevel - 1] || 0);
   const nextTierMin = peakLevel === 0 ? 1 : (PEAK_THRESHOLDS[peakLevel] || PEAK_THRESHOLDS[PEAK_THRESHOLDS.length - 1]);

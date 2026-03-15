@@ -209,7 +209,7 @@ export default function MainLayout() {
     
     // ⚡️ REVERTED: Just check contextLoading. The initialWindowMetrics handles the layout shift safely!
     if (contextLoading) {
-        return <AnimeLoading message="LOADING_PAGE" subMessage="Syncing Account" />;
+        return <AnimeLoading tipType={"general"} message="LOADING_PAGE" subMessage="Syncing Account" />;
     }
 
     if (!isUserAuthenticated && isUserAuthenticated !== null) {
