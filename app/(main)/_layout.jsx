@@ -1,3 +1,4 @@
+import AsyncStorage from '@react-native-async-storage/async-storage'; // ⚡️ Added for migration
 import { Ionicons, MaterialCommunityIcons } from "@expo/vector-icons";
 // ⚡️ Swapped to MMKV
 import { useMMKV } from "react-native-mmkv";
@@ -52,7 +53,9 @@ export default function MainLayout() {
     const [showClanMenu, setShowClanMenu] = useState(false);
     
     const navY = useRef(new Animated.Value(0)).current;
-    const { user, contextLoading } = useUser();
+    
+    // ⚡️ Grabbed setUser to update global state during migration
+    const { user, setUser, contextLoading } = useUser(); 
     const animValue = useRef(new Animated.Value(0)).current;
     const eventPulse = useRef(new Animated.Value(1)).current;
 
@@ -103,11 +106,43 @@ export default function MainLayout() {
         ).start();
     }, [eventPulse]);
 
-    // ⚡️ SYNCHRONOUS USER CHECK: Instantly loads, no async/await needed!
+    // ⚡️ THE GATEKEEPER MIGRATION PROTOCOL
     useEffect(() => {
-        const storedUser = storage.getString("mobileUser");
-        setIsUserAuthenticated(!!storedUser);
-    }, [storage]);
+        const checkAuthAndMigrate = async () => {
+            try {
+                // 1. Check MMKV (Fastest path for regular users)
+                const storedUser = storage.getString("mobileUser");
+                if (storedUser) {
+                    setIsUserAuthenticated(true);
+                    return;
+                }
+
+                // 2. 🛡️ MIGRATION: MMKV is empty, check legacy AsyncStorage
+                const legacyUserStr = await AsyncStorage.getItem("mobileUser");
+                if (legacyUserStr) {
+                    console.log("Gatekeeper: Migrating veteran operative to MMKV...");
+                    
+                    // Copy to new fast storage
+                    storage.set("mobileUser", legacyUserStr);
+                    
+                    // Update global context so the rest of the app knows who they are
+                    const parsed = JSON.parse(legacyUserStr);
+                    setUser(parsed); 
+                    
+                    setIsUserAuthenticated(true);
+                    return;
+                }
+
+                // 3. Completely new user or cleared data
+                setIsUserAuthenticated(false);
+            } catch (e) {
+                console.error("Gatekeeper migration error:", e);
+                setIsUserAuthenticated(false);
+            }
+        };
+
+        checkAuthAndMigrate();
+    }, [setUser, storage]);
 
     useEffect(() => {
         if (user?.deviceId) {
@@ -156,7 +191,6 @@ export default function MainLayout() {
         return () => subscription.remove();
     }, [lastOffset, isNavVisible, navY]);
 
-    // ⚡️ SYNCHRONOUS CLAN CHECK: Replaced async/await
     const handleClanPress = () => {
         try {
             const userClanData = storage.getString('userClan');
@@ -207,12 +241,13 @@ export default function MainLayout() {
         DeviceEventEmitter.emit("navigateSafely", route);
     };
     
-    // ⚡️ REVERTED: Just check contextLoading. The initialWindowMetrics handles the layout shift safely!
-    if (contextLoading) {
+    // ⚡️ UPDATED: Added isUserAuthenticated === null so it keeps loading while migrating
+    if (contextLoading || isUserAuthenticated === null) {
         return <AnimeLoading message="LOADING_PAGE" subMessage="Syncing Account" />;
     }
 
-    if (!isUserAuthenticated && isUserAuthenticated !== null) {
+    // Now it only redirects if we are 100% sure they are not in MMKV AND not in AsyncStorage
+    if (!isUserAuthenticated) {
         return <Redirect href="/screens/FirstLaunchScreen" />;
     }
 
