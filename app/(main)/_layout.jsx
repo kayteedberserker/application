@@ -205,7 +205,7 @@ export default function MainLayout() {
             >
                 {count > 9 && <View className="w-1 h-1 bg-white rounded-full" />}
             </View>
-        );
+        )
     };
 
     const translateY_1 = animValue.interpolate({ inputRange: [0, 1], outputRange: [20, 0] });
