@@ -40,6 +40,8 @@ export const UserProvider = ({ children }) => {
     const backgroundSyncUser = async () => {
       // Exit if already done or no deviceId to sync with
       if (hasFetched.current || !user?.deviceId) {
+        console.log("false");
+        
         setLoading(false);
         return;
       }
@@ -54,6 +56,8 @@ export const UserProvider = ({ children }) => {
           
           if (res.ok) {
             const dbUser = await res.json();
+            console.log(dbUser);
+            
             const updatedUser = {
               ...user,
               country: dbUser.country || "Unknown",

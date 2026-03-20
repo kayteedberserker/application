@@ -9,9 +9,7 @@ import { useColorScheme as useNativeWind } from "nativewind";
 import { useEffect, useMemo, useRef, useState } from "react";
 import {
     ActivityIndicator,
-    Animated,
     Dimensions,
-    Easing,
     FlatList,
     Modal,
     Platform,
@@ -21,6 +19,15 @@ import {
     TouchableOpacity,
     View
 } from "react-native";
+import Animated, { 
+    useSharedValue, 
+    useAnimatedStyle, 
+    withRepeat, 
+    withTiming, 
+    withSequence, 
+    Easing,
+    interpolate
+} from "react-native-reanimated"; // 🔹 Switched to Reanimated
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { SvgXml } from "react-native-svg";
 import Toast from "react-native-toast-message";
@@ -287,7 +294,6 @@ const AuthorStoreModal = ({ visible, onClose, user, isDark, setInventory }) => {
                                             <ScrollView 
                                                 horizontal 
                                                 showsHorizontalScrollIndicator={false}
-                                                // 🔹 Applied your specific heights
                                                 style={{ height: items.length > 1 ? 380 : 180 }}
                                                 contentContainerStyle={{
                                                     flexDirection: 'column',
@@ -306,7 +312,7 @@ const AuthorStoreModal = ({ visible, onClose, user, isDark, setInventory }) => {
                                                 <View className="w-1 h-3 bg-blue-500 rounded-full mr-2" />
                                                 <Text className="text-gray-500 font-black uppercase text-[10px] tracking-[0.2em]">Thematic Collections</Text>
                                             </View>
-                                            <View className="flex-row flex-wrap justify-between">
+                                            <div className="flex flex-wrap justify-between">
                                                 {catalog.themes.map((theme) => (
                                                 <TouchableOpacity
                                                     key={theme.id}
@@ -322,7 +328,7 @@ const AuthorStoreModal = ({ visible, onClose, user, isDark, setInventory }) => {
                                                     </View>
                                                 </TouchableOpacity>
                                                 ))}
-                                            </View>
+                                            </div>
                                         </View>
                                     )}
                                 </View>
@@ -342,7 +348,6 @@ const AuthorStoreModal = ({ visible, onClose, user, isDark, setInventory }) => {
                                                 <ScrollView 
                                                     horizontal 
                                                     showsHorizontalScrollIndicator={false}
-                                                    // 🔹 Applied your specific heights
                                                     style={{ height: themeItems.length > 1 ? 380 : 180 }}
                                                     contentContainerStyle={{
                                                         flexDirection: 'column',
@@ -385,13 +390,11 @@ const AuthorInventoryModal = ({ visible, onClose, user, setUser, isDark, theinve
         setIsUpdating(true);
 
         try {
-            // 1. Logic for "Only one per category" (except Badges)
             const updatedInventory = inventory.map(item => {
                 if (item.itemId === selectedItem.itemId) {
                     return { ...item, isEquipped: !item.isEquipped };
                 }
 
-                // If it's a different item in same category and NOT a badge, unequip it
                 if (
                     item.category === selectedItem.category &&
                     selectedItem.category !== 'BADGE' &&
@@ -402,17 +405,13 @@ const AuthorInventoryModal = ({ visible, onClose, user, setUser, isDark, theinve
                 return item;
             });
 
-            // 2. Prepare FormData to call the unified PUT route
             const formData = new FormData();
             formData.append("userId", user?._id || "");
             formData.append("fingerprint", user?.deviceId || "");
             formData.append("inventory", JSON.stringify(updatedInventory));
-
-            // Crucial: Pass existing data so the backend doesn't null them out
             formData.append("username", user?.username || "");
             formData.append("description", user?.description || "");
 
-            // If you have existing preferences in the user object, pass them too
             if (user?.preferences) {
                 formData.append("preferences", JSON.stringify(user.preferences));
             }
@@ -425,8 +424,6 @@ const AuthorInventoryModal = ({ visible, onClose, user, setUser, isDark, theinve
             const result = await res.json();
 
             if (res.ok) {
-                // 3. Update the global state!
-                // This will trigger a re-render in the Profile and everywhere else
                 setUser(result.user);
             } else {
                 throw new Error(result.message || "Sync failed");
@@ -516,7 +513,6 @@ const AuthorInventoryModal = ({ visible, onClose, user, setUser, isDark, theinve
                                             : 'bg-gray-50 dark:bg-[#161b22] border-gray-100 dark:border-gray-800'
                                         } ${isExpired ? 'opacity-50' : ''}`}
                                     >
-                                        {/* Icon Container */}
                                         <View className="mr-4">
                                             {isBorder ? (
                                                 <ClanBorder
@@ -534,7 +530,6 @@ const AuthorInventoryModal = ({ visible, onClose, user, setUser, isDark, theinve
                                             )}
                                         </View>
 
-                                        {/* Info Container */}
                                         <View className="flex-1">
                                             <Text className="font-black dark:text-white text-sm uppercase italic">
                                                 {item.name}
@@ -563,7 +558,6 @@ const AuthorInventoryModal = ({ visible, onClose, user, setUser, isDark, theinve
                                             </View>
                                         </View>
 
-                                        {/* Action Button */}
                                         {item.category !== "VERIFIED" && (
                                             <TouchableOpacity
                                                 disabled={isUpdating}
@@ -581,7 +575,6 @@ const AuthorInventoryModal = ({ visible, onClose, user, setUser, isDark, theinve
                                             </TouchableOpacity>
                                         )}
 
-                                        {/* Show 'Delete' or 'Expired' label if it's dead */}
                                         {isExpired && (
                                             <View className="px-4 py-2 bg-red-500/10 rounded-lg border border-red-500/20">
                                                 <Text className="text-red-500 text-[10px] font-black uppercase">Void</Text>
@@ -608,17 +601,14 @@ const AuthorInventoryModal = ({ visible, onClose, user, setUser, isDark, theinve
 
 
 export default function MobileProfilePage() {
-    // 🔹 Strictly use the useMMKV hook
     const storage = useMMKV();
-
     const CustomAlert = useAlert();
-    const [theinventory, setInventory] = useState([])
+    const [theinventory, setInventory] = useState([]);
     const { user, setUser, contextLoading } = useUser();
     const { colorScheme } = useNativeWind();
     const isDark = colorScheme === "dark";
     const router = useRouter();
     const insets = useSafeAreaInsets();
-
     const playerCardRef = useRef(null);
 
     const [description, setDescription] = useState("");
@@ -636,25 +626,80 @@ export default function MobileProfilePage() {
     const [auraModalVisible, setAuraModalVisible] = useState(false);
     const [cardPreviewVisible, setCardPreviewVisible] = useState(false);
 
-    // 🔹 Neural Prefs State
     const [favAnimes, setFavAnimes] = useState("");
     const [favCharacter, setFavCharacter] = useState("");
     const [favGenres, setFavGenres] = useState("");
 
-    const scanAnim = useRef(new Animated.Value(0)).current;
-    const loadingAnim = useRef(new Animated.Value(0)).current;
-    const pulseAnim = useRef(new Animated.Value(1)).current;
+    // 🔹 REANIMATED SHARED VALUES
+    const scanAnim = useSharedValue(0);
+    const loadingAnim = useSharedValue(0);
+    const pulseAnim = useSharedValue(1);
+
     const [copied, setCopied] = useState(false);
     const [refCopied, setRefCopied] = useState(false);
 
     const CACHE_KEY_USER_EXTRAS = `user_profile_cache_${user?.deviceId}`;
-
     const currentAuraPoints = user?.weeklyAura || 0;
     const aura = useMemo(() => getAuraVisuals(user?.previousRank), [user?.previousRank]);
     const equippedGlow = user?.inventory?.find(i => i.category === 'GLOW' && i.isEquipped);
     const activeGlowColor = equippedGlow?.visualConfig?.primaryColor || null;
     const dynamicAuraColor = activeGlowColor || aura.color;
     const filledBoxes = Math.min(Math.floor(currentAuraPoints / 10), 10);
+
+    // 🔹 REANIMATED ANIMATION TRIGGERS
+    useEffect(() => {
+        // DNA Scan Rotation
+        scanAnim.value = withRepeat(
+            withTiming(1, { duration: 10000, easing: Easing.linear }),
+            -1,
+            false
+        );
+
+        // Aura Pulse Effect
+        pulseAnim.value = withRepeat(
+            withSequence(
+                withTiming(1.15, { duration: 2000 }),
+                withTiming(1, { duration: 2000 })
+            ),
+            -1,
+            true
+        );
+    }, []);
+
+    useEffect(() => {
+        if (isUpdating) {
+            loadingAnim.value = withRepeat(
+                withTiming(1, { duration: 1500, easing: Easing.linear }),
+                -1,
+                false
+            );
+        } else {
+            loadingAnim.value = 0;
+        }
+    }, [isUpdating]);
+
+    // 🔹 REANIMATED ANIMATED STYLES
+    const scanAnimatedStyle = useAnimatedStyle(() => {
+        const rotate = interpolate(scanAnim.value, [0, 1], [0, 360]);
+        return {
+            transform: [{ rotate: `${rotate}deg` }],
+            borderColor: `${dynamicAuraColor}40`
+        };
+    });
+
+    const auraPulseStyle = useAnimatedStyle(() => {
+        return {
+            transform: [{ scale: pulseAnim.value }],
+            backgroundColor: dynamicAuraColor
+        };
+    });
+
+    const progressBarAnimationStyle = useAnimatedStyle(() => {
+        const transX = interpolate(loadingAnim.value, [0, 1], [-width, width]);
+        return {
+            transform: [{ translateX: transX }]
+        };
+    });
 
     const copyToClipboard = async () => {
         if (user?.deviceId) {
@@ -692,27 +737,6 @@ export default function MobileProfilePage() {
         }
     };
 
-    useEffect(() => {
-        Animated.loop(Animated.timing(scanAnim, { toValue: 1, duration: 10000, easing: Easing.linear, useNativeDriver: true })).start();
-        Animated.loop(Animated.sequence([
-            Animated.timing(pulseAnim, { toValue: 1.15, duration: 2000, useNativeDriver: true }),
-            Animated.timing(pulseAnim, { toValue: 1, duration: 2000, useNativeDriver: true }),
-        ])).start();
-    }, []);
-
-    useEffect(() => {
-        if (isUpdating) {
-            Animated.loop(Animated.timing(loadingAnim, { toValue: 1, duration: 1500, easing: Easing.linear, useNativeDriver: true })).start();
-        } else {
-            loadingAnim.stopAnimation();
-            loadingAnim.setValue(0);
-        }
-    }, [isUpdating]);
-
-    const spin = scanAnim.interpolate({ inputRange: [0, 1], outputRange: ['0deg', '360deg'] });
-    const translateX = loadingAnim.interpolate({ inputRange: [0, 1], outputRange: [-width, width] });
-
-    // 🔹 SYNCHRONOUS CACHE LOAD WITH MMKV
     useEffect(() => {
         if (!user?.deviceId) return;
         try {
@@ -756,7 +780,6 @@ export default function MobileProfilePage() {
                     const newTotal = postData.total || 0;
                     if (postRes.ok) setTotalPosts(newTotal);
 
-                    // 🔹 SYNCHRONOUS CACHE SAVE
                     storage.set(CACHE_KEY_USER_EXTRAS, JSON.stringify({
                         username: dbUser.username,
                         description: dbUser.description,
@@ -773,7 +796,7 @@ export default function MobileProfilePage() {
 
     const getKey = (pageIndex, previousPageData) => {
         if (!user?._id) return null;
-        if (previousPageData && previousPageData.posts.length < LIMIT) return null;
+        if (previousPageData && previousPageData.posts?.length < LIMIT) return null;
         return `/posts?author=${user._id}&page=${pageIndex + 1}&limit=${LIMIT}`;
     };
 
@@ -788,7 +811,7 @@ export default function MobileProfilePage() {
     }, [data]);
 
     const isLoadingInitialData = isLoading && !data;
-    const isReachingEnd = data && data[data.length - 1]?.posts.length < LIMIT;
+    const isReachingEnd = data && data[data.length - 1]?.posts?.length < LIMIT;
     const isFetchingNextPage = isValidating && data && typeof data[size - 1] === "undefined";
 
     const count = totalPosts;
@@ -852,7 +875,6 @@ export default function MobileProfilePage() {
                 setPreview(null);
                 setImageFile(null);
 
-                // 🔹 SYNCHRONOUS CACHE SAVE
                 storage.set(CACHE_KEY_USER_EXTRAS, JSON.stringify({
                     username: result.user.username,
                     description: result.user.description,
@@ -912,8 +934,8 @@ export default function MobileProfilePage() {
 
                 <View style={{ position: "relative" }} className="flex-row flex items-center justify-center mb-10 pr-2">
                     <View className="">
-                        <Animated.View style={{ position: 'absolute', inset: -12, borderRadius: 100, backgroundColor: dynamicAuraColor, opacity: 0.15, transform: [{ scale: pulseAnim }] }} />
-                        <Animated.View style={{ transform: [{ rotate: spin }], borderColor: `${dynamicAuraColor}40` }} className="absolute -inset-4 border border-dashed rounded-full" />
+                        <Animated.View style={[{ position: 'absolute', inset: -12, borderRadius: 100, opacity: 0.15 }, auraPulseStyle]} />
+                        <Animated.View style={[{ position: 'absolute', inset: -4, borderStyle: 'dashed', borderWidth: 1, borderRadius: 10000 }, scanAnimatedStyle]} />
                         <View style={{ borderColor: dynamicAuraColor }} className="absolute -inset-1 border-2 rounded-full opacity-50" />
                         <TouchableOpacity onPress={pickImage} className="w-40 h-40 rounded-full overflow-hidden border-4 border-white dark:border-[#0a0a0a] bg-gray-900 shadow-2xl">
                             <Image source={{ uri: preview || user?.profilePic?.url || "https://via.placeholder.com/150" }} style={{width:"100%", height: "100%"}} className="object-cover" />
@@ -998,7 +1020,7 @@ export default function MobileProfilePage() {
 
                 <TouchableOpacity onPress={handleUpdate} disabled={isUpdating} style={{ backgroundColor: dynamicAuraColor }} className="relative w-full h-14 rounded-2xl overflow-hidden items-center justify-center mt-6">
                     <Text className="relative z-10 text-white font-black uppercase italic tracking-widest text-xs">{isUpdating ? "Syncing Changes..." : "Update Character Data"}</Text>
-                    {isUpdating && <Animated.View className="absolute bottom-0 h-1 bg-white/40 w-full" style={{ transform: [{ translateX }] }} />}
+                    {isUpdating && <Animated.View className="absolute bottom-0 h-1 bg-white/40 w-full" style={progressBarAnimationStyle} />}
                 </TouchableOpacity>
             </View>
 
@@ -1007,7 +1029,7 @@ export default function MobileProfilePage() {
                 <View className="h-[1px] flex-1 bg-gray-100 dark:bg-gray-800" />
             </View>
         </View>
-    ), [user, preview, description, username, isUpdating, spin, translateX, totalPosts, copied, refCopied, rankTitle, rankIcon, progress, nextMilestone, count, showId, isDark, aura, pulseAnim, filledBoxes, currentAuraPoints, dynamicAuraColor, pickImage, handleUpdate, captureAndShare]);
+    ), [user, preview, description, username, isUpdating, totalPosts, copied, refCopied, rankTitle, rankIcon, progress, nextMilestone, count, showId, isDark, aura, filledBoxes, currentAuraPoints, dynamicAuraColor, pickImage, handleUpdate, captureAndShare, scanAnimatedStyle, auraPulseStyle, progressBarAnimationStyle]);
 
 
     return (
@@ -1101,7 +1123,6 @@ export default function MobileProfilePage() {
                 </View>
             </Modal>
 
-            {/* 🛒 RENDER THE EXTRACTED STORE MODAL HERE */}
             <AuthorStoreModal
                 setInventory={setInventory}
                 visible={storeVisible}
@@ -1123,7 +1144,6 @@ export default function MobileProfilePage() {
                 </View>
             </Modal>
 
-            {/* 🔹 Player Card Preview Modal (Fixed Layout & Closing) */}
             <Modal visible={cardPreviewVisible} transparent animationType="slide">
                 <View className="flex-1 bg-black/90">
                     <ScrollView
@@ -1131,7 +1151,6 @@ export default function MobileProfilePage() {
                         showsVerticalScrollIndicator={false}
                     >
                         <View className="w-full items-center">
-                            {/* Header with Close Button */}
                             <View className="w-full flex-row pt-10 justify-between items-center">
                                 <View>
                                     <Text className="text-white font-black text-xl italic uppercase tracking-widest">Operator Identity</Text>
@@ -1145,7 +1164,6 @@ export default function MobileProfilePage() {
                                 </Pressable>
                             </View>
 
-                            {/* Card Render - Scaled to fit screen width safely */}
                             <View
                                 style={{
                                     transform: [{ scale: Math.min(1, (width - 40) / 380) }],
@@ -1157,7 +1175,6 @@ export default function MobileProfilePage() {
                                 <PlayerCard author={user} totalPosts={totalPosts} isDark={isDark} />
                             </View>
 
-                            {/* Footer Actions */}
                             <View className="w-full">
                                 <TouchableOpacity
                                     onPress={captureAndShare}

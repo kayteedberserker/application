@@ -10,12 +10,14 @@ import {
   ScrollView,
   TextInput,
   TouchableOpacity,
+  useColorScheme,
   View
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { Text } from '../../components/Text';
 import THEME from '../../components/useAppTheme';
 import apiFetch from "../../utils/apiFetch";
+import TopBar from '../../components/Topbar';
 
 const { width } = Dimensions.get('window');
 
@@ -23,7 +25,7 @@ export default function Contact() {
   const router = useRouter();
   const [form, setForm] = useState({ name: "", email: "", message: "", type: "General" });
   const [status, setStatus] = useState({ loading: false, success: "", error: "" });
-
+  const isDark = useColorScheme() === "dark";
   const handleChange = (key, value) => {
     setForm({ ...form, [key]: value });
   };
@@ -65,6 +67,7 @@ export default function Contact() {
 
   return (
     <SafeAreaView style={{ flex: 1, backgroundColor: THEME.bg }}>
+      <TopBar isDark={isDark} />
       {/* --- Ambient Background Glows --- */}
       <View style={{ position: 'absolute', top: -50, right: -50, width: 300, height: 300, borderRadius: 150, backgroundColor: THEME.glowBlue }} />
       <View style={{ position: 'absolute', bottom: 100, left: -100, width: 350, height: 350, borderRadius: 175, backgroundColor: THEME.glowRed }} />

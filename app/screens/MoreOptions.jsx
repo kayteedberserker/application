@@ -11,12 +11,14 @@ import {
   ScrollView,
   Switch,
   TouchableOpacity,
+  useColorScheme,
   View
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { Text } from '../../components/Text';
 import THEME from '../../components/useAppTheme';
 import { useAlert } from '../../context/AlertContext';
+import TopBar from '../../components/Topbar';
 const { width } = Dimensions.get('window');
 
 export default function MoreOptions() {
@@ -24,7 +26,7 @@ export default function MoreOptions() {
   const router = useRouter();
   const [isNotificationsEnabled, setIsNotificationsEnabled] = useState(false);
   const [loading, setLoading] = useState(true);
-
+      const isDark = useColorScheme() === "dark";
   // Check current permission status on mount
   useEffect(() => {
     checkPermission();
@@ -90,6 +92,7 @@ export default function MoreOptions() {
 
   return (
     <SafeAreaView style={{ flex: 1, backgroundColor: THEME.bg }}>
+      <TopBar isDark={isDark}/>
       {/* --- Ambient Background Glows --- */}
       <View style={{ position: 'absolute', top: -50, right: -50, width: 300, height: 300, borderRadius: 150, backgroundColor: THEME.glowBlue, opacity: 0.2 }} />
       <View style={{ position: 'absolute', bottom: 100, left: -100, width: 400, height: 400, borderRadius: 200, backgroundColor: THEME.glowPurple, opacity: 0.2 }} />

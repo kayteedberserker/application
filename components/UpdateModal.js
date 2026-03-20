@@ -1,9 +1,17 @@
 import { Feather, Ionicons } from "@expo/vector-icons";
 import Constants from 'expo-constants';
-import { useEffect, useRef, useState } from 'react';
+import { useEffect, useState } from 'react';
 import apiFetch from "../utils/apiFetch";
 
-import { Animated, Easing, Linking, Modal, Pressable, Text as RNText, useColorScheme, View } from 'react-native';
+import { Linking, Modal, Pressable, Text as RNText, useColorScheme, View } from 'react-native';
+import Animated, { 
+    useSharedValue, 
+    useAnimatedStyle, 
+    withRepeat, 
+    withSequence, 
+    withTiming, 
+    Easing 
+} from 'react-native-reanimated';
 
 const VERSION_CHECK_URL = 'https://oreblogda.com/api/version'; 
 const INSTALLED_VERSION = Constants.expoConfig?.version || Constants.manifest?.version || '1.0.0';
@@ -35,36 +43,33 @@ export default function UpdateHandler() {
   const colorScheme = useColorScheme();
   const isDark = colorScheme === "dark";
 
-  // Pulse Animation Ref
-  const pulseAnim = useRef(new Animated.Value(1)).current;
+  const pulseAnim = useSharedValue(1);
 
   useEffect(() => {
     fetchLatestVersion();
   }, []);
 
-  // Animation Trigger
   useEffect(() => {
     if (visible) {
-      Animated.loop(
-        Animated.sequence([
-          Animated.timing(pulseAnim, {
-            toValue: 1.05,
-            duration: 800,
-            easing: Easing.inOut(Easing.ease),
-            useNativeDriver: true,
-          }),
-          Animated.timing(pulseAnim, {
-            toValue: 1,
-            duration: 800,
-            easing: Easing.inOut(Easing.ease),
-            useNativeDriver: true,
-          }),
-        ])
-      ).start();
+      pulseAnim.value = withRepeat(
+        withSequence(
+          withTiming(1.05, { duration: 800, easing: Easing.inOut(Easing.ease) }),
+          withTiming(1, { duration: 800, easing: Easing.inOut(Easing.ease) })
+        ),
+        -1,
+        false
+      );
+    } else {
+      pulseAnim.value = 1;
     }
   }, [visible]);
 
-  // Countdown logic
+  const pulseAnimatedStyle = useAnimatedStyle(() => {
+      return {
+          transform: [{ scale: pulseAnim.value }]
+      };
+  });
+
   useEffect(() => {
     let timer;
     if (visible && isCritical && countdown > 0) {
@@ -123,13 +128,14 @@ export default function UpdateHandler() {
           <View style={{ backgroundColor: themeColor }} className="h-[4px] w-full opacity-50" />
           
           <View className="p-8 items-center">
-            {/* PULSING ICON */}
             <Animated.View 
-                style={{ 
-                    backgroundColor: `${themeColor}20`, 
-                    borderColor: `${themeColor}40`,
-                    transform: [{ scale: pulseAnim }]
-                }}
+                style={[
+                    { 
+                        backgroundColor: `${themeColor}20`, 
+                        borderColor: `${themeColor}40`
+                    },
+                    pulseAnimatedStyle
+                ]}
                 className="w-16 h-16 rounded-full items-center justify-center mb-6 border"
             >
               <Feather name={isCritical ? "alert-triangle" : "download-cloud"} size={32} color={themeColor} />
@@ -150,8 +156,7 @@ export default function UpdateHandler() {
             </RNText>
 
             <View className="w-full gap-3">
-              {/* PULSING ACTION BUTTON */}
-              <Animated.View style={{ transform: [{ scale: pulseAnim }] }}>
+              <Animated.View style={pulseAnimatedStyle}>
                 <Pressable 
                     onPress={handleUpdate}
                     style={{ 

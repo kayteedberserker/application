@@ -18,27 +18,28 @@ const CHANNELS = [
     { id: 'gaming', title: 'Gaming', type: 'category' },
 ];
 
-// ⚡️ LAZY LOADED SCENE: Only mounts if it is near the active screen
+// ⚡️ STRICT MEMORY SCENE: Actively mounts AND destroys pages to save RAM
 const Scene = memo(({ item, index, activeIndex }) => {
-    const [hasLoaded, setHasLoaded] = useState(false);
-
-    // If this scene is the active one, or immediately adjacent (left/right), load it.
-    // Once it loads, it stays loaded so swiping back is instant.
-    if (!hasLoaded && Math.abs(activeIndex - index) <= 1) {
-        setHasLoaded(true);
-    }
+    
+    // ⚡️ THE MEMORY RULES:
+    // Rule 1: The Global Feed (Index 0) is ALWAYS mounted.
+    // Rule 2: Mount the Active Page + 1 page to the left/right (so the finger swipe doesn't show a blank black screen).
+    // Rule 3: If it doesn't match Rule 1 or 2, DESTROY the component to free RAM.
+    const isGlobalFeed = index === 0;
+    const isAdjacent = Math.abs(activeIndex - index) <= 1;
+    const shouldMount = isGlobalFeed || isAdjacent;
 
     return (
         <View style={{ flex: 1 }}>
             <View className="flex-1 z-10 bg-transparent">
-                {/* ⚡️ Only mount the heavy list if it is inside our lazy window */}
-                {hasLoaded ? (
+                {/* ⚡️ Only render the heavy lists if they pass the strict memory rules */}
+                {shouldMount ? (
                     item.type === 'feed' ? <PostsViewer /> : <CategoryPage forcedId={item.id} />
                 ) : null}
             </View>
             
-            {/* Show loading indicator ONLY if the heavy list hasn't mounted yet */}
-            {!hasLoaded && (
+            {/* Show loading indicator behind unmounted pages */}
+            {!shouldMount && (
                 <View 
                     pointerEvents="none" 
                     style={{ position: 'absolute', inset: 0, zIndex: -1 }}
@@ -51,13 +52,12 @@ const Scene = memo(({ item, index, activeIndex }) => {
     );
 }, (prevProps, nextProps) => {
     // ⚡️ AGGRESSIVE MEMOIZATION:
-    // If the scene has already been loaded, tell React to NEVER re-render it from here.
-    // The LegendList inside will handle its own internal renders.
-    const prevInWindow = Math.abs(prevProps.activeIndex - prevProps.index) <= 1;
-    const nextInWindow = Math.abs(nextProps.activeIndex - nextProps.index) <= 1;
+    // Do not let React re-render this Scene unless its 'shouldMount' status has changed.
+    // This stops the app from lagging when you swipe.
+    const prevShouldMount = prevProps.index === 0 || Math.abs(prevProps.activeIndex - prevProps.index) <= 1;
+    const nextShouldMount = nextProps.index === 0 || Math.abs(nextProps.activeIndex - nextProps.index) <= 1;
     
-    if (prevInWindow) return true; // Block re-render if it was already loaded
-    return prevInWindow === nextInWindow; // Only re-render when it enters the window
+    return prevShouldMount === nextShouldMount; 
 });
 
 export default function HomePage() {
@@ -69,7 +69,6 @@ export default function HomePage() {
     const { initialSector } = useLocalSearchParams(); 
     
     const [activeTitle, setActiveTitle] = useState(CHANNELS[0].title); 
-    // ⚡️ Track numeric index to drive the Lazy Window
     const [activeIndex, setActiveIndex] = useState(0); 
 
     useEffect(() => {
@@ -96,7 +95,7 @@ export default function HomePage() {
     const onPageSelected = useCallback((e) => {
         const newIndex = e.nativeEvent.position;
         setActiveTitle(CHANNELS[newIndex].title);
-        setActiveIndex(newIndex); // ⚡️ Update the window position
+        setActiveIndex(newIndex); // ⚡️ This triggers the Scene unmounting logic
         DeviceEventEmitter.emit("pageSwiped", newIndex);
     }, []);
 
@@ -112,7 +111,6 @@ export default function HomePage() {
             >
                 {CHANNELS.map((item, index) => (
                     <View key={item.id} style={{ flex: 1 }} collapsable={false}>
-                        {/* ⚡️ Pass index and activeIndex to power the Lazy Engine */}
                         <Scene item={item} index={index} activeIndex={activeIndex} />
                     </View>
                 ))}

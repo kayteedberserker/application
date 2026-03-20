@@ -2,22 +2,19 @@ import { Ionicons, MaterialCommunityIcons, Feather } from "@expo/vector-icons";
 import { useLocalSearchParams, useRouter } from "expo-router";
 import * as Sharing from "expo-sharing";
 import { useColorScheme } from "nativewind";
-import { useCallback, useEffect, useRef, useState, useMemo, memo } from "react";
+import { useCallback, useEffect, useRef, useState, memo } from "react";
 import {
   ActivityIndicator,
-  Animated,
   Image,
   Clipboard,
   DeviceEventEmitter,
   Dimensions,
-  Easing,
   Modal,
   Pressable,
   ScrollView,
   TouchableOpacity,
   View
 } from "react-native";
-// ⚡️ Swapped FlashList for LegendList
 import { useMMKV } from 'react-native-mmkv';
 import { LegendList } from "@legendapp/list";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
@@ -34,8 +31,15 @@ import { useAlert } from "../../../context/AlertContext";
 import { useUser } from "../../../context/UserContext";
 import apiFetch from "../../../utils/apiFetch";
 
-// ⚡️ Reanimated Imports
-import AnimatedReanimated, { useSharedValue, withRepeat, withTiming, useAnimatedStyle, interpolate } from "react-native-reanimated";
+import AnimatedReanimated, { 
+    useSharedValue, 
+    withRepeat, 
+    withTiming, 
+    withSequence,
+    useAnimatedStyle, 
+    interpolate,
+    Easing
+} from "react-native-reanimated";
 
 const API_BASE = "https://oreblogda.com/api";
 const { width } = Dimensions.get('window');
@@ -45,7 +49,6 @@ const CLAN_POSTS_MEMORY_CACHE = {};
 
 const THEME = { accent: "#3b82f6" };
 
-// ⚡️ Adjusted to use Number-based Ranks matching your ClanSchema
 const getClanTierDetails = (rankNumber) => {
   switch (rankNumber) {
     case 6: return { title: "The Akatsuki", color: '#ef4444' };
@@ -57,9 +60,6 @@ const getClanTierDetails = (rankNumber) => {
   }
 };
 
-// ------------------------------------------------------------------
-// ⚡️ MOVED OUTSIDE: Isolated Reanimated Component
-// ------------------------------------------------------------------
 const AnimatedProgressBar = memo(({ scoreA, scoreB }) => {
   const total = scoreA + scoreB || 1;
   const pctA = (scoreA / total) * 100;
@@ -118,33 +118,54 @@ export default function ClanPage() {
 
   const scrollRef = useRef(null);
   const clanCardRef = useRef(null);
-  const pulseAnim = useRef(new Animated.Value(1)).current;
-  const rotationAnim = useRef(new Animated.Value(0)).current;
-  const skeletonFade = useRef(new Animated.Value(0.3)).current;
+
+  const pulseAnim = useSharedValue(1);
+  const rotationAnim = useSharedValue(0);
+  const skeletonFade = useSharedValue(0.3);
 
   useEffect(() => {
-    Animated.loop(
-      Animated.sequence([
-        Animated.timing(pulseAnim, { toValue: 1.1, duration: 2000, useNativeDriver: true }),
-        Animated.timing(pulseAnim, { toValue: 1, duration: 2000, useNativeDriver: true }),
-      ])
-    ).start();
+    pulseAnim.value = withRepeat(
+      withSequence(
+        withTiming(1.1, { duration: 2000 }),
+        withTiming(1, { duration: 2000 })
+      ),
+      -1,
+      true
+    );
 
-    Animated.loop(
-      Animated.timing(rotationAnim, { toValue: 1, duration: 20000, easing: Easing.linear, useNativeDriver: true })
-    ).start();
+    rotationAnim.value = withRepeat(
+      withTiming(1, { duration: 20000, easing: Easing.linear }),
+      -1,
+      false
+    );
 
-    Animated.loop(
-      Animated.sequence([
-        Animated.timing(skeletonFade, { toValue: 0.7, duration: 800, useNativeDriver: true }),
-        Animated.timing(skeletonFade, { toValue: 0.3, duration: 800, useNativeDriver: true }),
-      ])
-    ).start();
+    skeletonFade.value = withRepeat(
+      withSequence(
+        withTiming(0.7, { duration: 800 }),
+        withTiming(0.3, { duration: 800 })
+      ),
+      -1,
+      true
+    );
   }, []);
 
-  const spin = rotationAnim.interpolate({
-    inputRange: [0, 1],
-    outputRange: ['0deg', '360deg']
+  const spinAnimatedStyle = useAnimatedStyle(() => {
+      const rotate = interpolate(rotationAnim.value, [0, 1], [0, 360]);
+      return {
+          transform: [{ rotate: `${rotate}deg` }]
+      };
+  });
+
+  const pulseAnimatedStyle = useAnimatedStyle(() => {
+      return {
+          transform: [{ scale: pulseAnim.value }]
+      };
+  });
+
+  const skeletonAnimatedStyle = useAnimatedStyle(() => {
+      return {
+          opacity: skeletonFade.value
+      };
   });
 
   useEffect(() => {
@@ -358,11 +379,11 @@ export default function ClanPage() {
   const ClanSkeleton = useCallback(() => (
     <View className="px-4 pt-20 pb-6 opacity-40">
       <View className="p-6 bg-gray-100 dark:bg-[#111] border border-gray-200 dark:border-gray-800 rounded-[40px] items-center">
-        <Animated.View style={{ opacity: skeletonFade }} className="w-32 h-32 bg-gray-300 dark:bg-gray-800 rounded-full mb-6" />
-        <Animated.View style={{ opacity: skeletonFade }} className="w-48 h-8 bg-gray-300 dark:bg-gray-800 rounded-lg mb-4" />
+        <AnimatedReanimated.View style={skeletonAnimatedStyle} className="w-32 h-32 bg-gray-300 dark:bg-gray-800 rounded-full mb-6" />
+        <AnimatedReanimated.View style={skeletonAnimatedStyle} className="w-48 h-8 bg-gray-300 dark:bg-gray-800 rounded-lg mb-4" />
       </View>
     </View>
-  ), [skeletonFade]);
+  ), [skeletonAnimatedStyle]);
 
   const RemoteSvgIcon = useCallback(({ xml, size = 50, color }) => {
     if (!xml) return <MaterialCommunityIcons name="help-circle-outline" size={size} color="gray" />;
@@ -467,8 +488,8 @@ export default function ClanPage() {
 
                 <View className="items-center">
                   <View className="relative items-center justify-center mb-4">
-                    <Animated.View style={{ position: 'absolute', width: 120, height: 120, borderRadius: 100, backgroundColor: rankInfo.color, opacity: 0.1, transform: [{ scale: pulseAnim }] }} />
-                    <Animated.View style={{ transform: [{ rotate: spin }], borderColor: `${rankInfo.color}40`, width: 140, height: 140 }} className="absolute border border-dashed rounded-full" />
+                    <AnimatedReanimated.View style={[{ position: 'absolute', width: 120, height: 120, borderRadius: 100, backgroundColor: rankInfo.color, opacity: 0.1 }, pulseAnimatedStyle]} />
+                    <AnimatedReanimated.View style={[{ borderColor: `${rankInfo.color}40`, width: 140, height: 140 }, spinAnimatedStyle]} className="absolute border border-dashed rounded-full" />
                     <ClanCrest rank={clan.rank || 1} size={110} glowColor={activeGlowColor || verifiedColor} />
                   </View>
 
@@ -560,8 +581,8 @@ export default function ClanPage() {
 
               <View className="items-center">
                 <View className="relative items-center justify-center mb-4">
-                  <Animated.View style={{ position: 'absolute', width: 120, height: 120, borderRadius: 100, backgroundColor: rankInfo.color, opacity: 0.1, transform: [{ scale: pulseAnim }] }} />
-                  <Animated.View style={{ transform: [{ rotate: spin }], borderColor: `${rankInfo.color}40`, width: 140, height: 140 }} className="absolute border border-dashed rounded-full" />
+                  <AnimatedReanimated.View style={[{ position: 'absolute', width: 120, height: 120, borderRadius: 100, backgroundColor: rankInfo.color, opacity: 0.1 }, pulseAnimatedStyle]} />
+                  <AnimatedReanimated.View style={[{ borderColor: `${rankInfo.color}40`, width: 140, height: 140 }, spinAnimatedStyle]} className="absolute border border-dashed rounded-full" />
                   <ClanCrest rank={clan.rank || 1} size={110} glowColor={activeGlowColor || verifiedColor} />
                 </View>
 
@@ -627,7 +648,7 @@ export default function ClanPage() {
         )}
       </View>
     );
-  }, [clan, isOffline, isDark, pulseAnim, spin, isFollowing, loadingFollow, actionLoading, showAlert, handleFollow, handleAuthorRequest, router]);
+  }, [clan, isOffline, isDark, pulseAnimatedStyle, spinAnimatedStyle, skeletonAnimatedStyle, isFollowing, loadingFollow, actionLoading, showAlert, handleFollow, handleAuthorRequest, router]);
 
   const renderItem = useCallback(({ item }) => (
     <View className="px-3">
@@ -646,7 +667,6 @@ export default function ClanPage() {
 
   return (
     <View className="flex-1 bg-white dark:bg-[#0a0a0a]">
-      {/* ⚡️ Swapped to LegendList */}
       <LegendList
         ref={scrollRef}
         data={posts}
@@ -654,7 +674,6 @@ export default function ClanPage() {
         renderItem={renderItem}
         ListHeaderComponent={ListHeader}
 
-        // ⚡️ LegendList Settings
         estimatedItemSize={500}
         drawDistance={1000}
         recycleItems={true}

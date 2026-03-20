@@ -1,15 +1,16 @@
 import { Ionicons } from '@expo/vector-icons';
 import { useRouter } from 'expo-router';
-import { Dimensions, ScrollView, TouchableOpacity, View } from 'react-native';
+import { Dimensions, ScrollView, TouchableOpacity, useColorScheme, View } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { Text } from '../../components/Text';
 import THEME from '../../components/useAppTheme';
+import TopBar from '../../components/Topbar';
 const { width } = Dimensions.get('window');
 
 
 export default function Instructions() {
   const router = useRouter();
-
+  const isDark = useColorScheme() === "dark";
   const InstructionStep = ({ icon, title, desc, color }) => (
     <View className="flex-row items-start mb-8">
       <View 
@@ -27,6 +28,7 @@ export default function Instructions() {
 
   return (
     <SafeAreaView style={{ flex: 1, backgroundColor: THEME.bg }}>
+      <TopBar isDark={isDark}/>
       {/* --- Ambient Background Glows --- */}
       <View style={{ position: 'absolute', top: -50, right: -50, width: 300, height: 300, borderRadius: 150, backgroundColor: THEME.glowBlue }} />
       <View style={{ position: 'absolute', bottom: 100, left: -100, width: 400, height: 400, borderRadius: 200, backgroundColor: THEME.glowGreen }} />

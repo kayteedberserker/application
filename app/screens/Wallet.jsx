@@ -2,12 +2,10 @@ import { Ionicons, MaterialCommunityIcons } from '@expo/vector-icons';
 import { useNavigation } from '@react-navigation/native';
 import { Canvas, Circle, Fill, Group, LinearGradient, Rect, vec } from "@shopify/react-native-skia";
 import { Image } from 'expo-image';
-import { useCallback, useEffect, useRef, useState } from 'react';
+import { useCallback, useEffect, useState } from 'react';
 import {
   ActivityIndicator,
-  Animated,
   Dimensions,
-  Easing,
   Modal,
   Platform,
   ScrollView,
@@ -22,6 +20,16 @@ import { useMMKV } from 'react-native-mmkv';
 import Purchases from 'react-native-purchases';
 import { SafeAreaView, useSafeAreaInsets } from 'react-native-safe-area-context';
 import { SvgXml } from 'react-native-svg';
+import Animated, {
+  useSharedValue,
+  useAnimatedStyle,
+  withRepeat,
+  withTiming,
+  withSequence,
+  Easing,
+  interpolate
+} from 'react-native-reanimated';
+
 import ClanBorder from '../../components/ClanBorder';
 import CoinIcon from '../../components/ClanIcon';
 import PullSpinModal from '../../components/PullSpinModal';
@@ -32,8 +40,6 @@ import { useClan } from '../../context/ClanContext';
 import { useCoins } from '../../context/CoinContext';
 import { useUser } from '../../context/UserContext';
 import apiFetch from '../../utils/apiFetch';
-
-// ⚡️ Import the Peak Badge
 import PeakBadge from '../../components/PeakBadge'; 
 import AnimeLoading from '../../components/AnimeLoading';
 
@@ -52,7 +58,6 @@ const USER_STATS_CACHE_KEY = '@user_vault_stats_cache';
 const RECENT_USERS_KEY = '@wallet_recent_users';
 const RECENT_AMOUNTS_KEY = '@wallet_recent_amounts';
 
-// ⚡️ PEAK SYSTEM CONSTANTS
 const PEAK_THRESHOLDS = [1, 1000, 5000, 10000, 25000, 50000, 100000, 250000, 500000, 1000000];
 const PEAK_REWARDS = [
   { level: 1, title: "Initiate Status", desc: "First purchase completed. Welcome to Peak." },
@@ -114,19 +119,16 @@ const WalletPage = () => {
   const [pullModalVisible, setPullModalVisible] = useState(false);
   const [activePullData, setActivePullData] = useState(null);
   const [minLoadDone, setMinLoadDone] = useState(false);
-  useEffect(() => {
-        const t = setTimeout(() => setMinLoadDone(true), 3000);
-        return () => clearTimeout(t);
-    }, []);
 
+  const spinValue = useSharedValue(0);
+  const pulseValue = useSharedValue(1);
 
-  const spinValue = useRef(new Animated.Value(0)).current;
-  const pulseValue = useRef(new Animated.Value(1)).current;
-  const spinAnimInstance = useRef(null);
-  const pulseAnimInstance = useRef(null);
-
-  // ⚡️ DYNAMIC TABS BASED ON CLAN STATUS
   const TABS = isInClan ? ['OC', 'PEAK', 'CC', 'PACKS'] : ['OC', 'PEAK', 'PACKS'];
+
+  useEffect(() => {
+    const t = setTimeout(() => setMinLoadDone(true), 3000);
+    return () => clearTimeout(t);
+  }, []);
 
   useEffect(() => {
     const cachedUsers = storage.getString(RECENT_USERS_KEY);
@@ -136,7 +138,6 @@ const WalletPage = () => {
   }, [storage]);
 
   useEffect(() => {
-    // Failsafe: If activeTab is CC but user somehow leaves their clan
     if (!isInClan && activeTab === 'CC') {
       setActiveTab('OC');
     }
@@ -145,25 +146,37 @@ const WalletPage = () => {
   useEffect(() => {
     const isLoading = isProcessingTransaction || clanLoading || isFetchingStore;
     if (isLoading) {
-      spinAnimInstance.current = Animated.loop(
-        Animated.timing(spinValue, { toValue: 1, duration: 2000, easing: Easing.linear, useNativeDriver: true })
+      spinValue.value = withRepeat(
+        withTiming(1, { duration: 2000, easing: Easing.linear }),
+        -1,
+        false
       );
-      spinAnimInstance.current.start();
-
-      pulseAnimInstance.current = Animated.loop(
-        Animated.sequence([
-          Animated.timing(pulseValue, { toValue: 0.5, duration: 800, useNativeDriver: true }),
-          Animated.timing(pulseValue, { toValue: 1, duration: 800, useNativeDriver: true }),
-        ])
+      pulseValue.value = withRepeat(
+        withSequence(
+          withTiming(0.5, { duration: 800 }),
+          withTiming(1, { duration: 800 })
+        ),
+        -1,
+        false
       );
-      pulseAnimInstance.current.start();
     } else {
-      if (spinAnimInstance.current) spinAnimInstance.current.stop();
-      if (pulseAnimInstance.current) pulseAnimInstance.current.stop();
-      spinValue.setValue(0);
-      pulseValue.setValue(1);
+      spinValue.value = 0;
+      pulseValue.value = 1;
     }
   }, [isProcessingTransaction, clanLoading, isFetchingStore]);
+
+  const spinStyle = useAnimatedStyle(() => {
+    const rotate = interpolate(spinValue.value, [0, 1], [0, 360]);
+    return {
+      transform: [{ rotate: `${rotate}deg` }]
+    };
+  });
+
+  const pulseStyle = useAnimatedStyle(() => {
+    return {
+      opacity: pulseValue.value
+    };
+  });
 
   useEffect(() => {
     if (user) {
@@ -487,18 +500,13 @@ const WalletPage = () => {
             />
         );
     }
-  // ⚡️ HELPER FOR PEAK PROGRESS BAR (Math Safe)
+
   const currentTierMin = peakLevel === 0 ? 0 : (PEAK_THRESHOLDS[peakLevel - 1] || 0);
   const nextTierMin = peakLevel === 0 ? 1 : (PEAK_THRESHOLDS[peakLevel] || PEAK_THRESHOLDS[PEAK_THRESHOLDS.length - 1]);
   const progressBase = Math.max(0, totalPurchasedCoins - currentTierMin);
   const progressGoal = Math.max(1, nextTierMin - currentTierMin);
   const peakProgress = peakLevel === 10 ? 1 : Math.min(1, progressBase / progressGoal);
   const coinsToNextPeak = peakLevel === 10 ? 0 : nextTierMin - totalPurchasedCoins;
-
-  const spin = spinValue.interpolate({
-    inputRange: [0, 1],
-    outputRange: ['0deg', '360deg']
-  });
 
   const correctCoin = activeTab === 'CC' ? (clanCoins || 0) : (coins || 0);
   const correctIcon = activeTab === 'CC' ? "CC" : "OC";
@@ -539,7 +547,6 @@ const WalletPage = () => {
 
       <ScrollView contentContainerStyle={{ paddingBottom: 100 }} className="p-5" showsVerticalScrollIndicator={false}>
         
-        {/* 🔹 BALANCE CARD */}
         <View className="mb-6 rounded-[35px] overflow-hidden h-fit" style={{ backgroundColor: THEME.card, borderWidth: 1, borderColor: THEME.border }}>
           <Canvas style={{ flex: 1, position: 'absolute', width: '100%', height: '100%' }}>
             <Rect x={0} y={0} width={width} height={200}>
@@ -586,7 +593,6 @@ const WalletPage = () => {
           </View>
         </View>
 
-        {/* 🔹 DYNAMIC TABS (Hides CC if !isInClan) */}
         <View className="flex-row mb-8 bg-black/5 dark:bg-white/5 p-1 rounded-[22px] border border-black/5 dark:border-white/5">
           {TABS.map((tab) => (
             <TouchableOpacity
@@ -602,7 +608,6 @@ const WalletPage = () => {
           ))}
         </View>
 
-        {/* 🔹 CONTENT AREA */}
         <View>
           {message.text !== '' && (
             <View style={{ backgroundColor: THEME.card, borderColor: message.type === 'error' ? THEME.danger : THEME.success }} className="mb-6 p-4 rounded-2xl border-b-2 flex-row items-center justify-center">
@@ -610,7 +615,6 @@ const WalletPage = () => {
             </View>
           )}
 
-          {/* ⚡️ PEAK TAB UI */}
           {activeTab === 'PEAK' && (
             <View>
               <View className="mb-6 px-1 flex-row items-end justify-between">
@@ -618,7 +622,6 @@ const WalletPage = () => {
                 <Text style={{ color: THEME.accent }} className="text-[8px] font-black uppercase tracking-[2px]">Peak System</Text>
               </View>
 
-              {/* Current Status Card */}
               <View style={{ backgroundColor: THEME.card, borderColor: THEME.border, borderWidth: 1 }} className="p-8 rounded-[35px] items-center mb-8 shadow-sm">
                 <View className="mb-4">
                   {peakLevel > 0 ? (
@@ -636,7 +639,6 @@ const WalletPage = () => {
                   Acquired: {totalPurchasedCoins.toLocaleString()} OC
                 </Text>
 
-                {/* Ascenscion Progress Bar */}
                 <View className="w-full">
                   <View className="flex-row justify-between mb-2 px-1">
                     <Text style={{ color: THEME.text }} className="text-[10px] font-black tracking-widest">
@@ -661,7 +663,6 @@ const WalletPage = () => {
                 </View>
               </View>
 
-              {/* Peak Perks / Rules */}
               <Text style={{ color: THEME.textSecondary }} className="font-black text-[11px] uppercase mb-4 tracking-widest px-1">Tier Rewards</Text>
               <View className="gap-3">
                 {PEAK_REWARDS.map((tier, index) => {
@@ -720,7 +721,6 @@ const WalletPage = () => {
                   <Text style={{ color: THEME.accent }} className="text-[8px] font-black uppercase tracking-[2px]">Rank-Locked Equipment</Text>
                 </View>
 
-                {/* 🛡️ CLAN RECRUITMENT BANNER (Shown if not in a clan) */}
                 {!isInClan && (
                   <View style={{ backgroundColor: THEME.card, borderColor: THEME.border, borderWidth: 1 }} className="mt-6 p-6 rounded-[28px] items-center shadow-lg">
                     <View className="w-16 h-16 rounded-full items-center justify-center mb-4" style={{ backgroundColor: THEME.bg }}>
@@ -741,7 +741,6 @@ const WalletPage = () => {
                   </View>
                 )}
 
-                {/* 🛡️ AUTHOR / CLAN TOGGLE (Shown only if in a clan) */}
                 {userClan && (
                   <View className="flex-row mt-4 bg-black/5 dark:bg-white/5 rounded-2xl p-1 border border-black/5 dark:border-white/5">
                     <TouchableOpacity
@@ -830,7 +829,6 @@ const WalletPage = () => {
         </View>
       </ScrollView>
 
-      {/* 🔹 PURCHASE PREVIEW MODAL */}
       <Modal visible={previewVisible} transparent animationType="slide">
         <View className="flex-1 bg-black/80 justify-end">
           <View style={{ backgroundColor: THEME.bg, borderTopLeftRadius: 40, borderTopRightRadius: 40, borderTopWidth: 4, borderColor: selectedPkg?.isPurchased ? THEME.success : THEME.accent }} className="h-[75%] p-8">
@@ -899,7 +897,6 @@ const WalletPage = () => {
         </View>
       </Modal>
 
-      {/* 🔹 TRANSFER MODAL */}
       <Modal visible={shareModalVisible} animationType="slide" transparent>
         <View className="flex-1 bg-black/80 justify-end">
           <View style={{ backgroundColor: THEME.bg, borderTopLeftRadius: 40, borderTopRightRadius: 40 }} className="h-[85%] p-8">
@@ -1004,7 +1001,6 @@ const WalletPage = () => {
         </View>
       </Modal>
 
-      {/* 🔹 PULL SPIN MODAL */}
       {activePullData && (
         <PullSpinModal 
           isVisible={pullModalVisible}
@@ -1015,20 +1011,19 @@ const WalletPage = () => {
         />
       )}
 
-      {/* 🔹 LOADING OVERLAY */}
       {(isProcessingTransaction || clanLoading || isFetchingStore) && (
         <View className="absolute inset-0 z-[100] items-center justify-center">
           <Canvas style={{ position: 'absolute', width: '100%', height: '100%' }}>
             <Rect x={0} y={0} width={width} height={height} color={isDark ? "rgba(0,0,0,0.85)" : "rgba(255,255,255,0.9)"} />
           </Canvas>
           <View className="items-center">
-            <Animated.View style={{ transform: [{ rotate: spin }] }}>
+            <Animated.View style={[spinStyle]}>
               <Canvas style={{ width: 120, height: 120 }}>
                 <Group opacity={0.3}><Circle cx={60} cy={60} r={50} color={THEME.accent} style="stroke" strokeWidth={2} /></Group>
                 <Circle cx={60} cy={10} r={6} color={THEME.accent} />
               </Canvas>
             </Animated.View>
-            <Animated.View style={{ opacity: pulseValue }} className="mt-10 items-center">
+            <Animated.View style={[pulseStyle]} className="mt-10 items-center">
               <Text style={{ color: THEME.text }} className="font-black uppercase tracking-[6px] text-[11px] italic">Accessing Vault...</Text>
             </Animated.View>
           </View>

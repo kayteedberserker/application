@@ -1,35 +1,46 @@
 import { Ionicons } from '@expo/vector-icons';
 import { useEffect } from 'react';
-import { Animated, Easing, View } from 'react-native';
+import { Text, View } from 'react-native';
+import Animated, {
+  Easing,
+  useAnimatedStyle,
+  useSharedValue,
+  withRepeat,
+  withTiming,
+} from 'react-native-reanimated';
 
 const SendingLoader = () => {
-  const spinValue = new Animated.Value(0);
+  const spinValue = useSharedValue(0);
 
   useEffect(() => {
-    Animated.loop(
-      Animated.timing(spinValue, {
-        toValue: 1,
+    spinValue.value = withRepeat(
+      withTiming(360, {
         duration: 1000,
         easing: Easing.linear,
-        useNativeDriver: true,
-      })
-    ).start();
+      }),
+      -1,
+      false // false = don't reverse, just loop 0 -> 360 over and over
+    );
   }, []);
 
-  const spin = spinValue.interpolate({
-    inputRange: [0, 1],
-    outputRange: ['0deg', '360deg'],
+  const animatedStyle = useAnimatedStyle(() => {
+    return {
+      transform: [{ rotate: `${spinValue.value}deg` }],
+    };
   });
 
   return (
     <View className="flex-row items-center justify-center p-2">
-      <Animated.View style={{ transform: [{ rotate: spin }] }}>
+      <Animated.View style={animatedStyle}>
         <Ionicons name="refresh-outline" size={20} color="#3b82f6" />
       </Animated.View>
       <Text className="ml-2 text-blue-500 font-bold">Sending...</Text>
     </View>
   );
 };
+
+export default SendingLoader;
+
 // export default function SendingLoader() {
 //   return null;
 // }

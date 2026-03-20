@@ -21,6 +21,7 @@ import AnimeLoading from "../components/AnimeLoading";
 import ReviewGate from "../components/ReviewGate";
 import { AlertProvider } from '../context/AlertContext';
 import { ClanProvider } from "../context/ClanContext";
+import { EventProvider } from "../context/EventContext";
 import { CoinProvider } from "../context/CoinContext";
 import { StreakProvider, useStreak } from "../context/StreakContext";
 import { UserProvider, useUser } from "../context/UserContext";
@@ -464,7 +465,9 @@ export default function RootLayout() {
                     <ClanProvider>
                         <AlertProvider>
                             <CoinProvider>
-                                <RootLayoutContent />
+                                <EventProvider>
+                                    <RootLayoutContent />
+                                </EventProvider>
                             </CoinProvider>
                         </AlertProvider>
                     </ClanProvider>

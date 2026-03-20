@@ -1,14 +1,15 @@
 import { Ionicons } from '@expo/vector-icons';
 import { useRouter } from 'expo-router';
-import { Dimensions, ScrollView, TouchableOpacity, View } from 'react-native';
+import { Dimensions, ScrollView, TouchableOpacity, useColorScheme, View } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { Text } from '../../components/Text';
 import THEME from '../../components/useAppTheme';
+import TopBar from '../../components/Topbar';
 const { width } = Dimensions.get('window');
 
 export default function Rules() {
   const router = useRouter();
-
+  const isDark = useColorScheme() === "dark";
   const RuleItem = ({ icon, title, desc, type }) => (
     <View 
       style={{ 
@@ -45,6 +46,7 @@ export default function Rules() {
   return (
     <SafeAreaView style={{ flex: 1, backgroundColor: THEME.bg }}>
       {/* --- Ambient Background Glows --- */}
+      <TopBar isDark={isDark}/>
       <View style={{ position: 'absolute', top: -100, left: -50, width: 350, height: 350, borderRadius: 175, backgroundColor: THEME.glowBlue }} />
       <View style={{ position: 'absolute', bottom: 100, right: -50, width: 300, height: 300, borderRadius: 150, backgroundColor: THEME.glowRed }} />
 

@@ -27,6 +27,8 @@ export default function ClanDiscover() {
     const storage = useMMKV();
     const { colorScheme } = useColorScheme();
     const isDark = colorScheme === "dark";
+    console.log(isDark);
+    
     const router = useRouter();
     const insets = useSafeAreaInsets();
 

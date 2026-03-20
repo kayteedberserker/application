@@ -1,14 +1,15 @@
 import { Ionicons } from '@expo/vector-icons';
 import { useRouter } from 'expo-router';
-import { Dimensions, ScrollView, TouchableOpacity, View } from 'react-native';
+import { Dimensions, ScrollView, TouchableOpacity, useColorScheme, View } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { Text } from '../../components/Text';
 import THEME from '../../components/useAppTheme';
+import TopBar from '../../components/Topbar';
 const { width } = Dimensions.get('window');
 
 export default function PrivacyPolicy() {
   const router = useRouter();
-
+  const isDark = useColorScheme() === "dark";
   const Section = ({ title, content }) => (
     <View className="mb-10">
       <View className="flex-row items-center mb-4">
@@ -25,6 +26,7 @@ export default function PrivacyPolicy() {
 
   return (
     <SafeAreaView style={{ flex: 1, backgroundColor: THEME.bg }}>
+      <TopBar isDark={isDark}/>
       {/* --- Ambient Background Glows --- */}
       <View style={{ position: 'absolute', top: -100, right: -50, width: 350, height: 350, borderRadius: 175, backgroundColor: THEME.glowBlue }} />
       <View style={{ position: 'absolute', bottom: 0, left: -100, width: 400, height: 400, borderRadius: 200, backgroundColor: THEME.glowIndigo }} />

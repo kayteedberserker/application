@@ -1,16 +1,17 @@
 import { Ionicons, MaterialCommunityIcons } from '@expo/vector-icons';
 import { useRouter } from 'expo-router';
-import { Dimensions, ScrollView, TouchableOpacity, View } from 'react-native';
+import { Dimensions, ScrollView, TouchableOpacity, useColorScheme, View } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { Text } from '../../components/Text';
 import THEME from '../../components/useAppTheme';
+import TopBar from '../../components/Topbar';
 const { width } = Dimensions.get('window');
 
 const AURA_PURPLE = "#a78bfa";
 
 export default function RankSystemScreen() {
   const router = useRouter();
-
+  const isDark = useColorScheme() === "dark";
   const RankRow = ({ icon, title, count, limit, isLast }) => (
     <View 
       style={{ borderBottomColor: THEME.border }}
@@ -40,6 +41,7 @@ export default function RankSystemScreen() {
   return (
     <SafeAreaView style={{ flex: 1, backgroundColor: THEME.bg }}>
       {/* --- Ambient Background Glows --- */}
+      <TopBar isDark={isDark} />
       <View style={{ position: 'absolute', top: -100, right: -50, width: 300, height: 300, borderRadius: 150, backgroundColor: THEME.glowBlue }} />
       <View style={{ position: 'absolute', bottom: 100, left: -100, width: 400, height: 400, borderRadius: 200, backgroundColor: THEME.glowOrange }} />
 

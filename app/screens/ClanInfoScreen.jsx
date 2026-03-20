@@ -1,15 +1,16 @@
 import { Ionicons, MaterialCommunityIcons } from "@expo/vector-icons";
 import { useRouter } from "expo-router";
-import { ScrollView, TouchableOpacity, View } from "react-native";
+import { ScrollView, TouchableOpacity, useColorScheme, View } from "react-native";
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { BadgeShowcase } from "../../components/ClanBadge";
 import ClanCrest from "../../components/ClanCrest"; // Assuming path
 import { Text } from "../../components/Text";
 import THEME from "../../components/useAppTheme";
+import TopBar from "../../components/Topbar";
 
 export default function ClanInfoScreen() {
   const router = useRouter();
-
+  const isDark = useColorScheme() === "dark";
   const RankRow = ({ rank, threshold, allowance, color, title }) => (
     <View style={{ borderColor: THEME.border }} className="flex-row items-center justify-between py-4 border-b border-dashed">
       <View className="flex-row items-center">
@@ -30,6 +31,7 @@ export default function ClanInfoScreen() {
 
   return (
     <SafeAreaView style={{ flex: 1, backgroundColor: THEME.bg }}>
+      <TopBar isDark={isDark}/>
       <ScrollView className="flex-1 px-6" showsVerticalScrollIndicator={false}>
 
         {/* --- Header with Top Padding --- */}

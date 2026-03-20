@@ -2,19 +2,27 @@ import { MaterialCommunityIcons } from '@expo/vector-icons';
 import { useColorScheme } from "nativewind";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react"; 
 import {
-    Animated,
     AppState,
     DeviceEventEmitter,
     Dimensions,
-    Easing,
     RefreshControl,
     View
 } from "react-native";
-// ⚡️ Swapped FlashList for LegendList
 import { useMMKV } from 'react-native-mmkv';
 import { LegendList } from "@legendapp/list"; 
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import useSWRInfinite from "swr/infinite";
+
+// ⚡️ IMPORT REANIMATED
+import Animated, {
+    useSharedValue,
+    useAnimatedStyle,
+    withRepeat,
+    withSequence,
+    withTiming,
+    Easing
+} from 'react-native-reanimated';
+
 import AnimeLoading from "../../../components/AnimeLoading"; 
 import PostCard from "../../../components/PostCard";
 import { SyncLoading } from "../../../components/SyncLoading";
@@ -30,7 +38,6 @@ const CATEGORY_MEMORY_CACHE = {};
 const CATEGORIES_SYNCED_THIS_SESSION = new Set(); 
 
 export default function CategoryPage({ forcedId }) {
-    // ⚡️ Initialize Storage Hook
     const storage = useMMKV();
     
     const id = forcedId;
@@ -38,8 +45,10 @@ export default function CategoryPage({ forcedId }) {
     const { colorScheme } = useColorScheme();
     const isDark = colorScheme === "dark";
 
-    const pulseAnim = useRef(new Animated.Value(0)).current;
     const appState = useRef(AppState.currentState);
+
+    // ⚡️ REANIMATED PULSE
+    const pulseAnim = useSharedValue(0);
 
     const categoryName = useMemo(() => {
         if (!id) return "";
@@ -56,7 +65,6 @@ export default function CategoryPage({ forcedId }) {
     const [refreshing, setRefreshing] = useState(false);
     const scrollRef = useRef(null);
 
-    // ⚡️ Synchronous Cache Saver
     const saveHeavyCache = useCallback((key, data) => {
         try {
             const cacheEntry = { data: data, timestamp: Date.now() };
@@ -66,7 +74,6 @@ export default function CategoryPage({ forcedId }) {
         }
     }, [storage]);
 
-    // ⚡️ Synchronous Cache Loader
     useEffect(() => {
         let isMounted = true;
         const prepare = () => {
@@ -92,16 +99,24 @@ export default function CategoryPage({ forcedId }) {
         return () => { isMounted = false; };
     }, [id, CACHE_KEY, storage]);
 
+    // ⚡️ TRIGGER REANIMATED PULSE
     useEffect(() => {
-        const animation = Animated.loop(
-            Animated.sequence([
-                Animated.timing(pulseAnim, { toValue: 1, duration: 1500, easing: Easing.linear, useNativeDriver: true }),
-                Animated.timing(pulseAnim, { toValue: 0, duration: 1500, easing: Easing.linear, useNativeDriver: true })
-            ])
+        pulseAnim.value = withRepeat(
+            withSequence(
+                withTiming(1, { duration: 1500, easing: Easing.inOut(Easing.ease) }),
+                withTiming(0, { duration: 1500, easing: Easing.inOut(Easing.ease) })
+            ),
+            -1, // Infinite
+            true // Reverse
         );
-        animation.start();
-        return () => animation.stop();
-    }, [pulseAnim]);
+    }, []);
+
+    // ⚡️ PULSE ANIMATED STYLE
+    const pulseStyle = useAnimatedStyle(() => {
+        return {
+            opacity: pulseAnim.value
+        };
+    });
 
     const getKey = (pageIndex, previousPageData) => {
         if (!ready) return null;
@@ -161,7 +176,6 @@ export default function CategoryPage({ forcedId }) {
         return () => sub.remove();
     }, []);
 
-    // ⚡️ Memoized renderItem feeding the Backend Props into PostCard
     const renderItem = useCallback(({ item }) => (
         <PostCard 
             post={item} 
@@ -202,24 +216,20 @@ export default function CategoryPage({ forcedId }) {
                 style={{ width: width * 0.7, height: width * 0.7, backgroundColor: isOfflineMode ? '#f97316' : (isDark ? '#2563eb' : '#3b82f6') }}
             />
 
-            {/* ⚡️ Swapped to LegendList */}
             <LegendList
                 ref={scrollRef}
                 data={posts}
                 keyExtractor={(item) => item._id}
                 renderItem={renderItem}
                 ListHeaderComponent={ListHeader}
-                
-                // ⚡️ LegendList Performance Props
                 estimatedItemSize={500}
-                drawDistance={1000} // Much better pre-rendering radius for dynamic media heights
-                recycleItems={true} // Essential for list speed
+                drawDistance={1000} 
+                recycleItems={true} 
                 contentContainerStyle={{ 
                     paddingHorizontal: 16, 
                     paddingTop: insets.top + 20, 
                     paddingBottom: insets.bottom + 100 
                 }}
-                
                 refreshControl={
                     <RefreshControl
                         refreshing={refreshing}
@@ -228,7 +238,6 @@ export default function CategoryPage({ forcedId }) {
                         tintColor="#2563eb"
                     />
                 }
-
                 ListFooterComponent={
                     <View className="py-12 items-center justify-center min-h-[140px]">
                         {(isLoading || (isValidating && size > 1)) && !refreshing ? (
@@ -247,13 +256,17 @@ export default function CategoryPage({ forcedId }) {
                 scrollEventThrottle={16}
             />
 
+            {/* ⚡️ REANIMATED COMPONENT USAGE */}
             <View
                 className="absolute left-6 flex-row items-center gap-2"
                 style={{ bottom: insets.bottom + 20, opacity: 0.6 }}
                 pointerEvents="none"
             >
                 <MaterialCommunityIcons name={isOfflineMode ? "cloud-off-outline" : "pulse"} size={14} color={isOfflineMode ? "#f97316" : "#2563eb"} />
-                <Animated.Text style={{ opacity: pulseAnim }} className={`text-[8px] font-[900] uppercase tracking-[0.4em] ${isOfflineMode ? 'text-orange-500' : 'text-blue-600'}`}>
+                <Animated.Text 
+                    style={pulseStyle} 
+                    className={`text-[8px] font-[900] uppercase tracking-[0.4em] ${isOfflineMode ? 'text-orange-500' : 'text-blue-600'}`}
+                >
                     {isOfflineMode ? "Cache_Relay_Active" : "Neural_Link_Established"}
                 </Animated.Text>
             </View>

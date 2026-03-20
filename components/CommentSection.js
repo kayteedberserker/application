@@ -11,7 +11,6 @@ import {
     PanResponder,
     Platform,
     Pressable,
-    Animated as RNAnimated,
     ScrollView,
     Share,
     TextInput,
@@ -26,6 +25,8 @@ import Animated, {
     withRepeat,
     withSequence,
     withTiming,
+    withSpring,
+    interpolate
 } from "react-native-reanimated";
 import useSWR from "swr";
 import { useAlert } from "../context/AlertContext";
@@ -36,7 +37,6 @@ import { Text } from "./Text";
 const { width: SCREEN_WIDTH, height: SCREEN_HEIGHT } = Dimensions.get("window");
 const API_URL = "https://oreblogda.com";
 
-// --- Helper: Flatten the Deep Tree for Display ---
 const flattenReplies = (nodes) => {
     let flatList = [];
     const traverse = (items) => {
@@ -52,27 +52,32 @@ const flattenReplies = (nodes) => {
     return flatList.sort((a, b) => new Date(a.date) - new Date(b.date));
 };
 
-// --- Skeleton Component ---
 const CommentSkeleton = () => {
-    const opacity = useRef(new RNAnimated.Value(0.3)).current;
+    const opacityVal = useSharedValue(0.3);
+
     useEffect(() => {
-        RNAnimated.loop(
-            RNAnimated.sequence([
-                RNAnimated.timing(opacity, { toValue: 0.7, duration: 800, useNativeDriver: true }),
-                RNAnimated.timing(opacity, { toValue: 0.3, duration: 800, useNativeDriver: true }),
-            ])
-        ).start();
+        opacityVal.value = withRepeat(
+            withSequence(
+                withTiming(0.7, { duration: 800 }),
+                withTiming(0.3, { duration: 800 })
+            ),
+            -1,
+            true
+        );
     }, []);
+
+    const animatedStyle = useAnimatedStyle(() => ({
+        opacity: opacityVal.value
+    }));
 
     return (
         <View className="mb-6 pl-4 border-l-2 border-gray-100 dark:border-gray-800">
-            <RNAnimated.View style={{ opacity }} className="h-5 w-32 bg-gray-200 dark:bg-gray-800 rounded-md mb-2" />
-            <RNAnimated.View style={{ opacity }} className="h-4 w-full bg-gray-100 dark:border-gray-800 rounded-md mb-1" />
+            <Animated.View style={animatedStyle} className="h-5 w-32 bg-gray-200 dark:bg-gray-800 rounded-md mb-2" />
+            <Animated.View style={animatedStyle} className="h-4 w-full bg-gray-100 dark:border-gray-800 rounded-md mb-1" />
         </View>
     );
 };
 
-// --- Single Comment Component ---
 const SingleComment = ({ comment, onOpenDiscussion }) => {
     const countReplies = (nodes) => {
         let count = 0;
@@ -117,11 +122,12 @@ const SingleComment = ({ comment, onOpenDiscussion }) => {
     );
 };
 
-// --- Discussion Drawer Component ---
 const DiscussionDrawer = ({ visible, comment, onClose, onReply, isPosting, slug, highlightId }) => {
     const [replyText, setReplyText] = useState("");
     const [showJumpToBottom, setShowJumpToBottom] = useState(false);
-    const panY = useRef(new RNAnimated.Value(0)).current;
+    
+    const panY = useSharedValue(SCREEN_HEIGHT);
+    
     const scrollViewRef = useRef(null);
     const scrollOffset = useRef(0);
     const contentHeight = useRef(0);
@@ -134,23 +140,37 @@ const DiscussionDrawer = ({ visible, comment, onClose, onReply, isPosting, slug,
 
     useEffect(() => {
         if (visible) {
-            panY.setValue(0);
+            panY.value = withTiming(0, { duration: 250, easing: Easing.out(Easing.ease) });
             setTimeout(() => {
                 scrollViewRef.current?.scrollToEnd({ animated: true });
             }, 400);
+        } else {
+            panY.value = withTiming(SCREEN_HEIGHT, { duration: 250 });
         }
     }, [visible]);
+
+    const handleClose = () => {
+        panY.value = withTiming(SCREEN_HEIGHT, { duration: 250 }, () => {
+            onClose();
+        });
+    };
 
     const panResponder = useRef(
         PanResponder.create({
             onStartShouldSetPanResponder: () => false,
             onMoveShouldSetPanResponder: (e, gs) => gs.dy > 10 && scrollOffset.current <= 5 && !Keyboard.isVisible(),
-            onPanResponderMove: (e, gs) => { if (gs.dy > 0) panY.setValue(gs.dy); },
+            onPanResponderMove: (e, gs) => { 
+                if (gs.dy > 0) {
+                    panY.value = gs.dy; 
+                }
+            },
             onPanResponderRelease: (e, gs) => {
                 if (gs.dy > 150 || gs.vy > 0.5) {
-                    RNAnimated.timing(panY, { toValue: SCREEN_HEIGHT, duration: 250, useNativeDriver: true }).start(onClose);
+                    panY.value = withTiming(SCREEN_HEIGHT, { duration: 250 }, () => {
+                        onClose();
+                    });
                 } else {
-                    RNAnimated.spring(panY, { toValue: 0, useNativeDriver: true }).start();
+                    panY.value = withSpring(0, { damping: 15, stiffness: 90 });
                 }
             },
         })
@@ -174,24 +194,29 @@ const DiscussionDrawer = ({ visible, comment, onClose, onReply, isPosting, slug,
         setShowJumpToBottom(totalScrollable - offset > 100);
     };
 
+    const drawerStyle = useAnimatedStyle(() => {
+        return {
+            transform: [{ translateY: panY.value }]
+        };
+    });
+
     if (!comment) return null;
 
     return (
-        <Modal visible={visible} animationType="slide" transparent={true} onRequestClose={onClose}>
+        <Modal visible={visible} animationType="none" transparent={true} onRequestClose={handleClose}>
             <View className="flex-1 bg-black/60">
-                <Pressable className="flex-1" onPress={() => { Keyboard.dismiss(); onClose(); }} />
+                <Pressable className="flex-1" onPress={() => { Keyboard.dismiss(); handleClose(); }} />
                 <KeyboardAvoidingView behavior={Platform.OS === "ios" ? "padding" : "height"}>
-                    <RNAnimated.View
-                        style={{ transform: [{ translateY: panY }], height: SCREEN_HEIGHT * 0.9 }}
+                    <Animated.View
+                        style={[drawerStyle, { height: SCREEN_HEIGHT * 0.9 }]}
                         className="bg-white dark:bg-[#0a0a0a] rounded-t-[40px] border-t-2 border-blue-600/40 overflow-hidden"
                     >
-                        {/* HEADER + FIXED ANCHOR COMMENT */}
                         <View className="bg-white dark:bg-[#0a0a0a] border-b border-gray-100 dark:border-gray-800 z-50">
                             <View {...panResponder.panHandlers} className="items-center py-4">
                                 <View className="w-12 h-1.5 bg-gray-200 dark:bg-gray-800 rounded-full" />
                             </View>
                             <View className="flex-row items-center justify-between px-6 pb-2">
-                                <Pressable onPress={onClose} className="bg-gray-100 dark:bg-white/10 px-4 py-2 rounded-full">
+                                <Pressable onPress={handleClose} className="bg-gray-100 dark:bg-white/10 px-4 py-2 rounded-full">
                                     <Text className="text-[10px] font-black text-blue-600 uppercase">Close</Text>
                                 </Pressable>
                                 <Pressable onPress={handleShare} className="flex-row items-center bg-blue-600 px-5 py-2 rounded-full shadow-md">
@@ -200,7 +225,6 @@ const DiscussionDrawer = ({ visible, comment, onClose, onReply, isPosting, slug,
                                 </Pressable>
                             </View>
 
-                            {/* 📌 FIXED ANCHOR SECTION (Does not scroll) */}
                             <View className="bg-blue-50/50 dark:bg-blue-900/10 px-6 py-4 border-y border-blue-100 dark:border-blue-900/30">
                                 <Text className="text-[10px] font-black text-blue-600 uppercase tracking-widest mb-1">Anchor Signal</Text>
                                 <Text className="text-sm font-black dark:text-white">{comment.name}</Text>
@@ -273,16 +297,16 @@ const DiscussionDrawer = ({ visible, comment, onClose, onReply, isPosting, slug,
                                 </View>
                             </ScrollView>
                         </View>
-                    </RNAnimated.View>
+                    </Animated.View>
                 </KeyboardAvoidingView>
             </View>
         </Modal>
     );
 };
 
-// --- Sub-Component: Highlightable Comment ---
 const HighlightableComment = ({ reply, isHighlighted }) => {
     const scale = useSharedValue(1);
+    const bgColorOpacity = useSharedValue(0);
 
     useEffect(() => {
         if (isHighlighted) {
@@ -290,18 +314,25 @@ const HighlightableComment = ({ reply, isHighlighted }) => {
                 withTiming(1.08, { duration: 400 }),
                 withRepeat(withTiming(1, { duration: 400 }), 3, true)
             );
+            bgColorOpacity.value = withTiming(0.15, { duration: 500 });
+        } else {
+            bgColorOpacity.value = withTiming(0, { duration: 500 });
         }
     }, [isHighlighted]);
 
     const animatedStyle = useAnimatedStyle(() => ({
         transform: [{ scale: scale.value }],
-        backgroundColor: isHighlighted ? withTiming('rgba(37, 99, 235, 0.15)', { duration: 500 }) : 'transparent',
+        backgroundColor: `rgba(37, 99, 235, ${bgColorOpacity.value})`,
         borderRadius: 8,
-        padding: isHighlighted ? 12 : 0
+        padding: isHighlighted ? 12 : 0,
+        marginBottom: 24,
+        borderLeftWidth: 2,
+        borderLeftColor: isHighlighted ? '#2563eb' : '#374151',
+        paddingLeft: 16
     }));
 
     return (
-        <Animated.View style={[animatedStyle, { marginBottom: 24, borderLeftWidth: 2, borderLeftColor: isHighlighted ? '#2563eb' : '#374151', paddingLeft: 16 }]}>
+        <Animated.View style={animatedStyle}>
             <Text className="text-[10px] font-black text-blue-400 uppercase tracking-tighter">{reply.name}</Text>
             <Text className="text-xs text-gray-600 dark:text-gray-300 font-bold mt-1 leading-5">{reply.text}</Text>
             <Text className="text-[8px] font-bold text-gray-400 uppercase mt-2">{new Date(reply.date).toLocaleTimeString()}</Text>
@@ -309,14 +340,12 @@ const HighlightableComment = ({ reply, isHighlighted }) => {
     );
 };
 
-// --- Main Comment Section ---
 export default function CommentSection({ postId, slug, discussionIdfromPage }) {
     const CustomAlert = useAlert()
     const { user } = useUser();
-    // 🔔 Get both potential sources of deep-linking IDs
     const { discussion, commentId, discussionId } = useLocalSearchParams(); 
     const targetId = discussion || commentId || discussionId || discussionIdfromPage
-	
+    
     const [text, setText] = useState("");
     const [isPosting, setIsPosting] = useState(false);
     const [activeDiscussion, setActiveDiscussion] = useState(null);
@@ -325,10 +354,10 @@ export default function CommentSection({ postId, slug, discussionIdfromPage }) {
     const [page, setPage] = useState(1);
     const [isLoadingMore, setIsLoadingMore] = useState(false);
     
-    // Ref to prevent double-opening from multiple triggers
     const hasAutoOpened = useRef(false);
 
     const loaderX = useSharedValue(-200);
+    
     useEffect(() => {
         if (isPosting || isLoadingMore || (pagedComments.length === 0 && !data)) {
             loaderX.value = withRepeat(withTiming(200, { duration: 1500, easing: Easing.linear }), -1, false);
@@ -377,18 +406,16 @@ export default function CommentSection({ postId, slug, discussionIdfromPage }) {
         if (target) {
             setActiveDiscussion(target);
             setActiveHighlightId(tId);
-            hasAutoOpened.current = true; // Mark as done to prevent double opening
+            hasAutoOpened.current = true; 
         }
     };
 
-    // 🎯 REFINED AUTO-OPEN LOGIC
-    // Consolidates URL listeners and local params to fire only when data is ready
     useEffect(() => {
         if (pagedComments.length > 0 && targetId && !hasAutoOpened.current) {
             findAndOpenComment(targetId);
-        }else if (discussionIdfromPage) {
+        } else if (discussionIdfromPage) {
             findAndOpenComment(targetId);
-		}
+        }
     }, [targetId, pagedComments, discussionIdfromPage]);
 
     useEffect(() => {
@@ -478,7 +505,7 @@ export default function CommentSection({ postId, slug, discussionIdfromPage }) {
                             <CommentSkeleton />
                         </View>
                     ) : pagedComments.length > 0 ? (
-                        <>
+                        <View>
                             {pagedComments.map((c, i) => (
                                 <SingleComment key={c._id || i} comment={c} onOpenDiscussion={(comm) => {
                                     setActiveHighlightId(null); 
@@ -490,7 +517,7 @@ export default function CommentSection({ postId, slug, discussionIdfromPage }) {
                                     {isLoadingMore ? <ActivityIndicator size="small" color="#2563eb" /> : <Text className="text-blue-600 font-black text-[10px] uppercase tracking-widest">Load More Signals</Text>}
                                 </Pressable>
                             )}
-                        </>
+                        </View>
                     ) : (
                         <View className="items-center justify-center py-10 opacity-40">
                             <ActivityIndicator size="small" color="#6b7280" />

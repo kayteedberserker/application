@@ -3,9 +3,8 @@ import { Ionicons, MaterialCommunityIcons } from "@expo/vector-icons";
 import { useMMKV } from "react-native-mmkv";
 import { Redirect, Stack, usePathname, useRouter } from "expo-router";
 import { useColorScheme as useNativeWind } from "nativewind";
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useState } from "react";
 import {
-    Animated,
     DeviceEventEmitter,
     StatusBar,
     StyleSheet,
@@ -15,6 +14,21 @@ import {
     View
 } from "react-native";
 import { SafeAreaView, useSafeAreaInsets } from "react-native-safe-area-context";
+
+// ⚡️ IMPORT REANIMATED
+import Animated, {
+    Easing,
+    Extrapolation,
+    interpolate,
+    useAnimatedStyle,
+    useSharedValue,
+    withRepeat,
+    withSequence,
+    withSpring,
+    withTiming,
+    withDelay
+} from "react-native-reanimated";
+
 import AnimeLoading from "../../components/AnimeLoading";
 import UpdateHandler from "../../components/UpdateModal";
 import { useClan } from "../../context/ClanContext";
@@ -23,6 +37,7 @@ import apiFetch from "../../utils/apiFetch";
 import "../globals.css";
 import CategoryNav from "./../../components/CategoryNav";
 import TopBar from "./../../components/Topbar";
+import DailyModal from '../../components/DailyModal';
 
 export default function MainLayout() {
     const { colorScheme, setColorScheme } = useNativeWind();
@@ -32,7 +47,6 @@ export default function MainLayout() {
     const insets = useSafeAreaInsets(); 
     const [isActive, setIsActive] = useState(false);
     
-    // ⚡️ Initialize Storage
     const storage = useMMKV();
     
     useEffect(() => {
@@ -50,14 +64,19 @@ export default function MainLayout() {
     const [showTop, setShowTop] = useState(false);
     const [showClanMenu, setShowClanMenu] = useState(false);
     
-    const navY = useRef(new Animated.Value(0)).current;
-    
     const { user, setUser, contextLoading } = useUser(); 
-    const animValue = useRef(new Animated.Value(0)).current;
-    const eventPulse = useRef(new Animated.Value(1)).current;
 
-    // ⚡️ PERFORMANCE BOOST: Check MMKV synchronously right on mount. 
-    // This skips the 'null' state entirely for existing users, making it instant!
+    // ⚡️ CLAN HINT STATE
+    const [showClanHint, setShowClanHint] = useState(false);
+
+    // ⚡️ REANIMATED SHARED VALUES
+    const navY = useSharedValue(0);
+    const clanMenuAnim = useSharedValue(0);
+    const eventPulse = useSharedValue(1);
+    const eventSpin = useSharedValue(0);
+    const tooltipAnim = useSharedValue(0);
+    const clanHintBounce = useSharedValue(0); // ⚡️ For the Gold clan hint
+
     const [isUserAuthenticated, setIsUserAuthenticated] = useState(() => {
         return storage.getString("mobileUser") ? true : null;
     });
@@ -71,68 +90,94 @@ export default function MainLayout() {
         { id: 'profile', label: 'PROFILE', icon: 'person', route: '/profile', color: '#f59e0b', match: (p) => p === "/profile" },
     ];
 
+    // ⚡️ CLAN HINT LOGIC (2s Delay, 10x Max)
+    useEffect(() => {
+        const hintCount = storage.getNumber('clan_hint_count') || 0;
+        console.log(hintCount);
+        
+        if (hintCount < 10) {
+            // 1. Wait 2 seconds before showing the hint
+            const showTimer = setTimeout(() => {
+                setShowClanHint(true);
+                storage.set('clan_hint_count', hintCount + 1);
+
+                // 2. Start Vertical Bouncing Animation (Up and Down)
+                clanHintBounce.value = withRepeat(
+                    withSequence(
+                        withTiming(-8, { duration: 400 }), // Move up
+                        withTiming(0, { duration: 400 })   // Move down
+                    ), -1, true
+                );
+            }, 2000);
+
+            // 3. Auto hide after 10 seconds total (2s wait + 8s display)
+            const hideTimer = setTimeout(() => setShowClanHint(false), 10000);
+            
+            return () => {
+                clearTimeout(showTimer);
+                clearTimeout(hideTimer);
+            };
+        }
+    }, []);
+
+    // ⚡️ REANIMATED EFFECTS
     useEffect(() => {
         setIsNavVisible(true);
-        Animated.timing(navY, {
-            toValue: 0,
-            duration: 300,
-            useNativeDriver: true,
-        }).start();
-    }, [pathname, navY]);
+        navY.value = withTiming(0, { duration: 300 });
+    }, [pathname]);
 
     useEffect(() => {
-        Animated.spring(animValue, {
-            toValue: showClanMenu ? 1 : 0,
-            useNativeDriver: true,
-            friction: 8,
-            tension: 40,
-        }).start();
-    }, [showClanMenu, animValue]);
+        clanMenuAnim.value = withSpring(showClanMenu ? 1 : 0, {
+            damping: 15,
+            stiffness: 150,
+        });
+    }, [showClanMenu]);
 
     useEffect(() => {
-        Animated.loop(
-            Animated.sequence([
-                Animated.timing(eventPulse, {
-                    toValue: 1.05,
-                    duration: 1200,
-                    useNativeDriver: true,
-                }),
-                Animated.timing(eventPulse, {
-                    toValue: 1,
-                    duration: 1200,
-                    useNativeDriver: true,
-                })
-            ])
-        ).start();
-    }, [eventPulse]);
+        // Continuous Pulse
+        eventPulse.value = withRepeat(
+            withSequence(
+                withTiming(1.05, { duration: 1200 }),
+                withTiming(1, { duration: 1200 })
+            ),
+            -1, 
+            false
+        );
 
-    // ⚡️ THE MIGRATION PROTOCOL (Only runs if MMKV was empty on mount)
-    useEffect(() => {
-        if (isUserAuthenticated !== null) return; // Skip if already resolved synchronously
+        eventSpin.value = 0; 
+        eventSpin.value = withRepeat(
+            withTiming(1, { duration: 3500, easing: Easing.linear }),
+            -1, 
+            false
+        );
 
-        const checkAuthAndMigrate = async () => {
-            try {
-                // 🛡️ MIGRATION: MMKV was empty, check legacy AsyncStorage
-                const legacyUserStr = await AsyncStorage.getItem("mobileUser");
-                if (legacyUserStr) {
-                    console.log("Gatekeeper: Migrating veteran operative to MMKV...");
-                    
-                    storage.set("mobileUser", legacyUserStr);
-                    const parsed = JSON.parse(legacyUserStr);
-                    setUser(parsed); 
-                    
-                    setIsUserAuthenticated(true);
-                    return;
-                }
+        // Attractor Tooltip Animation
+        tooltipAnim.value = withSequence(
+            withSpring(1, { damping: 12, stiffness: 100 }), 
+            withDelay(4000, withTiming(0, { duration: 500 })) 
+        );
+    }, []);
 
-                // Completely new user or cleared data
-                setIsUserAuthenticated(false);
-            } catch (e) {
-                console.error("Gatekeeper migration error:", e);
-                setIsUserAuthenticated(false);
+    const checkAuthAndMigrate = async () => {
+        if (isUserAuthenticated !== null) return;
+        try {
+            const legacyUserStr = await AsyncStorage.getItem("mobileUser");
+            if (legacyUserStr) {
+                console.log("Gatekeeper: Migrating veteran operative to MMKV...");
+                storage.set("mobileUser", legacyUserStr);
+                const parsed = JSON.parse(legacyUserStr);
+                setUser(parsed); 
+                setIsUserAuthenticated(true);
+                return;
             }
-        };
+            setIsUserAuthenticated(false);
+        } catch (e) {
+            console.error("Gatekeeper migration error:", e);
+            setIsUserAuthenticated(false);
+        }
+    };
 
+    useEffect(() => {
         checkAuthAndMigrate();
     }, [isUserAuthenticated, setUser, storage]);
 
@@ -162,28 +207,21 @@ export default function MainLayout() {
             if (offsetY < lastOffset || offsetY < 50) {
                 if (!isNavVisible) {
                     setIsNavVisible(true);
-                    Animated.timing(navY, {
-                        toValue: 0,
-                        duration: 200,
-                        useNativeDriver: true,
-                    }).start();
+                    navY.value = withTiming(0, { duration: 200 });
                 }
             } else if (offsetY > lastOffset && offsetY > 100) {
                 if (isNavVisible) {
                     setIsNavVisible(false);
-                    Animated.timing(navY, {
-                        toValue: -80,
-                        duration: 200,
-                        useNativeDriver: true,
-                    }).start();
+                    navY.value = withTiming(-80, { duration: 200 });
                 }
             }
             setLastOffset(offsetY);
         });
         return () => subscription.remove();
-    }, [lastOffset, isNavVisible, navY]);
+    }, [lastOffset, isNavVisible]);
 
     const handleClanPress = () => {
+        setShowClanHint(false); // ⚡️ Instantly hide the hint if they click it!
         try {
             const userClanData = storage.getString('userClan');
             if (userClanData) {
@@ -208,17 +246,50 @@ export default function MainLayout() {
         )
     };
 
-    const translateY_1 = animValue.interpolate({ inputRange: [0, 1], outputRange: [20, 0] });
-    const translateY_2 = animValue.interpolate({ inputRange: [0, 1], outputRange: [40, 0] });
-    const translateY_3 = animValue.interpolate({ inputRange: [0, 1], outputRange: [60, 0] });
-    const scale = animValue.interpolate({ inputRange: [0, 1], outputRange: [0, 1] });
-    const opacityClan = animValue.interpolate({ inputRange: [0, 0.5, 1], outputRange: [0, 0, 1] });
-    const rotation = animValue.interpolate({ inputRange: [0, 1], outputRange: ['0deg', '90deg'] });
+    // ⚡️ REANIMATED STYLES
+    const navStyle = useAnimatedStyle(() => ({
+        transform: [{ translateY: navY.value }],
+        opacity: interpolate(navY.value, [-70, -20, 0], [0, 0.5, 1], Extrapolation.CLAMP),
+    }));
 
-    const navOpacity = navY.interpolate({
-        inputRange: [-70, -20, 0],
-        outputRange: [0, 0.5, 1]
+    const eventBtnStyle = useAnimatedStyle(() => ({
+        transform: [{ scale: eventPulse.value }],
+    }));
+
+    const rouletteSpinStyle = useAnimatedStyle(() => {
+        return {
+            transform: [{ rotate: `${eventSpin.value * 360}deg` }],
+        };
     });
+
+    const tooltipStyle = useAnimatedStyle(() => ({
+        opacity: tooltipAnim.value,
+        transform: [
+            { translateX: interpolate(tooltipAnim.value, [0, 1], [20, 0]) },
+            { scale: interpolate(tooltipAnim.value, [0, 1], [0.8, 1]) }
+        ],
+    }));
+
+    const mainFabIconStyle = useAnimatedStyle(() => ({
+        transform: [{ rotate: `${interpolate(clanMenuAnim.value, [0, 1], [0, 90])}deg` }],
+    }));
+
+    const getSubFabStyle = (targetY) => useAnimatedStyle(() => ({
+        opacity: interpolate(clanMenuAnim.value, [0, 0.5, 1], [0, 0, 1]),
+        transform: [
+            { translateY: interpolate(clanMenuAnim.value, [0, 1], [targetY, 0]) },
+            { scale: clanMenuAnim.value }
+        ]
+    }));
+
+    // ⚡️ Clan Hint Vertical Animation Style
+    const clanHintAnimatedStyle = useAnimatedStyle(() => ({
+        transform: [{ translateY: clanHintBounce.value }]
+    }));
+
+    const fab1Style = getSubFabStyle(20);
+    const fab2Style = getSubFabStyle(40);
+    const fab3Style = getSubFabStyle(60);
 
     const isDark = colorScheme === "dark";
     const handleBackToTop = () => DeviceEventEmitter.emit("doScrollToTop");
@@ -233,12 +304,10 @@ export default function MainLayout() {
         DeviceEventEmitter.emit("navigateSafely", route);
     };
     
-    // ⚡️ YOUR EXACT PREFERRED LOGIC: Allows the Stack to mount in the background, preventing the freeze!
     if (contextLoading) {
         return <AnimeLoading tipType={"general"} message="LOADING_PAGE" subMessage="Syncing Account" />;
     }
 
-    // Only triggers redirect if they definitively fail both MMKV and AsyncStorage checks
     if (isUserAuthenticated === false) {
         return <Redirect href="/screens/FirstLaunchScreen" />;
     }
@@ -258,17 +327,18 @@ export default function MainLayout() {
 
             <Animated.View
                 pointerEvents={isNavVisible ? "auto" : "none"}
-                style={{
-                    position: 'absolute',
-                    top: insets.top + 55,
-                    left: 0,
-                    right: 0,
-                    height: 40,
-                    transform: [{ translateY: navY }],
-                    opacity: navOpacity,
-                    zIndex: 90,
-                    backgroundColor: "transparent", 
-                }}
+                style={[
+                    {
+                        position: 'absolute',
+                        top: insets.top + 55,
+                        left: 0,
+                        right: 0,
+                        height: 40,
+                        zIndex: 90,
+                        backgroundColor: "transparent", 
+                    },
+                    navStyle
+                ]}
             >
                 <CategoryNav isDark={isDark} />
             </Animated.View>
@@ -284,31 +354,39 @@ export default function MainLayout() {
                 <Stack.Screen name="categories/[id]" />
             </Stack>
 
-            <Animated.View style={[styles.eventButtonContainer, { transform: [{ scale: eventPulse }] }]}>
-                <TouchableOpacity
-                    onPress={() => navigateTo("/screens/referralevent")}
-                    activeOpacity={0.8}
-                    style={[
-                        styles.eventButton, 
-                        { 
-                            backgroundColor: isDark ? "#111111" : "#ffffff",
-                            borderColor: isDark ? "#3b82f6" : "#60a5fa",
-                            shadowColor: isDark ? "#60a5fa" : "#3b82f6",
-                        }
-                    ]}
-                >
-                    <Ionicons name="trophy" size={24} color={isDark ? "#60a5fa" : "#3b82f6"} />
-                    <View style={[
-                        styles.eventBadge, 
-                        { 
-                            backgroundColor: "#3b82f6", 
-                            borderColor: isDark ? "#111111" : "#ffffff" 
-                        }
-                    ]}>
-                        <Text style={styles.eventBadgeText}>WIN!</Text>
-                    </View>
-                </TouchableOpacity>
-            </Animated.View>
+            {/* ⚡️ THE GOLD ROULETTE EVENT BUTTON + TOOLTIP */}
+            <View style={styles.eventButtonContainer}>
+                <Animated.View style={[styles.tooltipContainer, tooltipStyle]}>
+                    <Text style={styles.tooltipText}>NEW EVENT!</Text>
+                    <View style={styles.tooltipArrow} />
+                </Animated.View>
+
+                <Animated.View style={eventBtnStyle}>
+                    <TouchableOpacity
+                        onPress={() => navigateTo("/screens/referralevent")}
+                        activeOpacity={0.8}
+                        style={[
+                            styles.eventButton, 
+                            { 
+                                backgroundColor: isDark ? "#111111" : "#ffffff",
+                                borderColor: "#f59e0b",
+                                shadowColor: "#f59e0b",
+                            }
+                        ]}
+                    >
+                        <Animated.View style={rouletteSpinStyle}>
+                            <Ionicons name="aperture" size={26} color="#f59e0b" />
+                        </Animated.View>
+                        
+                        <View style={[
+                            styles.eventBadge, 
+                            { backgroundColor: "#f59e0b", borderColor: isDark ? "#111111" : "#ffffff" }
+                        ]}>
+                            <Text style={styles.eventBadgeText}>EVENT</Text>
+                        </View>
+                    </TouchableOpacity>
+                </Animated.View>
+            </View>
 
             <View
                 style={{
@@ -356,12 +434,7 @@ export default function MainLayout() {
                             />
                             {active && (
                                 <Text 
-                                    style={{ 
-                                        fontSize: 11, 
-                                        fontWeight: '900', 
-                                        color: "#fff", 
-                                        marginLeft: 8 
-                                    }}
+                                    style={{ fontSize: 11, fontWeight: '900', color: "#fff", marginLeft: 8 }}
                                 >
                                     {tab.label}
                                 </Text>
@@ -371,7 +444,8 @@ export default function MainLayout() {
                 })}
             </View>
 
-            {/* CLAN OVERLAY */}
+            <DailyModal />
+
             {showClanMenu && (
                 <TouchableOpacity
                     style={[styles.overlay, { backgroundColor: isDark ? 'rgba(0,0,0,0.6)' : 'rgba(0,0,0,0.3)' }]}
@@ -384,11 +458,7 @@ export default function MainLayout() {
                 style={[styles.container, { bottom: insets.bottom + 22 }]}
                 pointerEvents="box-none" 
             >
-                {/* ⚔️ WAR PAGE BUTTON */}
-                <Animated.View 
-                    pointerEvents={showClanMenu ? "auto" : "none"} 
-                    style={{ opacity: opacityClan, transform: [{ translateY: translateY_3 }, { scale }], marginBottom: 10 }}
-                >
+                <Animated.View pointerEvents={showClanMenu ? "auto" : "none"} style={[fab3Style, { marginBottom: 10 }]}>
                     <TouchableOpacity 
                         onPress={() => { setShowClanMenu(false); navigateTo("/screens/war"); }} 
                         activeOpacity={0.8} 
@@ -399,12 +469,8 @@ export default function MainLayout() {
                     </TouchableOpacity>
                 </Animated.View>
 
-                {/* 🛡️ CLAN PROFILE BUTTON */}
                 {userInClan && (
-                    <Animated.View 
-                        pointerEvents={showClanMenu ? "auto" : "none"} 
-                        style={{ opacity: opacityClan, transform: [{ translateY: translateY_2 }, { scale }], marginBottom: 10 }}
-                    >
+                    <Animated.View pointerEvents={showClanMenu ? "auto" : "none"} style={[fab2Style, { marginBottom: 10 }]}>
                         <TouchableOpacity 
                             onPress={() => { setShowClanMenu(false); navigateTo("/clanprofile"); }} 
                             activeOpacity={0.8} 
@@ -416,11 +482,7 @@ export default function MainLayout() {
                     </Animated.View>
                 )}
 
-                {/* 🔍 DISCOVER BUTTON */}
-                <Animated.View 
-                    pointerEvents={showClanMenu ? "auto" : "none"} 
-                    style={{ opacity: opacityClan, transform: [{ translateY: translateY_1 }, { scale }], marginBottom: 12 }}
-                >
+                <Animated.View pointerEvents={showClanMenu ? "auto" : "none"} style={[fab1Style, { marginBottom: 12 }]}>
                     <TouchableOpacity 
                         onPress={() => { setShowClanMenu(false); navigateTo("/screens/discover"); }} 
                         activeOpacity={0.8} 
@@ -430,7 +492,6 @@ export default function MainLayout() {
                     </TouchableOpacity>
                 </Animated.View>
 
-                {/* ⬆️ BACK TO TOP */}
                 {showTop && (
                     <TouchableOpacity 
                         onPress={handleBackToTop} 
@@ -441,43 +502,78 @@ export default function MainLayout() {
                     </TouchableOpacity>
                 )}
 
-                {/* 🔘 MAIN CLAN FAB (Toggle) */}
-                <TouchableOpacity 
-                    onPress={handleClanPress} 
-                    activeOpacity={0.8} 
-                    style={[
-                        styles.mainFab, 
-                        { 
-                            borderColor: showClanMenu ? (isDark ? "#fff" : "#3b82f6") : (isDark ? "#1e293b" : "#e2e8f0"), 
-                            borderWidth: 2, 
-                            backgroundColor: showClanMenu ? (isDark ? "#1e293b" : "#3b82f6") : (isDark ? "#111111" : "#f8fafc") 
-                        }
-                    ]}
-                >
-                    <Animated.View style={{ transform: [{ rotate: rotation }] }}>
-                        <Ionicons 
-                            name={showClanMenu ? "close" : "shield-half"} 
-                            size={24} 
-                            color={showClanMenu ? "#fff" : "#3b82f6"} 
-                        />
-                    </Animated.View>
+                {/* ⚡️ WRAPPER FOR MAIN FAB + VERTICAL FLOATING HINT */}
+                <View className="relative items-center justify-center z-50">
                     
-                    {!showClanMenu && canManageClan && (warActionsCount > 0 || fullData > 0) && (
-                        <View 
-                            style={{
-                                position: 'absolute',
-                                top: -2,
-                                right: -2,
-                                width: 14,
-                                height: 14,
-                                borderRadius: 7,
-                                backgroundColor: '#ef4444',
-                                borderWidth: 2,
-                                borderColor: isDark ? '#111111' : '#f8fafc'
-                            }} 
-                        />
+                    {/* ⚡️ VERTICAL BOUNCING GOLD HINT */}
+                    {showClanHint && !showClanMenu && (
+                        <Animated.View 
+                            style={[clanHintAnimatedStyle, { position: 'absolute', bottom: 40, right: 10, alignItems: 'center' }]} 
+                            className="z-[100]"
+                        >
+                            <View 
+                                style={{ backgroundColor: '#f59e0b', shadowColor: '#f59e0b' }}
+                                className="px-4 py-3 rounded-xl shadow-[0_0_15px_rgba(245,158,11,0.6)] min-w-[100] border border-yellow-300 items-center justify-center"
+                            >
+                                <View className="flex-row items-center mb-1">
+                                    <Ionicons name="shield-half" size={24} color="white" className="mr-1" />
+                                    <Text className="text-white font-black uppercase text-[12px] tracking-widest leading-tight text-center">
+                                        Clan Details
+                                    </Text>
+                                </View>
+                                <Text className="text-white/80 font-bold uppercase text-[10px] tracking-widest text-center">
+                                    Tap To Access
+                                </Text>
+                            </View>
+                            
+                            <Ionicons 
+                                name="caret-down" 
+                                size={28} 
+                                color="#f59e0b" 
+                                style={{ 
+                                    marginTop: -8, 
+                                    position: "absolute",
+                                    right: 0,
+                                    bottom: 0,
+                                    textShadowColor: 'rgba(245, 158, 11, 0.5)', 
+                                    textShadowOffset: { width: 0, height: 2 },
+                                    textShadowRadius: 6 
+                                }} 
+                            />
+                        </Animated.View>
                     )}
-                </TouchableOpacity>
+
+                    <TouchableOpacity 
+                        onPress={handleClanPress} 
+                        activeOpacity={0.8} 
+                        style={[
+                            styles.mainFab, 
+                            { 
+                                borderColor: showClanMenu ? (isDark ? "#fff" : "#3b82f6") : (isDark ? "#1e293b" : "#e2e8f0"), 
+                                borderWidth: 2, 
+                                backgroundColor: showClanMenu ? (isDark ? "#1e293b" : "#3b82f6") : (isDark ? "#111111" : "#f8fafc") 
+                            }
+                        ]}
+                    >
+                        <Animated.View style={mainFabIconStyle}>
+                            <Ionicons 
+                                name={showClanMenu ? "close" : "shield-half"} 
+                                size={24} 
+                                color={showClanMenu ? "#fff" : "#3b82f6"} 
+                            />
+                        </Animated.View>
+                        
+                        {!showClanMenu && canManageClan && (warActionsCount > 0 || fullData > 0) && (
+                            <View 
+                                style={{
+                                    position: 'absolute', top: -2, right: -2, width: 14, height: 14,
+                                    borderRadius: 7, backgroundColor: '#ef4444', borderWidth: 2,
+                                    borderColor: isDark ? '#111111' : '#f8fafc'
+                                }} 
+                            />
+                        )}
+                    </TouchableOpacity>
+                </View>
             </View>
         </View>
     );
@@ -488,8 +584,13 @@ const styles = StyleSheet.create({
     overlay: { position: 'absolute', top: 0, bottom: 0, left: 0, right: 0, zIndex: 999 },
     mainFab: { width: 48, height: 48, borderRadius: 18, justifyContent: "center", alignItems: "center", elevation: 8, shadowColor: "#000", shadowOffset: { width: 0, height: 4 }, shadowOpacity: 0.3, shadowRadius: 4.65 },
     subFab: { width: 45, height: 45, borderRadius: 15, justifyContent: "center", alignItems: "center", elevation: 5, shadowColor: "#000", shadowOffset: { width: 0, height: 2 }, shadowOpacity: 0.25, shadowRadius: 3.84 },
-    eventButtonContainer: { position: 'absolute', right: 12, top: '45%', zIndex: 998 },
+    eventButtonContainer: { position: 'absolute', right: 12, top: '45%', zIndex: 998, flexDirection: 'row', alignItems: 'center' },
     eventButton: { width: 40, height: 40, borderRadius: 25, justifyContent: 'center', alignItems: 'center', elevation: 10, shadowOffset: { width: 0, height: 4 }, shadowOpacity: 0.4, shadowRadius: 5, borderWidth: 2 },
     eventBadge: { position: 'absolute', top: -6, left: -8, borderRadius: 12, paddingHorizontal: 6, paddingVertical: 2, borderWidth: 1.5 },
-    eventBadgeText: { fontSize: 6, color: '#ffffff', fontWeight: '900' }
+    eventBadgeText: { fontSize: 6, color: '#ffffff', fontWeight: '900' },
+    
+    // ⚡️ Tooltip Styles for Event Button
+    tooltipContainer: { backgroundColor: '#f59e0b', paddingHorizontal: 10, paddingVertical: 6, borderRadius: 8, marginRight: 10, elevation: 5, shadowColor: '#f59e0b', shadowOpacity: 0.8, shadowRadius: 8, shadowOffset: { width: 0, height: 2 } },
+    tooltipText: { color: 'white', fontSize: 9, fontWeight: '900', letterSpacing: 1 },
+    tooltipArrow: { position: 'absolute', right: -4, top: '50%', marginTop: -4, width: 0, height: 0, borderTopWidth: 4, borderBottomWidth: 4, borderLeftWidth: 5, borderStyle: 'solid', backgroundColor: 'transparent', borderTopColor: 'transparent', borderBottomColor: 'transparent', borderLeftColor: '#f59e0b' }
 });

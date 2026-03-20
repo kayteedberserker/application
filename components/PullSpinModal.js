@@ -1,14 +1,20 @@
 import { Canvas, Circle, Group, Rect } from "@shopify/react-native-skia";
-import { useRef, useState } from 'react';
+import { useState } from 'react';
 import {
-    Animated,
     Dimensions,
     Modal,
     Text,
     TouchableOpacity,
     View
 } from 'react-native';
-import THEME from './useAppTheme'; // Ensure path is correct
+import Animated, {
+    useAnimatedStyle,
+    useSharedValue,
+    withSequence,
+    withSpring,
+    withTiming
+} from 'react-native-reanimated';
+import THEME from './useAppTheme'; 
 
 const { width } = Dimensions.get('window');
 
@@ -17,11 +23,7 @@ const PullSpinModal = ({ isVisible, onClose, onComplete, pullMetadata, rewardNam
   const [currentNum, setCurrentNum] = useState('?');
   const [hasFinished, setHasFinished] = useState(false);
   
-  const spinValue = useRef(new Animated.Value(0)).current;
-  const scaleValue = useRef(new Animated.Value(1)).current;
-
-  // Numbers to cycle through during animation
-  const numbers = [0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10];
+  const scaleValue = useSharedValue(1);
 
   const startSpin = () => {
     if (isSpinning) return;
@@ -29,7 +31,6 @@ const PullSpinModal = ({ isVisible, onClose, onComplete, pullMetadata, rewardNam
     setIsSpinning(true);
     setHasFinished(false);
 
-    // Rapidly cycle numbers
     let iterations = 0;
     const maxIterations = 30;
     const interval = setInterval(() => {
@@ -49,16 +50,21 @@ const PullSpinModal = ({ isVisible, onClose, onComplete, pullMetadata, rewardNam
     setIsSpinning(false);
     setHasFinished(true);
 
-    // Pulse effect on win
-    Animated.sequence([
-      Animated.timing(scaleValue, { toValue: 1.5, duration: 200, useNativeDriver: true }),
-      Animated.spring(scaleValue, { toValue: 1, friction: 4, useNativeDriver: true })
-    ]).start();
+    scaleValue.value = withSequence(
+      withTiming(1.5, { duration: 200 }),
+      withSpring(1, { damping: 10, stiffness: 100 })
+    );
   };
 
   const handleConfirm = () => {
     onComplete(currentNum);
   };
+
+  const animatedStyle = useAnimatedStyle(() => {
+    return {
+      transform: [{ scale: scaleValue.value }]
+    };
+  });
 
   return (
     <Modal visible={isVisible} transparent animationType="fade">
@@ -75,11 +81,13 @@ const PullSpinModal = ({ isVisible, onClose, onComplete, pullMetadata, rewardNam
           <Text style={{ color: 'white' }} className="text-2xl font-black italic uppercase mb-10 text-center">{rewardName}</Text>
 
           <Animated.View 
-            style={{ 
-              transform: [{ scale: scaleValue }],
-              borderColor: hasFinished ? THEME.success : THEME.accent,
-              backgroundColor: THEME.card 
-            }} 
+            style={[
+              animatedStyle,
+              { 
+                borderColor: hasFinished ? THEME.success : THEME.accent,
+                backgroundColor: THEME.card 
+              }
+            ]} 
             className="w-40 h-40 rounded-3xl border-4 items-center justify-center shadow-2xl"
           >
             <Text style={{ color: hasFinished ? THEME.success : THEME.text }} className="text-7xl font-black italic">

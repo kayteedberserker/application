@@ -7,6 +7,7 @@ import {
     ScrollView,
     Share,
     TouchableOpacity,
+    useColorScheme,
     View
 } from "react-native";
 import { SafeAreaView } from 'react-native-safe-area-context';
@@ -15,6 +16,7 @@ import { Text } from "../../components/Text";
 import THEME from "../../components/useAppTheme";
 import { useUser } from "../../context/UserContext";
 import apiFetch from "../../utils/apiFetch";
+import TopBar from "../../components/Topbar";
 
 const CACHE_KEY = "referral_dashboard_cache";
 
@@ -25,7 +27,7 @@ export default function ReferralDashboard() {
     const { user } = useUser();
     const [copied, setCopied] = useState(false);
     const [refreshing, setRefreshing] = useState(false);
-    
+    const isDark = useColorScheme() === "dark";
     // UI State initialized with empty or Context fallbacks
     const [dbData, setDbData] = useState({
         referralCode: user?.referralCode || "---",
@@ -112,6 +114,7 @@ export default function ReferralDashboard() {
 
     return (
         <SafeAreaView style={{ flex: 1, backgroundColor: THEME.bg }}>
+            <TopBar isDark={isDark} />
             <ScrollView 
                 showsVerticalScrollIndicator={false} 
                 className="px-6"

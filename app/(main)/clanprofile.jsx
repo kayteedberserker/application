@@ -1,3 +1,4 @@
+import AsyncStorage from '@react-native-async-storage/async-storage'; 
 import { Feather, Ionicons, MaterialCommunityIcons } from "@expo/vector-icons";
 import { useMMKV } from "react-native-mmkv"; 
 import * as Clipboard from 'expo-clipboard';
@@ -7,11 +8,9 @@ import { useEffect, useMemo, useRef, useState } from 'react';
 import {
     ActivityIndicator,
     Image,
-    Animated,
     DeviceEventEmitter,
     Keyboard,
     Dimensions,
-    Easing,
     Modal,
     Pressable,
     ScrollView,
@@ -27,6 +26,17 @@ import ViewShot from "react-native-view-shot";
 
 // ⚡️ Swapped to LegendList for maximum performance
 import { LegendList } from "@legendapp/list"; 
+
+// ⚡️ ALL ANIMATIONS NOW STRICTLY USE REANIMATED FOR UI THREAD PERFORMANCE
+import Animated, {
+    useSharedValue,
+    useAnimatedStyle,
+    withTiming,
+    withRepeat,
+    withSequence,
+    Easing,
+    runOnJS
+} from 'react-native-reanimated';
 
 import AnimeLoading from "../../components/AnimeLoading";
 import { ClanBadge } from "../../components/ClanBadge";
@@ -76,7 +86,6 @@ const ClanProfile = () => {
     const colorScheme = useColorScheme();
     const isDark = colorScheme === "dark";
 
-
     // Pagination & Posts State
     const [posts, setPosts] = useState([]);
     const [page, setPage] = useState(1);
@@ -113,10 +122,10 @@ const ClanProfile = () => {
     }, [fullData?.messages]);
 
     // =================================================================
-    // 🔹 ANIMATION LOGIC
+    // ⚡️ UPGRADED REANIMATED LOGIC (Zero JS Thread Blocking)
     // =================================================================
-    const scanAnim = useRef(new Animated.Value(0)).current;
-    const pulseAnim = useRef(new Animated.Value(1)).current;
+    const scanAnim = useSharedValue(0);
+    const pulseAnim = useSharedValue(1);
 
     const progressToNextRank = useMemo(() => {
         if (!fullData || !fullData.nextThreshold) return 0;
@@ -124,27 +133,37 @@ const ClanProfile = () => {
     }, [fullData]);
 
     useEffect(() => {
-        Animated.loop(
-            Animated.timing(scanAnim, {
-                toValue: 1,
-                duration: 10000,
-                easing: Easing.linear,
-                useNativeDriver: true,
-            })
-        ).start();
+        // Continuous 360 Spin
+        scanAnim.value = withRepeat(
+            withTiming(1, { duration: 10000, easing: Easing.linear }),
+            -1, // Infinite
+            false // Don't reverse
+        );
 
-        Animated.loop(
-            Animated.sequence([
-                Animated.timing(pulseAnim, { toValue: 1.05, duration: 2500, useNativeDriver: true }),
-                Animated.timing(pulseAnim, { toValue: 1, duration: 2500, useNativeDriver: true }),
-            ])
-        ).start();
-    }, [pulseAnim, scanAnim]);
+        // Continuous Pulse (Scale Up & Down)
+        pulseAnim.value = withRepeat(
+            withSequence(
+                withTiming(1.05, { duration: 2500 }),
+                withTiming(1, { duration: 2500 })
+            ),
+            -1, // Infinite
+            false 
+        );
+    }, []);
 
-    const spin = scanAnim.interpolate({
-        inputRange: [0, 1],
-        outputRange: ['0deg', '360deg'],
+    const spinStyle = useAnimatedStyle(() => {
+        return {
+            transform: [{ rotate: `${scanAnim.value * 360}deg` }]
+        };
     });
+
+    const pulseStyle = useAnimatedStyle(() => {
+        return {
+            transform: [{ scale: pulseAnim.value }]
+        };
+    });
+
+    // =================================================================
 
     useEffect(() => {
         if (userClan?.tag) {
@@ -418,15 +437,21 @@ const ClanProfile = () => {
             <View className="p-8 px-2 mt-10 items-center border-b border-gray-100 dark:border-zinc-900">
                 <View className="w-full flex-row justify-center items-center relative">
                     <View className="relative">
+                        {/* ⚡️ USING REANIMATED STYLES */}
                         <Animated.View
-                            style={{
-                                position: 'absolute', inset: -15, borderRadius: 100,
-                                backgroundColor: activeGlowColor || APP_BLUE, opacity: 0.1,
-                                transform: [{ scale: pulseAnim }]
-                            }}
+                            style={[
+                                {
+                                    position: 'absolute', inset: -15, borderRadius: 100,
+                                    backgroundColor: activeGlowColor || APP_BLUE, opacity: 0.1,
+                                },
+                                pulseStyle
+                            ]}
                         />
                         <Animated.View
-                            style={{ transform: [{ rotate: spin }], borderColor: `${activeGlowColor || APP_BLUE}40` }}
+                            style={[
+                                { borderColor: `${activeGlowColor || APP_BLUE}40` },
+                                spinStyle
+                            ]}
                             className="absolute -inset-5 border border-dashed rounded-full"
                         />
                         <ClanCrest glowColor={activeGlowColor || verifiedColor} rank={fullData?.rank || 1} size={120} />

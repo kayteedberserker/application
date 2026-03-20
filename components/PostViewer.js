@@ -2,13 +2,18 @@ import { MaterialCommunityIcons } from '@expo/vector-icons';
 import { useColorScheme } from "nativewind";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import {
-    Animated,
     DeviceEventEmitter,
-    Easing,
     RefreshControl,
     View
 } from "react-native";
-// ⚡️ LegendList: The JS-native high-performance list
+import Animated, {
+    Easing,
+    useAnimatedStyle,
+    useSharedValue,
+    withRepeat,
+    withSequence,
+    withTiming
+} from "react-native-reanimated";
 import { LegendList } from "@legendapp/list"; 
 import { useMMKV } from 'react-native-mmkv'; 
 import { useSafeAreaInsets } from "react-native-safe-area-context";
@@ -37,7 +42,6 @@ export default function PostsViewer() {
     const { colorScheme } = useColorScheme();
     const isDark = colorScheme === "dark";
 
-    // ⚡️ Synchronous Cache Initialization (Instantly available on Frame 1)
     const [cachedData, setCachedData] = useState(() => {
         if (SESSION_STATE.memoryCache) return SESSION_STATE.memoryCache;
         try {
@@ -58,7 +62,7 @@ export default function PostsViewer() {
     const [isOfflineMode, setIsOfflineMode] = useState(false);
     const [refreshing, setRefreshing] = useState(false);
 
-    const pulseAnim = useRef(new Animated.Value(0)).current;
+    const pulseAnim = useSharedValue(0);
 
     const saveHeavyCache = useCallback((data) => {
         try {
@@ -72,20 +76,23 @@ export default function PostsViewer() {
         }
     }, [storage]);
 
-    // Removed the buggy prepare() useEffect entirely! MMKV handles this in the useState now.
-
     useEffect(() => {
-        const animation = Animated.loop(
-            Animated.sequence([
-                Animated.timing(pulseAnim, { toValue: 1, duration: 1500, easing: Easing.linear, useNativeDriver: true }),
-                Animated.timing(pulseAnim, { toValue: 0, duration: 1500, easing: Easing.linear, useNativeDriver: true })
-            ])
+        pulseAnim.value = withRepeat(
+            withSequence(
+                withTiming(1, { duration: 1500, easing: Easing.linear }),
+                withTiming(0, { duration: 1500, easing: Easing.linear })
+            ),
+            -1,
+            false
         );
-        animation.start();
-        return () => animation.stop();
-    }, [pulseAnim]);
+    }, []);
 
-    // ⚡️ No more 'ready' or 'canFetch' locks. It fires immediately.
+    const pulseAnimatedStyle = useAnimatedStyle(() => {
+        return {
+            opacity: pulseAnim.value
+        };
+    });
+
     const getKey = (pageIndex, previousPageData) => {
         if (previousPageData && previousPageData.posts?.length < LIMIT) return null;
         return `/posts?page=${pageIndex + 1}&limit=${LIMIT}`;
@@ -191,7 +198,6 @@ export default function PostsViewer() {
         </View>
     ), [isOfflineMode, isDark]);
 
-    // Prevent rendering blank lists during initial fetch if cache is totally empty
     if (isLoading && posts.length === 0) {
         return <AnimeLoading tipType={"post"} message="Loading Posts" subMessage="Prepping Otaku content" />
     }
@@ -209,12 +215,9 @@ export default function PostsViewer() {
                     paddingBottom: insets.bottom + 120,
                 }}
                 renderItem={renderItem}
-                
-                // PERFORMANCE TUNING
                 estimatedItemSize={600} 
                 drawDistance={2000} 
                 recycleItems={true} 
-                
                 onViewableItemsChanged={onViewableItemsChanged}
                 viewabilityConfig={viewabilityConfig}
                 onEndReached={loadMore}
@@ -258,12 +261,11 @@ export default function PostsViewer() {
                     size={14}
                     color={isOfflineMode ? "#f97316" : "#2563eb"}
                 />
-                <Animated.Text
-                    style={{ opacity: pulseAnim }}
-                    className={`text-[8px] font-[900] uppercase tracking-[0.4em] ${isOfflineMode ? 'text-orange-500' : 'text-blue-600'}`}
-                >
-                    {isOfflineMode ? "Cache_Relay_Active" : "Neural_Link_Established"}
-                </Animated.Text>
+                <Animated.View style={pulseAnimatedStyle}>
+                    <Text className={`text-[8px] font-[900] uppercase tracking-[0.4em] ${isOfflineMode ? 'text-orange-500' : 'text-blue-600'}`}>
+                        {isOfflineMode ? "Cache_Relay_Active" : "Neural_Link_Established"}
+                    </Text>
+                </Animated.View>
             </View>
         </View>
     );

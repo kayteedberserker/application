@@ -4,10 +4,8 @@ import * as Sharing from 'expo-sharing';
 import { useColorScheme } from "nativewind";
 import { useCallback, useEffect, useRef, useState, useMemo } from "react";
 import {
-    Animated,
     DeviceEventEmitter,
     Dimensions,
-    Easing,
     Modal,
     Pressable,
     ScrollView,
@@ -20,6 +18,16 @@ import { LegendList } from "@legendapp/list";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import Svg, { Defs, LinearGradient, Rect, Stop, SvgXml } from "react-native-svg";
 import ViewShot from "react-native-view-shot";
+// ⚡️ Imported Reanimated
+import Animated, {
+    useSharedValue,
+    useAnimatedStyle,
+    withRepeat,
+    withTiming,
+    withSequence,
+    Easing,
+    interpolate
+} from "react-native-reanimated";
 import AuraAvatar from "../../../components/AuraAvatar";
 import ClanBorder from "../../../components/ClanBorder";
 import PlayerCard from "../../../components/PlayerCard";
@@ -30,6 +38,7 @@ import apiFetch from "../../../utils/apiFetch";
 
 // ⚡️ Imported PeakBadge
 import PeakBadge from "../../../components/PeakBadge"; 
+import { Image } from "expo-image";
 
 const API_BASE = "https://oreblogda.com/api";
 const { width } = Dimensions.get('window');
@@ -91,9 +100,11 @@ export default function AuthorPage() {
 
     const scrollRef = useRef(null);
     const playerCardRef = useRef(null);
-    const pulseAnim = useRef(new Animated.Value(1)).current;
-    const rotationAnim = useRef(new Animated.Value(0)).current;
-    const skeletonFade = useRef(new Animated.Value(0.3)).current;
+
+    // ⚡️ REANIMATED SHARED VALUES
+    const pulseAnim = useSharedValue(1);
+    const rotationAnim = useSharedValue(0);
+    const skeletonFade = useSharedValue(0.3);
 
     // --- 🎨 Unified Theme Color Logic (Top Level) ---
     const auraRank = author?.previousRank || 0;
@@ -102,29 +113,53 @@ export default function AuthorPage() {
     const activeGlowColor = equippedGlow?.visualConfig?.primaryColor || null;
     const themeColor = activeGlowColor || aura.color;
 
+    // ⚡️ REANIMATED ANIMATION TRIGGERS
     useEffect(() => {
-        Animated.loop(
-            Animated.sequence([
-                Animated.timing(pulseAnim, { toValue: 1.1, duration: 2000, useNativeDriver: true }),
-                Animated.timing(pulseAnim, { toValue: 1, duration: 2000, useNativeDriver: true }),
-            ])
-        ).start();
+        pulseAnim.value = withRepeat(
+            withSequence(
+                withTiming(1.1, { duration: 2000 }),
+                withTiming(1, { duration: 2000 })
+            ),
+            -1,
+            true
+        );
 
-        Animated.loop(
-            Animated.timing(rotationAnim, { toValue: 1, duration: 20000, easing: Easing.linear, useNativeDriver: true })
-        ).start();
+        rotationAnim.value = withRepeat(
+            withTiming(1, { duration: 20000, easing: Easing.linear }),
+            -1,
+            false
+        );
 
-        Animated.loop(
-            Animated.sequence([
-                Animated.timing(skeletonFade, { toValue: 0.7, duration: 800, useNativeDriver: true }),
-                Animated.timing(skeletonFade, { toValue: 0.3, duration: 800, useNativeDriver: true }),
-            ])
-        ).start();
+        skeletonFade.value = withRepeat(
+            withSequence(
+                withTiming(0.7, { duration: 800 }),
+                withTiming(0.3, { duration: 800 })
+            ),
+            -1,
+            true
+        );
     }, []);
 
-    const spin = rotationAnim.interpolate({
-        inputRange: [0, 1],
-        outputRange: ['0deg', '360deg']
+    // ⚡️ REANIMATED ANIMATED STYLES
+    const scanAnimatedStyle = useAnimatedStyle(() => {
+        const rotate = interpolate(rotationAnim.value, [0, 1], [0, 360]);
+        return {
+            transform: [{ rotate: `${rotate}deg` }],
+            borderColor: `${themeColor}40`
+        };
+    });
+
+    const auraPulseStyle = useAnimatedStyle(() => {
+        return {
+            transform: [{ scale: pulseAnim.value }],
+            backgroundColor: themeColor
+        };
+    });
+
+    const skeletonAnimatedStyle = useAnimatedStyle(() => {
+        return {
+            opacity: skeletonFade.value
+        };
     });
 
     useEffect(() => {
@@ -241,11 +276,11 @@ export default function AuthorPage() {
     const AuthorSkeleton = useCallback(() => (
         <View className="px-4 pt-20 pb-6 opacity-40">
             <View className="p-6 bg-gray-100 dark:bg-[#111] border border-gray-200 dark:border-gray-800 rounded-[40px] items-center">
-                <Animated.View style={{ opacity: skeletonFade }} className="w-32 h-32 bg-gray-300 dark:bg-gray-800 rounded-full mb-6" />
-                <Animated.View style={{ opacity: skeletonFade }} className="w-48 h-8 bg-gray-300 dark:bg-gray-800 rounded-lg mb-4" />
+                <Animated.View style={[skeletonAnimatedStyle]} className="w-32 h-32 bg-gray-300 dark:bg-gray-800 rounded-full mb-6" />
+                <Animated.View style={[skeletonAnimatedStyle]} className="w-48 h-8 bg-gray-300 dark:bg-gray-800 rounded-lg mb-4" />
             </View>
         </View>
-    ), [skeletonFade]);
+    ), [skeletonAnimatedStyle]);
 
     const renderItem = useCallback(({ item }) => (
         <View className="px-3">
@@ -334,17 +369,18 @@ export default function AuthorPage() {
                 <View className="flex-col items-center gap-6">
                     <View className="relative items-center justify-center">
                         <Animated.View
-                            style={{
-                                position: 'absolute',
-                                width: 140,
-                                height: 140,
-                                borderRadius: 100,
-                                backgroundColor: themeColor,
-                                opacity: activeGlowColor ? 0.25 : 0.1,
-                                transform: [{ scale: pulseAnim }]
-                            }}
+                            style={[
+                                {
+                                    position: 'absolute',
+                                    width: 140,
+                                    height: 140,
+                                    borderRadius: 100,
+                                    opacity: activeGlowColor ? 0.25 : 0.1,
+                                },
+                                auraPulseStyle
+                            ]}
                         />
-                        <Animated.View style={{ transform: [{ rotate: spin }], borderColor: `${themeColor}40`, width: 160, height: 160 }} className="absolute border border-dashed rounded-full" />
+                        <Animated.View style={[{ width: 160, height: 160 }, scanAnimatedStyle]} className="absolute border border-dashed rounded-full" />
                         <AuraAvatar
                             author={{ ...author, rank: auraRank, image: author.profilePic?.url, name: author.username }}
                             aura={aura}
@@ -445,7 +481,7 @@ export default function AuthorPage() {
                 </View>
             </View>
         );
-    }, [author, isOffline, isDark, themeColor, pulseAnim, spin, activeGlowColor, aura, auraRank, totalPosts]);
+    }, [author, isOffline, isDark, themeColor, activeGlowColor, aura, auraRank, totalPosts, scanAnimatedStyle, auraPulseStyle, skeletonAnimatedStyle]);
 
     if (!author && isOffline) {
         return (

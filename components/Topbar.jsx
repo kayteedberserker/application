@@ -1,7 +1,7 @@
 import { Ionicons } from "@expo/vector-icons";
 import { Image } from "expo-image";
-import { usePathname } from "expo-router";
-import { useEffect } from "react";
+import { usePathname, useRouter } from "expo-router";
+import { useEffect, useState } from "react";
 import {
     ActivityIndicator,
     DeviceEventEmitter,
@@ -15,6 +15,7 @@ import Animated, {
     withSequence,
     withTiming
 } from "react-native-reanimated";
+import { useMMKV } from "react-native-mmkv"; 
 import { useAlert } from "../context/AlertContext";
 import { useCoins } from "../context/CoinContext";
 import { useStreak } from "../context/StreakContext";
@@ -22,13 +23,16 @@ import { useUser } from "../context/UserContext";
 import apiFetch from "../utils/apiFetch";
 import CoinIcon from "./ClanIcon";
 import { Text } from "./Text";
-import PeakBadge from "./PeakBadge"; // ⚡️ Imported PeakBadge
+import PeakBadge from "./PeakBadge";
 
-const TopBar = ({ isDark }) => {
+// ⚡️ Global session flag: Resets to false only when the app is completely restarted.
+let hasShownThisSession = false;
+
+export default function TopBar({ isDark }) {
+    const storage = useMMKV(); 
     const CustomAlert = useAlert();
     const { streak, loading, refreshStreak } = useStreak();
     const { user, refreshUser } = useUser();
-    // ⚡️ Pull peakLevel from CoinContext
     const { coins, clanCoins, peakLevel, processTransaction, isProcessingTransaction } = useCoins(); 
     const pathName = usePathname();
 
@@ -37,7 +41,40 @@ const TopBar = ({ isDark }) => {
     const showRestoreUI = streak?.canRestore;
     const isZeroStreak = !hasActiveStreak && !showRestoreUI;
 
-    // Start pulsing animation if streak needs restoration
+    // ⚡️ WALLET HINT STATE & ANIMATION
+    const [showWalletHint, setShowWalletHint] = useState(false);
+    const hintBounce = useSharedValue(0);
+
+    useEffect(() => {
+        // ⚡️ Check if we've already shown it during this active app session
+        if (hasShownThisSession) return;
+
+        // ⚡️ Check how many times we've shown this hint overall
+        const hintCount = storage.getNumber('wallet_hint_count2') || 0;
+        
+        if (hintCount < 10) {
+            hasShownThisSession = true; // Mark as shown for this session
+            setShowWalletHint(true);
+            storage.set('wallet_hint_count2', hintCount + 1); // Increment lifetime count
+
+            // Start bouncing animation
+            hintBounce.value = withRepeat(
+                withSequence(
+                    withTiming(-8, { duration: 400 }),
+                    withTiming(0, { duration: 400 })
+                ), -1, true
+            );
+
+            // Auto-hide after 8 seconds 
+            const hideTimer = setTimeout(() => setShowWalletHint(false), 8000);
+            return () => clearTimeout(hideTimer);
+        }
+    }, []);
+
+    const hintAnimatedStyle = useAnimatedStyle(() => ({
+        transform: [{ translateY: hintBounce.value }]
+    }));
+
     useEffect(() => {
         if (showRestoreUI) {
             pulse.value = withRepeat(
@@ -61,7 +98,6 @@ const TopBar = ({ isDark }) => {
             return;
         }
 
-        // Confirmation Dialog
         CustomAlert(
             "Revive Streak?",
             "Spend 50 OC to restore your broken streak and keep your progress alive!",
@@ -101,6 +137,12 @@ const TopBar = ({ isDark }) => {
         );
     };
 
+    // ⚡️ Intercept the click to immediately hide the hint
+    const handleWalletClick = () => {
+        setShowWalletHint(false);
+        DeviceEventEmitter.emit("navigateSafely", "/screens/Wallet");
+    };
+
     const urgentButtonStyle = useAnimatedStyle(() => ({
         transform: [{ scale: pulse.value }],
     }));
@@ -110,54 +152,75 @@ const TopBar = ({ isDark }) => {
     }));
 
     const logoSrc = isDark
-        ? require("../assets/images/logowhite.png")
-        : require("../assets/images/og-image.png");
+        ? require("../assets/images/eidlightlogo.png")
+        : require("../assets/images/eiddarklogo.png");
 
     if (pathName == "/Search") return null; 
 
     return (
-        <View className={`flex-row items-center justify-between px-1 pl-4 h-14 ${ // ⚡️ Reduced px to 1, height to 14
-            isDark ? "bg-[#050505] border-b border-blue-900/30" : "bg-white border-b border-gray-200"
-        }`}>
-            {/* ⚡️ Slightly smaller logo to save width */}
+        <View className={`flex-row items-center justify-between px-1 pl-4 h-14 ${isDark ? "bg-[#050505] border-b border-blue-900/30" : "bg-white border-b border-gray-200"} z-50`}>
             <Image
                 source={logoSrc}
-                style={{ width: 84, height: 40, resizeMode: "contain" }}
+                style={{ width: 94, height: 52, resizeMode: "contain" }}
             />
-
-            <View className="flex-row items-center gap-1"> {/* ⚡️ Tighter gap */}
-
-                {/* 🪙 COIN & PEAK HUD (Combined) */}
-                <TouchableOpacity 
-                    onPress={() => DeviceEventEmitter.emit("navigateSafely", "/screens/Wallet")}
-                    className={`flex-row items-center pl-1.5 pr-2 py-1 gap-1.5 rounded-xl border ${ // ⚡️ Tighter padding
-                        isDark ? "bg-white/5 border-white/10" : "bg-gray-50 border-gray-200"
-                    }`}
-                >
-                    {/* ⚡️ Insert Peak Badge right next to the coin balance if they have one */}
-                    {peakLevel > 0 && (
-                        <View className="mr-0.5">
-                            <PeakBadge level={peakLevel} size={20} />
-                        </View>
-                    )}
-
-                    <View className="flex-col items-end justify-center">
-                        <View className="flex-row items-center">
-                            <Text className="text-yellow-500 font-black text-[11px] mr-1">{coins || 0}</Text>
-                            {isProcessingTransaction ? <ActivityIndicator size={10} color="#ca8a04" /> : <CoinIcon type="OC" size={14} />}
-                        </View>
-                        {/* ⚡️ Only show Clan coins if there is NO peak badge (to save space) */}
-                        {clanCoins > 0 && (
-                            <View className="flex-row items-center mt-[1px]">
-                                <Text style={{color: isDark ? "#c084fc" : "#9333ea"}} className="font-black text-[11px] mr-1">{clanCoins}</Text>
-                                <CoinIcon type="CC" size={14} />
+            <View className="flex-row items-center gap-1 relative">
+                
+                {/* ⚡️ WRAPPED WALLET BUTTON IN A RELATIVE CONTAINER */}
+                <View className="relative z-50">
+                    <TouchableOpacity 
+                        onPress={handleWalletClick}
+                        className={`flex-row items-center pl-1.5 pr-2 py-1 gap-1.5 rounded-xl border ${isDark ? "bg-white/5 border-white/10" : "bg-gray-50 border-gray-200"}`}
+                    >
+                        {peakLevel > 0 ? (
+                            <View className="mr-0.5">
+                                <PeakBadge level={peakLevel} size={20} />
                             </View>
-                        )}
-                    </View>
-                </TouchableOpacity>
+                        ) : null}
+                        <View className="flex-col items-end justify-center">
+                            <View className="flex-row items-center">
+                                <Text className="text-yellow-500 font-black text-[11px] mr-1">{coins || 0}</Text>
+                                {isProcessingTransaction ? <ActivityIndicator size={10} color="#ca8a04" /> : <CoinIcon type="OC" size={14} />}
+                            </View>
+                            {clanCoins > 0 ? (
+                                <View className="flex-row items-center mt-[1px]">
+                                    <Text style={{color: isDark ? "#c084fc" : "#9333ea"}} className="font-black text-[11px] mr-1">{clanCoins}</Text>
+                                    <CoinIcon type="CC" size={14} />
+                                </View>
+                            ) : null}
+                        </View>
+                    </TouchableOpacity>
 
-                {/* 🔥 STREAK HUD */}
-                {streak && (
+                    {/* ⚡️ THE FLOATING HUD HINT (UPDATED STYLING) */}
+                    {showWalletHint && (
+                        <Animated.View 
+                            style={hintAnimatedStyle} 
+                            className="absolute top-[80%] right-0 items-end z-[100]"
+                        >
+                            <Ionicons 
+                                name="caret-up" 
+                                size={24} 
+                                color="#f59e0b" // ⚡️ Amber color to match OC
+                                style={{ 
+                                    marginBottom: -10, 
+                                    marginRight: 15, 
+                                    textShadowColor: 'rgba(245, 158, 11, 0.5)', // Glow effect
+                                    textShadowRadius: 6 
+                                }} 
+                            />
+                            <View 
+                                style={{ backgroundColor: '#f59e0b', shadowColor: '#f59e0b' }}
+                                className="px-4 py-3 rounded-xl shadow-[0_0_15px_rgba(245,158,11,0.6)] border border-yellow-300 flex-row items-center min-w-[120px] justify-center"
+                            >
+                                <Ionicons name="wallet" size={14} color="white" className="mr-1.5" />
+                                <Text className="text-white font-black uppercase text-[12px] tracking-widest leading-tight">
+                                    Tap To Open{"\n"}Wallet
+                                </Text>
+                            </View>
+                        </Animated.View>
+                    )}
+                </View>
+
+                {streak ? (
                     <TouchableOpacity
                         disabled={(!showRestoreUI && !hasActiveStreak) || isProcessingTransaction}
                         onPress={showRestoreUI ? handleRestoreStreak : () => CustomAlert("Streak", "Stay active to grow your streak!")}
@@ -165,13 +228,7 @@ const TopBar = ({ isDark }) => {
                     >
                         <Animated.View 
                             style={showRestoreUI ? urgentButtonStyle : {}}
-                            className={`px-1.5 py-1 rounded-xl flex-row items-center border-2 ${ // ⚡️ Tighter padding
-                                showRestoreUI 
-                                    ? "bg-red-500/20 border-red-500 animate-pulse" 
-                                    : isZeroStreak 
-                                        ? "bg-gray-500/5 border-gray-500/10" 
-                                        : "bg-orange-500/10 border-orange-500/20 border"
-                            }`}
+                            className={`px-1.5 py-1 rounded-xl flex-row items-center border-2 ${showRestoreUI ? "bg-red-500/20 border-red-500 animate-pulse" : isZeroStreak ? "bg-gray-500/5 border-gray-500/10" : "bg-orange-500/10 border-orange-500/20 border"}`}
                         >
                             {isProcessingTransaction ? (
                                 <ActivityIndicator size="small" color="#ef4444" />
@@ -180,40 +237,33 @@ const TopBar = ({ isDark }) => {
                                     <Animated.View style={healthyFlameStyle}>
                                         <Ionicons
                                             name={showRestoreUI ? "bonfire-outline" : "flame"}
-                                            size={showRestoreUI ? 16 : 14} // ⚡️ Smaller flame
+                                            size={showRestoreUI ? 16 : 14}
                                             color={showRestoreUI ? "#ef4444" : isZeroStreak ? "#9ca3af" : "#f97316"}
                                         />
                                     </Animated.View>
                                 </View>
                             )}
-
                             <View className="flex-row items-center ml-0.5">
-                                <Text className={`text-[13px] font-black leading-none ${ // ⚡️ Slightly smaller text
-                                    showRestoreUI ? 'text-red-500 text-base' : isZeroStreak ? 'text-gray-400' : isDark ? 'text-white' : 'text-black'
-                                }`}>
+                                <Text className={`text-[13px] font-black leading-none ${showRestoreUI ? 'text-red-500 text-base' : isZeroStreak ? 'text-gray-400' : isDark ? 'text-white' : 'text-black'}`}>
                                     {showRestoreUI ? streak.recoverableStreak : (streak?.streak || 0)}
                                 </Text>
                             </View>
-
-                            {showRestoreUI && !isProcessingTransaction && (
+                            {(showRestoreUI && !isProcessingTransaction) ? (
                                 <View className="bg-red-500 rounded-full h-1.5 w-1.5 absolute -top-1 -right-1 border border-white" />
-                            )}
+                            ) : null}
                         </Animated.View>
                     </TouchableOpacity>
-                )}
-
-                {/* ACTION BUTTONS */}
-                <View className="flex-row items-center gap-1"> {/* ⚡️ Tighter gap */}
+                ) : null}
+                <View className="flex-row items-center gap-1">
                     <TouchableOpacity
                         onPress={() => DeviceEventEmitter.emit("navigateSafely", "/screens/Leaderboard")}
-                        className={`p-1.5 rounded-xl border ${isDark ? "bg-white/5 border-white/10" : "bg-gray-50 border-gray-200"}`} // ⚡️ Smaller padding
+                        className={`p-1.5 rounded-xl border ${isDark ? "bg-white/5 border-white/10" : "bg-gray-50 border-gray-200"}`}
                     >
                         <Ionicons name="trophy-outline" size={16} color={isDark ? "#60a5fa" : "#111827"} />
                     </TouchableOpacity>
-
                     <TouchableOpacity
                         onPress={() => DeviceEventEmitter.emit("navigateSafely", "/screens/MoreOptions")}
-                        className={`p-1.5 rounded-xl border ${isDark ? "bg-white/5 border-white/10" : "bg-gray-50 border-gray-200"}`} // ⚡️ Smaller padding
+                        className={`p-1.5 rounded-xl border ${isDark ? "bg-white/5 border-white/10" : "bg-gray-50 border-gray-200"}`}
                     >
                         <Ionicons name="grid-outline" size={16} color={isDark ? "#60a5fa" : "#111827"} />
                     </TouchableOpacity>
@@ -221,6 +271,4 @@ const TopBar = ({ isDark }) => {
             </View>
         </View>
     );
-};
-
-export default TopBar;
+}
