@@ -1,7 +1,7 @@
 import { Ionicons, MaterialCommunityIcons, Feather } from "@expo/vector-icons";
 import { useMMKV } from "react-native-mmkv";
 import { useColorScheme as useNativeWind } from "nativewind";
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useEffect, useState, useRef } from "react";
 import {
     ActivityIndicator,
     Clipboard,
@@ -20,10 +20,13 @@ import Animated, {
     withRepeat,
     withSequence,
     Easing as ReanimatedEasing,
-    runOnJS
+    runOnJS,
+    useAnimatedReaction // ⚡️ ADDED THIS IMPORT
 } from 'react-native-reanimated';
 import { SafeAreaView } from "react-native-safe-area-context";
 import { SvgXml } from "react-native-svg";
+import * as Haptics from 'expo-haptics'; 
+
 import { Text } from "../../components/Text";
 import THEME from "../../components/useAppTheme";
 import { useUser } from "../../context/UserContext";
@@ -120,6 +123,7 @@ const ClaimTab = ({ eventData }) => {
 
     const handleClaim = async () => {
         if (isProcessingTransaction || hasClaimed || isEventExpired) return;
+        Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
 
         setStatus({ type: '', text: '' });
         const result = await processTransaction('claim', claimId);
@@ -128,6 +132,7 @@ const ClaimTab = ({ eventData }) => {
             setHasClaimed(true);
             storage.set(`has_claimed_${claimId}`, true); 
             setStatus({ type: 'success', text: `${claimAmount} OC Acquired!` });
+            Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
         } else {
             const errorMessage = result.error || 'Failed to claim.';
             if (errorMessage.toLowerCase().includes('already') || errorMessage.toLowerCase().includes('claimed')) {
@@ -135,6 +140,7 @@ const ClaimTab = ({ eventData }) => {
                 storage.set(`has_claimed_${claimId}`, true);
             }
             setStatus({ type: 'error', text: errorMessage });
+            Haptics.notificationAsync(Haptics.NotificationFeedbackType.Error);
         }
     };
 
@@ -224,8 +230,9 @@ const GachaTab = ({ eventData, gachaPool, ownedIds, setOwnedIds, pityCount, setP
     const [rouletteTrack, setRouletteTrack] = useState([]);
     const [animationDone, setAnimationFinished] = useState(false);
 
-    // ⚡️ NEW: Modal Preview State
+    // Modal Preview States
     const [previewItem, setPreviewItem] = useState(null);
+    const [showSummaryModal, setShowSummaryModal] = useState(false); 
 
     const themeColor = eventData?.themeColor || '#facc15';
     const EventIcon = eventData?.icon || 'moon-waning-crescent';
@@ -238,7 +245,17 @@ const GachaTab = ({ eventData, gachaPool, ownedIds, setOwnedIds, pityCount, setP
     const ITEM_SIZE = 120; 
     const WIN_INDEX = 30; 
 
-    const pityProgress = Math.min(((pityCount || 0) / 50) * 100, 100);
+    const pityProgress = Math.min(((pityCount || 0) / 100) * 100, 100);
+    
+    // ⚡️ FIXED: Using useAnimatedReaction instead of addListener to prevent Reanimated v3 crashes
+    useAnimatedReaction(
+        () => Math.abs(Math.round(scrollX.value / ITEM_SIZE)),
+        (currentIndex, previousIndex) => {
+            if (currentIndex !== previousIndex && previousIndex !== null) {
+                runOnJS(Haptics.impactAsync)(Haptics.ImpactFeedbackStyle.Light);
+            }
+        }
+    );
 
     useEffect(() => {
         if (showReveal) {
@@ -275,9 +292,11 @@ const GachaTab = ({ eventData, gachaPool, ownedIds, setOwnedIds, pityCount, setP
     const handleSpin = (pullType) => {
         if (isSpinning || gachaPool.length === 0 || isEventExpired) return;
         
+        Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Heavy);
         setIsSpinning(true);
         setIsFetchingServer(true); 
         setShowReveal(true); 
+        setShowSummaryModal(false);
 
         setTimeout(async () => {
             try {
@@ -290,7 +309,6 @@ const GachaTab = ({ eventData, gachaPool, ownedIds, setOwnedIds, pityCount, setP
                 if (data.success) {
                     await fetchCoins(); 
                     if (data.inventory) setOwnedIds(data.inventory.map(i => i.itemId));
-                    
                     if (data.pityCount !== undefined) setPityCount(data.pityCount);
 
                     setPullResults(data.rewards);
@@ -311,6 +329,15 @@ const GachaTab = ({ eventData, gachaPool, ownedIds, setOwnedIds, pityCount, setP
             }
         }, 50);
     };
+
+    const handleAnimationComplete = (tier) => {
+        setAnimationFinished(true);
+        if (tier === 'MYTHIC' || tier === 'EPIC') {
+            Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
+        } else {
+            Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Heavy);
+        }
+    }
 
     const startRouletteAnimation = (wonItem) => {
         setAnimationFinished(false);
@@ -345,15 +372,16 @@ const GachaTab = ({ eventData, gachaPool, ownedIds, setOwnedIds, pityCount, setP
             finalPosition + randomTick,
             {
                 duration: 4500,
-                easing: ReanimatedEasing.out(ReanimatedEasing.cubic),
+                easing: ReanimatedEasing.bezier(0.1, 0.8, 0.2, 1),
             },
             (finished) => {
-                if (finished) runOnJS(setAnimationFinished)(true);
+                if (finished) runOnJS(handleAnimationComplete)(wonItem.tier);
             }
         );
     };
 
     const handleNextReveal = () => {
+        Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
         if (revealStep < pullResults.length - 1) {
             const nextItem = pullResults[revealStep + 1];
             setRevealStep(prev => prev + 1);
@@ -361,7 +389,15 @@ const GachaTab = ({ eventData, gachaPool, ownedIds, setOwnedIds, pityCount, setP
         } else {
             setShowReveal(false);
             setIsSpinning(false); 
+            setShowSummaryModal(true);
         }
+    };
+
+    const handleSkipReveal = () => {
+        Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
+        setShowReveal(false);
+        setIsSpinning(false);
+        setShowSummaryModal(true);
     };
 
     const activeRevealItem = pullResults[revealStep];
@@ -377,9 +413,9 @@ const GachaTab = ({ eventData, gachaPool, ownedIds, setOwnedIds, pityCount, setP
 
     return (
         <View className="mb-20">
-            {/* ⚡️ NEW: ITEM PREVIEW INFO MODAL */}
+            {/* ⚡️ ITEM PREVIEW INFO MODAL */}
             <Modal visible={!!previewItem} transparent={true} animationType="fade">
-                <View className="flex-1 bg-black/90 items-center justify-center px-6">
+                <View className="flex-1 bg-black/90 items-center justify-center px-6 z-50">
                     {previewItem && (
                         <View style={{ borderColor: getTierColor(previewItem.tier), shadowColor: getTierColor(previewItem.tier) }} className="w-full bg-[#0f172a] rounded-3xl p-6 border-2 items-center shadow-[0_0_30px_rgba(0,0,0,0.5)]">
                             <TouchableOpacity onPress={() => setPreviewItem(null)} className="absolute top-4 right-4 z-10 p-2 bg-white/10 rounded-full">
@@ -392,7 +428,7 @@ const GachaTab = ({ eventData, gachaPool, ownedIds, setOwnedIds, pityCount, setP
 
                             <View style={{ backgroundColor: `${getTierColor(previewItem.tier)}15`, borderColor: `${getTierColor(previewItem.tier)}50` }} className="w-32 h-32 rounded-2xl items-center justify-center border-2 mb-6">
                                 {previewItem.category === 'BORDER' ? (
-                                    <ClanBorder color={previewItem.visualConfig?.primaryColor} animationType="singleSnake">
+                                    <ClanBorder color={previewItem.visualConfig?.primaryColor} animationType={previewItem.visualConfig?.animationType || "singleSnake"}>
                                         <View className="w-16 h-16 bg-black/40 rounded-full" />
                                     </ClanBorder>
                                 ) : (
@@ -402,13 +438,18 @@ const GachaTab = ({ eventData, gachaPool, ownedIds, setOwnedIds, pityCount, setP
 
                             <Text className="text-white text-2xl font-black italic uppercase text-center mb-2">{previewItem.name}</Text>
                             
-                            <View className="flex-row items-center mb-6">
-                                <View style={{ backgroundColor: `${getTierColor(previewItem.tier)}20` }} className="px-3 py-1 rounded-md mr-2">
+                            <View className="flex-row items-center flex-wrap justify-center gap-2 mb-6">
+                                <View style={{ backgroundColor: `${getTierColor(previewItem.tier)}20` }} className="px-3 py-1.5 rounded-md">
                                     <Text style={{ color: getTierColor(previewItem.tier) }} className="text-[10px] font-black uppercase tracking-widest">{previewItem.category}</Text>
                                 </View>
                                 {previewItem.expiresInDays && (
-                                    <View className="px-3 py-1 bg-orange-500/20 rounded-md border border-orange-500/30">
+                                    <View className="px-3 py-1.5 bg-orange-500/20 rounded-md border border-orange-500/30">
                                         <Text className="text-orange-500 text-[10px] font-black uppercase tracking-widest">{previewItem.expiresInDays} Day Duration</Text>
+                                    </View>
+                                )}
+                                {previewItem.rewardAmount && (
+                                    <View className="px-3 py-1.5 bg-green-500/20 rounded-md border border-green-500/30">
+                                        <Text className="text-green-500 text-[10px] font-black uppercase tracking-widest">Yields: {previewItem.rewardAmount} OC</Text>
                                     </View>
                                 )}
                             </View>
@@ -430,6 +471,16 @@ const GachaTab = ({ eventData, gachaPool, ownedIds, setOwnedIds, pityCount, setP
             <Modal visible={showReveal} transparent={true} animationType="fade">
                 <View className="flex-1 bg-black/95 items-center justify-center relative overflow-hidden">
                     
+                    {/* ⚡️ SKIP BUTTON */}
+                    {!isFetchingServer && pullResults.length > 1 && (
+                        <TouchableOpacity 
+                            onPress={handleSkipReveal} 
+                            className="absolute top-12 right-6 z-50 bg-white/10 px-4 py-2 rounded-full border border-white/20"
+                        >
+                            <Text className="text-white font-black text-[10px] uppercase tracking-widest">Skip ⏭</Text>
+                        </TouchableOpacity>
+                    )}
+
                     {isFetchingServer ? (
                         <View className="items-center justify-center relative">
                             <Animated.View style={[outerPortalStyle, { position: 'absolute', width: 140, height: 140, borderRadius: 70, borderWidth: 2, borderColor: themeColor, borderStyle: 'dashed', opacity: 0.4 }]} />
@@ -464,7 +515,7 @@ const GachaTab = ({ eventData, gachaPool, ownedIds, setOwnedIds, pityCount, setP
                                                 className={`h-28 rounded-2xl border-2 items-center justify-center ${isWinnerSlot ? 'scale-110 shadow-lg shadow-' + getTierColor(item.tier) : 'opacity-50 scale-95'}`}
                                             >
                                                 {item.category === 'BORDER' ? (
-                                                    <ClanBorder color={item.visualConfig?.primaryColor} animationType="singleSnake">
+                                                    <ClanBorder color={item.visualConfig?.primaryColor} animationType={item.visualConfig?.animationType || "singleSnake"}>
                                                         <View className="w-12 h-12 bg-black/40 rounded-full" />
                                                     </ClanBorder>
                                                 ) : (
@@ -479,11 +530,16 @@ const GachaTab = ({ eventData, gachaPool, ownedIds, setOwnedIds, pityCount, setP
                             <View className="mt-12 items-center h-40 w-full px-8">
                                 {animationDone && activeRevealItem && (
                                     <>
-                                        <Text style={{ color: getTierColor(activeRevealItem.tier) }} className="text-3xl font-black italic text-center mb-1">
-                                            {activeRevealItem.name}
-                                        </Text>
+                                        <TouchableOpacity onPress={() => setPreviewItem(activeRevealItem)} className="flex-row items-center justify-center mb-1">
+                                            <Text style={{ color: getTierColor(activeRevealItem.tier) }} className="text-3xl font-black italic text-center mr-2">
+                                                {activeRevealItem.name}
+                                            </Text>
+                                            <Ionicons name="information-circle-outline" size={24} color={getTierColor(activeRevealItem.tier)} />
+                                        </TouchableOpacity>
+
                                         <Text className="text-slate-400 font-bold text-[10px] tracking-widest uppercase mb-6">
                                             TYPE: {activeRevealItem.category}
+                                            {pullResults.length > 1 && ` (${revealStep + 1}/${pullResults.length})`}
                                         </Text>
 
                                         {activeRevealItem.isDuplicate && (
@@ -495,10 +551,10 @@ const GachaTab = ({ eventData, gachaPool, ownedIds, setOwnedIds, pityCount, setP
                                         <TouchableOpacity 
                                             onPress={handleNextReveal}
                                             style={{ backgroundColor: getTierColor(activeRevealItem.tier) }}
-                                            className="w-full py-4 rounded-xl items-center justify-center"
+                                            className="w-full py-4 rounded-xl items-center justify-center shadow-lg"
                                         >
                                             <Text className="text-slate-900 font-black uppercase tracking-widest text-sm">
-                                                {revealStep < pullResults.length - 1 ? "Reveal Next" : "Accept"}
+                                                {revealStep < pullResults.length - 1 ? "Reveal Next" : "Accept & View All"}
                                             </Text>
                                         </TouchableOpacity>
                                     </>
@@ -506,6 +562,82 @@ const GachaTab = ({ eventData, gachaPool, ownedIds, setOwnedIds, pityCount, setP
                             </View>
                         </>
                     )}
+                </View>
+            </Modal>
+
+            {/* ⚡️ POST-PULL SUMMARY MODAL */}
+            <Modal visible={showSummaryModal} transparent={true} animationType="slide">
+                <View className="flex-1 bg-black/95 justify-end">
+                    <View className="bg-[#0f172a] h-[85%] rounded-t-[40px] border-t border-slate-800 p-6 flex flex-col">
+                        <View className="flex-row justify-between items-center mb-6">
+                            <View>
+                                <Text className="text-white text-2xl font-black uppercase italic tracking-tighter">Summoning Results</Text>
+                                <Text className="text-slate-400 text-[10px] font-bold uppercase tracking-widest mt-1">
+                                    {pullResults.length} Artifact{pullResults.length > 1 ? 's' : ''} Acquired
+                                </Text>
+                            </View>
+                            <TouchableOpacity onPress={() => setShowSummaryModal(false)} className="p-2 bg-white/10 rounded-full">
+                                <Ionicons name="close" size={24} color="white" />
+                            </TouchableOpacity>
+                        </View>
+
+                        <ScrollView showsVerticalScrollIndicator={false} className="flex-1">
+                            <View className="flex-row flex-wrap justify-between">
+                                {pullResults.map((item, idx) => {
+                                    const isBorder = item.category === 'BORDER';
+                                    const visual = item.visualConfig || {};
+                                    const tierColor = getTierColor(item.tier);
+
+                                    return (
+                                        <TouchableOpacity
+                                            key={idx}
+                                            activeOpacity={0.8}
+                                            onPress={() => setPreviewItem(item)}
+                                            style={{ width: '48%', borderColor: `${tierColor}40`, backgroundColor: `${tierColor}10` }}
+                                            className="mb-4 rounded-2xl border-2 items-center p-4 relative"
+                                        >
+                                            {item.isDuplicate && (
+                                                <View className="absolute top-2 left-2 bg-red-500 px-2 py-0.5 rounded border border-red-400 z-10 shadow-sm">
+                                                    <Text className="text-white font-black text-[8px] uppercase tracking-widest">Duplicate</Text>
+                                                </View>
+                                            )}
+                                            
+                                            <View className="w-16 h-16 items-center justify-center mb-3">
+                                                {isBorder ? (
+                                                    <ClanBorder color={visual.primaryColor || visual.color || "#f59e0b"} animationType={visual?.animationType || "singleSnake"}>
+                                                        <View className="w-10 h-10 bg-black/40 rounded-full" />
+                                                    </ClanBorder>
+                                                ) : (
+                                                    <RemoteSvgIcon xml={visual.svgCode} size={45} color={visual.color || visual.primaryColor}/>
+                                                )}
+                                            </View>
+
+                                            <Text style={{ color: tierColor }} className="font-black text-[11px] uppercase text-center mb-1" numberOfLines={2}>
+                                                {item.name}
+                                            </Text>
+                                            
+                                            {item.isDuplicate ? (
+                                                <Text className="text-red-400 text-[9px] font-bold tracking-widest uppercase mt-1">
+                                                    +{item.refundAmount} OC
+                                                </Text>
+                                            ) : (
+                                                <Text className="text-slate-400 text-[8px] font-bold tracking-widest uppercase mt-1">
+                                                    {item.tier}
+                                                </Text>
+                                            )}
+                                        </TouchableOpacity>
+                                    );
+                                })}
+                            </View>
+                        </ScrollView>
+
+                        <TouchableOpacity 
+                            onPress={() => setShowSummaryModal(false)}
+                            className="w-full bg-blue-600 py-4 rounded-xl items-center justify-center mt-4 shadow-lg shadow-blue-500/20"
+                        >
+                            <Text className="text-white font-black uppercase tracking-[0.2em] text-sm">Return to Hub</Text>
+                        </TouchableOpacity>
+                    </View>
                 </View>
             </Modal>
 
@@ -543,7 +675,7 @@ const GachaTab = ({ eventData, gachaPool, ownedIds, setOwnedIds, pityCount, setP
                             <View className="h-full bg-yellow-400" style={{ width: `${pityProgress}%` }} />
                         </View>
                         <Text className="text-gray-500 font-bold text-[8px] uppercase tracking-widest text-center mt-2">
-                            Guaranteed Mythic at 50 pulls
+                            Guaranteed Mythic at 100 pulls
                         </Text>
                     </View>
 
@@ -571,7 +703,7 @@ const GachaTab = ({ eventData, gachaPool, ownedIds, setOwnedIds, pityCount, setP
 
                         <TouchableOpacity
                             disabled={isSpinning || gachaPool.length === 0 || isEventExpired}
-                            onPress={() => handleSpin('11x')} 
+                            onPress={() => handleSpin('11x')}
                             style={{ opacity: gachaPool.length === 0 || isEventExpired ? 0.5 : 1, backgroundColor: isEventExpired ? '#334155' : themeColor }}
                             className="flex-1 h-14 rounded-xl flex-row items-center justify-center shadow-lg shadow-black"
                         >
@@ -611,7 +743,6 @@ const GachaTab = ({ eventData, gachaPool, ownedIds, setOwnedIds, pityCount, setP
                             const tierColor = getTierColor(item.tier);
 
                             return (
-                                // ⚡️ NEW: TAP TO OPEN PREVIEW MODAL
                                 <TouchableOpacity
                                     key={item.id || idx}
                                     activeOpacity={0.8}
@@ -621,7 +752,7 @@ const GachaTab = ({ eventData, gachaPool, ownedIds, setOwnedIds, pityCount, setP
                                 >
                                     <View style={{ borderColor: isOwned ? '#22c55e' : `${tierColor}40`, backgroundColor: `${tierColor}10` }} className="w-14 h-14 rounded-lg border items-center justify-center mb-3">
                                         {isBorder ? (
-                                            <ClanBorder color={visual.primaryColor || visual.color || "#f59e0b"} animationType="singleSnake">
+                                            <ClanBorder color={visual.primaryColor || visual.color || "#f59e0b"} animationType={visual?.animationType || "singleSnake"}>
                                                 <View className="w-8 h-8" />
                                             </ClanBorder>
                                         ) : (
@@ -837,7 +968,6 @@ export default function EventHubScreen() {
     const { tab } = useLocalSearchParams(); 
     const [activeTab, setActiveTab] = useState(tab || 'claim');
 
-    // ⚡️ PITY STATE
     const [pityCount, setPityCount] = useState(0); 
 
     useEffect(() => {
@@ -895,8 +1025,6 @@ export default function EventHubScreen() {
             if (gachaRes.ok && gachaData.success) {
                 setGachaPool(gachaData.pool);
                 setOwnedIds(gachaData.ownedIds || []);
-                
-                // ⚡️ Fetch Pity from Server
                 setPityCount(gachaData.pityCount || 0); 
                 
                 storage.set(GACHA_POOL_CACHE_KEY, JSON.stringify(gachaData.pool));
@@ -1014,7 +1142,7 @@ export default function EventHubScreen() {
                         gachaPool={gachaPool} 
                         ownedIds={ownedIds} 
                         setOwnedIds={setOwnedIds} 
-                        pityCount={pityCount} // ⚡️ PASS PITY STATE
+                        pityCount={pityCount} 
                         setPityCount={setPityCount}
                     />
                 ) : (
