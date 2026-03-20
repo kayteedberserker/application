@@ -131,8 +131,8 @@ export default function ClanCard({ clan, isDark, THEME = { card: '#0a0a0a', text
     <View
       className="relative p-8 overflow-hidden"
       style={{
-        borderRadius: 28,
-        width: 380,
+        borderRadius: 35,
+        width: 372,
         backgroundColor: isDark ? '#0a0a0a' : '#ffffff',
         borderWidth: equippedBorder ? 0 : 1,
         borderColor: isVerified ? highlightColor : (isDark ? '#262626' : '#f3f4f6')
@@ -281,7 +281,7 @@ export default function ClanCard({ clan, isDark, THEME = { card: '#0a0a0a', text
           color={borderVisual.primaryColor || borderVisual.color || "#ff0000"}
           secondaryColor={borderVisual.secondaryColor || null}
           animationType={borderVisual.animationType || "singleSnake"}
-          snakeLength={borderVisual.snakeLength || 120}
+          snakeLength={borderVisual.snakeLength || 400}
           duration={borderVisual.duration || 3000}
         >
           {CardInner}

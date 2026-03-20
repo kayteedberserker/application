@@ -60,7 +60,8 @@ export default function PlayerCard({ author, totalPosts, isDark }) {
 
   const equippedBorder = author.inventory?.find(i => i.category === 'BORDER' && i.isEquipped);
   const borderVisual = equippedBorder?.visualConfig || {};
-
+  console.log(borderVisual);
+  
   const equippedWatermark = author.inventory?.find(i => i.category === 'WATERMARK' && i.isEquipped);
   const watermarkVisual = equippedWatermark?.visualConfig || {};
 
@@ -88,7 +89,7 @@ export default function PlayerCard({ author, totalPosts, isDark }) {
   const CardContent = (
     <View
       className="relative p-8 bg-white dark:bg-[#0a0a0a] border border-gray-100 dark:border-gray-800 overflow-hidden shadow-2xl"
-      style={{ borderRadius: 48, width: 380 }} // Increased width and border radius
+      style={{ borderRadius: 27, width: 372 }} // Increased width and border radius
     >
       {/* Background Aura Glow */}
       <View
@@ -258,7 +259,7 @@ export default function PlayerCard({ author, totalPosts, isDark }) {
       color={borderVisual.primaryColor || themeColor}
       secondaryColor={borderVisual.secondaryColor || null}
       animationType={borderVisual.animationType || "singleSnake"}
-      snakeLength={borderVisual.snakeLength || 120}
+      snakeLength={borderVisual.snakeLength || 400}
       duration={borderVisual.duration || 3000}
     >
       {CardContent}
