@@ -167,7 +167,8 @@ const AuthorStoreModal = ({ visible, onClose, user, isDark, setInventory }) => {
                             name: item.name,
                             category: item.category,
                             currency: itemCurrency,
-                            visualConfig: item.visualData || item.visualConfig
+                            visualConfig: item.visualData || item.visualConfig,
+                            expiresInDays: item.expiresInDays // ⚡️ ADDED THIS LINE
                         });
 
                         if (result.success) {

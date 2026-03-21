@@ -153,7 +153,8 @@ export const CoinProvider = ({ children }) => {
                     category: extraData.category,
                     visualConfig: extraData.visualData || extraData.visualConfig,
                     coinType: extraData.currency,
-                    rewards: extraData.rewards 
+                    rewards: extraData.rewards,
+                    expiresInDays: extraData.expiresInDays // ⚡️ ADDED THIS LINE
                 });
             }
 
