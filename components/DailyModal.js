@@ -26,11 +26,11 @@ export default function DailyModal() {
     const [modalMode, setModalMode] = useState(null); 
     const [currentPromo, setCurrentPromo] = useState(null);
     
-    // ⚡️ NEW: Track if the user manually closed the modal this session
+    // ⚡️ Track if the user manually closed the modal this session
     const [dismissedSession, setDismissedSession] = useState(false);
 
     useEffect(() => {
-        if (!user || dismissedSession) return; // ⚡️ Block the effect if already dismissed
+        if (!user || dismissedSession) return; 
 
         const todayStr = new Date().toDateString();
         const lastClaimStr = user.lastClaimedDate ? new Date(user.lastClaimedDate).toDateString() : null;
@@ -58,7 +58,6 @@ export default function DailyModal() {
             if (now < globalCooldown) return;
 
             const eventQueue = [];
-            // ⚡️ INJECT 'tabKey' so the router knows where to go!
             if (activeEvent.gacha) eventQueue.push({ ...activeEvent.gacha, tabKey: 'gacha' });
             if (activeEvent.claim) eventQueue.push({ ...activeEvent.claim, tabKey: 'claim' });
 
@@ -74,7 +73,7 @@ export default function DailyModal() {
                 return () => clearTimeout(timer);
             }
         }
-    }, [user, activeEvent, hasClaimed, dismissedSession]); // ⚡️ Added to dependency array
+    }, [user, activeEvent, hasClaimed, dismissedSession]); 
 
     const handleClaimDaily = async () => {
         if (isProcessingTransaction) return;
@@ -93,13 +92,14 @@ export default function DailyModal() {
     };
 
     const handleDismissEvent = () => {
+        console.log("Dismissing modal");
+        
         if (modalMode === 'event' && currentPromo) {
             storage.set(`last_dismissed_${currentPromo.id}`, new Date().toDateString());
             const thirtyMinsFromNow = new Date().getTime() + (30 * 60 * 1000);
             storage.set(GLOBAL_COOLDOWN_KEY, thirtyMinsFromNow);
         }
         
-        // ⚡️ Prevent it from reappearing
         setDismissedSession(true);
         setVisible(false);
     };
@@ -119,18 +119,18 @@ export default function DailyModal() {
 
     return (
         <Modal transparent visible={visible} animationType="fade">
-            <View className="flex-1 justify-center items-center bg-black/90 px-6">
+            <View className="flex-1 justify-center items-center bg-black/90 px-6 z-50">
                 
                 <View 
                     style={{ backgroundColor: '#0f172a', borderColor: modalMode === 'daily' ? THEME.accent : eventColor }} 
-                    className={`w-full rounded-2xl p-6 border-2 items-center shadow-2xl ${modalMode === 'daily' ? 'shadow-blue-500/40' : 'shadow-yellow-500/30'}`}
+                    className={`w-full rounded-2xl px-6 py-8 border-2 items-center shadow-2xl z-50 ${modalMode === 'daily' ? 'shadow-blue-500/40' : 'shadow-yellow-500/30'}`}
                 >
                     
                     {/* ========================================== */}
                     {/* ⚡️ MODE 1: DAILY LOGIN */}
                     {/* ========================================== */}
                     {modalMode === 'daily' && (
-                        <>
+                        <View className="w-full items-center">
                             <View className="bg-blue-500/20 px-4 py-1.5 rounded-sm border-l-2 border-r-2 border-blue-500 mb-6 flex-row items-center">
                                 <Ionicons name="flame" size={14} color={THEME.accent} />
                                 <Text style={{ color: THEME.accent }} className="font-black text-[10px] uppercase tracking-[0.2em] ml-1.5">
@@ -139,14 +139,14 @@ export default function DailyModal() {
                             </View>
 
                             {hasClaimed ? (
-                                <View className="items-center mb-8 mt-4">
+                                <View className="items-center mb-8 mt-4 w-full">
                                     <View className="w-24 h-24 bg-green-500/10 rounded-2xl items-center justify-center border border-green-500/30 mb-4 shadow-[0_0_20px_rgba(34,197,94,0.3)]">
                                         <Ionicons name="checkmark" size={50} color="#22c55e" />
                                     </View>
                                     <Text className="text-green-500 font-black text-2xl italic uppercase tracking-[0.3em]">Acquired</Text>
                                 </View>
                             ) : (
-                                <View className="items-center mb-8 mt-4">
+                                <View className="items-center mb-8 mt-4 w-full">
                                     <Text className="text-slate-400 font-bold text-[10px] uppercase tracking-widest mb-2">
                                         Energy Payload Ready
                                     </Text>
@@ -164,7 +164,7 @@ export default function DailyModal() {
                                     onPress={handleClaimDaily}
                                     disabled={isProcessingTransaction}
                                     style={{ backgroundColor: THEME.accent }}
-                                    className="w-full h-14 rounded-xl flex-row items-center justify-center shadow-lg shadow-blue-500/50"
+                                    className="w-full h-14 rounded-xl flex-row items-center justify-center shadow-lg shadow-blue-500/50 z-50"
                                 >
                                     {isProcessingTransaction ? (
                                         <ActivityIndicator color="white" />
@@ -178,14 +178,14 @@ export default function DailyModal() {
                                     )}
                                 </TouchableOpacity>
                             )}
-                        </>
+                        </View>
                     )}
 
                     {/* ========================================== */}
                     {/* ⚡️ MODE 2: DYNAMIC EVENT PROMO */}
                     {/* ========================================== */}
                     {modalMode === 'event' && currentPromo && (
-                        <>
+                        <View className="w-full items-center">
                             <View 
                                 style={{ backgroundColor: `${eventColor}20`, borderLeftColor: eventColor, borderRightColor: eventColor }} 
                                 className="px-4 py-1.5 rounded-sm border-l-2 border-r-2 mb-6 flex-row items-center"
@@ -214,22 +214,29 @@ export default function DailyModal() {
                             <TouchableOpacity 
                                 onPress={handleGoToEvent}
                                 style={{ backgroundColor: eventColor, shadowColor: eventColor }}
-                                className="w-full h-14 rounded-xl flex-row items-center justify-center shadow-[0_0_20px_rgba(0,0,0,0.4)]"
+                                className="w-full h-14 rounded-xl flex-row items-center justify-center shadow-[0_0_20px_rgba(0,0,0,0.4)] z-50"
                             >
                                 <Text className="text-slate-900 font-black text-[13px] uppercase tracking-[0.2em]">
                                     Enter Portal
                                 </Text>
                             </TouchableOpacity>
-                        </>
+                        </View>
                     )}
 
+                    {/* ⚡️ DISMISS BUTTON FIXED ⚡️ */}
                     {!hasClaimed && !isProcessingTransaction && (
-                        <TouchableOpacity onPress={handleDismissEvent} className="mt-6">
-                            <Text className="text-slate-400 font-black text-[9px] uppercase tracking-[0.2em] opacity-50 hover:opacity-100">
+                        <TouchableOpacity 
+                            onPress={handleDismissEvent} 
+                            activeOpacity={0.5}
+                            className="mt-6 p-4 w-full items-center justify-center z-50"
+                            hitSlop={{ top: 20, bottom: 20, left: 20, right: 20 }}
+                        >
+                            <Text className="text-slate-400 font-black text-[9px] uppercase tracking-[0.2em] opacity-70">
                                 Dismiss
                             </Text>
                         </TouchableOpacity>
                     )}
+
                 </View>
             </View>
         </Modal>
