@@ -9,9 +9,7 @@ import { useColorScheme as useNativeWind } from "nativewind";
 import { useEffect, useMemo, useRef, useState } from "react";
 import {
     ActivityIndicator,
-    Animated,
     Dimensions,
-    Easing,
     FlatList,
     Modal,
     Platform,
@@ -36,6 +34,17 @@ import { useAlert } from "../../context/AlertContext";
 import { useCoins } from "../../context/CoinContext";
 import { useUser } from "../../context/UserContext";
 import apiFetch from "../../utils/apiFetch";
+// ⚡️ Correct Reanimated Imports
+import Animated, { 
+    useSharedValue, 
+    useAnimatedStyle, 
+    withRepeat, 
+    withSequence, 
+    withTiming, 
+    withSpring, 
+    Easing,
+    interpolate 
+} from "react-native-reanimated";
 
 const { width, height } = Dimensions.get("window");
 const API_BASE = "https://oreblogda.com/api";
@@ -609,7 +618,6 @@ const AuthorInventoryModal = ({ visible, onClose, user, setUser, isDark, theinve
 
 
 export default function MobileProfilePage() {
-    // 🔹 Strictly use the useMMKV hook
     const storage = useMMKV();
 
     const CustomAlert = useAlert();
@@ -637,16 +645,23 @@ export default function MobileProfilePage() {
     const [auraModalVisible, setAuraModalVisible] = useState(false);
     const [cardPreviewVisible, setCardPreviewVisible] = useState(false);
 
-    // 🔹 Neural Prefs State
     const [favAnimes, setFavAnimes] = useState("");
     const [favCharacter, setFavCharacter] = useState("");
     const [favGenres, setFavGenres] = useState("");
 
-    const scanAnim = useRef(new Animated.Value(0)).current;
-    const loadingAnim = useRef(new Animated.Value(0)).current;
-    const pulseAnim = useRef(new Animated.Value(1)).current;
     const [copied, setCopied] = useState(false);
     const [refCopied, setRefCopied] = useState(false);
+
+    const [isOnboarding, setIsOnboarding] = useState(false);
+    const [onboardingStep, setOnboardingStep] = useState(0);
+    const [currentPosTop, setcurrentPosTop] = useState(0)
+
+    const scanAnim = useSharedValue(0);
+    const loadingAnim = useSharedValue(0);
+    const pulseAnim = useSharedValue(1);
+    
+    const tooltipY = useSharedValue(0);
+    const pointerX = useSharedValue(0);
 
     const CACHE_KEY_USER_EXTRAS = `user_profile_cache_${user?.deviceId}`;
 
@@ -656,6 +671,73 @@ export default function MobileProfilePage() {
     const activeGlowColor = equippedGlow?.visualConfig?.primaryColor || null;
     const dynamicAuraColor = activeGlowColor || aura.color;
     const filledBoxes = Math.min(Math.floor(currentAuraPoints / 10), 10);
+
+    useEffect(() => {
+        const hasSeenOnboarding = storage.getBoolean('has_seen_profile_onboarding');
+        if (!hasSeenOnboarding) {
+            setIsOnboarding(true);
+        }
+    }, [storage]);
+
+    useEffect(() => {
+        tooltipY.value = withSpring(onboardingStep * 60, { damping: 14, stiffness: 90 });
+    }, [onboardingStep]);
+
+    useEffect(() => {
+        if (isOnboarding) {
+            pointerX.value = withRepeat(
+                withSequence(
+                    withTiming(5, { duration: 500 }),
+                    withTiming(0, { duration: 500 })
+                ),
+                -1,
+                true
+            );
+        } else {
+            pointerX.value = 0;
+        }
+    }, [isOnboarding]);
+
+    const tooltipAnimatedStyle = useAnimatedStyle(() => {
+        return { transform: [{ translateY: tooltipY.value }] };
+    });
+
+    const pointerAnimatedStyle = useAnimatedStyle(() => {
+        return { transform: [{ translateX: pointerX.value }] };
+    });
+
+    const onboardingSteps = [
+        { title: "Inventory", desc: "Check your acquired items and manage your gear here." },
+        { title: "Preferences", desc: "Update your neural preferences and favorite anime characters." },
+        { title: "Store", desc: "Visit the store to get new upgrades, auras, and cosmetics." },
+        { title: "Player Card", desc: "Preview and broadcast your unique Operator Identity card." },
+    ];
+
+    const nextOnboardingStep = () => {
+        if (onboardingStep < onboardingSteps.length - 1) {
+            setOnboardingStep(prev => prev + 1);
+            setcurrentPosTop(-10)
+            console.log(currentPosTop);
+            
+        } else {
+            setIsOnboarding(false);
+            storage.set('has_seen_profile_onboarding', true);
+        }
+    };
+    const prevOnboardingStep = () => {
+
+        if (onboardingStep > 0) {
+
+            setOnboardingStep(prev => prev - 1);
+
+        }
+
+    };
+
+    const skipOnboarding = () => {
+        setIsOnboarding(false);
+        storage.set('has_seen_profile_onboarding', true);
+    };
 
     const copyToClipboard = async () => {
         if (user?.deviceId) {
@@ -694,26 +776,47 @@ export default function MobileProfilePage() {
     };
 
     useEffect(() => {
-        Animated.loop(Animated.timing(scanAnim, { toValue: 1, duration: 10000, easing: Easing.linear, useNativeDriver: true })).start();
-        Animated.loop(Animated.sequence([
-            Animated.timing(pulseAnim, { toValue: 1.15, duration: 2000, useNativeDriver: true }),
-            Animated.timing(pulseAnim, { toValue: 1, duration: 2000, useNativeDriver: true }),
-        ])).start();
+        scanAnim.value = withRepeat(
+            withTiming(1, { duration: 10000, easing: Easing.linear }),
+            -1,
+            false
+        );
+        pulseAnim.value = withRepeat(
+            withSequence(
+                withTiming(1.15, { duration: 2000 }),
+                withTiming(1, { duration: 2000 })
+            ),
+            -1,
+            true
+        );
     }, []);
 
     useEffect(() => {
         if (isUpdating) {
-            Animated.loop(Animated.timing(loadingAnim, { toValue: 1, duration: 1500, easing: Easing.linear, useNativeDriver: true })).start();
+            loadingAnim.value = withRepeat(
+                withTiming(1, { duration: 1500, easing: Easing.linear }),
+                -1,
+                false
+            );
         } else {
-            loadingAnim.stopAnimation();
-            loadingAnim.setValue(0);
+            loadingAnim.value = 0;
         }
     }, [isUpdating]);
 
-    const spin = scanAnim.interpolate({ inputRange: [0, 1], outputRange: ['0deg', '360deg'] });
-    const translateX = loadingAnim.interpolate({ inputRange: [0, 1], outputRange: [-width, width] });
+    const scanAnimatedStyle = useAnimatedStyle(() => {
+        const rotate = interpolate(scanAnim.value, [0, 1], [0, 360]);
+        return { transform: [{ rotate: `${rotate}deg` }], borderColor: `${dynamicAuraColor}40` };
+    });
 
-    // 🔹 SYNCHRONOUS CACHE LOAD WITH MMKV
+    const pulseAnimatedStyle = useAnimatedStyle(() => {
+        return { transform: [{ scale: pulseAnim.value }] };
+    });
+
+    const progressAnimatedStyle = useAnimatedStyle(() => {
+        const transX = interpolate(loadingAnim.value, [0, 1], [-width, width]);
+        return { transform: [{ translateX: transX }] };
+    });
+
     useEffect(() => {
         if (!user?.deviceId) return;
         try {
@@ -757,7 +860,6 @@ export default function MobileProfilePage() {
                     const newTotal = postData.total || 0;
                     if (postRes.ok) setTotalPosts(newTotal);
 
-                    // 🔹 SYNCHRONOUS CACHE SAVE
                     storage.set(CACHE_KEY_USER_EXTRAS, JSON.stringify({
                         username: dbUser.username,
                         description: dbUser.description,
@@ -774,7 +876,7 @@ export default function MobileProfilePage() {
 
     const getKey = (pageIndex, previousPageData) => {
         if (!user?._id) return null;
-        if (previousPageData && previousPageData.posts.length < LIMIT) return null;
+        if (previousPageData && previousPageData.posts?.length < LIMIT) return null;
         return `/posts?author=${user._id}&page=${pageIndex + 1}&limit=${LIMIT}`;
     };
 
@@ -789,7 +891,7 @@ export default function MobileProfilePage() {
     }, [data]);
 
     const isLoadingInitialData = isLoading && !data;
-    const isReachingEnd = data && data[data.length - 1]?.posts.length < LIMIT;
+    const isReachingEnd = data && data[data.length - 1]?.posts?.length < LIMIT;
     const isFetchingNextPage = isValidating && data && typeof data[size - 1] === "undefined";
 
     const count = totalPosts;
@@ -853,7 +955,6 @@ export default function MobileProfilePage() {
                 setPreview(null);
                 setImageFile(null);
 
-                // 🔹 SYNCHRONOUS CACHE SAVE
                 storage.set(CACHE_KEY_USER_EXTRAS, JSON.stringify({
                     username: result.user.username,
                     description: result.user.description,
@@ -913,8 +1014,8 @@ export default function MobileProfilePage() {
 
                 <View style={{ position: "relative" }} className="flex-row flex items-center justify-center mb-10 pr-2">
                     <View className="">
-                        <Animated.View style={{ position: 'absolute', inset: -12, borderRadius: 100, backgroundColor: dynamicAuraColor, opacity: 0.15, transform: [{ scale: pulseAnim }] }} />
-                        <Animated.View style={{ transform: [{ rotate: spin }], borderColor: `${dynamicAuraColor}40` }} className="absolute -inset-4 border border-dashed rounded-full" />
+                        <Animated.View style={[{ position: 'absolute', inset: -12, borderRadius: 100, backgroundColor: dynamicAuraColor, opacity: 0.15 }, pulseAnimatedStyle]} />
+                        <Animated.View style={[{ position: 'absolute', inset: -4, borderStyle: 'dashed', borderWidth: 1, borderRadius: 10000 }, scanAnimatedStyle]} />
                         <View style={{ borderColor: dynamicAuraColor }} className="absolute -inset-1 border-2 rounded-full opacity-50" />
                         <TouchableOpacity onPress={pickImage} className="w-40 h-40 rounded-full overflow-hidden border-4 border-white dark:border-[#0a0a0a] bg-gray-900 shadow-2xl">
                             <Image source={{ uri: preview || user?.profilePic?.url || "https://via.placeholder.com/150" }} style={{width:"100%", height: "100%"}} className="object-cover" />
@@ -924,11 +1025,60 @@ export default function MobileProfilePage() {
                         </TouchableOpacity>
                     </View>
 
-                    <View style={{ position: "absolute", left: -5 }} className="flex-col items-center">
+                    <View style={{ position: "absolute", left: -5, zIndex: 100 }} className="flex-col items-center">
                         <ProfileActionButton icon="archive-outline" color="#3b82f6" label="Items" onPress={() => setInventoryVisible(true)} />
                         <ProfileActionButton icon="cog-outline" color="#a855f7" label="Prefs" onPress={() => setPrefsVisible(true)} />
                         <ProfileActionButton icon="cart-outline" color="#22c55e" label="Store" onPress={() => setStoreVisible(true)} />
                         <ProfileActionButton icon="card-account-details-outline" color="#f59e0b" label="Card" onPress={() => setCardPreviewVisible(true)} />
+
+                        {isOnboarding && (
+                            <Animated.View 
+                                style={[
+                                    tooltipAnimatedStyle, 
+                                    { position: 'absolute', left: 60, top: currentPosTop, width: 220, zIndex: 110 }
+                                ]} 
+                                className="bg-blue-600 dark:bg-blue-900 rounded-2xl p-4 shadow-2xl flex-row items-start"
+                            >
+                                <Animated.View style={pointerAnimatedStyle} className="absolute -left-3 top-4">
+                                    <Ionicons name="caret-back" size={24} color={isDark ? "#1e3a8a" : "#2563eb"} />
+                                </Animated.View>
+                                <View className="flex-1">
+                                    <Text className="text-white font-black text-sm uppercase tracking-widest">
+                                        {onboardingSteps[onboardingStep].title}
+                                    </Text>
+                                    <Text className="text-blue-100 text-[10px] mt-1 font-medium leading-relaxed">
+                                        {onboardingSteps[onboardingStep].desc}
+                                    </Text>
+                                    {/* <View className="flex-row justify-between items-center mt-3 pt-3 border-t border-blue-400/30">
+                                        <TouchableOpacity onPress={skipOnboarding}>
+                                            <Text className="text-blue-200 text-[10px] font-bold uppercase tracking-widest">Skip</Text>
+                                        </TouchableOpacity>
+                                        <TouchableOpacity onPress={nextOnboardingStep} className="bg-white px-3 py-1.5 rounded-lg active:scale-95">
+                                            <Text className="text-blue-600 dark:text-blue-900 text-[10px] font-black uppercase tracking-widest">
+                                                {onboardingStep === 3 ? "Done" : "Next"}
+                                            </Text>
+                                        </TouchableOpacity>
+                                    </View> */}
+                                    <View className="flex-row justify-between items-center mt-3 pt-3 border-t border-blue-400/30">
+                                            <TouchableOpacity onPress={skipOnboarding}>
+                                                <Text className="text-blue-200 text-[10px] font-bold uppercase tracking-widest">Skip</Text>
+                                            </TouchableOpacity>
+                                            <View className="flex-row gap-2">
+                                                {onboardingStep > 0 && (
+                                                    <TouchableOpacity onPress={prevOnboardingStep} className="bg-blue-500/50 px-3 py-1.5 rounded-lg active:scale-95">
+                                                        <Text className="text-white text-[10px] font-black uppercase tracking-widest">Back</Text>
+                                                    </TouchableOpacity>
+                                                )}
+                                                <TouchableOpacity onPress={nextOnboardingStep} className="bg-white px-3 py-1.5 rounded-lg active:scale-95">
+                                                    <Text className="text-blue-600 dark:text-blue-900 text-[10px] font-black uppercase tracking-widest">
+                                                        {onboardingStep === 3 ? "Done" : "Next"}
+                                                    </Text>
+                                                </TouchableOpacity>
+                                            </View>
+                                        </View>
+                                </View>
+                            </Animated.View>
+                        )}
                     </View>
                 </View>
 
@@ -999,7 +1149,7 @@ export default function MobileProfilePage() {
 
                 <TouchableOpacity onPress={handleUpdate} disabled={isUpdating} style={{ backgroundColor: dynamicAuraColor }} className="relative w-full h-14 rounded-2xl overflow-hidden items-center justify-center mt-6">
                     <Text className="relative z-10 text-white font-black uppercase italic tracking-widest text-xs">{isUpdating ? "Syncing Changes..." : "Update Character Data"}</Text>
-                    {isUpdating && <Animated.View className="absolute bottom-0 h-1 bg-white/40 w-full" style={{ transform: [{ translateX }] }} />}
+                    {isUpdating && <Animated.View className="absolute bottom-0 h-1 bg-white/40 w-full" style={progressAnimatedStyle} />}
                 </TouchableOpacity>
             </View>
 
@@ -1008,7 +1158,7 @@ export default function MobileProfilePage() {
                 <View className="h-[1px] flex-1 bg-gray-100 dark:bg-gray-800" />
             </View>
         </View>
-    ), [user, preview, description, username, isUpdating, spin, translateX, totalPosts, copied, refCopied, rankTitle, rankIcon, progress, nextMilestone, count, showId, isDark, aura, pulseAnim, filledBoxes, currentAuraPoints, dynamicAuraColor, pickImage, handleUpdate, captureAndShare]);
+    ), [user, preview, description, username, isUpdating, totalPosts, copied, refCopied, rankTitle, rankIcon, progress, nextMilestone, count, showId, isDark, aura, filledBoxes, currentAuraPoints, dynamicAuraColor, pickImage, handleUpdate, captureAndShare, isOnboarding, onboardingStep, tooltipAnimatedStyle, pointerAnimatedStyle, scanAnimatedStyle, pulseAnimatedStyle, progressAnimatedStyle]);
 
 
     return (
@@ -1021,6 +1171,7 @@ export default function MobileProfilePage() {
                 data={posts}
                 keyExtractor={(item) => item._id}
                 ListHeaderComponent={listHeader}
+                scrollEnabled={!isOnboarding} 
                 onEndReached={() => { if (!isReachingEnd && !isValidating) setSize(size + 1); }}
                 onEndReachedThreshold={0.5}
                 renderItem={({ item }) => (
@@ -1064,6 +1215,7 @@ export default function MobileProfilePage() {
                     </View>
                 </View>
             </Modal>
+            
             <AuthorInventoryModal
                 setUser={setUser}
                 visible={inventoryVisible}
@@ -1102,7 +1254,6 @@ export default function MobileProfilePage() {
                 </View>
             </Modal>
 
-            {/* 🛒 RENDER THE EXTRACTED STORE MODAL HERE */}
             <AuthorStoreModal
                 setInventory={setInventory}
                 visible={storeVisible}
@@ -1124,7 +1275,6 @@ export default function MobileProfilePage() {
                 </View>
             </Modal>
 
-            {/* 🔹 Player Card Preview Modal (Fixed Layout & Closing) */}
             <Modal visible={cardPreviewVisible} transparent animationType="slide">
                 <View className="flex-1 bg-black/90">
                     <ScrollView
@@ -1132,7 +1282,6 @@ export default function MobileProfilePage() {
                         showsVerticalScrollIndicator={false}
                     >
                         <View className="w-full items-center">
-                            {/* Header with Close Button */}
                             <View className="w-full flex-row pt-10 justify-between items-center">
                                 <View>
                                     <Text className="text-white font-black text-xl italic uppercase tracking-widest">Operator Identity</Text>
@@ -1146,7 +1295,6 @@ export default function MobileProfilePage() {
                                 </Pressable>
                             </View>
 
-                            {/* Card Render - Scaled to fit screen width safely */}
                             <View
                                 style={{
                                     transform: [{ scale: Math.min(1, (width - 40) / 380) }],
@@ -1158,7 +1306,6 @@ export default function MobileProfilePage() {
                                 <PlayerCard author={user} totalPosts={totalPosts} isDark={isDark} />
                             </View>
 
-                            {/* Footer Actions */}
                             <View className="w-full">
                                 <TouchableOpacity
                                     onPress={captureAndShare}
