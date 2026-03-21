@@ -25,9 +25,12 @@ export default function DailyModal() {
     const [hasClaimed, setHasClaimed] = useState(false); 
     const [modalMode, setModalMode] = useState(null); 
     const [currentPromo, setCurrentPromo] = useState(null);
+    
+    // ⚡️ NEW: Track if the user manually closed the modal this session
+    const [dismissedSession, setDismissedSession] = useState(false);
 
     useEffect(() => {
-        if (!user) return;
+        if (!user || dismissedSession) return; // ⚡️ Block the effect if already dismissed
 
         const todayStr = new Date().toDateString();
         const lastClaimStr = user.lastClaimedDate ? new Date(user.lastClaimedDate).toDateString() : null;
@@ -71,7 +74,7 @@ export default function DailyModal() {
                 return () => clearTimeout(timer);
             }
         }
-    }, [user, activeEvent, hasClaimed]);
+    }, [user, activeEvent, hasClaimed, dismissedSession]); // ⚡️ Added to dependency array
 
     const handleClaimDaily = async () => {
         if (isProcessingTransaction) return;
@@ -90,17 +93,19 @@ export default function DailyModal() {
     };
 
     const handleDismissEvent = () => {
-        if (currentPromo) {
+        if (modalMode === 'event' && currentPromo) {
             storage.set(`last_dismissed_${currentPromo.id}`, new Date().toDateString());
             const thirtyMinsFromNow = new Date().getTime() + (30 * 60 * 1000);
             storage.set(GLOBAL_COOLDOWN_KEY, thirtyMinsFromNow);
         }
+        
+        // ⚡️ Prevent it from reappearing
+        setDismissedSession(true);
         setVisible(false);
     };
 
     const handleGoToEvent = () => {
         handleDismissEvent(); 
-        // ⚡️ Pass the tab target in the URL!
         const targetTab = currentPromo?.tabKey || 'gacha';
         router.push(`/screens/referralevent?tab=${targetTab}`); 
     };
@@ -142,12 +147,10 @@ export default function DailyModal() {
                                 </View>
                             ) : (
                                 <View className="items-center mb-8 mt-4">
-                                    {/* ⚡️ FIXED: Forced text-slate-400 */}
                                     <Text className="text-slate-400 font-bold text-[10px] uppercase tracking-widest mb-2">
                                         Energy Payload Ready
                                     </Text>
                                     <View className="flex-row items-center gap-2">
-                                        {/* ⚡️ FIXED: Forced text-white */}
                                         <Text className="text-white text-6xl font-black italic tracking-tighter">
                                             +{rewardAmount}
                                         </Text>
@@ -200,11 +203,9 @@ export default function DailyModal() {
                                     <MaterialCommunityIcons name={EventIcon} size={60} color={eventColor} />
                                 </View>
                                 
-                                {/* ⚡️ FIXED: Forced text-white */}
                                 <Text className="text-white text-2xl font-black italic uppercase text-center tracking-tighter mb-2">
                                     {currentPromo.title}
                                 </Text>
-                                {/* ⚡️ FIXED: Forced text-slate-300 */}
                                 <Text className="text-slate-300 text-[10px] font-bold text-center uppercase tracking-widest leading-relaxed px-4">
                                     {currentPromo.description}
                                 </Text>
@@ -224,7 +225,6 @@ export default function DailyModal() {
 
                     {!hasClaimed && !isProcessingTransaction && (
                         <TouchableOpacity onPress={handleDismissEvent} className="mt-6">
-                            {/* ⚡️ FIXED: Forced text-slate-400 */}
                             <Text className="text-slate-400 font-black text-[9px] uppercase tracking-[0.2em] opacity-50 hover:opacity-100">
                                 Dismiss
                             </Text>
