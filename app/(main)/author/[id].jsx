@@ -10,7 +10,8 @@ import {
     Pressable,
     ScrollView,
     TouchableOpacity,
-    View
+    View,
+    Image
 } from "react-native";
 // ⚡️ Swapped FlashList for LegendList
 import { useMMKV } from 'react-native-mmkv';
@@ -37,8 +38,7 @@ import { Text } from "../../../components/Text";
 import apiFetch from "../../../utils/apiFetch";
 
 // ⚡️ Imported PeakBadge
-import PeakBadge from "../../../components/PeakBadge"; 
-import { Image } from "expo-image";
+import PeakBadge from "../../../components/PeakBadge";
 
 const API_BASE = "https://oreblogda.com/api";
 const { width } = Dimensions.get('window');

@@ -312,7 +312,7 @@ const AuthorStoreModal = ({ visible, onClose, user, isDark, setInventory }) => {
                                                 <View className="w-1 h-3 bg-blue-500 rounded-full mr-2" />
                                                 <Text className="text-gray-500 font-black uppercase text-[10px] tracking-[0.2em]">Thematic Collections</Text>
                                             </View>
-                                            <div className="flex flex-wrap justify-between">
+                                            <View className="flex flex-wrap justify-between">
                                                 {catalog.themes.map((theme) => (
                                                 <TouchableOpacity
                                                     key={theme.id}
@@ -328,7 +328,7 @@ const AuthorStoreModal = ({ visible, onClose, user, isDark, setInventory }) => {
                                                     </View>
                                                 </TouchableOpacity>
                                                 ))}
-                                            </div>
+                                            </View>
                                         </View>
                                     )}
                                 </View>

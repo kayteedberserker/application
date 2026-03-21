@@ -11,7 +11,7 @@ export const syncApiUser = (userData) => {
 };
 
 export const apiFetch = async (endpoint, options = {}) => {
-  const baseUrl = "http://10.180.74.121:3000/api";
+  const baseUrl = "https://oreblogda.com/api";
   const cleanEndpoint = endpoint.startsWith('/') ? endpoint : `/${endpoint}`;
   const url = endpoint.startsWith('http') ? endpoint : `${baseUrl}${cleanEndpoint}`;
   
