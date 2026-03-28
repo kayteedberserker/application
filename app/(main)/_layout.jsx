@@ -57,8 +57,8 @@ export default function MainLayout() {
         }
     }, [pathname]);
 
-    const { warActionsCount, canManageClan, fullData } = useClan();
-
+    const { warActionsCount, canManageClan, fullData, hasUnreadChat } = useClan();
+    
     const [lastOffset, setLastOffset] = useState(0);
     const [isNavVisible, setIsNavVisible] = useState(true);
     const [showTop, setShowTop] = useState(false);
@@ -93,8 +93,6 @@ export default function MainLayout() {
     // ⚡️ CLAN HINT LOGIC (2s Delay, 10x Max)
     useEffect(() => {
         const hintCount = storage.getNumber('clan_hint_count') || 0;
-        console.log(hintCount);
-        
         if (hintCount < 10) {
             // 1. Wait 2 seconds before showing the hint
             const showTimer = setTimeout(() => {
@@ -233,9 +231,10 @@ export default function MainLayout() {
         }
     };
 
-    const NotificationBadge = ({ count, size = 12 }) => {
-        if (!count || count <= 0) return null;
-        if (!canManageClan) return null;
+    const NotificationBadge = ({ count, hasUnRead, size = 12 }) => {
+        
+        if (!hasUnRead && (!count || count <= 0)) return null;
+        if (!hasUnRead && !canManageClan) return null;
         return (
             <View 
                 className="absolute -top-1 -right-1 bg-red-500 rounded-full items-center justify-center border-2 border-white dark:border-slate-900"
@@ -477,7 +476,7 @@ export default function MainLayout() {
                             style={[styles.subFab, { backgroundColor: "#3b82f6" }]}
                         >
                             <Ionicons name="shield" size={20} color="#fff" />
-                            <NotificationBadge count={fullData} />
+                            <NotificationBadge hasUnRead={hasUnreadChat} count={fullData} />
                         </TouchableOpacity>
                     </Animated.View>
                 )}
@@ -563,7 +562,7 @@ export default function MainLayout() {
                             />
                         </Animated.View>
                         
-                        {!showClanMenu && canManageClan && (warActionsCount > 0 || fullData > 0) && (
+                        {(!showClanMenu && canManageClan && (warActionsCount > 0 || fullData > 0)) || hasUnreadChat && (
                             <View 
                                 style={{
                                     position: 'absolute', top: -2, right: -2, width: 14, height: 14,

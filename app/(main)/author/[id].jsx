@@ -13,13 +13,10 @@ import {
     View,
     Image
 } from "react-native";
-// ⚡️ Swapped FlashList for LegendList
 import { useMMKV } from 'react-native-mmkv';
 import { LegendList } from "@legendapp/list";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
-import Svg, { Defs, LinearGradient, Rect, Stop, SvgXml } from "react-native-svg";
 import ViewShot from "react-native-view-shot";
-// ⚡️ Imported Reanimated
 import Animated, {
     useSharedValue,
     useAnimatedStyle,
@@ -37,8 +34,11 @@ import { SyncLoading } from "../../../components/SyncLoading";
 import { Text } from "../../../components/Text";
 import apiFetch from "../../../utils/apiFetch";
 
-// ⚡️ Imported PeakBadge
-import PeakBadge from "../../../components/PeakBadge";
+// ⚡️ IMPORTED EXTRACTED COMPONENTS
+import PlayerNameplate from "../../../components/PlayerNameplate";
+import PlayerBackground from "../../../components/PlayerBackground";
+import PlayerWatermark from "../../../components/PlayerWatermark";
+import BadgeIcon from "../../../components/BadgeIcon";
 
 const API_BASE = "https://oreblogda.com/api";
 const { width } = Dimensions.get('window');
@@ -80,7 +80,6 @@ export default function AuthorPage() {
     const { colorScheme } = useColorScheme();
     const isDark = colorScheme === "dark";
 
-    // ⚡️ Initialize MMKV Hook
     const storage = useMMKV();
 
     const CACHE_KEY_AUTHOR = `author_data_${id}`;
@@ -101,19 +100,17 @@ export default function AuthorPage() {
     const scrollRef = useRef(null);
     const playerCardRef = useRef(null);
 
-    // ⚡️ REANIMATED SHARED VALUES
     const pulseAnim = useSharedValue(1);
     const rotationAnim = useSharedValue(0);
     const skeletonFade = useSharedValue(0.3);
 
-    // --- 🎨 Unified Theme Color Logic (Top Level) ---
-    const auraRank = author?.previousRank || 0;
+    const auraRank = author?.previousRank || null;
+
     const aura = getAuraTier(auraRank);
     const equippedGlow = author?.inventory?.find(i => i.category === 'GLOW' && i.isEquipped);
     const activeGlowColor = equippedGlow?.visualConfig?.primaryColor || null;
     const themeColor = activeGlowColor || aura.color;
 
-    // ⚡️ REANIMATED ANIMATION TRIGGERS
     useEffect(() => {
         pulseAnim.value = withRepeat(
             withSequence(
@@ -140,7 +137,6 @@ export default function AuthorPage() {
         );
     }, []);
 
-    // ⚡️ REANIMATED ANIMATED STYLES
     const scanAnimatedStyle = useAnimatedStyle(() => {
         const rotate = interpolate(rotationAnim.value, [0, 1], [0, 360]);
         return {
@@ -169,7 +165,6 @@ export default function AuthorPage() {
         return () => sub.remove();
     }, []);
 
-    // ⚡️ Synchronous MMKV Save
     const saveHeavyCache = useCallback((key, data) => {
         try {
             const cacheEntry = { data: data, timestamp: Date.now() };
@@ -188,7 +183,7 @@ export default function AuthorPage() {
 
             const userData = await userRes.json();
             const postData = await postRes.json();
-            
+
             if (userRes.ok) {
                 setAuthor(userData.user);
                 AUTHOR_MEMORY_CACHE[CACHE_KEY_AUTHOR] = userData.user;
@@ -230,7 +225,6 @@ export default function AuthorPage() {
         } catch (error) { console.error("Load more error:", error); } finally { setLoading(false); }
     }, [hasMore, loading, posts.length, isOffline, page, id, CACHE_KEY_POSTS]);
 
-    // ⚡️ Synchronous Cache Initialization
     useEffect(() => {
         const init = () => {
             if (AUTHOR_MEMORY_CACHE[CACHE_KEY_AUTHOR]) {
@@ -241,7 +235,7 @@ export default function AuthorPage() {
             try {
                 const cAuth = storage.getString(CACHE_KEY_AUTHOR);
                 const cPosts = storage.getString(CACHE_KEY_POSTS);
-                
+
                 if (cAuth) {
                     const parsed = JSON.parse(cAuth);
                     const authorData = parsed?.data || parsed;
@@ -256,7 +250,7 @@ export default function AuthorPage() {
                     setIsInitialMount(false);
                 }
             } catch (e) { console.error("MMKV Init Error", e); }
-            
+
             fetchInitialData();
         };
         init();
@@ -284,11 +278,11 @@ export default function AuthorPage() {
 
     const renderItem = useCallback(({ item }) => (
         <View className="px-3">
-            <PostCard 
-                post={item} 
+            <PostCard
+                post={item}
                 authorData={item.authorData}
-                clanData={item.clanData}  
-                isFeed 
+                clanData={item.clanData}
+                isFeed
             />
         </View>
     ), [author]);
@@ -305,34 +299,15 @@ export default function AuthorPage() {
 
         const favoriteCharacter = author?.preferences?.favCharacter || "NONE_SET";
 
+        const equippedBadges = author.inventory?.filter(i => i.category === 'BADGE' && i.isEquipped).slice(0, 10) || [];
         const equippedBg = author.inventory?.find(i => i.category === 'BACKGROUND' && i.isEquipped);
-        const bgVisual = equippedBg?.visualConfig || {};
-
         const equippedBorder = author.inventory?.find(i => i.category === 'BORDER' && i.isEquipped);
         const borderVisual = equippedBorder?.visualConfig || {};
-
         const equippedWatermark = author.inventory?.find(i => i.category === 'WATERMARK' && i.isEquipped);
-        const watermarkVisual = equippedWatermark?.visualConfig || {};
-
-        const SpecialWatermark = () => {
-            if (!equippedWatermark) return null;
-            const iconSize = watermarkVisual.size || 220;
-            const iconColor = watermarkVisual.color || (isDark ? 'white' : 'black');
-            return (
-                <View className="absolute" style={{ bottom: -20, right: -20, opacity: 0.7, transform: [{ rotate: watermarkVisual.rotation || '-15deg' }] }} pointerEvents="none">
-                    {watermarkVisual.svgCode ? (
-                        <SvgXml xml={watermarkVisual.svgCode.replace(/currentColor/g, iconColor)} width={iconSize} height={iconSize} />
-                    ) : (
-                        <MaterialCommunityIcons name={watermarkVisual.icon || 'fountain-pen-tip'} size={iconSize} color={iconColor} />
-                    )}
-                </View>
-            );
-        };
 
         const HeaderCard = (
             <View className="relative p-6 bg-white dark:bg-[#0a0a0a] shadow-2xl rounded-[25px] overflow-hidden">
-                
-                {/* ⚡️ Top Right Container: Card Button & Streak */}
+
                 <View className="absolute top-5 right-5 z-50 items-end gap-2">
                     <TouchableOpacity
                         onPress={() => setCardPreviewVisible(true)}
@@ -341,30 +316,13 @@ export default function AuthorPage() {
                     >
                         <Ionicons name="card-outline" size={20} color={isDark ? "white" : "black"} />
                     </TouchableOpacity>
-                    
-                    {/* ⚡️ Streak Moved to Top Right below Card */}
-                    <View className="flex-row items-center bg-orange-500/10 px-2 py-1 rounded-lg border border-orange-500/20">
-                        <Ionicons name="flame" size={12} color="#f97316" />
-                        <Text className="text-orange-500 font-black ml-1 text-[10px]">{author.lastStreak || "0"}</Text>
-                    </View>
+
+                    {/* ⚡️ Note: Streak removed from here as it is now inside PlayerNameplate */}
                 </View>
 
-                <View className="absolute -top-10 -right-10 w-60 h-60 opacity-10 rounded-full blur-3xl" style={{ backgroundColor: themeColor }} />
-                <SpecialWatermark />
-
-                {equippedBg && (
-                    <View className="absolute inset-0">
-                        <Svg height="100%" width="100%">
-                            <Defs>
-                                <LinearGradient id="authorCardGrad" x1="0%" y1="0%" x2="100%" >
-                                    <Stop offset="0%" stopColor={bgVisual.primaryColor || themeColor} stopOpacity={0.15} />
-                                    <Stop offset="100%" stopColor={bgVisual.secondaryColor || bgVisual.primaryColor || themeColor} stopOpacity={0.02} />
-                                </LinearGradient>
-                            </Defs>
-                            <Rect x="0" y="0" width="100%" height="100%" fill="url(#authorCardGrad)" />
-                        </Svg>
-                    </View>
-                )}
+                {/* ⚡️ REPLACED HARDCODED BACKGROUND & WATERMARK WITH COMPONENTS */}
+                <PlayerBackground equippedBg={equippedBg} themeColor={themeColor} borderRadius={25} />
+                <PlayerWatermark equippedWatermark={equippedWatermark} isDark={isDark} />
 
                 <View className="flex-col items-center gap-6">
                     <View className="relative items-center justify-center">
@@ -401,17 +359,25 @@ export default function AuthorPage() {
                     </View>
 
                     <View className="items-center w-full mt-2">
-                        {/* ⚡️ Name & Peak Badge Layout */}
-                        <View className="flex-row items-center justify-center gap-3 mb-3">
-                            <Text style={{ textShadowColor: themeColor, textShadowOffset: { width: 0, height: 0 }, textShadowRadius: (auraRank <= 2 || activeGlowColor) ? 10 : 0 }} className="text-3xl font-black italic tracking-tighter uppercase text-gray-900 dark:text-white text-center">
-                                {author.username}
-                            </Text>
-                            {/* ⚡️ Peak Badge Injected Next to Name */}
-                            {(author.peakLevel && author.peakLevel > 0) ? (
-                                <View className="-mt-1">
-                                    <PeakBadge level={author.peakLevel} size={28} />
+                        {/* ⚡️ REPLACED HARDCODED USERNAME, STREAK, AND PEAK BADGE WITH PLAYERNAMEPLATE */}
+                        <View className="items-center justify-center mb-3">
+                            <PlayerNameplate
+                                author={author}
+                                themeColor={themeColor}
+                                equippedGlow={equippedGlow}
+                                auraRank={auraRank}
+                                isDark={isDark}
+                                fontSize={24}
+                            />
+
+                            {/* ⚡️ EQUIPPED BADGES ROW (MAX 10) */}
+                            {equippedBadges.length > 0 && (
+                                <View className="flex-row flex-wrap justify-center gap-2 mt-2 mb-3">
+                                    {equippedBadges.map((badge, bIdx) => (
+                                        <BadgeIcon key={`spec-${bIdx}`} badge={badge} size={22} isDark={isDark} />
+                                    ))}
                                 </View>
-                            ) : null}
+                            )}
                         </View>
 
                         <Text className="text-sm text-gray-500 dark:text-gray-400 text-center leading-relaxed font-medium px-8 italic mb-4">
@@ -509,10 +475,10 @@ export default function AuthorPage() {
                 keyExtractor={(item) => item._id}
                 renderItem={renderItem}
                 ListHeaderComponent={ListHeader}
-                
+
                 // ⚡️ LegendList Performance Props
                 estimatedItemSize={500}
-                drawDistance={1000} // LegendList handles dynamic heights better with larger draw distances
+                drawDistance={1000}
                 recycleItems={true}
                 contentContainerStyle={{ paddingBottom: insets.bottom + 100 }}
 

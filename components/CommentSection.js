@@ -14,6 +14,7 @@ import {
     ScrollView,
     Share,
     TextInput,
+    useColorScheme,
     View
 } from "react-native";
 import Animated, {
@@ -26,13 +27,18 @@ import Animated, {
     withSequence,
     withTiming,
     withSpring,
-    interpolate
+    interpolate,
+    runOnJS
 } from "react-native-reanimated";
 import useSWR from "swr";
 import { useAlert } from "../context/AlertContext";
 import { useUser } from "../context/UserContext";
 import apiFetch from "../utils/apiFetch";
 import { Text } from "./Text";
+
+// Import your new components
+import PlayerNameplate from "./PlayerNameplate";
+import BadgeIcon from "./BadgeIcon";
 
 const { width: SCREEN_WIDTH, height: SCREEN_HEIGHT } = Dimensions.get("window");
 const API_URL = "https://oreblogda.com";
@@ -78,7 +84,7 @@ const CommentSkeleton = () => {
     );
 };
 
-const SingleComment = ({ comment, onOpenDiscussion }) => {
+const SingleComment = ({ comment, isDark, onOpenDiscussion }) => {
     const countReplies = (nodes) => {
         let count = 0;
         if (!nodes) return 0;
@@ -95,9 +101,31 @@ const SingleComment = ({ comment, onOpenDiscussion }) => {
 
     return (
         <View className="mb-6 border-l-2 border-blue-600/20 pl-4">
-            <Text className="text-[11px] font-black text-blue-600 uppercase tracking-tighter">{comment.name}</Text>
+
+            {/* ⚡️ FIXED: Removed flex-wrap, added flex-shrink to the nameplate wrapper */}
+            <View className="flex-row items-center gap-2 pr-2">
+                <View className="flex-shrink">
+                    <PlayerNameplate
+                        author={comment.author || { name: comment.name }}
+                        themeColor={comment.author?.equippedGlow?.visualConfig?.primaryColor || "#2563eb"}
+                        equippedGlow={comment.author?.equippedGlow}
+                        auraRank={comment.author?.auraRank}
+                        isDark={isDark}
+                        fontSize={14}
+                    />
+                </View>
+
+                {comment.author?.badges && comment.author.badges.length > 0 && (
+                    <View className="flex-row items-center gap-1 overflow-hidden flex-shrink-0">
+                        {comment.author.badges.slice(0, 3).map((badge, idx) => (
+                            <BadgeIcon key={idx} badge={badge} size={14} isDark={true} />
+                        ))}
+                    </View>
+                )}
+            </View>
+
             <Text className="text-xs text-gray-600 dark:text-gray-300 font-bold leading-5 mt-1">{comment.text}</Text>
-            <View className="flex-row items-center mt-3 gap-4">
+            <View className="flex-row items-center mt-1 gap-4">
                 <Text className="text-gray-400 text-[8px] font-bold">{new Date(comment.date).toLocaleDateString()}</Text>
                 <Pressable
                     onPress={() => {
@@ -122,12 +150,12 @@ const SingleComment = ({ comment, onOpenDiscussion }) => {
     );
 };
 
-const DiscussionDrawer = ({ visible, comment, onClose, onReply, isPosting, slug, highlightId }) => {
+const DiscussionDrawer = ({ visible, isDark, comment, onClose, onReply, isPosting, slug, highlightId }) => {
     const [replyText, setReplyText] = useState("");
     const [showJumpToBottom, setShowJumpToBottom] = useState(false);
-    
+
     const panY = useSharedValue(SCREEN_HEIGHT);
-    
+
     const scrollViewRef = useRef(null);
     const scrollOffset = useRef(0);
     const contentHeight = useRef(0);
@@ -150,8 +178,10 @@ const DiscussionDrawer = ({ visible, comment, onClose, onReply, isPosting, slug,
     }, [visible]);
 
     const handleClose = () => {
-        panY.value = withTiming(SCREEN_HEIGHT, { duration: 250 }, () => {
-            onClose();
+        panY.value = withTiming(SCREEN_HEIGHT, { duration: 250 }, (isFinished) => {
+            if (isFinished) {
+                runOnJS(onClose)();
+            }
         });
     };
 
@@ -159,15 +189,17 @@ const DiscussionDrawer = ({ visible, comment, onClose, onReply, isPosting, slug,
         PanResponder.create({
             onStartShouldSetPanResponder: () => false,
             onMoveShouldSetPanResponder: (e, gs) => gs.dy > 10 && scrollOffset.current <= 5 && !Keyboard.isVisible(),
-            onPanResponderMove: (e, gs) => { 
+            onPanResponderMove: (e, gs) => {
                 if (gs.dy > 0) {
-                    panY.value = gs.dy; 
+                    panY.value = gs.dy;
                 }
             },
             onPanResponderRelease: (e, gs) => {
                 if (gs.dy > 150 || gs.vy > 0.5) {
-                    panY.value = withTiming(SCREEN_HEIGHT, { duration: 250 }, () => {
-                        onClose();
+                    panY.value = withTiming(SCREEN_HEIGHT, { duration: 250 }, (isFinished) => {
+                        if (isFinished) {
+                            runOnJS(onClose)();
+                        }
                     });
                 } else {
                     panY.value = withSpring(0, { damping: 15, stiffness: 90 });
@@ -199,7 +231,8 @@ const DiscussionDrawer = ({ visible, comment, onClose, onReply, isPosting, slug,
             transform: [{ translateY: panY.value }]
         };
     });
-
+    console.log(comment);
+    
     if (!comment) return null;
 
     return (
@@ -227,8 +260,29 @@ const DiscussionDrawer = ({ visible, comment, onClose, onReply, isPosting, slug,
 
                             <View className="bg-blue-50/50 dark:bg-blue-900/10 px-6 py-4 border-y border-blue-100 dark:border-blue-900/30">
                                 <Text className="text-[10px] font-black text-blue-600 uppercase tracking-widest mb-1">Anchor Signal</Text>
-                                <Text className="text-sm font-black dark:text-white">{comment.name}</Text>
-                                <Text className="text-xs text-gray-600 dark:text-gray-400 font-bold mt-1 leading-5" numberOfLines={3}>{comment.text}</Text>
+
+                                {/* ⚡️ FIXED: Same fix applied here */}
+                                <View className="flex-row items-center gap-2 mb-1 pr-2">
+                                    <View className="flex-shrink">
+                                        <PlayerNameplate
+                                            author={comment.author || { name: comment.name }}
+                                            themeColor={comment.author?.equippedGlow?.visualConfig?.primaryColor || "#2563eb"}
+                                            equippedGlow={comment.author?.equippedGlow}
+                                            auraRank={comment.author?.auraRank}
+                                            isDark={isDark}
+                                            fontSize={16}
+                                        />
+                                    </View>
+                                    {comment.author?.badges && comment.author.badges.length > 0 && (
+                                        <View className="flex-row items-center gap-1 overflow-hidden flex-shrink-0">
+                                            {comment.author.badges.slice(0, 3).map((badge, idx) => (
+                                                <BadgeIcon key={idx} badge={badge} size={20} isDark={true} />
+                                            ))}
+                                        </View>
+                                    )}
+                                </View>
+
+                                <Text className="text-xs text-gray-600 dark:text-gray-400 font-bold leading-5" numberOfLines={3}>{comment.text}</Text>
                             </View>
 
                             <View className="p-5 flex-row gap-3 items-center">
@@ -290,7 +344,7 @@ const DiscussionDrawer = ({ visible, comment, onClose, onReply, isPosting, slug,
                                     {displayComments.map((reply, idx) => {
                                         const isHighlighted = highlightId === reply._id;
                                         return (
-                                            <HighlightableComment key={reply._id || idx} reply={reply} isHighlighted={isHighlighted} />
+                                            <HighlightableComment isDark={isDark} key={reply._id || idx} reply={reply} isHighlighted={isHighlighted} />
                                         );
                                     })}
                                     <View className="h-20" />
@@ -304,7 +358,7 @@ const DiscussionDrawer = ({ visible, comment, onClose, onReply, isPosting, slug,
     );
 };
 
-const HighlightableComment = ({ reply, isHighlighted }) => {
+const HighlightableComment = ({ reply, isHighlighted, isDark }) => {
     const scale = useSharedValue(1);
     const bgColorOpacity = useSharedValue(0);
 
@@ -319,7 +373,7 @@ const HighlightableComment = ({ reply, isHighlighted }) => {
             bgColorOpacity.value = withTiming(0, { duration: 500 });
         }
     }, [isHighlighted]);
-
+    let replyGlow = reply.author?.equippedGlow?.visualConfig?.primaryColor
     const animatedStyle = useAnimatedStyle(() => ({
         transform: [{ scale: scale.value }],
         backgroundColor: `rgba(37, 99, 235, ${bgColorOpacity.value})`,
@@ -327,15 +381,36 @@ const HighlightableComment = ({ reply, isHighlighted }) => {
         padding: isHighlighted ? 12 : 0,
         marginBottom: 24,
         borderLeftWidth: 2,
-        borderLeftColor: isHighlighted ? '#2563eb' : '#374151',
+        borderLeftColor: replyGlow ? replyGlow : isHighlighted ? '#2563eb' : '#374151',
         paddingLeft: 16
     }));
 
+
     return (
         <Animated.View style={animatedStyle}>
-            <Text className="text-[10px] font-black text-blue-400 uppercase tracking-tighter">{reply.name}</Text>
-            <Text className="text-xs text-gray-600 dark:text-gray-300 font-bold mt-1 leading-5">{reply.text}</Text>
-            <Text className="text-[8px] font-bold text-gray-400 uppercase mt-2">{new Date(reply.date).toLocaleTimeString()}</Text>
+            {/* ⚡️ FIXED: Cleaned up the 50% view widths and used proper flex-row constraints */}
+            <View className="flex-row items-start w-full mb-[2px] pr-2">
+                <View className="">
+                    <PlayerNameplate
+                        author={reply.author || { name: reply.name }}
+                        themeColor={reply.author?.equippedGlow?.visualConfig?.primaryColor || "#60a5fa"}
+                        equippedGlow={reply.author?.equippedGlow}
+                        auraRank={reply.author?.auraRank}
+                        isDark={isDark}
+                        fontSize={14}
+                    />
+                </View>
+                {reply.author?.badges && reply.author.badges.length > 0 && (
+                    <View className="flex-row items-start gap-1 overflow-hidden flex-shrink-0">
+                        {reply.author.badges.slice(0, 3).map((badge, idx) => (
+                            <BadgeIcon key={idx} badge={badge} size={16} isDark={true} />
+                        ))}
+                    </View>
+                )}
+            </View>
+
+            <Text className="text-xs text-gray-600 dark:text-gray-300 font-bold leading-5">{reply.text}</Text>
+            <Text className="text-[9px] font-bold text-gray-400 uppercase mt-2">{new Date(reply.date).toLocaleTimeString()}</Text>
         </Animated.View>
     );
 };
@@ -343,42 +418,44 @@ const HighlightableComment = ({ reply, isHighlighted }) => {
 export default function CommentSection({ postId, slug, discussionIdfromPage }) {
     const CustomAlert = useAlert()
     const { user } = useUser();
-    const { discussion, commentId, discussionId } = useLocalSearchParams(); 
+    const { discussion, commentId, discussionId } = useLocalSearchParams();
     const targetId = discussion || commentId || discussionId || discussionIdfromPage
-    
+    const isDark = useColorScheme() === "dark";
+    console.log(isDark);
+
     const [text, setText] = useState("");
     const [isPosting, setIsPosting] = useState(false);
     const [activeDiscussion, setActiveDiscussion] = useState(null);
-    const [activeHighlightId, setActiveHighlightId] = useState(null); 
+    const [activeHighlightId, setActiveHighlightId] = useState(null);
     const [pagedComments, setPagedComments] = useState([]);
     const [page, setPage] = useState(1);
     const [isLoadingMore, setIsLoadingMore] = useState(false);
-    
+
     const hasAutoOpened = useRef(false);
 
     const loaderX = useSharedValue(-200);
-    
+
     useEffect(() => {
         if (isPosting || isLoadingMore || (pagedComments.length === 0 && !data)) {
             loaderX.value = withRepeat(withTiming(200, { duration: 1500, easing: Easing.linear }), -1, false);
         } else {
-            loaderX.value = -200;
+            loaderX.value = -200
         }
     }, [isPosting, isLoadingMore, pagedComments, data]);
 
     const loaderStyle = useAnimatedStyle(() => ({ transform: [{ translateX: loaderX.value }] }));
 
     const { data, mutate, isLoading } = useSWR(
-        user?.deviceId ? `${API_URL}/api/posts/${postId}/comment?page=1&limit=40` : null,
+        user?.deviceId ? `/posts/${postId}/comment?page=1&limit=40` : null,
         (url) => apiFetch(url).then(res => res.json()),
-        { refreshInterval: 5000 }
+        { refreshInterval: 30000 }
     );
 
     useEffect(() => {
         if (data?.comments) {
             if (page === 1) setPagedComments(data.comments);
         }
-    }, [data, page]);
+    }, [data, page])
 
     const handleLoadMore = async () => {
         if (isLoadingMore || !data?.hasMore) return;
@@ -406,7 +483,7 @@ export default function CommentSection({ postId, slug, discussionIdfromPage }) {
         if (target) {
             setActiveDiscussion(target);
             setActiveHighlightId(tId);
-            hasAutoOpened.current = true; 
+            hasAutoOpened.current = true;
         }
     };
 
@@ -507,8 +584,8 @@ export default function CommentSection({ postId, slug, discussionIdfromPage }) {
                     ) : pagedComments.length > 0 ? (
                         <View>
                             {pagedComments.map((c, i) => (
-                                <SingleComment key={c._id || i} comment={c} onOpenDiscussion={(comm) => {
-                                    setActiveHighlightId(null); 
+                                <SingleComment key={c._id || i} isDark={isDark} comment={c} onOpenDiscussion={(comm) => {
+                                    setActiveHighlightId(null);
                                     setActiveDiscussion(comm);
                                 }} />
                             ))}
@@ -534,10 +611,11 @@ export default function CommentSection({ postId, slug, discussionIdfromPage }) {
                     setActiveDiscussion(null);
                     setActiveHighlightId(null);
                 }}
+                isDark={isDark}
                 onReply={handlePostComment}
                 isPosting={isPosting}
                 slug={slug}
-                highlightId={activeHighlightId} 
+                highlightId={activeHighlightId}
             />
         </View>
     );

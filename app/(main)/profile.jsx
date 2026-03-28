@@ -15,6 +15,7 @@ import {
     Platform,
     Pressable,
     ScrollView,
+    StyleSheet,
     TextInput,
     TouchableOpacity,
     View
@@ -28,6 +29,7 @@ import AppOnboarding from "../../components/AppOnboarding";
 import ClanBorder from "../../components/ClanBorder";
 import CoinIcon from "../../components/ClanIcon";
 import PlayerCard from "../../components/PlayerCard";
+import PlayerNameplate from "../../components/PlayerNameplate";
 import { SyncLoading } from "../../components/SyncLoading";
 import { Text } from "../../components/Text";
 import { useAlert } from "../../context/AlertContext";
@@ -35,16 +37,19 @@ import { useCoins } from "../../context/CoinContext";
 import { useUser } from "../../context/UserContext";
 import apiFetch from "../../utils/apiFetch";
 // ⚡️ Correct Reanimated Imports
-import Animated, { 
-    useSharedValue, 
-    useAnimatedStyle, 
-    withRepeat, 
-    withSequence, 
-    withTiming, 
-    withSpring, 
+import Animated, {
+    useSharedValue,
+    useAnimatedStyle,
+    withRepeat,
+    withSequence,
+    withTiming,
+    withSpring,
     Easing,
-    interpolate 
+    interpolate
 } from "react-native-reanimated";
+import AuraAvatar from "../../components/AuraAvatar"; // ⚡️ Needed for the preview
+import { MotiView } from 'moti';
+import LottieView from 'lottie-react-native'; // ⚡️ Added for Inventory Previews
 
 const { width, height } = Dimensions.get("window");
 const API_BASE = "https://oreblogda.com/api";
@@ -116,43 +121,299 @@ const RemoteSvgIcon = ({ xml, size = 50, color }) => {
     return <SvgXml xml={xml} width={size} height={size} color={color} />;
 };
 
+const getRarityColor = (rarity) => {
+    switch (rarity?.toUpperCase()) {
+        case 'MYTHIC': return '#ef4444'; // Red
+        case 'LEGENDARY': return '#fbbf24'; // Gold
+        case 'EPIC': return '#a855f7'; // Purple
+        case 'RARE': return '#3b82f6'; // Blue
+        case 'COMMON': default: return '#9ca3af'; // Gray
+    }
+};
+
+// ==========================================
+// 🔹 1. UNIFIED ITEM PREVIEW MODAL (Store & Inventory)
+// ==========================================
+const ItemPreviewModal = ({
+    isVisible,
+    onClose,
+    currentUser,
+    selectedProduct,
+    onAction, // Can be handlePurchase OR handleEquip
+    isProcessing,
+    actionType = "buy" // "buy" or "equip"
+}) => {
+
+    const previewUser = useMemo(() => {
+        if (!currentUser || !selectedProduct) return null;
+
+        const filteredInventory = (currentUser.inventory || []).map(item => {
+            if (item.category === selectedProduct.category) {
+                return { ...item, isEquipped: false };
+            }
+            return item;
+        });
+
+        const normalizedProduct = {
+            ...selectedProduct,
+            isEquipped: true,
+            visualConfig: selectedProduct.visualConfig || selectedProduct.visualData || {}
+        };
+
+        return {
+            ...currentUser,
+            inventory: [
+                ...filteredInventory,
+                normalizedProduct
+            ]
+        };
+    }, [currentUser, selectedProduct]);
+
+    if (!isVisible || !selectedProduct) return null;
+
+    const rarityColor = getRarityColor(selectedProduct.rarity);
+    const itemCurrency = selectedProduct.currency || 'OC';
+
+    // Check if the item is already equipped (for inventory view)
+    const isCurrentlyEquipped = currentUser?.inventory?.find(i => i.itemId === selectedProduct.itemId)?.isEquipped;
+
+    return (
+        <Modal visible={isVisible} transparent={true} animationType="none" onRequestClose={onClose}>
+            
+            {/* ⚡️ FIXED: Pressable background to close on tap outside */}
+            <Pressable style={previewStyles.overlay} onPress={onClose} disabled={isProcessing}>
+                
+                <MotiView
+                    from={{ opacity: 0, translateY: 100, scale: 0.9 }}
+                    animate={{ opacity: 1, translateY: 0, scale: 1 }}
+                    exit={{ opacity: 0, translateY: 100, scale: 0.9 }}
+                    transition={{ type: 'spring', damping: 20, stiffness: 200 }}
+                    // ⚡️ FIXED: Added maxHeight so it never pushes off-screen
+                    style={[previewStyles.modalCard, { borderColor: rarityColor, borderWidth: 1, maxHeight: '85%' }]}
+                >
+                    {/* ⚡️ FIXED: Inner Pressable stops background tap from triggering when clicking the card */}
+                    <Pressable style={{ flexShrink: 1, width: '100%' }} onPress={(e) => e.stopPropagation()}>
+                        
+                        <TouchableOpacity onPress={onClose} style={previewStyles.closeButton} disabled={isProcessing}>
+                            <Ionicons name="close" size={20} color="#fff" />
+                        </TouchableOpacity>
+
+                        {/* ⚡️ FIXED: Scrollable area for the PlayerCard so it fits on small phones */}
+                        <ScrollView 
+                            contentContainerStyle={{ alignItems: 'center', paddingBottom: 20 }}
+                            showsVerticalScrollIndicator={false}
+                            bounces={false}
+                        >
+                            <View style={previewStyles.header}>
+                                <MaterialCommunityIcons name="star-four-points" size={16} color={rarityColor} />
+                                <Text style={[previewStyles.rarityText, { color: rarityColor }]}>
+                                    {selectedProduct.rarity?.toUpperCase() || 'COMMON'} ITEM
+                                </Text>
+                            </View>
+
+                            {/* THE STAGE */}
+                            <View style={previewStyles.stage}>
+                                <View style={{ transform: [{ scale: 0.75 }], alignItems: 'center', justifyContent: 'center' }}>
+                                    <PlayerCard
+                                        author={previewUser}
+                                        totalPosts={currentUser?.totalPosts || 0}
+                                        isDark={true}
+                                    />
+                                </View>
+                            </View>
+                        </ScrollView>
+
+                        {/* ⚡️ FIXED: Product Details and Button are Pinned to the bottom outside the ScrollView */}
+                        <View style={previewStyles.detailsContainer}>
+                            <Text className="text-2xl font-black text-white text-center mb-1">
+                                {selectedProduct.name}
+                            </Text>
+                            {selectedProduct.expiresInDays && actionType === "buy" && (
+                                <Text className="text-xs font-medium text-gray-400 text-center mb-6 uppercase tracking-widest">
+                                    Duration: {selectedProduct.expiresInDays} Days
+                                </Text>
+                            )}
+                            {actionType === "equip" && (
+                                <Text className="text-xs font-medium text-gray-400 text-center mb-6 uppercase tracking-widest">
+                                    Previewing Item
+                                </Text>
+                            )}
+
+                            {/* Action Button (Buy vs Equip) */}
+                            <TouchableOpacity
+                                disabled={isProcessing}
+                                onPress={() => onAction(selectedProduct)}
+                                style={[
+                                    previewStyles.purchaseButton,
+                                    isProcessing && { opacity: 0.5 },
+                                    actionType === "equip" && { backgroundColor: isCurrentlyEquipped ? '#ef4444' : '#22c55e' }
+                                ]}
+                            >
+                                {isProcessing ? (
+                                    <ActivityIndicator size="small" color="#000" />
+                                ) : (
+                                    <>
+                                        {actionType === "buy" ? (
+                                            <>
+                                                <Ionicons name="flash" size={18} color="#000" />
+                                                <Text className="text-base font-black text-black ml-2 uppercase">
+                                                    Unlock for {selectedProduct.price} {itemCurrency}
+                                                </Text>
+                                            </>
+                                        ) : (
+                                            <>
+                                                <MaterialCommunityIcons name={isCurrentlyEquipped ? "shield-remove" : "shield-check"} size={18} color="#fff" />
+                                                <Text className="text-base font-black text-white ml-2 uppercase">
+                                                    {isCurrentlyEquipped ? 'Unequip Item' : 'Equip Item'}
+                                                </Text>
+                                            </>
+                                        )}
+                                    </>
+                                )}
+                            </TouchableOpacity>
+                        </View>
+
+                    </Pressable>
+                </MotiView>
+
+            </Pressable>
+        </Modal>
+    );
+};
+
+const previewStyles = StyleSheet.create({
+    overlay: {
+        ...StyleSheet.absoluteFillObject,
+        backgroundColor: 'rgba(0,0,0,0.85)',
+        justifyContent: 'center',
+        alignItems: 'center',
+        zIndex: 200,
+    },
+    modalCard: {
+        width: width * 0.9,
+        backgroundColor: '#111827',
+        borderRadius: 32,
+        overflow: 'hidden',
+    },
+    closeButton: {
+        position: 'absolute',
+        top: 16,
+        right: 16,
+        zIndex: 20,
+        padding: 4,
+        backgroundColor: 'rgba(255,255,255,0.1)',
+        borderRadius: 100,
+    },
+    header: {
+        flexDirection: 'row',
+        alignItems: 'center',
+        justifyContent: 'center',
+        marginTop: 20,
+        gap: 6,
+    },
+    rarityText: {
+        fontSize: 12,
+        fontWeight: '900',
+        letterSpacing: 2,
+    },
+    stage: {
+        height: 380,
+        justifyContent: 'center',
+        alignItems: 'center',
+        paddingVertical: 10,
+    },
+    detailsContainer: {
+        padding: 24,
+        backgroundColor: '#1f2937',
+        borderTopWidth: 1,
+        borderColor: '#374151',
+    },
+    purchaseButton: {
+        flexDirection: 'row',
+        backgroundColor: '#fbbf24',
+        paddingVertical: 16,
+        borderRadius: 16,
+        justifyContent: 'center',
+        alignItems: 'center',
+    }
+});
+
+
+// 🔹 2. THE MAIN STORE COMPONENT
 const AuthorStoreModal = ({ visible, onClose, user, isDark, setInventory }) => {
-    const storage = useMMKV(); // 🔹 Using MMKV instance
-    const { coins, clanCoins, processTransaction, isProcessingTransaction } = useCoins();
-    
-    const [loading, setLoading] = useState(true);
-    const [catalog, setCatalog] = useState({ themes: [], standaloneItems: [] });
+    const { coins, clanCoins, processTransaction, isProcessingTransaction } = useCoins(); 
+    const storage = useMMKV(); 
+    const CustomAlert = useAlert(); 
+
+    // ⚡️ CACHE CONFIGURATION
+    const CACHE_KEY = "STORE_CATALOG_CACHE";
+    const hasFetchedThisSession = useRef(false);
+
+    // ⚡️ FIXED: Synchronously initialize from MMKV so there is zero flicker!
+    const [catalog, setCatalog] = useState(() => {
+        try {
+            const cached = storage.getString(CACHE_KEY);
+            return cached ? JSON.parse(cached) : { themes: [], standaloneItems: [] };
+        } catch {
+            return { themes: [], standaloneItems: [] };
+        }
+    });
+
+    // ⚡️ FIXED: Only start with loading screen if the cache is completely empty
+    const [loading, setLoading] = useState(() => {
+        try {
+            const cached = storage.getString(CACHE_KEY);
+            const parsed = cached ? JSON.parse(cached) : null;
+            return !(parsed && (parsed.themes?.length > 0 || parsed.standaloneItems?.length > 0));
+        } catch {
+            return true;
+        }
+    });
+
     const [selectedTheme, setSelectedTheme] = useState(null);
-    const CustomAlert = useAlert();
+    const [itemToPreview, setItemToPreview] = useState(null);
 
     useEffect(() => {
         if (visible) {
-            fetchStoreData();
+            loadStoreData();
         } else {
             setSelectedTheme(null);
+            setItemToPreview(null);
         }
     }, [visible]);
 
-    const fetchStoreData = async () => {
-        try {
-            setLoading(true);
-            const res = await apiFetch(`/store?type=author`);
-            const data = await res.json();
+    const loadStoreData = async () => {
+        // We already loaded the cache synchronously in useState!
+        // Now, we just check if we need to fetch fresh data in the background.
+        if (!hasFetchedThisSession.current) {
+            try {
+                // Failsafe: just in case the catalog is empty
+                if (catalog.themes.length === 0 && catalog.standaloneItems.length === 0) {
+                    setLoading(true); 
+                }
+                
+                const res = await apiFetch(`/store?type=author`);
+                const data = await res.json();
 
-            if (data.success && data.catalog) {
-                setCatalog({
-                    themes: data.catalog.themes || [],
-                    standaloneItems: data.catalog.standaloneItems || []
-                });
+                if (data.success && data.catalog) {
+                    const newCatalog = {
+                        themes: data.catalog.themes || [],
+                        standaloneItems: data.catalog.standaloneItems || []
+                    };
+                    
+                    setCatalog(newCatalog);
+                    storage.set(CACHE_KEY, JSON.stringify(newCatalog));
+                    hasFetchedThisSession.current = true;
+                }
+            } catch (e) {
+                console.error("Store fetch error:", e);
+            } finally {
+                setLoading(false);
             }
-        } catch (e) {
-            console.error("Store fetch error:", e);
-        } finally {
-            setLoading(false);
         }
     };
 
-    const handlePurchase = async (item) => {
+    const executePurchase = async (item) => {
         const itemCurrency = item.currency || 'OC';
         const currentBalance = itemCurrency === 'CC' ? clanCoins : coins;
         const currencyName = itemCurrency === 'CC' ? "CC" : "OC";
@@ -162,39 +423,28 @@ const AuthorStoreModal = ({ visible, onClose, user, isDark, setInventory }) => {
             return;
         }
 
-        CustomAlert(
-            "Confirm Purchase",
-            `Buy ${item.name} for ${item.price} ${itemCurrency}?`,
-            [
-                { text: "Cancel", style: "cancel" },
-                {
-                    text: "Purchase",
-                    onPress: async () => {
-                        const result = await processTransaction('buy_item', item.category, {
-                            itemId: item.id,
-                            price: item.price,
-                            name: item.name,
-                            category: item.category,
-                            currency: itemCurrency,
-                            visualConfig: item.visualData || item.visualConfig,
-                            expiresInDays: item.expiresInDays // ⚡️ ADDED THIS LINE
-                        });
+        const result = await processTransaction('buy_item', item.category, {
+            itemId: item.id,
+            price: item.price,
+            name: item.name,
+            category: item.category,
+            currency: itemCurrency,
+            visualConfig: item.visualData || item.visualConfig,
+            expiresInDays: item.expiresInDays,
+            rarity: item.rarity 
+        });
 
-                        if (result.success) {
-                            CustomAlert("Success", "Item added to your inventory!");
-                            if (typeof setInventory === 'function') {
-                                setInventory(result.inventory);
-                            }
-                        } else {
-                            CustomAlert("Error", result.error || "Transaction failed");
-                        }
-                    }
-                }
-            ]
-        );
+        if (result.success) {
+            CustomAlert("Success", "Item added to your inventory!");
+            if (typeof setInventory === 'function') {
+                setInventory(result.inventory);
+            }
+            setItemToPreview(null);
+        } else {
+            CustomAlert("Error", result.error || "Transaction failed");
+        }
     };
 
-    // 🔹 Group Items by Category
     const groupedStandaloneItems = useMemo(() => {
         return catalog.standaloneItems.reduce((groups, item) => {
             const category = item.category || 'MISC';
@@ -204,19 +454,25 @@ const AuthorStoreModal = ({ visible, onClose, user, isDark, setInventory }) => {
         }, {});
     }, [catalog.standaloneItems]);
 
-    // 🔹 Compact Card Helper
     const renderCompactCard = (item) => {
         const visual = item.visualData || item.visualConfig || {};
         const isBorder = item.category === 'BORDER';
+        const isVfx = item.category === 'AVATAR_VFX';
+        const isLottie = !!(visual.lottieUrl || visual.lottieJson);
+        const cardRarityColor = getRarityColor(item.rarity);
 
         return (
             <TouchableOpacity
                 key={item.id}
-                onPress={() => handlePurchase(item)}
-                className="bg-gray-100 dark:bg-[#1a1a1a] mr-4 p-4 rounded-3xl w-40 border border-green-900/20 shadow-sm mb-4"
+                onPress={() => setItemToPreview(item)}
+                className="bg-gray-100 dark:bg-[#1a1a1a] mr-4 p-4 rounded-3xl w-40 border shadow-sm mb-4"
+                style={{ borderColor: `${cardRarityColor}40` }}
             >
                 <View className="mb-3">
-                    <View className="h-24 w-full bg-black/10 dark:bg-black/40 rounded-2xl items-center justify-center overflow-hidden border border-black/5 dark:border-white/5">
+                    <View
+                        className="h-24 w-full bg-black/10 dark:bg-black/40 rounded-2xl items-center justify-center overflow-hidden border dark:border-white/5 relative"
+                        style={{ borderColor: `${cardRarityColor}20` }}
+                    >
                         {isBorder ? (
                             <ClanBorder
                                 color={visual.primaryColor || visual.color || "#ff0000"}
@@ -228,19 +484,48 @@ const AuthorStoreModal = ({ visible, onClose, user, isDark, setInventory }) => {
                                     <Text className="text-[10px] dark:text-white/50 font-black uppercase tracking-tighter">Frame</Text>
                                 </View>
                             </ClanBorder>
+                        ) : (isVfx || isLottie) ? (
+                            <LottieView
+                                source={visual.lottieJson ? visual.lottieJson : { uri: visual.lottieUrl }}
+                                autoPlay
+                                loop
+                                style={{
+                                    width: isVfx ? '150%' : '100%',
+                                    height: isVfx ? '150%' : '100%',
+                                    position: 'absolute',
+                                    bottom: isVfx ? -10 : 0
+                                }}
+                                resizeMode="contain"
+                            />
+                        ) : visual.svgCode ? (
+                            <RemoteSvgIcon
+                                xml={visual.svgCode}
+                                color={visual.glowColor || visual.primaryColor || visual.color}
+                                size={50}
+                            />
                         ) : (
-                            <RemoteSvgIcon xml={visual.svgCode} color={visual.glowColor || visual.primaryColor || visual.color} size={50} />
+                            <MaterialCommunityIcons
+                                name={visual.icon || 'help-circle-outline'}
+                                size={40}
+                                color={visual.color || (isDark ? 'white' : 'black')}
+                            />
                         )}
+
+                        <View style={{ backgroundColor: cardRarityColor }} className="absolute top-2 right-2 w-2 h-2 rounded-full shadow-lg" />
                     </View>
                 </View>
-                <Text className="dark:text-white font-black text-[11px] uppercase tracking-tight" numberOfLines={1}>{item.name}</Text>
+
+                <Text className="dark:text-white font-black text-[11px] uppercase tracking-tight" numberOfLines={1}>
+                    {item.name}
+                </Text>
+
                 <View className="flex-row items-center mt-2 justify-between">
                     <View className="flex-row items-center bg-green-500/10 px-2 py-0.5 rounded-lg">
                         <Text className="text-green-600 dark:text-green-500 font-black text-[10px] mr-1">{item.price}</Text>
                         <CoinIcon type={item.currency || "OC"} size={10} />
                     </View>
-                    <View className="bg-green-500 p-1.5 rounded-full shadow-lg shadow-green-500/30">
-                        <Ionicons name="cart" size={12} color="white" />
+                    <View style={{backgroundColor: cardRarityColor}} className="p-1.5 rounded-full shadow-lg shadow-blue-500/30">
+                        <Ionicons name="eye" size={12} color="white" />
                     </View>
                 </View>
             </TouchableOpacity>
@@ -251,8 +536,6 @@ const AuthorStoreModal = ({ visible, onClose, user, isDark, setInventory }) => {
         <Modal visible={visible} animationType="slide" transparent>
             <View className="flex-1 bg-black/60 justify-end">
                 <View className="bg-white dark:bg-[#0a0a0a] h-[85%] rounded-t-[40px] p-6 border-t-4 border-green-500">
-
-                    {/* Header */}
                     <View className="flex-row justify-between items-center mb-6">
                         <View>
                             <TouchableOpacity
@@ -287,29 +570,17 @@ const AuthorStoreModal = ({ visible, onClose, user, isDark, setInventory }) => {
                         <ScrollView showsVerticalScrollIndicator={false} contentContainerStyle={{ paddingBottom: 40 }}>
                             {!selectedTheme ? (
                                 <View>
-                                    {/* 🔹 Standalone Grouped Sections */}
                                     {Object.entries(groupedStandaloneItems).map(([category, items]) => (
                                         <View key={category} className="mb-8">
                                             <View className="flex-row items-center mb-3">
                                                 <View className="w-1 h-3 bg-green-500 rounded-full mr-2" />
                                                 <Text className="text-gray-500 font-black uppercase text-[10px] tracking-[0.2em]">{category}S</Text>
                                             </View>
-                                            <ScrollView 
-                                                horizontal 
-                                                showsHorizontalScrollIndicator={false}
-                                                // 🔹 Applied your specific heights
-                                                style={{ height: items.length > 1 ? 380 : 180 }}
-                                                contentContainerStyle={{
-                                                    flexDirection: 'column',
-                                                    flexWrap: 'wrap'
-                                                }}
-                                            >
+                                            <ScrollView horizontal showsHorizontalScrollIndicator={false} style={{ height: items.length > 1 ? 380 : 180 }} contentContainerStyle={{ flexDirection: 'column', flexWrap: 'wrap' }}>
                                                 {items.map(item => renderCompactCard(item))}
                                             </ScrollView>
                                         </View>
                                     ))}
-
-                                    {/* Thematic Collections Grid */}
                                     {catalog.themes?.length > 0 && (
                                         <View>
                                             <View className="flex-row items-center mb-4 mt-2">
@@ -318,19 +589,15 @@ const AuthorStoreModal = ({ visible, onClose, user, isDark, setInventory }) => {
                                             </View>
                                             <View className="flex-row flex-wrap justify-between">
                                                 {catalog.themes.map((theme) => (
-                                                <TouchableOpacity
-                                                    key={theme.id}
-                                                    onPress={() => setSelectedTheme(theme)}
-                                                    className="w-[48%] bg-gray-100 dark:bg-[#1a1a1a] p-6 rounded-3xl mb-4 items-center border border-gray-200 dark:border-gray-800 shadow-sm"
-                                                >
-                                                    <View className="mb-3">
-                                                        <RemoteSvgIcon xml={theme.iconsvg} color="#22c55e" size={80} />
-                                                    </View>
-                                                    <Text className="dark:text-white font-black uppercase mt-1 text-center text-xs">{theme.label}</Text>
-                                                    <View className="bg-gray-200 dark:bg-zinc-800 px-2 py-1 rounded-md mt-2">
-                                                        <Text className="text-gray-500 text-[8px] uppercase font-bold">{theme.items?.length || 0} Items</Text>
-                                                    </View>
-                                                </TouchableOpacity>
+                                                    <TouchableOpacity key={theme.id} onPress={() => setSelectedTheme(theme)} className="w-[48%] bg-gray-100 dark:bg-[#1a1a1a] p-6 rounded-3xl mb-4 items-center border border-gray-200 dark:border-gray-800 shadow-sm">
+                                                        <View className="mb-3">
+                                                            <RemoteSvgIcon xml={theme.iconsvg} color="#22c55e" size={80} />
+                                                        </View>
+                                                        <Text className="dark:text-white font-black uppercase mt-1 text-center text-xs">{theme.label}</Text>
+                                                        <View className="bg-gray-200 dark:bg-zinc-800 px-2 py-1 rounded-md mt-2">
+                                                            <Text className="text-gray-500 text-[8px] uppercase font-bold">{theme.items?.length || 0} Items</Text>
+                                                        </View>
+                                                    </TouchableOpacity>
                                                 ))}
                                             </View>
                                         </View>
@@ -338,27 +605,16 @@ const AuthorStoreModal = ({ visible, onClose, user, isDark, setInventory }) => {
                                 </View>
                             ) : (
                                 <View>
-                                    {/* Items within a Theme */}
-                                    {['BADGE', 'THEME', 'BACKGROUND', "WATERMARK", 'EFFECT', 'GLOW', 'BORDER'].map((cat) => {
+                                    {['BADGE', 'THEME', 'BACKGROUND', "WATERMARK", 'EFFECT', 'GLOW', 'BORDER', 'AVATAR_VFX', 'AVATAR'].map((cat) => {
                                         const themeItems = selectedTheme.items?.filter(i => i.category?.toUpperCase() === cat) || [];
                                         if (themeItems.length === 0) return null;
-
                                         return (
                                             <View key={cat} className="mb-6">
                                                 <View className="flex-row items-center mb-3">
                                                     <View className="w-1 h-3 bg-green-500 rounded-full mr-2" />
                                                     <Text className="text-gray-500 font-black uppercase text-[10px] tracking-[0.2em]">{cat}S</Text>
                                                 </View>
-                                                <ScrollView 
-                                                    horizontal 
-                                                    showsHorizontalScrollIndicator={false}
-                                                    // 🔹 Applied your specific heights
-                                                    style={{ height: themeItems.length > 1 ? 380 : 180 }}
-                                                    contentContainerStyle={{
-                                                        flexDirection: 'column',
-                                                        flexWrap: 'wrap'
-                                                    }}
-                                                >
+                                                <ScrollView horizontal showsHorizontalScrollIndicator={false} style={{ height: themeItems.length > 1 ? 380 : 180 }} contentContainerStyle={{ flexDirection: 'column', flexWrap: 'wrap' }}>
                                                     {themeItems.map(item => renderCompactCard(item))}
                                                 </ScrollView>
                                             </View>
@@ -368,40 +624,41 @@ const AuthorStoreModal = ({ visible, onClose, user, isDark, setInventory }) => {
                             )}
                         </ScrollView>
                     )}
-
-                    {isProcessingTransaction && (
-                        <View className="absolute inset-0 bg-black/60 items-center justify-center rounded-t-[40px]">
-                            <ActivityIndicator size="large" color="#22c55e" />
-                            <Text className="text-green-500 font-black uppercase text-[10px] mt-4">Syncing with Chain...</Text>
-                        </View>
-                    )}
                 </View>
             </View>
+
+            <ItemPreviewModal
+                isVisible={!!itemToPreview}
+                onClose={() => setItemToPreview(null)}
+                currentUser={user}
+                selectedProduct={itemToPreview}
+                onAction={executePurchase}
+                isProcessing={isProcessingTransaction}
+                actionType="buy"
+            />
         </Modal>
     );
 };
 
-
+// 🔹 3. THE INVENTORY COMPONENT
 const AuthorInventoryModal = ({ visible, onClose, user, setUser, isDark, theinventory }) => {
     const [filter, setFilter] = useState('ALL');
     const [isUpdating, setIsUpdating] = useState(false);
+    const [itemToPreview, setItemToPreview] = useState(null); // ⚡️ Setup preview state for inventory
     const CustomAlert = useAlert();
 
     const inventory = theinventory || user?.inventory || [];
-    const categories = ['ALL', 'GLOW', 'BORDER', 'BADGE', 'WATERMARK'];
+    const categories = ['ALL', 'GLOW', 'BORDER', 'BADGE', 'WATERMARK', "AVATER", 'AVATAR_VFX'];
 
     const handleEquipToggle = async (selectedItem) => {
         if (isUpdating) return;
         setIsUpdating(true);
 
         try {
-            // 1. Logic for "Only one per category" (except Badges)
             const updatedInventory = inventory.map(item => {
                 if (item.itemId === selectedItem.itemId) {
                     return { ...item, isEquipped: !item.isEquipped };
                 }
-
-                // If it's a different item in same category and NOT a badge, unequip it
                 if (
                     item.category === selectedItem.category &&
                     selectedItem.category !== 'BADGE' &&
@@ -412,17 +669,13 @@ const AuthorInventoryModal = ({ visible, onClose, user, setUser, isDark, theinve
                 return item;
             });
 
-            // 2. Prepare FormData to call the unified PUT route
             const formData = new FormData();
             formData.append("userId", user?._id || "");
             formData.append("fingerprint", user?.deviceId || "");
             formData.append("inventory", JSON.stringify(updatedInventory));
-
-            // Crucial: Pass existing data so the backend doesn't null them out
             formData.append("username", user?.username || "");
             formData.append("description", user?.description || "");
 
-            // If you have existing preferences in the user object, pass them too
             if (user?.preferences) {
                 formData.append("preferences", JSON.stringify(user.preferences));
             }
@@ -435,9 +688,8 @@ const AuthorInventoryModal = ({ visible, onClose, user, setUser, isDark, theinve
             const result = await res.json();
 
             if (res.ok) {
-                // 3. Update the global state!
-                // This will trigger a re-render in the Profile and everywhere else
                 setUser(result.user);
+                setItemToPreview(null); // Close modal on equip success
             } else {
                 throw new Error(result.message || "Sync failed");
             }
@@ -473,7 +725,6 @@ const AuthorInventoryModal = ({ visible, onClose, user, setUser, isDark, theinve
             <View className="flex-1 bg-black/60 justify-end">
                 <View className="bg-white dark:bg-[#0d1117] h-[85%] rounded-t-[40px] p-6 border-t-4 border-blue-500">
 
-                    {/* Header */}
                     <View className="flex-row justify-between items-center mb-4">
                         <View>
                             <Text className="text-2xl font-black uppercase italic dark:text-white">Arsenal</Text>
@@ -486,7 +737,6 @@ const AuthorInventoryModal = ({ visible, onClose, user, setUser, isDark, theinve
                         </TouchableOpacity>
                     </View>
 
-                    {/* Category Tabs */}
                     <View className="flex-row mb-6">
                         <ScrollView horizontal showsHorizontalScrollIndicator={false}>
                             {categories.map((cat) => (
@@ -503,18 +753,66 @@ const AuthorInventoryModal = ({ visible, onClose, user, setUser, isDark, theinve
                         </ScrollView>
                     </View>
 
-                    {/* Inventory List */}
                     <ScrollView showsVerticalScrollIndicator={false} contentContainerStyle={{ paddingBottom: 40 }}>
                         {filteredInventory.length > 0 ? (
                             filteredInventory.map((item, idx) => {
                                 const expiration = getExpirationText(item.expiresAt);
                                 const isExpired = expiration === "Expired";
                                 const isBorder = item.category === 'BORDER';
+                                const isVfx = item.category === 'AVATAR_VFX';
                                 const visual = item.visualConfig || {};
-
+                                const rowRarityColor = getRarityColor(item.rarity); // ⚡️ Map color
+                                const isLottie = !!(visual.lottieUrl || visual.lottieJson);
                                 const PreviewIcon = (
-                                    <View className={`w-16 h-16 bg-black/20 items-center justify-center rounded-2xl overflow-hidden ${isBorder ? '' : 'border border-white/5'}`}>
-                                        <RemoteSvgIcon xml={visual.svgCode} size={40} color={visual.primaryColor}/>
+                                    <View
+                                        className={`w-16 h-16 bg-black/20 items-center justify-center rounded-2xl overflow-hidden ${isBorder ? '' : 'border relative'}`}
+                                        style={{ borderColor: `${rowRarityColor}40` }}
+                                    >
+                                        {isBorder ? (
+                                            <ClanBorder
+                                                color={visual.primaryColor || visual.color || "#ff0000"}
+                                                secondaryColor={visual.secondaryColor}
+                                                animationType={visual.animationType}
+                                                duration={visual.duration}
+                                            >
+                                                <View className="h-6 w-6 flex justify-center items-center">
+                                                    <Text className="text-[6px] dark:text-white/40 font-black uppercase">Frame</Text>
+                                                </View>
+                                            </ClanBorder>
+                                        ) : (isVfx || isLottie) ? (
+                                            /* ⚡️ Render Lottie for VFX or Animated Watermarks */
+                                            <LottieView
+                                                source={visual.lottieJson ? visual.lottieJson : { uri: visual.lottieUrl }}
+                                                autoPlay
+                                                loop
+                                                style={{
+                                                    width: (isVfx || isLottie) ? '140%' : '100%',
+                                                    height: (isVfx || isLottie) ? '140%' : '100%',
+                                                    position: 'absolute',
+                                                    bottom: isVfx ? -8 : 0
+                                                }}
+                                                resizeMode="contain"
+                                            />
+                                        ) : visual.svgCode ? (
+                                            <RemoteSvgIcon
+                                                xml={visual.svgCode}
+                                                size={40}
+                                                color={visual.primaryColor || visual.color}
+                                            />
+                                        ) : (
+                                            /* Fallback to Material Icon if no SVG/Lottie exists */
+                                            <MaterialCommunityIcons
+                                                name={visual.icon || 'star'}
+                                                size={30}
+                                                color={visual.primaryColor || visual.color || 'white'}
+                                            />
+                                        )}
+
+                                        {/* Rarity Dot */}
+                                        <View
+                                            style={{ backgroundColor: rowRarityColor }}
+                                            className="absolute top-1.5 right-1.5 w-2 h-2 rounded-full shadow-sm"
+                                        />
                                     </View>
                                 );
 
@@ -523,11 +821,11 @@ const AuthorInventoryModal = ({ visible, onClose, user, setUser, isDark, theinve
                                         key={item.itemId || idx}
                                         className={`flex-row items-center p-4 rounded-3xl mb-3 border ${item.isEquipped
                                             ? 'bg-blue-500/10 border-blue-500'
-                                            : 'bg-gray-50 dark:bg-[#161b22] border-gray-100 dark:border-gray-800'
-                                        } ${isExpired ? 'opacity-50' : ''}`}
+                                            : 'bg-gray-50 dark:bg-[#161b22]'
+                                            } ${isExpired ? 'opacity-50 border-red-500/30' : 'border-gray-100 dark:border-gray-800'}`}
                                     >
-                                        {/* Icon Container */}
-                                        <View className="mr-4">
+                                        {/* ⚡️ Tap the Icon to Preview */}
+                                        <TouchableOpacity onPress={() => setItemToPreview(item)} className="mr-4">
                                             {isBorder ? (
                                                 <ClanBorder
                                                     color={visual.primaryColor || visual.color || "#ff0000"}
@@ -542,17 +840,16 @@ const AuthorInventoryModal = ({ visible, onClose, user, setUser, isDark, theinve
                                             ) : (
                                                 PreviewIcon
                                             )}
-                                        </View>
+                                        </TouchableOpacity>
 
-                                        {/* Info Container */}
                                         <View className="flex-1">
                                             <Text className="font-black dark:text-white text-sm uppercase italic">
                                                 {item.name}
                                             </Text>
 
                                             <View className="flex-row mt-2 items-center">
-                                                <Text className="text-[9px] text-gray-500 uppercase font-bold tracking-widest">
-                                                    {item.category}
+                                                <Text style={{ color: rowRarityColor }} className="text-[9px] uppercase font-bold tracking-widest">
+                                                    {item.rarity || 'COMMON'} {item.category}
                                                 </Text>
 
                                                 {expiration && (
@@ -573,13 +870,13 @@ const AuthorInventoryModal = ({ visible, onClose, user, setUser, isDark, theinve
                                             </View>
                                         </View>
 
-                                        {/* Action Button */}
-                                        {item.category !== "VERIFIED" && (
+                                        {/* ⚡️ BUG FIX: Only show Equip button if it's NOT EXPIRED */}
+                                        {!isExpired && item.category !== "VERIFIED" && (
                                             <TouchableOpacity
                                                 disabled={isUpdating}
                                                 onPress={() => handleEquipToggle(item)}
                                                 className={`px-6 py-3 rounded-xl ${item.isEquipped ? 'bg-green-500' : 'bg-blue-600'
-                                                } ${isUpdating ? 'opacity-50' : ''}`}
+                                                    } ${isUpdating ? 'opacity-50' : ''}`}
                                             >
                                                 {isUpdating ? (
                                                     <ActivityIndicator size="small" color="white" />
@@ -591,7 +888,7 @@ const AuthorInventoryModal = ({ visible, onClose, user, setUser, isDark, theinve
                                             </TouchableOpacity>
                                         )}
 
-                                        {/* Show 'Delete' or 'Expired' label if it's dead */}
+                                        {/* ⚡️ Only show VOID if expired */}
                                         {isExpired && (
                                             <View className="px-4 py-2 bg-red-500/10 rounded-lg border border-red-500/20">
                                                 <Text className="text-red-500 text-[10px] font-black uppercase">Void</Text>
@@ -611,11 +908,43 @@ const AuthorInventoryModal = ({ visible, onClose, user, setUser, isDark, theinve
                     </ScrollView>
                 </View>
             </View>
+
+            {/* ⚡️ Render Universal Preview Modal for Inventory */}
+            <ItemPreviewModal
+                isVisible={!!itemToPreview}
+                onClose={() => setItemToPreview(null)}
+                currentUser={user}
+                selectedProduct={itemToPreview}
+                onAction={handleEquipToggle} // Passes the Equip function instead of Purchase
+                isProcessing={isUpdating}
+                actionType="equip" // Tells the modal to show Equip UI
+            />
         </Modal>
     );
 };
 
+const getAuraTier = (rank) => {
+    const MONARCH_GOLD = '#fbbf24';
+    const CRIMSON_RED = '#ef4444';
+    const SHADOW_PURPLE = '#a855f7';
+    const STEEL_BLUE = '#3b82f6';
+    const REI_WHITE = '#e0f2fe';
 
+    if (!rank || rank > 10 || rank <= 0) return { color: '#3b82f6', label: 'ACTIVE', icon: 'radar' };
+    switch (rank) {
+        case 1: return { color: MONARCH_GOLD, label: 'MONARCH', icon: 'crown' };
+        case 2: return { color: CRIMSON_RED, label: 'YONKO', icon: 'flare' };
+        case 3: return { color: SHADOW_PURPLE, label: 'KAGE', icon: 'moon-waxing-crescent' };
+        case 4: return { color: STEEL_BLUE, label: 'SHOGUN', icon: 'shield-star' };
+        case 5: return { color: REI_WHITE, label: 'ESPADA 0', icon: 'skull' };
+        case 6: return { color: '#cbd5e1', label: 'ESPADA 1', icon: 'sword-cross' };
+        case 7: return { color: '#94a3b8', label: 'ESPADA 2', icon: 'sword-cross' };
+        case 8: return { color: '#64748b', label: 'ESPADA 3', icon: 'sword-cross' };
+        case 9: return { color: '#475569', label: 'ESPADA 4', icon: 'sword-cross' };
+        case 10: return { color: '#334155', label: 'ESPADA 5', icon: 'sword-cross' };
+        default: return { color: '#1e293b', label: 'VANGUARD', icon: 'shield-check' };
+    }
+};
 
 export default function MobileProfilePage() {
     const storage = useMMKV();
@@ -659,17 +988,18 @@ export default function MobileProfilePage() {
     const scanAnim = useSharedValue(0);
     const loadingAnim = useSharedValue(0);
     const pulseAnim = useSharedValue(1);
-    
+
     const tooltipY = useSharedValue(0);
     const pointerX = useSharedValue(0);
 
-    const CACHE_KEY_USER_EXTRAS = `user_profile_cache_${user?.deviceId}`;
+    const CACHE_KEY_USER_EXTRAS = `user_profile_cache_${user?.deviceId || 'temp'}`;
 
+    // Safely fallback user properties to prevent render crashes during initial sign-up flow
     const currentAuraPoints = user?.weeklyAura || 0;
-    const aura = useMemo(() => getAuraVisuals(user?.previousRank), [user?.previousRank]);
+    const aura = useMemo(() => getAuraVisuals(user?.previousRank) || { color: '#3b82f6', icon: 'shield-outline', label: 'NOVICE', description: 'Operator initializing...' }, [user?.previousRank]);
     const equippedGlow = user?.inventory?.find(i => i.category === 'GLOW' && i.isEquipped);
     const activeGlowColor = equippedGlow?.visualConfig?.primaryColor || null;
-    const dynamicAuraColor = activeGlowColor || aura.color;
+    const dynamicAuraColor = activeGlowColor || aura?.color || '#3b82f6';
     const filledBoxes = Math.min(Math.floor(currentAuraPoints / 10), 10);
 
     useEffect(() => {
@@ -717,21 +1047,15 @@ export default function MobileProfilePage() {
         if (onboardingStep < onboardingSteps.length - 1) {
             setOnboardingStep(prev => prev + 1);
             setcurrentPosTop(-10)
-            console.log(currentPosTop);
-            
         } else {
             setIsOnboarding(false);
             storage.set('has_seen_profile_onboarding', true);
         }
     };
     const prevOnboardingStep = () => {
-
         if (onboardingStep > 0) {
-
             setOnboardingStep(prev => prev - 1);
-
         }
-
     };
 
     const skipOnboarding = () => {
@@ -803,9 +1127,14 @@ export default function MobileProfilePage() {
         }
     }, [isUpdating]);
 
+    // Fixed: Removed unsafe string concatenation for color opacity
     const scanAnimatedStyle = useAnimatedStyle(() => {
         const rotate = interpolate(scanAnim.value, [0, 1], [0, 360]);
-        return { transform: [{ rotate: `${rotate}deg` }], borderColor: `${dynamicAuraColor}40` };
+        return { 
+            transform: [{ rotate: `${rotate}deg` }], 
+            borderColor: dynamicAuraColor,
+            opacity: 0.4 
+        };
     });
 
     const pulseAnimatedStyle = useAnimatedStyle(() => {
@@ -833,7 +1162,7 @@ export default function MobileProfilePage() {
         } catch (e) {
             console.error("Cache load error", e);
         }
-    }, [user?.deviceId, storage, CACHE_KEY_USER_EXTRAS]);
+    }, []);
 
     useEffect(() => {
         const syncUserWithDB = async () => {
@@ -847,8 +1176,9 @@ export default function MobileProfilePage() {
                     setDescription(dbUser.description || "");
                     setUsername(dbUser.username || "");
 
-                    const dbAnimes = dbUser.preferences?.favAnimes?.join(', ') || "";
-                    const dbGenres = dbUser.preferences?.favGenres?.join(', ') || "";
+                    // Safe array checks before joining
+                    const dbAnimes = Array.isArray(dbUser.preferences?.favAnimes) ? dbUser.preferences.favAnimes.join(', ') : "";
+                    const dbGenres = Array.isArray(dbUser.preferences?.favGenres) ? dbUser.preferences.favGenres.join(', ') : "";
                     const dbChar = dbUser.preferences?.favCharacter || "";
 
                     setFavAnimes(dbAnimes);
@@ -872,7 +1202,7 @@ export default function MobileProfilePage() {
             } catch (err) { console.error("Sync User Error:", err); }
         };
         syncUserWithDB();
-    }, [user?.deviceId, storage, CACHE_KEY_USER_EXTRAS, setUser]);
+    }, []);
 
     const getKey = (pageIndex, previousPageData) => {
         if (!user?._id) return null;
@@ -881,7 +1211,7 @@ export default function MobileProfilePage() {
     };
 
     const { data, size, setSize, isLoading, isValidating, mutate } = useSWRInfinite(getKey, fetcher, {
-        refreshInterval: 10000,
+        refreshInterval: 240000,
         revalidateOnFocus: true,
         dedupingInterval: 5000,
     });
@@ -901,6 +1231,8 @@ export default function MobileProfilePage() {
     const progress = Math.min((count / nextMilestone) * 100, 100);
 
     const pickImage = async () => {
+        console.log("picking image");
+
         const result = await ImagePicker.launchImageLibraryAsync({
             mediaTypes: ImagePicker.MediaTypeOptions.Images,
             allowsEditing: true,
@@ -955,12 +1287,15 @@ export default function MobileProfilePage() {
                 setPreview(null);
                 setImageFile(null);
 
+                const dbAnimes = Array.isArray(result.user.preferences?.favAnimes) ? result.user.preferences.favAnimes.join(', ') : "";
+                const dbGenres = Array.isArray(result.user.preferences?.favGenres) ? result.user.preferences.favGenres.join(', ') : "";
+
                 storage.set(CACHE_KEY_USER_EXTRAS, JSON.stringify({
                     username: result.user.username,
                     description: result.user.description,
                     totalPosts: totalPosts,
-                    favAnimes: result.user.preferences?.favAnimes?.join(', ') || "",
-                    favGenres: result.user.preferences?.favGenres?.join(', ') || "",
+                    favAnimes: dbAnimes,
+                    favGenres: dbGenres,
                     favCharacter: result.user.preferences?.favCharacter || ""
                 }));
 
@@ -1013,16 +1348,47 @@ export default function MobileProfilePage() {
                 </View>
 
                 <View style={{ position: "relative" }} className="flex-row flex items-center justify-center mb-10 pr-2">
-                    <View className="">
-                        <Animated.View style={[{ position: 'absolute', inset: -12, borderRadius: 100, backgroundColor: dynamicAuraColor, opacity: 0.15 }, pulseAnimatedStyle]} />
-                        <Animated.View style={[{ position: 'absolute', inset: -4, borderStyle: 'dashed', borderWidth: 1, borderRadius: 10000 }, scanAnimatedStyle]} />
-                        <View style={{ borderColor: dynamicAuraColor }} className="absolute -inset-1 border-2 rounded-full opacity-50" />
-                        <TouchableOpacity onPress={pickImage} className="w-40 h-40 rounded-full overflow-hidden border-4 border-white dark:border-[#0a0a0a] bg-gray-900 shadow-2xl">
-                            <Image source={{ uri: preview || user?.profilePic?.url || "https://via.placeholder.com/150" }} style={{width:"100%", height: "100%"}} className="object-cover" />
+                    <View className="relative shrink-0 items-center justify-center">
+
+                        {/* ⚡️ FIXED: Passed onPress directly to AuraAvatar. Removed outer TouchableOpacity. */}
+                        <AuraAvatar
+                            author={{
+                                ...user,
+                                // 1. Force the image to be the preview if it exists, otherwise use their normal PFP
+                                image: preview || user?.profilePic?.url,
+                                // 2. If they have a preview active, temporarily "unequip" their Lottie avatar in the UI so they can see the photo
+                                inventory: preview
+                                    ? user?.inventory?.map(item => item.category === 'AVATAR' ? { ...item, isEquipped: false } : item)
+                                    : user?.inventory
+                            }}
+                            aura={getAuraTier(user?.rank || 100)}
+                            isTop10={(user?.rank || 100) <= 10 && (user?.rank || 100) > 0}
+                            isDark={isDark}
+                            size={160}
+                            glowColor={dynamicAuraColor}
+                            onPress={pickImage} // 👈 AuraAvatar will now handle the click
+                        />
+
+                        {/* ⚡️ THE "CHANGE DNA" OVERLAY */}
+                        {/* pointerEvents="none" is crucial here so clicks pass through to the Avatar */}
+                        <View
+                            className="absolute items-center justify-center rounded-full overflow-hidden"
+                            pointerEvents="none"
+                            style={{
+                                width: 160,
+                                height: 160,
+                                zIndex: 10,
+                                // If they are rank 1, the avatar is rotated 45deg, so we counter-rotate the overlay
+                                transform: [(user?.rank || 100) === 1 ? { rotate: '-45deg' } : { rotate: '0deg' }]
+                            }}
+                        >
                             <View className="absolute inset-0 bg-black/40 items-center justify-center">
-                                <Text className="text-[10px] font-black uppercase tracking-widest text-white">Change DNA</Text>
+                                <Text className="text-[10px] font-black uppercase tracking-widest text-white">
+                                    Change DNA
+                                </Text>
                             </View>
-                        </TouchableOpacity>
+                        </View>
+
                     </View>
 
                     <View style={{ position: "absolute", left: -5, zIndex: 100 }} className="flex-col items-center">
@@ -1032,11 +1398,11 @@ export default function MobileProfilePage() {
                         <ProfileActionButton icon="card-account-details-outline" color="#f59e0b" label="Card" onPress={() => setCardPreviewVisible(true)} />
 
                         {isOnboarding && (
-                            <Animated.View 
+                            <Animated.View
                                 style={[
-                                    tooltipAnimatedStyle, 
+                                    tooltipAnimatedStyle,
                                     { position: 'absolute', left: 60, top: currentPosTop, width: 220, zIndex: 110 }
-                                ]} 
+                                ]}
                                 className="bg-blue-600 dark:bg-blue-900 rounded-2xl p-4 shadow-2xl flex-row items-start"
                             >
                                 <Animated.View style={pointerAnimatedStyle} className="absolute -left-3 top-4">
@@ -1049,33 +1415,23 @@ export default function MobileProfilePage() {
                                     <Text className="text-blue-100 text-[10px] mt-1 font-medium leading-relaxed">
                                         {onboardingSteps[onboardingStep].desc}
                                     </Text>
-                                    {/* <View className="flex-row justify-between items-center mt-3 pt-3 border-t border-blue-400/30">
+                                    <View className="flex-row justify-between items-center mt-3 pt-3 border-t border-blue-400/30">
                                         <TouchableOpacity onPress={skipOnboarding}>
                                             <Text className="text-blue-200 text-[10px] font-bold uppercase tracking-widest">Skip</Text>
                                         </TouchableOpacity>
-                                        <TouchableOpacity onPress={nextOnboardingStep} className="bg-white px-3 py-1.5 rounded-lg active:scale-95">
-                                            <Text className="text-blue-600 dark:text-blue-900 text-[10px] font-black uppercase tracking-widest">
-                                                {onboardingStep === 3 ? "Done" : "Next"}
-                                            </Text>
-                                        </TouchableOpacity>
-                                    </View> */}
-                                    <View className="flex-row justify-between items-center mt-3 pt-3 border-t border-blue-400/30">
-                                            <TouchableOpacity onPress={skipOnboarding}>
-                                                <Text className="text-blue-200 text-[10px] font-bold uppercase tracking-widest">Skip</Text>
-                                            </TouchableOpacity>
-                                            <View className="flex-row gap-2">
-                                                {onboardingStep > 0 && (
-                                                    <TouchableOpacity onPress={prevOnboardingStep} className="bg-blue-500/50 px-3 py-1.5 rounded-lg active:scale-95">
-                                                        <Text className="text-white text-[10px] font-black uppercase tracking-widest">Back</Text>
-                                                    </TouchableOpacity>
-                                                )}
-                                                <TouchableOpacity onPress={nextOnboardingStep} className="bg-white px-3 py-1.5 rounded-lg active:scale-95">
-                                                    <Text className="text-blue-600 dark:text-blue-900 text-[10px] font-black uppercase tracking-widest">
-                                                        {onboardingStep === 3 ? "Done" : "Next"}
-                                                    </Text>
+                                        <View className="flex-row gap-2">
+                                            {onboardingStep > 0 && (
+                                                <TouchableOpacity onPress={prevOnboardingStep} className="bg-blue-500/50 px-3 py-1.5 rounded-lg active:scale-95">
+                                                    <Text className="text-white text-[10px] font-black uppercase tracking-widest">Back</Text>
                                                 </TouchableOpacity>
-                                            </View>
+                                            )}
+                                            <TouchableOpacity onPress={nextOnboardingStep} className="bg-white px-3 py-1.5 rounded-lg active:scale-95">
+                                                <Text className="text-blue-600 dark:text-blue-900 text-[10px] font-black uppercase tracking-widest">
+                                                    {onboardingStep === 3 ? "Done" : "Next"}
+                                                </Text>
+                                            </TouchableOpacity>
                                         </View>
+                                    </View>
                                 </View>
                             </Animated.View>
                         )}
@@ -1083,12 +1439,24 @@ export default function MobileProfilePage() {
                 </View>
 
                 <View className="items-center mb-6">
-                    <Pressable onPress={() => setAuraModalVisible(true)} className="flex-row items-center gap-2">
-                        <Text style={{ color: isDark ? "#fff" : "#000" }} className="text-2xl font-black uppercase tracking-tighter">{username || user?.username || "GUEST"}</Text>
-                        <View className="px-2 py-0.5 rounded-full border" style={{ borderColor: dynamicAuraColor, backgroundColor: `${dynamicAuraColor}10` }}>
-                            <Text style={{ color: dynamicAuraColor, fontSize: 8, fontWeight: '900' }}>{aura.label} {currentAuraPoints}</Text>
+                    {/* ⚡️ REPLACED WITH PLAYERNAMEPLATE */}
+                    <Pressable onPress={() => setAuraModalVisible(true)} className="items-center">
+                        <PlayerNameplate
+                            author={user}
+                            themeColor={dynamicAuraColor}
+                            equippedGlow={equippedGlow}
+                            auraRank={user?.previousRank || 0} // Safe fallback added
+                            isDark={isDark}
+                            fontSize={24}
+                        />
+
+                        {/* Fixed: Replaced ${dynamicAuraColor}10 with explicit safe opacity View */}
+                        <View className="px-2 py-0.5 rounded-full border mt-1 overflow-hidden" style={{ borderColor: dynamicAuraColor }}>
+                            <View style={{ position: 'absolute', top: 0, left: 0, right: 0, bottom: 0, backgroundColor: dynamicAuraColor, opacity: 0.1 }} />
+                            <Text style={{ color: dynamicAuraColor, fontSize: 8, fontWeight: '900', zIndex: 1 }}>{aura?.label || 'NOVICE'} {currentAuraPoints}</Text>
                         </View>
                     </Pressable>
+
                     <View className="mt-3 items-center">
                         <View className="flex-row gap-1 mb-1">
                             {[...Array(10)].map((_, i) => (
@@ -1117,7 +1485,7 @@ export default function MobileProfilePage() {
             <View className="space-y-6">
                 <View className="space-y-1">
                     <Text className="text-[9px] font-black uppercase tracking-widest text-gray-400 ml-1">Display Name / Alias</Text>
-                    <TextInput value={username} onChangeText={setUsername} placeholder="Enter alias..." placeholderTextColor="#4b5563" className="w-full bg-gray-50 dark:bg-gray-900 border border-gray-100 dark:border-gray-800 p-4 rounded-2xl text-sm font-bold dark:text-white" />
+                    <TextInput defaultValue={username} onChangeText={setUsername} placeholder="Enter alias..." placeholderTextColor="#4b5563" className="w-full bg-gray-50 dark:bg-gray-900 border border-gray-100 dark:border-gray-800 p-4 rounded-2xl text-sm font-bold dark:text-white" />
                 </View>
 
                 <View className="space-y-1 mt-4">
@@ -1144,7 +1512,7 @@ export default function MobileProfilePage() {
 
                 <View className="space-y-1 mt-4">
                     <Text className="text-[9px] font-black uppercase tracking-widest text-gray-400 ml-1">Biography / Lore</Text>
-                    <TextInput multiline value={description} onChangeText={setDescription} placeholder="Write your player bio here..." placeholderTextColor="#4b5563" className="w-full bg-white dark:bg-black/40 border-2 border-gray-100 dark:border-gray-800 rounded-2xl p-4 text-sm font-medium dark:text-white min-h-[120px]" style={{ textAlignVertical: 'top' }} />
+                    <TextInput multiline defaultValue={description} onChangeText={setDescription} placeholder="Write your player bio here..." placeholderTextColor="#4b5563" className="w-full bg-white dark:bg-black/40 border-2 border-gray-100 dark:border-gray-800 rounded-2xl p-4 text-sm font-medium dark:text-white min-h-[120px]" style={{ textAlignVertical: 'top' }} />
                 </View>
 
                 <TouchableOpacity onPress={handleUpdate} disabled={isUpdating} style={{ backgroundColor: dynamicAuraColor }} className="relative w-full h-14 rounded-2xl overflow-hidden items-center justify-center mt-6">
@@ -1160,7 +1528,6 @@ export default function MobileProfilePage() {
         </View>
     ), [user, preview, description, username, isUpdating, totalPosts, copied, refCopied, rankTitle, rankIcon, progress, nextMilestone, count, showId, isDark, aura, filledBoxes, currentAuraPoints, dynamicAuraColor, pickImage, handleUpdate, captureAndShare, isOnboarding, onboardingStep, tooltipAnimatedStyle, pointerAnimatedStyle, scanAnimatedStyle, pulseAnimatedStyle, progressAnimatedStyle]);
 
-
     return (
         <View className="flex-1 bg-white dark:bg-[#0a0a0a]" style={{ paddingTop: insets.top }}>
             <AppOnboarding />
@@ -1171,7 +1538,7 @@ export default function MobileProfilePage() {
                 data={posts}
                 keyExtractor={(item) => item._id}
                 ListHeaderComponent={listHeader}
-                scrollEnabled={!isOnboarding} 
+                scrollEnabled={!isOnboarding}
                 onEndReached={() => { if (!isReachingEnd && !isValidating) setSize(size + 1); }}
                 onEndReachedThreshold={0.5}
                 renderItem={({ item }) => (
@@ -1215,7 +1582,7 @@ export default function MobileProfilePage() {
                     </View>
                 </View>
             </Modal>
-            
+
             <AuthorInventoryModal
                 setUser={setUser}
                 visible={inventoryVisible}
@@ -1232,17 +1599,17 @@ export default function MobileProfilePage() {
                         <ScrollView className="space-y-4" showsVerticalScrollIndicator={false}>
                             <View>
                                 <Text className="text-[10px] font-black uppercase text-gray-400 mb-2">Absolute GOAT Character</Text>
-                                <TextInput value={favCharacter} onChangeText={setFavCharacter} placeholder="E.G. ITACHI" placeholderTextColor="#4b5563" className="bg-gray-50 dark:bg-gray-900 p-4 rounded-2xl dark:text-white font-black italic border border-purple-500/20" />
+                                <TextInput defaultValue={favCharacter} onChangeText={setFavCharacter} placeholder="E.G. ITACHI" placeholderTextColor="#4b5563" className="bg-gray-50 dark:bg-gray-900 p-4 rounded-2xl dark:text-white font-black italic border border-purple-500/20" />
                             </View>
 
                             <View className="mt-4">
                                 <Text className="text-[10px] font-black uppercase text-gray-400 mb-2">Favorite Animes (Comma separated)</Text>
-                                <TextInput value={favAnimes} onChangeText={setFavAnimes} placeholder="One Piece, Naruto, Bleach" placeholderTextColor="#4b5563" className="bg-gray-50 dark:bg-gray-900 p-4 rounded-2xl dark:text-white font-black italic border border-purple-500/20" />
+                                <TextInput defaultValue={favAnimes} onChangeText={setFavAnimes} placeholder="One Piece, Naruto, Bleach" placeholderTextColor="#4b5563" className="bg-gray-50 dark:bg-gray-900 p-4 rounded-2xl dark:text-white font-black italic border border-purple-500/20" />
                             </View>
 
                             <View className="mt-4">
                                 <Text className="text-[10px] font-black uppercase text-gray-400 mb-2">Favorite Genres (Comma separated)</Text>
-                                <TextInput value={favGenres} onChangeText={setFavGenres} placeholder="Action, Seinen, Psychological" placeholderTextColor="#4b5563" className="bg-gray-50 dark:bg-gray-900 p-4 rounded-2xl dark:text-white font-black italic border border-purple-500/20" />
+                                <TextInput defaultValue={favGenres} onChangeText={setFavGenres} placeholder="Action, Seinen, Psychological" placeholderTextColor="#4b5563" className="bg-gray-50 dark:bg-gray-900 p-4 rounded-2xl dark:text-white font-black italic border border-purple-500/20" />
                             </View>
                         </ScrollView>
 
@@ -1265,11 +1632,12 @@ export default function MobileProfilePage() {
             <Modal visible={auraModalVisible} transparent animationType="fade">
                 <View className="flex-1 bg-black/80 items-center justify-center p-6">
                     <View className="bg-white dark:bg-[#0d1117] w-full p-8 rounded-[40px] border-2" style={{ borderColor: dynamicAuraColor }}>
-                        <MaterialCommunityIcons name={aura.icon} size={60} color={dynamicAuraColor} style={{ alignSelf: 'center', marginBottom: 20 }} />
-                        <Text style={{ color: dynamicAuraColor }} className="text-3xl font-black text-center uppercase tracking-widest mb-2">{aura.label} POWER</Text>
+                        {/* Fixed: Safe fallback for icon name to prevent another native crash */}
+                        <MaterialCommunityIcons name={aura?.icon || 'shield-outline'} size={60} color={dynamicAuraColor} style={{ alignSelf: 'center', marginBottom: 20 }} />
+                        <Text style={{ color: dynamicAuraColor }} className="text-3xl font-black text-center uppercase tracking-widest mb-2">{aura?.label || 'NOVICE'} POWER</Text>
                         <Text className="text-gray-500 text-center font-bold text-[10px] uppercase tracking-[0.3em] mb-2">Total Points: {currentAuraPoints}</Text>
                         <View className="flex-row justify-center gap-1 mb-6">{[...Array(10)].map((_, i) => (<View key={i} className="h-2 w-4 rounded-sm" style={{ backgroundColor: i < filledBoxes ? dynamicAuraColor : '#374151' }} />))}</View>
-                        <Text className="text-gray-600 dark:text-gray-400 text-center leading-7 mb-8 font-medium">{aura.description}</Text>
+                        <Text className="text-gray-600 dark:text-gray-400 text-center leading-7 mb-8 font-medium">{aura?.description || 'Operator initializing...'}</Text>
                         <TouchableOpacity onPress={() => setAuraModalVisible(false)} style={{ backgroundColor: dynamicAuraColor }} className="p-4 rounded-2xl items-center shadow-lg"><Text className="text-white font-black uppercase tracking-widest text-xs">Acknowledge</Text></TouchableOpacity>
                     </View>
                 </View>

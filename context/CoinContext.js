@@ -151,6 +151,7 @@ export const CoinProvider = ({ children }) => {
                     price: extraData.price,
                     name: extraData.name,
                     category: extraData.category,
+                    rarity: extraData.rarity,
                     visualConfig: extraData.visualData || extraData.visualConfig,
                     coinType: extraData.currency,
                     rewards: extraData.rewards,

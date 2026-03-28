@@ -160,6 +160,7 @@ export default function FirstLaunchScreen() {
         return;
       }
       if (username.trim().length < 3) return notify("Identity Weak", "Callsign must be 3+ characters.");
+      if (username.trim().length > 30) return notify("Identity Too Long", "Callsign must be less than 30 characters.");
       if (FORBIDDEN_NAMES.includes(username.toLowerCase())) return notify("Access Denied", "This callsign is restricted.");
       setStep(2);
     } else if (step === 2) {

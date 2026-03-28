@@ -20,6 +20,9 @@ export const ClanProvider = ({ children }) => {
     const [cCoins, setClanCoins] = useState(0);
     const [clanRank, setClanRank] = useState(0);
 
+    // 🔹 NEW: Track if there is an unread chat message
+    const [hasUnreadChat, setHasUnreadChat] = useState(false);
+
     // 1. Initial Load from MMKV (Synchronous)
     useEffect(() => {
         try {
@@ -86,12 +89,37 @@ export const ClanProvider = ({ children }) => {
         try {
             const res = await apiFetch(`/clans/${userClan.tag}?deviceId=${user.deviceId}`);
             const data = await res.json();
+            
             setFullData(data?.joinRequests?.length || 0);
             setClanCoins(data?.spendablePoints || 0);
             setClanRank(data?.rank);
+
+            // 🔹 NEW: Check for unread messages
+            // Note: Adjust the path to the timestamp based on how your backend returns the chat!
+            // E.g., data?.latestMessage?.createdAt OR data?.chat?.[data.chat.length - 1]?.createdAt
+            const latestMessageAt = data?.latestMessage?.createdAt || data?.messages?.[data?.messages?.length - 1]?.date; 
+            if (latestMessageAt) {
+                const lastReadStr = storage.getString(`lastReadChat_${userClan.tag}`);
+                const lastReadTime = lastReadStr ? new Date(lastReadStr).getTime() : 0;
+                const latestMsgTime = new Date(latestMessageAt).getTime();
+                if (latestMsgTime > lastReadTime) {
+                    setHasUnreadChat(true);
+                } else {
+                    setHasUnreadChat(false);
+                }
+            }
+
         } catch (err) {
             console.error("Fetch Details Error:", err);
         }
+    };
+
+    // 🔹 NEW: Call this function when the user mounts/opens the clan chat page
+    const markChatAsRead = () => {
+        if (!userClan) return;
+        const now = new Date().toISOString();
+        storage.set(`lastReadChat_${userClan.tag}`, now);
+        setHasUnreadChat(false);
     };
 
     useEffect(() => {
@@ -157,6 +185,8 @@ export const ClanProvider = ({ children }) => {
                 fullData,
                 cCoins,
                 warActionsCount,
+                hasUnreadChat, // Exported here for your UI indicators
+                markChatAsRead, // Exported here to trigger when opening chat
                 checkWarNotifications: () => checkWarNotifications(userClan?.tag),
                 refreshClanStatus: () => refreshClanStatus(user?.deviceId),
                 clearClanData,

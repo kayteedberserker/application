@@ -23,8 +23,9 @@ import { SyncLoading } from '../../components/SyncLoading';
 import { Text } from "../../components/Text";
 import apiFetch from "../../utils/apiFetch";
 
-// ⚡️ Import Peak Badge
+// ⚡️ Imports
 import PeakBadge from '../../components/PeakBadge';
+import PlayerNameplate from '../../components/PlayerNameplate'; // ⚡️ ADDED: Imported PlayerNameplate
 
 const { width } = Dimensions.get('window');
 const API_URL = "https://oreblogda.com";
@@ -219,13 +220,22 @@ export default function Leaderboard() {
 
                         {/* Operative Info */}
                         <TouchableOpacity style={{ flex: 1 }} onPress={() => DeviceEventEmitter.emit("navigateSafely", { pathname: "/author/[userId]", params: { userId: item.userId } })}>
-                            {/* ⚡️ Smaller Font Size for Username */}
-                            <Text numberOfLines={1} style={{ fontSize: 13, fontWeight: '900', color: aura ? aura.color : (isDark ? '#fff' : '#000'), letterSpacing: 0.5 }}>
-                                {(item.username || "GUEST").toUpperCase()}
-                            </Text>
+                            
+                            {/* ⚡️ REPLACED TEXT WITH PLAYERNAMEPLATE */}
+                            <PlayerNameplate 
+                                author={item} 
+                                themeColor={aura ? aura.color : (isDark ? '#fff' : '#000')} 
+                                equippedGlow={item.equippedGlow} 
+                                auraRank={item.previousRank || 999} 
+                                isDark={isDark} 
+                                fontSize={13} 
+                                showFlame={false} 
+                                showPeakBadge={false} 
+                            />
+
                             {aura && (
                                 <View style={{ backgroundColor: aura.color, paddingHorizontal: 4, borderRadius: 4, alignSelf: 'flex-start', marginTop: 2 }}>
-                                    <Text style={{ fontSize: 7, fontWeight: 'bold', color: '#000' }}>{aura.label}</Text>
+                                    <Text style={{ fontSize: 9, fontWeight: 'bold', color: '#000' }}>{aura.label}</Text>
                                 </View>
                             )}
                             <View style={{ flexDirection: 'row', alignItems: 'center', marginTop: 3 }}>
@@ -252,7 +262,7 @@ export default function Leaderboard() {
                                 <Text style={{ fontSize: 6, color: '#a78bfa', fontWeight: 'bold' }}>AURA</Text>
                                 <Text style={{ fontSize: 11, fontWeight: '900', color: '#a78bfa' }}>{auraPoints}</Text>
                             </View>
-                            {/* ⚡️ New Peak Coins Column */}
+                            {/* ⚡️ Peak Coins Column */}
                             <View style={{ alignItems: 'center', width: 34 }}>
                                 <Text style={{ fontSize: 6, color: '#10b981', fontWeight: 'bold' }}>PEAK</Text>
                                 <Text style={{ fontSize: 11, fontWeight: '900', color: '#10b981' }}>{formatCoins(purchasedCoins)}</Text>
@@ -284,9 +294,19 @@ export default function Leaderboard() {
                             </Text>
                         </View>
                         <TouchableOpacity style={{ flex: 1, paddingLeft: 10 }} onPress={() => DeviceEventEmitter.emit("navigateSafely", { pathname: "/clans/[tag]", params: { tag: item.tag } })}>
-                            <Text style={{ fontSize: 15, fontWeight: '800', color: clanTier.color, letterSpacing: 0.5 }}>
-                                {(item.name || "UNNAMED").toUpperCase()}
-                            </Text>
+                            
+                            {/* ⚡️ REPLACED TEXT WITH PLAYERNAMEPLATE FOR CLANS */}
+                            <PlayerNameplate 
+                                author={item} 
+                                themeColor={clanTier.color} 
+                                equippedGlow={item.equippedGlow} 
+                                auraRank={999} 
+                                isDark={isDark} 
+                                fontSize={15} 
+                                showFlame={false} 
+                                showPeakBadge={false} 
+                            />
+
                             <View style={{ backgroundColor: '#111', paddingHorizontal: 4, borderRadius: 4, alignSelf: 'flex-start', marginTop: 2, borderWidth: 1, borderColor: clanTier.color }}>
                                 <Text style={{ fontSize: 7, fontWeight: 'bold', color: clanTier.color }}>{item.tag}</Text>
                             </View>

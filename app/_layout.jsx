@@ -12,7 +12,6 @@ import { useColorScheme } from "nativewind";
 import { useCallback, useEffect, useRef, useState } from "react";
 import { AppState, BackHandler, DeviceEventEmitter, Platform, StatusBar, View } from "react-native";
 import Purchases from 'react-native-purchases';
-// ⚡️ Only need initialWindowMetrics to prevent Layout Shift
 import { SafeAreaProvider, initialWindowMetrics } from "react-native-safe-area-context";
 import Toast from 'react-native-toast-message';
 import { useMMKV } from 'react-native-mmkv';
@@ -33,7 +32,7 @@ let IS_NAVIGATING_GLOBAL = false;
 let LAST_PROCESSED_NOTIF_ID = null;
 let LAST_PROCESSED_URL = null;
 
-// 🔹 REVENUECAT KEYS
+// 🔹 REVENUE_CAT KEYS
 const REVENUE_CAT_API_KEYS = {
     ios: "goog_your_ios_key_here",
     android: "goog_cypWcXGzLgDujHkFvHTcUoqUNQi"
@@ -101,126 +100,91 @@ function RootLayoutContent() {
     const storage = useMMKV();
 
     const rootNavigationState = useRootNavigationState();
-    const isNavigationReady = rootNavigationState?.key != null;
+    const isNavigationReady = !!rootNavigationState?.key; // ⚡️ Check if navigation is mounted
 
     const [isUpdating, setIsUpdating] = useState(false);
     const [appReady, setAppReady] = useState(false);
 
     const appReadyRef = useRef(false);
     const pendingNavigation = useRef(null);
+
     useEffect(() => {
         const t = setTimeout(() => setMinLoadDone(true), 3000);
         return () => clearTimeout(t);
     }, []);
+
     useEffect(() => { appReadyRef.current = appReady; }, [appReady]);
 
-    // 🔹 REVENUECAT INITIALIZATION LOGIC
+    // 🔹 REVENUECAT INITIALIZATION
     useEffect(() => {
         const setupRevenueCat = async () => {
             try {
                 const isConfigured = await Purchases.isConfigured();
-
                 if (!isConfigured) {
-                    if (Platform.OS === 'ios') {
-                        await Purchases.configure({ apiKey: REVENUE_CAT_API_KEYS.ios });
-                    } else {
-                        await Purchases.configure({ apiKey: REVENUE_CAT_API_KEYS.android });
-                    }
-                    console.log("✅ RevenueCat: Configuration Complete");
+                    await Purchases.configure({ 
+                        apiKey: Platform.OS === 'ios' ? REVENUE_CAT_API_KEYS.ios : REVENUE_CAT_API_KEYS.android 
+                    });
                 }
-
                 if (user?.uid || user?.id) {
                     await Purchases.logIn(user.uid || user.id);
-                    console.log("👤 RevenueCat: User Sync Successful");
                 }
             } catch (e) {
-                console.error("❌ RevenueCat: Initialization Failed", e);
+                console.error("❌ RevenueCat Error:", e);
             }
         };
-
         setupRevenueCat();
     }, [user?.uid, user?.id]);
 
-    // ⚡️ CACHE JANITOR (Now 100% Synchronous & Fast using MMKV)
+    // ⚡️ CACHE JANITOR
     useEffect(() => {
         const runCacheJanitor = () => {
             try {
-                // Ensure storage is fully loaded before running
                 if (!storage) return;
-
                 const allKeys = storage.getAllKeys();
                 const targetPrefixes = ["POSTS_CACHE_", "CATEGORY_CACHE_", "clan_posts_", "WARS_", "CLAN_PROFILE_", "auth_cache_"];
-                const expiredTime = 48 * 60 * 60 * 1000; // 48 hours
+                const expiredTime = 48 * 60 * 60 * 1000;
                 const now = Date.now();
-
                 const keysToReview = allKeys.filter(key => targetPrefixes.some(prefix => key.startsWith(prefix)));
 
                 for (const key of keysToReview) {
                     const value = storage.getString(key);
-
-                    // If it's already empty (from our fallback), skip it!
                     if (!value) continue;
-
                     try {
                         const parsed = JSON.parse(value);
-                        if (parsed && typeof parsed === 'object' && parsed.timestamp) {
-                            if (now - parsed.timestamp > expiredTime) {
-                                // 🛡️ SAFE DELETE: Try standard delete, fallback to empty string
-                                try {
-                                    storage.delete(key);
-                                } catch (e) {
-                                    storage.set(key, "");
-                                }
-                                console.log(`🧹 Janitor: Cleared expired cache: ${key}`);
-                            }
+                        if (parsed?.timestamp && (now - parsed.timestamp > expiredTime)) {
+                            storage.delete(key);
                         }
                     } catch (e) {
-                        // 🛡️ If JSON is corrupted, wipe it safely
-                        try {
-                            storage.delete(key);
-                        } catch (fallbackErr) {
-                            storage.set(key, "");
-                        }
+                        storage.delete(key);
                     }
                 }
-            } catch (err) {
-                console.error("Janitor failed to run:", err);
-            }
+            } catch (err) { console.error("Janitor failed:", err); }
         };
-
-        // Run Janitor 30 seconds after app load so it doesn't slow down the UI
         const timeout = setTimeout(runCacheJanitor, 30000);
         return () => clearTimeout(timeout);
     }, [storage]);
 
     const currentPathRef = useRef(pathname);
-    useEffect(() => {
-        currentPathRef.current = pathname;
-    }, [pathname]);
+    useEffect(() => { currentPathRef.current = pathname; }, [pathname]);
 
     // 🔹 ROUTING PROCESSOR
     const processRouting = useCallback((data) => {
-        console.log("📍 [processRouting] Incoming Data:", JSON.stringify(data));
-        if (!data?.notificationId) return;
+        if (!data) return;
 
         const currentNotifId = data.notificationId || data.id || JSON.stringify(data);
 
-        if (IS_NAVIGATING_GLOBAL || LAST_PROCESSED_NOTIF_ID === currentNotifId) {
-            return;
-        }
+        // 🛡️ Guard against double processing and check if navigation is actually ready
+        if (IS_NAVIGATING_GLOBAL || LAST_PROCESSED_NOTIF_ID === currentNotifId) return;
 
-        if (!appReadyRef.current) {
-            console.log("⏳ [processRouting] App not ready. Queuing request...");
+        if (!appReadyRef.current || !isNavigationReady) {
+            console.log("⏳ Navigation not ready. Queueing...");
             pendingNavigation.current = data;
             return;
         }
 
         const targetPostId = data.postId || data.id || data.body?.postId;
         const targetType = data.type || data.body?.type;
-        let targetPage = null
-        if (targetType) {
-            targetPage = data.page || data.body?.page;
-        }
+        const targetPage = data.page || data.body?.page;
         const targetDiscussionId = data.discussion || data.commentId;
 
         let targetPath = "";
@@ -230,17 +194,16 @@ function RootLayoutContent() {
             targetPath = `/post/${targetPostId}`;
         } else if (targetType === "version_update") {
             targetPath = "/";
-        } else if (targetType === "screen" && targetPage == "clanprofile") {
-            targetPath = "/clanprofile"
+        } else if (targetType === "screen" && targetPage === "clanprofile") {
+            targetPath = "/clanprofile";
         }
 
         if (!targetPath) return;
 
         const currentPathBase = currentPathRef.current.split('?')[0];
         const targetPathBase = targetPath.split('?')[0];
-        const isOnSamePage = currentPathBase === targetPathBase;
-
-        if (isOnSamePage) {
+        
+        if (currentPathBase === targetPathBase) {
             if (targetDiscussionId) {
                 DeviceEventEmitter.emit("openCommentSection", { discussionId: targetDiscussionId });
             }
@@ -249,11 +212,18 @@ function RootLayoutContent() {
 
         const finalUrl = targetDiscussionId ? `${targetPath}?discussionId=${targetDiscussionId}` : targetPath;
 
+        // ⚡️ Apply Global Lock
+        IS_NAVIGATING_GLOBAL = true;
+        LAST_PROCESSED_NOTIF_ID = currentNotifId;
+
         requestAnimationFrame(() => {
             router.replace(finalUrl);
+            // Unlock after a delay to allow the router to settle
+            setTimeout(() => { IS_NAVIGATING_GLOBAL = false; }, 1000);
         });
-    }, [router]);
+    }, [router, isNavigationReady]);
 
+    // 🔹 NATIVE EVENT LISTENERS
     useEffect(() => {
         const navSub = DeviceEventEmitter.addListener("navigateSafely", (targetPath) => {
             if (currentPathRef.current === targetPath) return;
@@ -263,12 +233,10 @@ function RootLayoutContent() {
         const backHandler = BackHandler.addEventListener("hardwareBackPress", () => {
             const currentPath = currentPathRef.current;
             const isAtHome = currentPath === "/" || currentPath === "/(tabs)" || currentPath === "/index";
-
             if (router.canGoBack()) {
                 router.back();
                 return true;
             }
-
             if (!isAtHome) {
                 router.replace("/");
                 return true;
@@ -282,30 +250,23 @@ function RootLayoutContent() {
         };
     }, [router]);
 
-    useEffect(() => {
-        if (Platform.OS === 'web') {
-            setAppReady(true);
-            return;
-        }
-        setAppReady(true);
-    }, []);
+    useEffect(() => { setAppReady(true); }, []);
 
-    // 🔹 FLUSH PENDING NAVIGATION
+    // 🔹 FLUSH PENDING NAVIGATION (Now waits for isNavigationReady)
     useEffect(() => {
-        if (appReady && pendingNavigation.current) {
-            console.log("🔄 Flushing pending navigation...");
+        if (appReady && isNavigationReady && pendingNavigation.current) {
             const data = pendingNavigation.current;
             pendingNavigation.current = null;
-            setTimeout(() => processRouting(data), 150);
+            // Short delay to ensure context is fully stable
+            const timer = setTimeout(() => processRouting(data), 300);
+            return () => clearTimeout(timer);
         }
-    }, [appReady, processRouting]);
+    }, [appReady, isNavigationReady, processRouting]);
 
+    // 🔹 DEEP LINKING HANDLER
     useEffect(() => {
         const handleUrl = (url) => {
-            if (!url || isUpdating) return;
-
-            if (url === LAST_PROCESSED_URL) return;
-
+            if (!url || isUpdating || url === LAST_PROCESSED_URL) return;
             LAST_PROCESSED_URL = url;
             setTimeout(() => { LAST_PROCESSED_URL = null; }, 3000);
 
@@ -313,25 +274,19 @@ function RootLayoutContent() {
             const { path, queryParams } = parsed;
 
             if (path && path !== "/") {
-                const segments = path.split('/');
-                const pathId = segments.pop();
-                const type = segments.includes('post') ? 'post_detail' : null;
-
                 if (path.includes('post/')) {
-                    processRouting({ postId: pathId, type: type, ...queryParams });
-                } else {
-                    const currentPathBase = currentPathRef.current;
-                    if (currentPathBase !== `/${path}`) {
-                        router.replace(path);
-                    }
+                    const pathId = path.split('/').pop();
+                    processRouting({ postId: pathId, type: 'post_detail', ...queryParams });
+                } else if (currentPathRef.current !== `/${path}`) {
+                    router.replace(path);
                 }
             }
         };
-
         const subscription = Linking.addEventListener('url', (event) => handleUrl(event.url));
         return () => subscription.remove();
     }, [isUpdating, processRouting, router]);
 
+    // 🔹 UPDATE CHECKER
     useEffect(() => {
         async function onFetchUpdateAsync() {
             if (__DEV__) return;
@@ -347,7 +302,6 @@ function RootLayoutContent() {
         onFetchUpdateAsync();
     }, []);
 
-    // 🔹 PRELOADING ICON FONTS ALONGSIDE CUSTOM FONTS
     const [fontsLoaded] = useFonts({
         "SpaceGrotesk": require("../assets/fonts/SpaceGrotesk.ttf"),
         "SpaceGroteskBold": require("../assets/fonts/SpaceGrotesk.ttf"),
@@ -356,10 +310,8 @@ function RootLayoutContent() {
         ...FontAwesome.font,
     });
 
-    // ⚡️ COMPLETELY REMOVED INTERACTION MANAGER
     useEffect(() => {
         if (!fontsLoaded || isUpdating) return;
-
         const setupNotifications = async () => {
             if (Platform.OS === 'android') {
                 await notifee.createChannel({
@@ -368,10 +320,8 @@ function RootLayoutContent() {
                     importance: AndroidImportance.HIGH,
                 });
             }
-
             const token = await registerForPushNotificationsAsync();
             if (token && user?.deviceId) {
-                // Fire and forget, don't await this
                 apiFetch("https://oreblogda.com/api/users/update-push-token", {
                     method: 'POST',
                     headers: { 'Content-Type': 'application/json' },
@@ -379,7 +329,6 @@ function RootLayoutContent() {
                 }).catch(() => { });
             }
         };
-
         setupNotifications();
     }, [fontsLoaded, user?.deviceId, isUpdating]);
 
@@ -401,21 +350,15 @@ function RootLayoutContent() {
         if (isUpdating) return;
 
         const unsubscribeNotifee = notifee.onForegroundEvent(({ type, detail }) => {
-            if (type === EventType.PRESS) {
-                handleNotifeeInteraction(detail);
-            }
+            if (type === EventType.PRESS) handleNotifeeInteraction(detail);
         });
 
         notifee.getInitialNotification().then(initialNotification => {
-            if (initialNotification) {
-                handleNotifeeInteraction(initialNotification);
-            }
+            if (initialNotification) handleNotifeeInteraction(initialNotification);
         });
 
         Notifications.getLastNotificationResponseAsync().then(response => {
-            if (response) {
-                handleNotificationNavigation(response);
-            }
+            if (response) handleNotificationNavigation(response);
         });
 
         const responseSub = Notifications.addNotificationResponseReceivedListener(response => {
@@ -428,8 +371,7 @@ function RootLayoutContent() {
         };
     }, [isUpdating, handleNotifeeInteraction, handleNotificationNavigation]);
 
-    // ⚡️ REMOVED contextLoading and safeAreaReady blocks!
-    // The safe area layout jump is fixed purely by the initialWindowMetrics prop below.
+    // ⚡️ RENDER LOGIC
     if (!fontsLoaded || isUpdating || !appReady || !minLoadDone) {
         return (
             <AnimeLoading
@@ -458,7 +400,6 @@ function RootLayoutContent() {
 
 export default function RootLayout() {
     return (
-        // ⚡️ This is what fixes the layout shift natively, instantly.
         <SafeAreaProvider initialMetrics={initialWindowMetrics}>
             <UserProvider>
                 <StreakProvider>

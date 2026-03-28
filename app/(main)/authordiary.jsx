@@ -25,8 +25,8 @@ import AnimeLoading from "../../components/AnimeLoading";
 import CoinIcon from "../../components/ClanIcon";
 import { Text } from "../../components/Text";
 import THEME from "../../components/useAppTheme";
-import { useAlert } from "../../context/AlertContext"; 
-import { useClan } from "../../context/ClanContext"; 
+import { useAlert } from "../../context/AlertContext";
+import { useClan } from "../../context/ClanContext";
 import { useCoins } from "../../context/CoinContext";
 import { useStreak } from "../../context/StreakContext";
 import { useUser } from "../../context/UserContext";
@@ -118,7 +118,7 @@ export default function AuthorDiaryDashboard() {
     const [uploading, setUploading] = useState(false);
     const [submitting, setSubmitting] = useState(false);
     const [timeLeft, setTimeLeft] = useState("");
-    const [additionalSlot, setAdditionalSlot] = useState(0); 
+    const [additionalSlot, setAdditionalSlot] = useState(0);
 
     // Rank & Post Limit State
     const [userRank, setUserRank] = useState({ rankTitle: "Novice_Researcher", rankIcon: "🛡️", postLimit: 2 });
@@ -128,7 +128,7 @@ export default function AuthorDiaryDashboard() {
     const [pickedImage, setPickedImage] = useState(false);
 
     // ⚡️ Draft restoring states
-    const [saveStatus, setSaveStatus] = useState("synced"); 
+    const [saveStatus, setSaveStatus] = useState("synced");
     const [lastSavedTime, setLastSavedTime] = useState("");
     const [isOfflineMode, setIsOfflineMode] = useState(false);
 
@@ -218,7 +218,7 @@ export default function AuthorDiaryDashboard() {
     const todayPosts = useMemo(() => {
         return todayPostsData?.posts || cachedTodayPosts?.posts || [];
     }, [todayPostsData, cachedTodayPosts]);
-    
+
     const todayPost = todayPosts[0] || null;
     const postsLast24h = todayPosts.length;
     const maxPostsToday = isInClan ? userRank.postLimit + 2 + additionalSlot : userRank.postLimit + additionalSlot;
@@ -348,7 +348,7 @@ export default function AuthorDiaryDashboard() {
                 if (existingId) {
                     try {
                         await Notifications.cancelScheduledNotificationAsync(existingId);
-                    } catch (e) {}
+                    } catch (e) { }
                 }
 
                 try {
@@ -376,7 +376,7 @@ export default function AuthorDiaryDashboard() {
 
                     await AsyncStorage.setItem(COOLDOWN_NOTIFICATION_KEY, notificationId);
                     await AsyncStorage.setItem("LAST_SCHEDULED_TARGET", targetTime.toString());
-                } catch (error) {}
+                } catch (error) { }
             };
 
             scheduleDoneNotification();
@@ -498,7 +498,13 @@ export default function AuthorDiaryDashboard() {
                     const cloudData = await cloudRes.json();
                     if (cloudRes.ok) {
                         let finalUrl = cloudData.secure_url;
-                        const transform = isVideo ? "q_auto,vc_auto" : "f_auto,q_auto";
+                        const videoTransform = "c_limit,w_720,br_1.5m,q_auto,vc_auto";
+
+                        // For images, we should also limit the width so 12MP photos don't eat data
+                        const imageTransform = "c_limit,w_1080,f_auto,q_auto";
+
+                        const transform = isVideo ? videoTransform : imageTransform;
+
                         finalUrl = finalUrl.replace("/upload/", `/upload/${transform}/`);
                         uploadedAssets.push({ url: finalUrl, type: isVideo ? "video" : "image" });
                     }
@@ -579,10 +585,10 @@ export default function AuthorDiaryDashboard() {
             setMediaUrlLink("");
             setPickedImage(false);
             mutateTodayPosts();
-            
+
             // 🔹 FIX: Calculate base limit to know exactly when to clear the slot
             const baseLimit = isInClan ? userRank.postLimit + 2 : userRank.postLimit;
-            
+
             // If they have an extra slot AND this new post hits their newly extended limit
             if (additionalSlot === 1 && (todayPosts.length + 1) >= (baseLimit + 1)) {
                 setAdditionalSlot(0);
@@ -694,8 +700,8 @@ export default function AuthorDiaryDashboard() {
 
     const handleAdditionalSlot = async () => {
         if (coins < 20) {
-           CustomAlert("Insufficient OC", "You need 20 OC 🪙 to purchase additional slot. Check back daily!") 
-           return;
+            CustomAlert("Insufficient OC", "You need 20 OC 🪙 to purchase additional slot. Check back daily!")
+            return;
         }
         const result = await processTransaction("spend", 'extra_slot')
         if (result.success) {
@@ -1032,7 +1038,7 @@ export default function AuthorDiaryDashboard() {
                                                             {item.type === "video" ? (
                                                                 <Ionicons name="videocam" size={30} color={THEME.accent} />
                                                             ) : (
-                                                                <Image style={{width: "100%", height: "100%"}} source={{ uri: item.url }} contentFit="cover" />
+                                                                <Image style={{ width: "100%", height: "100%" }} source={{ uri: item.url }} contentFit="cover" />
                                                             )}
                                                         </View>
                                                         <TouchableOpacity

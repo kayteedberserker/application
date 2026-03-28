@@ -1,7 +1,7 @@
-import { MaterialCommunityIcons } from "@expo/vector-icons";
+import { MaterialCommunityIcons, Feather } from "@expo/vector-icons";
 import { useEffect } from "react";
 import { Image, ScrollView, View } from "react-native";
-import Svg, { Defs, LinearGradient, Rect, Stop, SvgXml } from 'react-native-svg';
+import Svg, { SvgXml } from 'react-native-svg';
 import Animated, {
   useSharedValue,
   useAnimatedStyle,
@@ -11,11 +11,15 @@ import Animated, {
   Easing
 } from 'react-native-reanimated';
 
+// ⚡️ IMPORTED UNIFIED COMPONENTS
 import { ClanBadge } from "./ClanBadge";
 import ClanBorder from "./ClanBorder";
 import ClanCrest from "./ClanCrest";
-import { CardWatermark } from "./SigilLibrary";
 import { Text } from "./Text";
+import PlayerNameplate from "./PlayerNameplate";
+import PlayerBackground from "./PlayerBackground";
+import PlayerWatermark from "./PlayerWatermark";
+import BadgeIcon from "./BadgeIcon";
 
 const getClanTierDetails = (title) => {
   switch (title) {
@@ -28,6 +32,11 @@ const getClanTierDetails = (title) => {
   }
 };
 
+const RemoteSvgIcon = ({ xml, size = 50, color }) => {
+    if (!xml) return <MaterialCommunityIcons name="help-circle-outline" size={size} color="gray" />;
+    return <SvgXml xml={xml} width={size} height={size} />;
+};
+
 export default function ClanCard({ clan, isDark, THEME = { card: '#0a0a0a', text: '#ffffff', border: '#262626', accent: '#3b82f6' } }) {
   if (!clan) return null;
 
@@ -36,23 +45,20 @@ export default function ClanCard({ clan, isDark, THEME = { card: '#0a0a0a', text
   const verifiedTier = clan.activeCustomizations?.verifiedTier;
   const verifiedColor = verifiedTier === "premium" ? "#facc15" : verifiedTier === "standard" ? "#ef4444" : verifiedTier === "basic" ? "#3b82f6" : "";
   const rankInfo = getClanTierDetails(clan.rankTitle || "Wandering Ronin");
-  const highlightColor = isVerified ? verifiedColor : (rankInfo.color || THEME.accent);
+  const highlightColor = rankInfo.color || THEME.accent
   
   const equippedGlow = clan.specialInventory?.find(i => i.category === 'GLOW' && i.isEquipped);
   const activeGlowColor = equippedGlow?.visualConfig?.primaryColor || equippedGlow?.visualData?.glowColor || null;
 
   const equippedBg = clan.specialInventory?.find(i => i.category === 'BACKGROUND' && i.isEquipped);
-  const bgVisual = equippedBg?.visualConfig || equippedBg?.visualData || {};
 
   const equippedBorder = clan.specialInventory?.find(i => i.category === 'BORDER' && i.isEquipped);
   const borderVisual = equippedBorder?.visualConfig || equippedBorder?.visualData || {};
 
-  // --- WATERMARK LOGIC ---
   const equippedWatermark = clan.specialInventory?.find(i => i.category === 'WATERMARK' && i.isEquipped);
-  const watermarkVisual = equippedWatermark?.visualConfig || equippedWatermark?.visualData || {};
 
-  // Get all equipped visual badges (separate from the earned medals)
-  const specialBadges = clan.specialInventory?.filter(i => i.category === 'BADGE' && i.isEquipped) || [];
+  // ⚡️ Get up to 10 equipped visual badges
+  const specialBadges = clan.specialInventory?.filter(i => i.category === 'BADGE' && i.isEquipped).slice(0, 10) || [];
 
   const nextMilestone = clan.nextThreshold || 5000;
   const currentPoints = clan.totalPoints || 0;
@@ -63,7 +69,6 @@ export default function ClanCard({ clan, isDark, THEME = { card: '#0a0a0a', text
   const rotationDegrees = useSharedValue(0);
 
   useEffect(() => {
-    // Pulse Animation (1 -> 1.1 -> 1 infinitely)
     pulseScale.value = withRepeat(
       withSequence(
         withTiming(1.1, { duration: 2000 }),
@@ -73,7 +78,6 @@ export default function ClanCard({ clan, isDark, THEME = { card: '#0a0a0a', text
       false 
     );
 
-    // Rotation Animation (0 -> 360 infinitely)
     rotationDegrees.value = withRepeat(
       withTiming(360, {
         duration: 20000,
@@ -93,40 +97,6 @@ export default function ClanCard({ clan, isDark, THEME = { card: '#0a0a0a', text
     transform: [{ rotate: `${rotationDegrees.value}deg` }]
   }));
 
-  const SpecialWatermark = () => {
-    if (!equippedWatermark) return null;
-
-    const iconSize = watermarkVisual.size || 320;
-    const iconColor = watermarkVisual.color || (isDark ? 'white' : 'black');
-
-    return (
-      <View
-        className="absolute"
-        style={{
-          bottom: -20,
-          right: -20,
-          opacity: 0.7,
-          transform: [{ rotate: watermarkVisual.rotation || '-15deg' }]
-        }}
-        pointerEvents="none"
-      >
-        {watermarkVisual.svgCode ? (
-          <SvgXml
-            xml={watermarkVisual.svgCode.replace(/currentColor/g, iconColor)}
-            width={iconSize}
-            height={iconSize}
-          />
-        ) : (
-          <MaterialCommunityIcons
-            name={watermarkVisual.icon || 'fountain-pen-tip'}
-            size={iconSize}
-            color={iconColor}
-          />
-        )}
-      </View>
-    );
-  };
-
   const CardInner = (
     <View
       className="relative p-8 overflow-hidden"
@@ -138,28 +108,9 @@ export default function ClanCard({ clan, isDark, THEME = { card: '#0a0a0a', text
         borderColor: isVerified ? highlightColor : (isDark ? '#262626' : '#f3f4f6')
       }}
     >
-      {/* --- SVG BACKGROUND GLOW --- */}
-      {equippedBg && (
-        <View className="absolute inset-0">
-          <Svg height="100%" width="100%">
-            <Defs>
-              <LinearGradient id="clanCardGrad" x1="0%" y1="0%" x2="100%" y2="100%">
-                <Stop offset="0%" stopColor={bgVisual.primaryColor || highlightColor} stopOpacity={0.15} />
-                <Stop offset="100%" stopColor={bgVisual.secondaryColor || bgVisual.primaryColor} stopOpacity={0.02} />
-              </LinearGradient>
-            </Defs>
-            <Rect x="0" y="0" width="100%" height="100%" fill="url(#clanCardGrad)" />
-          </Svg>
-        </View>
-      )}
-
-      {/* NEW SYSTEM WATERMARK */}
-      <SpecialWatermark />
-
-      {/* LEGACY SYSTEM WATERMARK (Backward compatibility) */}
-      {clan.equippedSigil && !equippedWatermark && (
-        <CardWatermark name={clan.equippedSigil} color={highlightColor} size={320} />
-      )}
+      {/* ⚡️ REPLACED HARDCODED BACKGROUND & WATERMARK */}
+      <PlayerBackground equippedBg={equippedBg} themeColor={rankInfo.color} borderRadius={35} />
+      <PlayerWatermark equippedWatermark={equippedWatermark} isDark={isDark} />
 
       <View className="items-center z-10">
         <View className="relative items-center justify-center mb-4">
@@ -167,7 +118,6 @@ export default function ClanCard({ clan, isDark, THEME = { card: '#0a0a0a', text
             style={[
               {
                 position: 'absolute', width: 140, height: 140, borderRadius: 100,
-                // ⚡️ Added fallback to highlightColor so it never sets `backgroundColor: null`
                 backgroundColor: activeGlowColor || highlightColor, 
                 opacity: 0.1
               },
@@ -176,37 +126,44 @@ export default function ClanCard({ clan, isDark, THEME = { card: '#0a0a0a', text
           />
           <Animated.View
             style={[
-              // ⚡️ FIXED: Guaranteed a valid hex code before appending '40'
               { borderColor: `${activeGlowColor || highlightColor}40`, width: 160, height: 160 },
               rotationStyle
             ]}
             className="absolute border border-dashed rounded-full"
           />
-          <ClanCrest rank={clan.rank || 1} size={130} glowColor={activeGlowColor || verifiedColor} />
+          <ClanCrest rank={clan.rank || 1} size={130} glowColor={activeGlowColor} />
         </View>
 
-        {/* Equipped Special Badges Row */}
+        <View className="flex-row items-center justify-center gap-1 mb-2">
+            {/* ⚡️ REPLACED HARDCODED TEXT WITH PLAYERNAMEPLATE */}
+            <PlayerNameplate 
+                author={{ username: clan.name }} 
+                themeColor={rankInfo.color} 
+                equippedGlow={equippedGlow} 
+                auraRank={999} // High number disables standard aura requirement checks
+                fontSize={30} 
+                isDark={isDark}
+                showPeakBadge={false} 
+                showFlame={false} 
+            />
+            {isVerified && (
+                <View className="ml-1">
+                    <RemoteSvgIcon size={24} xml={clan.activeCustomizations?.verifiedBadgeXml} />
+                </View>
+            )}
+        </View>
+
+        {/* ⚡️ EQUIPPED BADGES ROW (MAX 10) */}
         {specialBadges.length > 0 && (
-          <View className="flex-row gap-2 mb-4">
-            {specialBadges.map((badge, bIdx) => (
-              <View key={`spec-${bIdx}`} className="bg-white/5 p-1 rounded-full border border-white/10">
-                <ClanBadge badgeName={badge.id} size="xs" />
-              </View>
-            ))}
-          </View>
+            <View className="flex-row flex-wrap justify-center gap-2 mb-4">
+                {specialBadges.map((badge, bIdx) => (
+                    <BadgeIcon key={`spec-${bIdx}`} badge={badge} size={22} isDark={isDark} />
+                ))}
+            </View>
         )}
 
-        <View className="flex-row gap-2 items-center mb-1">
-          <Text className="text-3xl font-black italic uppercase tracking-tighter dark:text-white">
-            {clan.name}
-          </Text>
-          {isVerified && (
-            <RemoteSvgIcon size={24} xml={clan.activeCustomizations?.verifiedBadgeXml} />
-          )}
-        </View>
-
         <View style={{ backgroundColor: `${highlightColor}10`, borderColor: `${highlightColor}20` }} className="px-4 py-1.5 rounded-full border mb-4">
-          <Text style={{ color: activeGlowColor || highlightColor }} className="text-xs font-bold tracking-widest uppercase">#{clan.tag}</Text>
+          <Text style={{ color: activeGlowColor|| verifiedColor || highlightColor }} className="text-xs font-bold tracking-widest uppercase">#{clan.tag}</Text>
         </View>
 
         <Text className="text-sm text-gray-500 dark:text-gray-400 text-center italic px-4 mb-6">
@@ -221,7 +178,7 @@ export default function ClanCard({ clan, isDark, THEME = { card: '#0a0a0a', text
           </View>
           <View className="items-center">
             <Text className="text-[10px] font-black text-gray-400 uppercase tracking-widest mb-1">Points</Text>
-            <Text className="text-lg font-black" style={{ color: activeGlowColor || highlightColor }}>{currentPoints.toLocaleString()}</Text>
+            <Text className="text-lg font-black" style={{ color: activeGlowColor || verifiedColor || highlightColor }}>{currentPoints.toLocaleString()}</Text>
           </View>
           <View className="items-center">
             <Text className="text-[10px] font-black text-gray-400 uppercase tracking-widest mb-1">Members</Text>
@@ -229,7 +186,7 @@ export default function ClanCard({ clan, isDark, THEME = { card: '#0a0a0a', text
           </View>
         </View>
 
-        {/* Medals Container */}
+        {/* Earned Medals Container */}
         <View className="w-full flex-row justify-center items-center gap-2 mb-6">
           {clan.badges?.length > 0 ? (
             <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={{ gap: 3 }}>
@@ -246,10 +203,8 @@ export default function ClanCard({ clan, isDark, THEME = { card: '#0a0a0a', text
         <View className="w-full flex-row justify-center mb-8">
           {clan.leader && (
             <View className="flex-row items-center gap-3 bg-gray-50 dark:bg-gray-900 p-2 pr-4 rounded-full border border-gray-100 dark:border-gray-800">
-              {/* ⚡️ Fixed invisible image issue with explicit styling */}
               <Image 
                   source={{ uri: clan.leader.profilePic?.url || "https://oreblogda.com/default-avatar.png" }} 
-                  contentFit="cover"
                   style={{ width: 32, height: 32, borderRadius: 16 }} 
               />
               <View>
@@ -292,8 +247,3 @@ export default function ClanCard({ clan, isDark, THEME = { card: '#0a0a0a', text
     </View>
   );
 }
-
-const RemoteSvgIcon = ({ xml, size = 50, color }) => {
-    if (!xml) return <MaterialCommunityIcons name="help-circle-outline" size={size} color="gray" />;
-    return <SvgXml xml={xml} width={size} height={size} />;
-};

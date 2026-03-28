@@ -18,7 +18,6 @@ import {
 import { useMMKV } from 'react-native-mmkv';
 import { LegendList } from "@legendapp/list";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
-import Svg, { Defs, LinearGradient, Rect, Stop, SvgXml } from "react-native-svg";
 import ViewShot from "react-native-view-shot";
 import { ClanBadge } from "../../../components/ClanBadge";
 import ClanBorder from "../../../components/ClanBorder";
@@ -31,6 +30,12 @@ import { useAlert } from "../../../context/AlertContext";
 import { useUser } from "../../../context/UserContext";
 import apiFetch from "../../../utils/apiFetch";
 
+// ⚡️ IMPORTED EXTRACTED COMPONENTS
+import PlayerNameplate from "../../../components/PlayerNameplate";
+import PlayerBackground from "../../../components/PlayerBackground";
+import PlayerWatermark from "../../../components/PlayerWatermark";
+import BadgeIcon from "../../../components/BadgeIcon"; // ⚡️ IMPORTED BADGE ICON
+
 import AnimatedReanimated, { 
     useSharedValue, 
     withRepeat, 
@@ -40,6 +45,7 @@ import AnimatedReanimated, {
     interpolate,
     Easing
 } from "react-native-reanimated";
+import { SvgXml } from "react-native-svg";
 
 const API_BASE = "https://oreblogda.com/api";
 const { width } = Dimensions.get('window');
@@ -385,18 +391,12 @@ export default function ClanPage() {
     </View>
   ), [skeletonAnimatedStyle]);
 
-  const RemoteSvgIcon = useCallback(({ xml, size = 50, color }) => {
-    if (!xml) return <MaterialCommunityIcons name="help-circle-outline" size={size} color="gray" />;
-    return <SvgXml xml={xml} width={size} height={size} />;
-  }, []);
-
   const ListHeader = useCallback(() => {
     if (!clan && isOffline) return <ClanSkeleton />;
     if (!clan) return null;
 
     const nextMilestone = clan.nextThreshold || 5000;
     const currentPoints = clan.totalPoints || 0;
-    const progress = Math.min((currentPoints / nextMilestone) * 100, 100);
     const isVerified = clan.verifiedUntil && new Date(clan.verifiedUntil) > new Date();
     const verifiedTier = clan.activeCustomizations?.verifiedTier;
     const verifiedColor = verifiedTier === "premium" ? "#facc15" : verifiedTier === "standard" ? "#ef4444" : verifiedTier === "basic" ? "#3b82f6" : "";
@@ -408,47 +408,12 @@ export default function ClanPage() {
     const activeGlowColor = equippedGlow?.visualConfig?.primaryColor || equippedGlow?.visualData?.glowColor || null;
 
     const equippedBg = clan.specialInventory?.find(i => i.category === 'BACKGROUND' && i.isEquipped);
-    const bgVisual = equippedBg?.visualConfig || equippedBg?.visualData || {};
-
     const equippedBorder = clan.specialInventory?.find(i => i.category === 'BORDER' && i.isEquipped);
     const borderVisual = equippedBorder?.visualConfig || equippedBorder?.visualData || {};
-
     const equippedWatermark = clan.specialInventory?.find(i => i.category === 'WATERMARK' && i.isEquipped);
-    const watermarkVisual = equippedWatermark?.visualConfig || equippedWatermark?.visualData || {};
-
-    const SpecialWatermark = () => {
-      if (!equippedWatermark) return null;
-
-      const iconSize = watermarkVisual.size || 220;
-      const iconColor = watermarkVisual.color || (isDark ? 'white' : 'black');
-
-      return (
-        <View
-          className="absolute"
-          style={{
-            bottom: -20,
-            right: -20,
-            opacity: 0.7,
-            transform: [{ rotate: watermarkVisual.rotation || '-15deg' }]
-          }}
-          pointerEvents="none"
-        >
-          {watermarkVisual.svgCode ? (
-            <SvgXml
-              xml={watermarkVisual.svgCode.replace(/currentColor/g, iconColor)}
-              width={iconSize}
-              height={iconSize}
-            />
-          ) : (
-            <MaterialCommunityIcons
-              name={watermarkVisual.icon || 'fountain-pen-tip'}
-              size={iconSize}
-              color={iconColor}
-            />
-          )}
-        </View>
-      );
-    };
+    
+    // ⚡️ EXTRACT UP TO 10 EQUIPPED BADGES
+    const equippedBadges = clan.specialInventory?.filter(i => i.category === 'BADGE' && i.isEquipped).slice(0, 10) || [];
 
     return (
       <View className="px-4 pt-16 pb-4">
@@ -464,21 +429,9 @@ export default function ClanPage() {
               <View className="relative p-5 bg-white dark:bg-[#0a0a0a] shadow-2xl rounded-[35px] overflow-hidden">
                 <View className="absolute -top-10 -right-10 w-40 h-40 opacity-10 rounded-full blur-3xl" style={{ backgroundColor: rankInfo.color }} />
 
-                <SpecialWatermark />
+                <PlayerBackground equippedBg={equippedBg} themeColor={rankInfo.color} borderRadius={35} />
+                <PlayerWatermark equippedWatermark={equippedWatermark} isDark={isDark} />
 
-                {equippedBg && (
-                  <View className="absolute inset-0">
-                    <Svg height="100%" width="100%">
-                      <Defs>
-                        <LinearGradient id="clanCardGrad" x1="0%" y1="0%" x2="100%" >
-                          <Stop offset="0%" stopColor={bgVisual.primaryColor} stopOpacity={0.15} />
-                          <Stop offset="100%" stopColor={bgVisual.secondaryColor || bgVisual.primaryColor} stopOpacity={0.02} />
-                        </LinearGradient>
-                      </Defs>
-                      <Rect x="0" y="0" width="100%" height="100%" fill="url(#clanCardGrad)" />
-                    </Svg>
-                  </View>
-                )}
                 <TouchableOpacity
                   onPress={() => setCardPreviewVisible(true)}
                   className="absolute top-4 right-4 z-10 w-10 h-10 rounded-2xl bg-gray-100/80 dark:bg-gray-800/80 items-center justify-center border border-gray-200 dark:border-gray-700"
@@ -493,16 +446,34 @@ export default function ClanPage() {
                     <ClanCrest rank={clan.rank || 1} size={110} glowColor={activeGlowColor || verifiedColor} />
                   </View>
 
-                  <View className="flex-row items-center gap-1">
-                    <Text className="text-2xl font-black italic uppercase tracking-tighter dark:text-white">{clan.name}</Text>
+                  <View className="flex-row items-center gap-1 justify-center mb-2">
+                    <PlayerNameplate 
+                        author={{ username: clan.name }} 
+                        themeColor={rankInfo.color} 
+                        equippedGlow={equippedGlow} 
+                        auraRank={999} 
+                        fontSize={24} 
+                        isDark={isDark}
+                        showPeakBadge={false} 
+                        showFlame={false} 
+                    />
                     {isVerified && (
-                      <RemoteSvgIcon size={24} xml={clan.activeCustomizations?.verifiedBadgeXml} />
+                      <View className="ml-1"><SvgXml xml={clan.activeCustomizations?.verifiedBadgeXml} width={24} height={24} /></View>
                     )}
-                    <TouchableOpacity onPress={handleFollow} disabled={loadingFollow} className={`px-2 py-1.5 rounded-full border flex-row items-center gap-2 ${isFollowing ? 'border-gray-200 dark:border-gray-700 bg-gray-50 dark:bg-transparent' : 'bg-blue-600 border-blue-600'}`}>
+                    <TouchableOpacity onPress={handleFollow} disabled={loadingFollow} className={`px-2 py-1.5 rounded-full border flex-row items-center gap-2 ml-2 ${isFollowing ? 'border-gray-200 dark:border-gray-700 bg-gray-50 dark:bg-transparent' : 'bg-blue-600 border-blue-600'}`}>
                       {loadingFollow ? <ActivityIndicator size="small" color={isFollowing ? "#3b82f6" : "white"} /> :
                         <Text className={`text-[10px] font-black uppercase ${isFollowing ? 'text-gray-500 dark:text-gray-400' : 'text-white'}`}>{isFollowing ? 'Unfollow' : 'Follow'}</Text>}
                     </TouchableOpacity>
                   </View>
+
+                  {/* ⚡️ RENDER EQUIPPED BADGES HERE */}
+                  {equippedBadges.length > 0 && (
+                    <View className="flex-row flex-wrap justify-center gap-2 mb-4 mt-1">
+                      {equippedBadges.map((badge, idx) => (
+                        <BadgeIcon key={idx} badge={badge} size={20} isDark={isDark} />
+                      ))}
+                    </View>
+                  )}
 
                   <TouchableOpacity onPress={() => { Clipboard.setString(clan.tag); showAlert("COPIED", "Clan tag copied"); }} style={{ backgroundColor: `${highlightColor}10`, borderColor: `${highlightColor}20` }} className="px-4 py-1.5 flex flex-row items-center gap-1 rounded-full border mb-4">
                     <Text style={{ color: highlightColor }} className="text-xs font-bold tracking-widest uppercase">#{clan.tag}</Text>
@@ -532,7 +503,6 @@ export default function ClanPage() {
                       <TouchableOpacity onPress={() => router.push(`/author/${clan.leader._id}`)} className="flex-row items-center gap-1.5 bg-gray-50 dark:bg-gray-900 p-1 pr-2 rounded-full border border-gray-100 dark:border-gray-800">
                         <Image
                           source={{ uri: clan.leader.profilePic?.url || "https://oreblogda.com/default-avatar.png" }}
-                          contentFit="cover"
                           style={{ width: 30, height: 30, borderRadius: 16 }}
                         />
                         <Text className="text-[9px] font-bold dark:text-white">{clan.leader.username}</Text>
@@ -557,21 +527,9 @@ export default function ClanPage() {
             <View className="relative p-5 bg-white dark:bg-[#0a0a0a] shadow-2xl rounded-[35px] overflow-hidden">
               <View className="absolute -top-10 -right-10 w-40 h-40 opacity-10 rounded-full blur-3xl" style={{ backgroundColor: rankInfo.color }} />
 
-              <SpecialWatermark />
+              <PlayerBackground equippedBg={equippedBg} themeColor={rankInfo.color} borderRadius={35} />
+              <PlayerWatermark equippedWatermark={equippedWatermark} isDark={isDark} />
 
-              {equippedBg && (
-                <View className="absolute inset-0">
-                  <Svg height="100%" width="100%">
-                    <Defs>
-                      <LinearGradient id="clanCardGrad" x1="0%" y1="0%" x2="100%" >
-                        <Stop offset="0%" stopColor={bgVisual.primaryColor} stopOpacity={0.25} />
-                        <Stop offset="100%" stopColor={bgVisual.secondaryColor || bgVisual.primaryColor} stopOpacity={0.12} />
-                      </LinearGradient>
-                    </Defs>
-                    <Rect x="0" y="0" width="100%" height="100%" fill="url(#clanCardGrad)" />
-                  </Svg>
-                </View>
-              )}
               <TouchableOpacity
                 onPress={() => setCardPreviewVisible(true)}
                 className="absolute top-4 right-4 z-10 w-10 h-10 rounded-2xl bg-gray-100/80 dark:bg-gray-800/80 items-center justify-center border border-gray-200 dark:border-gray-700"
@@ -583,19 +541,37 @@ export default function ClanPage() {
                 <View className="relative items-center justify-center mb-4">
                   <AnimatedReanimated.View style={[{ position: 'absolute', width: 120, height: 120, borderRadius: 100, backgroundColor: rankInfo.color, opacity: 0.1 }, pulseAnimatedStyle]} />
                   <AnimatedReanimated.View style={[{ borderColor: `${rankInfo.color}40`, width: 140, height: 140 }, spinAnimatedStyle]} className="absolute border border-dashed rounded-full" />
-                  <ClanCrest rank={clan.rank || 1} size={110} glowColor={activeGlowColor || verifiedColor} />
+                  <ClanCrest rank={clan.rank || 1} size={110} glowColor={activeGlowColor} />
                 </View>
 
-                <View className="flex-row items-center gap-1">
-                  <Text className="text-2xl font-black italic uppercase tracking-tighter dark:text-white">{clan.name}</Text>
+                <View className="flex-row items-center gap-1 justify-center mb-2">
+                  <PlayerNameplate 
+                      author={{ username: clan.name }} 
+                      themeColor={rankInfo.color} 
+                      equippedGlow={equippedGlow} 
+                      auraRank={999} 
+                      fontSize={24} 
+                      isDark={isDark}
+                      showPeakBadge={false} 
+                      showFlame={false} 
+                  />
                   {isVerified && (
-                    <RemoteSvgIcon size={24} xml={clan.activeCustomizations?.verifiedBadgeXml} />
+                    <View className="ml-1"><SvgXml xml={clan.activeCustomizations?.verifiedBadgeXml} width={24} height={24} /></View>
                   )}
-                  <TouchableOpacity onPress={handleFollow} disabled={loadingFollow} className={`px-2 py-1.5 rounded-full border flex-row items-center gap-2 ${isFollowing ? 'border-gray-200 dark:border-gray-700 bg-gray-50 dark:bg-transparent' : 'bg-blue-600 border-blue-600'}`}>
+                  <TouchableOpacity onPress={handleFollow} disabled={loadingFollow} className={`px-2 py-1.5 rounded-full border flex-row items-center gap-2 ml-2 ${isFollowing ? 'border-gray-200 dark:border-gray-700 bg-gray-50 dark:bg-transparent' : 'bg-blue-600 border-blue-600'}`}>
                     {loadingFollow ? <ActivityIndicator size="small" color={isFollowing ? "#3b82f6" : "white"} /> :
                       <Text className={`text-[10px] font-black uppercase ${isFollowing ? 'text-gray-500 dark:text-gray-400' : 'text-white'}`}>{isFollowing ? 'Unfollow' : 'Follow'}</Text>}
                   </TouchableOpacity>
                 </View>
+
+                {/* ⚡️ RENDER EQUIPPED BADGES HERE */}
+                {equippedBadges.length > 0 && (
+                  <View className="flex-row flex-wrap justify-center gap-2 mb-4 mt-1">
+                    {equippedBadges.map((badge, idx) => (
+                      <BadgeIcon key={idx} badge={badge} size={20} isDark={isDark} />
+                    ))}
+                  </View>
+                )}
 
                 <TouchableOpacity onPress={() => { Clipboard.setString(clan.tag); showAlert("COPIED", "Clan tag copied"); }} style={{ backgroundColor: `${highlightColor}10`, borderColor: `${highlightColor}20` }} className="px-4 py-1.5 flex flex-row items-center gap-1 rounded-full border mb-4">
                   <Text style={{ color: highlightColor }} className="text-xs font-bold tracking-widest uppercase">#{clan.tag}</Text>
@@ -625,7 +601,6 @@ export default function ClanPage() {
                     <TouchableOpacity onPress={() => router.push(`/author/${clan.leader._id}`)} className="flex-row items-center gap-1.5 bg-gray-50 dark:bg-gray-900 p-1 pr-2 rounded-full border border-gray-100 dark:border-gray-800">
                       <Image
                         source={{ uri: clan.leader.profilePic?.url || "https://oreblogda.com/default-avatar.png" }}
-                        contentFit="cover"
                         style={{ width: 30, height: 30, borderRadius: 16 }}
                       />
                       <Text className="text-[9px] font-bold dark:text-white">{clan.leader.username}</Text>

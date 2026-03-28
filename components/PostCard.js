@@ -1,10 +1,10 @@
 import { Feather, Ionicons, MaterialCommunityIcons } from "@expo/vector-icons";
 import * as FileSystem from 'expo-file-system/legacy';
-import { Image } from "expo-image";
 import * as MediaLibrary from 'expo-media-library';
 import { useNavigation, usePathname, useRouter } from "expo-router";
 import { useVideoPlayer, VideoView } from "expo-video";
 import { memo, useEffect, useMemo, useState } from "react";
+import { Image } from "expo-image";
 import {
     ActivityIndicator,
     BackHandler,
@@ -29,6 +29,9 @@ import { useAlert } from "../context/AlertContext";
 import { useUser } from "../context/UserContext";
 import apiFetch from "../utils/apiFetch";
 import AuraAvatar from "./AuraAvatar";
+import PlayerWatermark from "./PlayerWatermark";
+import PlayerNameplate from "./PlayerNameplate";
+import PlayerBackground from "./PlayerBackground";
 import ClanBorder from "./ClanBorder";
 import ClanCrest from "./ClanCrest";
 import Poll from "./Poll";
@@ -36,7 +39,9 @@ import { SyncLoading } from "./SyncLoading";
 import { Text } from "./Text";
 import THEME from "./useAppTheme";
 import PeakBadge from "./PeakBadge";
-
+import BadgeIcon from "./BadgeIcon";
+import * as Clipboard from 'expo-clipboard';
+import * as Haptics from 'expo-haptics';
 const { width: SCREEN_WIDTH, height: SCREEN_HEIGHT } = Dimensions.get('window');
 const fetcher = (url) => apiFetch(url).then((res) => res.json());
 
@@ -73,11 +78,11 @@ const resolveUserRank = (totalPosts) => {
     const count = totalPosts;
     const rankTitle =
         count > 200 ? "Master_Writer" :
-        count > 150 ? "Elite_Writer" :
-        count > 100 ? "Senior_Writer" :
-        count > 50 ? "Novice_Writer" :
-        count > 25 ? "Senior_Researcher" :
-        "Novice_Researcher";
+            count > 150 ? "Elite_Writer" :
+                count > 100 ? "Senior_Writer" :
+                    count > 50 ? "Novice_Writer" :
+                        count > 25 ? "Senior_Researcher" :
+                            "Novice_Researcher";
 
     const rankIcon = count > 200 ? "👑" : count > 150 ? "💎" : count > 100 ? "🔥" : count > 50 ? "⚔️" : count > 25 ? "📜" : "🛡️";
     return { rankName: rankIcon + rankTitle };
@@ -184,9 +189,26 @@ const MediaModal = ({ isOpen, onClose, mediaItems, currentIndex, setCurrentIndex
         }
 
         return (
-            <View style={{ width: SCREEN_WIDTH, height: SCREEN_HEIGHT }}>
-                <ImageZoom cropWidth={SCREEN_WIDTH} cropHeight={SCREEN_HEIGHT} imageWidth={SCREEN_WIDTH} imageHeight={SCREEN_HEIGHT} panToMove={true} pinchToZoom={true} enableSwipeDown={true} onSwipeDown={onClose}>
-                    <Image style={{ width: SCREEN_WIDTH, height: SCREEN_HEIGHT }} source={{ uri: item.url }} contentFit="contain" onLoadStart={() => setAssetLoading(true)} onLoadEnd={() => setAssetLoading(false)} />
+            // ⚡️ FIXED: Replaced fixed height/width with flex: 1 to prevent zoom boundary clipping
+            <View style={{ flex: 1, backgroundColor: 'black' }}>
+                <ImageZoom
+                    cropWidth={SCREEN_WIDTH}
+                    cropHeight={SCREEN_HEIGHT}
+                    imageWidth={SCREEN_WIDTH}
+                    imageHeight={SCREEN_HEIGHT}
+                    panToMove={true}
+                    pinchToZoom={true}
+                    enableSwipeDown={true}
+                    onSwipeDown={onClose}
+                    style={{ flex: 1, justifyContent: 'center', alignItems: 'center' }}
+                >
+                    <Image
+                        style={{ width: SCREEN_WIDTH, height: SCREEN_HEIGHT }}
+                        source={{ uri: item.url }}
+                        contentFit="contain"
+                        onLoadStart={() => setAssetLoading(true)}
+                        onLoadEnd={() => setAssetLoading(false)}
+                    />
                 </ImageZoom>
                 {assetLoading && <View className="absolute inset-0 items-center justify-center bg-black/20"><SyncLoading message="Synchronizing Visuals" /></View>}
             </View>
@@ -231,7 +253,7 @@ const MediaModal = ({ isOpen, onClose, mediaItems, currentIndex, setCurrentIndex
     );
 };
 
-const MemoizedClanHeader = memo(({ clanInfo, postId }) => {
+const MemoizedClanHeader = memo(({ clanInfo, postId, isDark }) => {
     if (!clanInfo) return null;
 
     const isVerified = clanInfo.verifiedUntil && new Date(clanInfo.verifiedUntil) > new Date();
@@ -246,8 +268,6 @@ const MemoizedClanHeader = memo(({ clanInfo, postId }) => {
     const activeGlowColor = equippedGlow?.visualConfig?.primaryColor || equippedGlow?.visualData?.glowColor || null;
 
     const equippedBg = clanInfo.specialInventory?.find(i => i.category === 'BACKGROUND' && i.isEquipped);
-    const bgVisual = equippedBg?.visualConfig || equippedBg?.visualData || {};
-
     const equippedBorder = clanInfo.specialInventory?.find(i => i.category === 'BORDER' && i.isEquipped);
     const borderVisual = equippedBorder?.visualConfig || equippedBorder?.visualData || {};
 
@@ -259,41 +279,39 @@ const MemoizedClanHeader = memo(({ clanInfo, postId }) => {
 
     const CardContent = (
         <View
-            style={{ backgroundColor: THEME.card, borderColor: equippedBorder ? 'transparent' : (isVerified ? highlightColor : THEME.border) }}
+            style={{ backgroundColor: THEME.card, borderColor: equippedBorder ? 'transparent' : THEME.border }}
             className="flex-row items-center justify-between px-4 py-4 rounded-[28px] border-2 relative overflow-hidden"
         >
-            {equippedBg && (
-                <View className="absolute inset-0">
-                    <Svg height="100%" width="100%">
-                        <Defs>
-                            <LinearGradient id={`clanCardGradient-${postId}`} x1="0%" y1="0%" x2="100%" y2="100%">
-                                <Stop offset="0%" stopColor={bgVisual.primaryColor || '#22c55e'} stopOpacity={0.25} />
-                                <Stop offset="100%" stopColor={bgVisual.secondaryColor || bgVisual.primaryColor || '#22c55e'} stopOpacity={0.12} />
-                            </LinearGradient>
-                        </Defs>
-                        <Rect x="0" y="0" width="100%" height="100%" fill={`url(#clanCardGradient-${postId})`} />
-                    </Svg>
-                </View>
-            )}
+            <PlayerBackground
+                equippedBg={equippedBg}
+                themeColor={activeGlowColor || '#22c55e'}
+                borderRadius={28}
+            />
 
             {displayBadge && (
-                <View className="absolute -right-2 -top-4 opacity-[0.4]">
-                    <RemoteSvgIcon xml={displayBadge.visualConfig?.svgCode || displayBadge.visualData?.svgCode} size={80} />
+                <View className="absolute -right-2 -top-4 opacity-[0.4] pointer-events-none">
+                    <BadgeIcon badge={displayBadge} size={80} containerStyle="bg-transparent border-0" />
                 </View>
             )}
 
             <Pressable onPress={() => DeviceEventEmitter.emit("navigateSafely", `/clans/${clanInfo.tag}`)} className="flex-row items-center flex-1 z-10">
                 <View className="mr-4">
-                    <ClanCrest isFeed={true} rank={clanInfo.rank} size={48} glowColor={activeGlowColor || verifiedColor} />
+                    <ClanCrest isFeed={true} rank={clanInfo.rank} size={48} glowColor={activeGlowColor} />
                 </View>
                 <View>
-                    <View className="flex-row gap-2 items-center">
-                        <Text style={{ color: THEME.text }} className="text-[16px] font-black uppercase tracking-tighter italic">
-                            {clanInfo.name}
-                        </Text>
+                    <View className="flex-row gap-1 items-center">
+                        <PlayerNameplate
+                            author={{ username: clanInfo.name }} // We pass the clan name as the username
+                            themeColor={THEME.text}
+                            equippedGlow={equippedGlow} // Use the clan's glow config
+                            fontSize={16}
+                            showPeakBadge={false}
+                            showFlame={false}
+                            isDark={isDark}
+                        />
                         {isVerified && <RemoteSvgIcon size={24} xml={clanInfo.activeCustomizations?.verifiedBadgeXml} />}
                     </View>
-                    <View className="flex-row items-center mt-0.5">
+                    <View className="flex-row items-center mt-1">
                         <View style={{ backgroundColor: highlightColor }} className="w-1 h-3 mr-2 rounded-full" />
                         <Text style={{ color: THEME.textSecondary }} className="text-[10px] font-bold uppercase tracking-[0.15em] opacity-70">
                             {getClanRankTitle(clanInfo.rank)}
@@ -305,11 +323,10 @@ const MemoizedClanHeader = memo(({ clanInfo, postId }) => {
             <View className="flex-row items-center z-10 pl-4 border-l border-white/5">
                 {displayBadge && (
                     <View className="mr-[7px] items-center justify-center">
-                        <View className="bg-white/5 p-1.5 rounded-full border border-white/10">
-                            <RemoteSvgIcon xml={displayBadge.visualConfig?.svgCode || displayBadge.visualData?.svgCode} size={22} />
-                        </View>
+                        <BadgeIcon badge={displayBadge} size={22} />
                     </View>
                 )}
+
                 {clanInfo.isInWar ? (
                     <View className="items-center">
                         <View className="bg-red-500 p-2 rounded-xl rotate-45 shadow-sm shadow-red-500/50">
@@ -340,13 +357,12 @@ const MemoizedClanHeader = memo(({ clanInfo, postId }) => {
     );
 });
 
-// ⚡️ MAIN COMPONENT
-const PostCardComponent = ({ post, authorData, clanData, setPosts, isFeed, hideMedia, syncing, similarPosts, isVisible = true }) => {
+// ⚡️ MAIN COMPONENT - Removed `similarPosts` entirely
+const PostCardComponent = ({ post, authorData, clanData, setPosts, isFeed, hideMedia, syncing, isVisible = true }) => {
     const CustomAlert = useAlert();
     const { user } = useUser();
-    const colorScheme = useColorScheme();
-    const isDark = colorScheme === "dark";
-    
+    const isDark = useColorScheme() === "dark";
+
     const storage = useMMKV();
 
     const [lightbox, setLightbox] = useState({ open: false, index: 0 });
@@ -355,15 +371,16 @@ const PostCardComponent = ({ post, authorData, clanData, setPosts, isFeed, hideM
     const [liked, setLiked] = useState(false);
     const [isMediaSaved, setIsMediaSaved] = useState(false);
 
-    const author = authorData || { 
-        name: post?.authorName || "Unknown", 
-        image: null, 
-        streak: null, 
-        rank: null, 
-        postsCount: 0, 
-        equippedGlow: null, 
+    const author = authorData || {
+        name: post?.authorName || "Unknown",
+        image: null,
+        streak: null,
+        rank: null,
+        postsCount: 0,
+        equippedGlow: null,
         equippedBadges: [],
-        peakLevel: 0 
+        inventory: [],
+        peakLevel: 0
     };
     const clanInfo = clanData || null;
 
@@ -408,15 +425,15 @@ const PostCardComponent = ({ post, authorData, clanData, setPosts, isFeed, hideM
     const { data: postData, mutate } = useSWR(syncing ? null :
         post?._id ? `/posts/${post._id}` : null,
         fetcher,
-        { refreshInterval: 30000 }
+        { refreshInterval: 120000 }
     );
 
     const totalLikes = postData?.likes?.length || 0;
     const totalComments = postData?.comments?.length || 0;
     const totalViews = postData?.views || 0;
-    const totalAuthorPost = author.postsCount || 0; 
+    const totalAuthorPost = author.postsCount || 0;
     const userRank = useMemo(() => resolveUserRank(totalAuthorPost), [totalAuthorPost]);
-    
+
     useEffect(() => {
         if (!post?._id || !user?.deviceId || syncing) return;
         const handleView = async () => {
@@ -425,12 +442,12 @@ const PostCardComponent = ({ post, authorData, clanData, setPosts, isFeed, hideM
                 const storedStr = storage.getString(viewedKey);
                 const viewed = storedStr ? JSON.parse(storedStr) : [];
                 if (viewed.includes(post._id)) return;
-                
+
                 const res = await apiFetch(`/posts/${post._id}`, {
                     method: "PATCH",
                     body: JSON.stringify({ action: "view", fingerprint: user.deviceId }),
                 });
-                
+
                 if (res.ok) {
                     const newViewed = [...viewed, post._id].slice(-200);
                     storage.set(viewedKey, JSON.stringify(newViewed));
@@ -441,7 +458,6 @@ const PostCardComponent = ({ post, authorData, clanData, setPosts, isFeed, hideM
         handleView();
     }, [post?._id, user?.deviceId, syncing, storage]);
 
-    // ⚡️ FIX 1: ERROR-CHECKED LIKE FUNCTION
     const handleLike = async () => {
         if (liked || !user) {
             if (!user) {
@@ -450,65 +466,68 @@ const PostCardComponent = ({ post, authorData, clanData, setPosts, isFeed, hideM
             }
             return;
         }
-        
-        const fingerprint = user?.deviceId;
-        const previousData = postData; // Save state for rollback
 
-        // Optimistic UI Update
+        const fingerprint = user?.deviceId;
+        const previousData = postData;
+
         setLiked(true);
         mutate({ ...postData, likes: [...(postData?.likes || []), { fingerprint }] }, false);
-        
+
         try {
             const res = await apiFetch(`/posts/${post?._id}`, {
                 method: "PATCH",
                 body: JSON.stringify({ action: "like", fingerprint }),
             });
-            
-            if (!res.ok) throw new Error("Server rejected like request");
-            
-            // Only persist to local storage if successful
-            const savedLikesStr = storage.getString('user_likes');
-            const likedList = savedLikesStr ? JSON.parse(savedLikesStr) : [];
-            if (!likedList.includes(post?._id)) {
-                likedList.push(post?._id);
-                storage.set('user_likes', JSON.stringify(likedList));
+            if (res.status == 400) {
+                const savedLikesStr = storage.getString('user_likes');
+                const likedList = savedLikesStr ? JSON.parse(savedLikesStr) : [];
+                if (!likedList.includes(post?._id)) {
+                    likedList.push(post?._id);
+                    storage.set('user_likes', JSON.stringify(likedList));
+                }
+                mutate(previousData, false);
+            } else if (!res.ok) {
+                throw new Error("Server rejected like request");
+            } else {
+                const savedLikesStr = storage.getString('user_likes');
+                const likedList = savedLikesStr ? JSON.parse(savedLikesStr) : [];
+                if (!likedList.includes(post?._id)) {
+                    likedList.push(post?._id);
+                    storage.set('user_likes', JSON.stringify(likedList));
+                }
             }
         } catch (err) {
             console.error("Network Like Logic Failed", err);
-            // 🚨 ROLLBACK IF IT FAILS
             setLiked(false);
             mutate(previousData, false);
             CustomAlert("Sync Error", "Could not register your like. Please check your connection.");
         }
     };
 
-    // ⚡️ FIX 2: CACHED AND ERROR-CHECKED SHARE FUNCTION
     const handleNativeShare = async () => {
         try {
             const url = `https://oreblogda.com/post/${post?.slug || post?._id}`;
             const shareResult = await Share.share({ message: `Check out this post on Oreblogda: ${post?.title}\n${url}` });
-            
-            // Proceed only if the user actually followed through with the share action
+
             if (shareResult.action === Share.sharedAction) {
                 const sharedStr = storage.getString('user_shares');
                 const sharedList = sharedStr ? JSON.parse(sharedStr) : [];
 
-                // Skip API call if they already shared this post
                 if (!sharedList.includes(post?._id)) {
-                    const res = await apiFetch(`/posts/${post?._id}`, { 
-                        method: "PATCH", 
-                        body: JSON.stringify({ action: "share", fingerprint: user?.deviceId }) 
+                    const res = await apiFetch(`/posts/${post?._id}`, {
+                        method: "PATCH",
+                        body: JSON.stringify({ action: "share", fingerprint: user?.deviceId })
                     });
-                    
+
                     if (res.ok) {
                         sharedList.push(post?._id);
                         storage.set('user_shares', JSON.stringify(sharedList));
-                        mutate(); 
+                        mutate();
                     }
                 }
             }
-        } catch (error) { 
-            console.error("Share error", error); 
+        } catch (error) {
+            console.error("Share error", error);
         }
     };
 
@@ -555,21 +574,42 @@ const PostCardComponent = ({ post, authorData, clanData, setPosts, isFeed, hideM
         return parts;
     };
 
+    // ⚡️ INVENTORY EXTRACTION - Setup to slice up to 2 badges
     const activeGlowColor = author.equippedGlow?.visualConfig?.primaryColor || author.equippedGlow?.visualConfig?.glowColor || null;
+    const customBadges = author.equippedBadges?.slice(0, 2) || [];
+    const equippedWatermark = author.inventory?.find(i => i.category === 'WATERMARK' && i.isEquipped);
+    const handleCopyFullText = async () => {
+        // 1. Replace your custom break tags with actual newlines
+        let cleanText = post.message.replace(/br\(\)|\[br\]/g, '\n');
 
-    const customBadge = author.equippedBadges?.length > 0 ? author.equippedBadges[0] : null;
+        // 2. Strip the rest of the formatting tags, keeping only the inner text
+        cleanText = cleanText.replace(
+            /s\((.*?)\)|\[section\](.*?)\[\/section\]|h\((.*?)\)|\[h\](.*?)\[\/h\]|l\((.*?)\)|\[li\](.*?)\[\/li\]|link\((.*?)\)-text\((.*?)\)|\[source="(.*?)" text:(.*?)\]/gs,
+            (match, p1, p2, p3, p4, p5, p6, p8, p10) => p1 || p2 || p3 || p4 || p5 || p6 || p8 || p10 || ''
+        ).trim();
 
+        // 3. Save to clipboard
+        await Clipboard.setStringAsync(cleanText);
+
+        // 4. Give the user some feedback
+        Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
+        CustomAlert("Scroll Copied", "The full text has been copied to your clipboard.");
+    };
     const renderContent = useMemo(() => {
-        const maxLength = similarPosts ? 100 : 150;
+        const maxLength = 150;
+
         if (isFeed) {
             const plainText = post.message
                 .replace(/s\((.*?)\)|\[section\](.*?)\[\/section\]|h\((.*?)\)|\[h\](.*?)\[\/h\]|l\((.*?)\)|\[li\](.*?)\[\/li\]|link\((.*?)\)-text\((.*?)\)|\[source="(.*?)" text:(.*?)\]|br\(\)|\[br\]/gs, (match, p1, p2, p3, p4, p5, p6, p8, p10) => p1 || p2 || p3 || p4 || p5 || p6 || p8 || p10 || '')
                 .trim();
             const truncated = plainText.length > maxLength ? plainText.slice(0, maxLength) + "..." : plainText;
-            return <Text style={{ color: isDark ? "#9ca3af" : "#4b5563" }} className={`${similarPosts ? "text-sm" : "text-base"} leading-6`}>{truncated}</Text>;
+            return <Text style={{ color: isDark ? "#9ca3af" : "#4b5563" }} className="text-base leading-6">{truncated}</Text>;
         }
+
         const parts = parseCustomSyntax(post.message);
-        return parts.map((part, i) => {
+
+        // Map your parts normally without selectable={true}
+        const contentNodes = parts.map((part, i) => {
             switch (part.type) {
                 case "text": return <Text key={i} className="text-base leading-7 text-gray-800 dark:text-gray-200">{part.content}</Text>;
                 case "br": return <View key={i} className="h-2" />;
@@ -580,7 +620,18 @@ const PostCardComponent = ({ post, authorData, clanData, setPosts, isFeed, hideM
                 default: return null;
             }
         });
-    }, [post.message, isFeed, isDark, similarPosts]);
+
+        // Wrap everything in a Pressable to catch the long press
+        return (
+            <Pressable
+                onLongPress={handleCopyFullText}
+                delayLongPress={300} // How long they have to hold it (in milliseconds)
+            >
+                {contentNodes}
+            </Pressable>
+        );
+
+    }, [post.message, isFeed, isDark]);
 
     const renderMediaContent = () => {
         if (mediaItems.length === 0) return null;
@@ -594,7 +645,7 @@ const PostCardComponent = ({ post, authorData, clanData, setPosts, isFeed, hideM
         };
 
         return (
-            <View className="my-2 rounded-2xl overflow-hidden bg-black" style={[glassStyle, { height: similarPosts ? 200 : 300 }]}>
+            <View className="my-2 rounded-2xl overflow-hidden bg-black" style={[glassStyle, { height: 300 }]}>
                 {count === 1 ? (
                     <View className="w-full h-full relative">
                         {mediaItems[0].type?.startsWith("video") || mediaItems[0].url.toLowerCase().includes("youtube") || mediaItems[0].url.toLowerCase().includes("tiktok") ? (
@@ -653,9 +704,10 @@ const PostCardComponent = ({ post, authorData, clanData, setPosts, isFeed, hideM
     const aura = getAuraVisuals(author.rank);
     const isTop10 = author.rank > 0 && author.rank <= 10;
     const isClanPost = !!(post.clanId || post.clanTag);
-
     return (
-        <View className={`${similarPosts ? "mb-4" : "mb-8"} overflow-hidden rounded-[32px] border ${isDark ? "bg-[#0d1117] border-gray-800" : "bg-white border-gray-100 shadow-sm"}`}>
+        <View className={`mb-8 overflow-hidden rounded-[32px] border ${isDark ? "bg-[#0d1117] border-gray-800" : "bg-white border-gray-100 shadow-sm"} relative`}>
+
+            <PlayerWatermark equippedWatermark={equippedWatermark} isDark={isDark} />
 
             {isTop10 && (
                 <View className="absolute inset-0 opacity-[0.04]" style={{ backgroundColor: activeGlowColor || aura.color }} pointerEvents="none" />
@@ -663,10 +715,10 @@ const PostCardComponent = ({ post, authorData, clanData, setPosts, isFeed, hideM
 
             <View className={`h-[3px] w-full bg-blue-600 opacity-20`} />
 
-            <View className={`${similarPosts ? "p-3" : "p-4"} px-2`}>
+            <View className="p-4 px-2">
                 <View className="mb-5">
                     {isClanPost && clanInfo && (
-                        <MemoizedClanHeader clanInfo={clanInfo} postId={post._id} />
+                        <MemoizedClanHeader clanInfo={clanInfo} isDark={isDark} postId={post._id} />
                     )}
 
                     <View className="flex-row justify-between items-start">
@@ -674,18 +726,27 @@ const PostCardComponent = ({ post, authorData, clanData, setPosts, isFeed, hideM
                             <AuraAvatar author={author} glowColor={activeGlowColor} aura={aura} isTop10={isTop10} isDark={isDark} size={44} onPress={() => DeviceEventEmitter.emit("navigateSafely", `/author/${post.authorUserId}`)} />
                             <View className="flex-1">
                                 <Pressable onPress={() => DeviceEventEmitter.emit("navigateSafely", `/author/${post.authorUserId}`)}>
-                                    <View className="flex-row items-center gap-1 flex-wrap">
-                                        <Text style={{ color: isTop10 ? activeGlowColor || aura.color : (isDark ? "#60a5fa" : "#2563eb") }} className="font-[900] uppercase tracking-widest text-[12px]">
-                                            {author.name}
-                                        </Text>
-                                        <Text className="text-gray-500 font-normal"> • </Text>
+                                    <View className="flex-row items-center gap-[2px]">
+                                        <View className="flex-shrink">
+                                            <PlayerNameplate
+                                                author={author}
+                                                themeColor={activeGlowColor || (isTop10 ? aura?.color : (isDark ? "#60a5fa" : "#2563eb"))}
+                                                equippedGlow={author.equippedGlow}
+                                                auraRank={author.rank || null}
+                                                fontSize={13}
+                                                isDark={isDark}
+                                                showPeakBadge={false}
+                                                showFlame={false}
+                                            />
+                                        </View>
+                                        <Text className="text-gray-500 font-normal flex-shrink-0"> • </Text>
                                         <Ionicons name="flame" size={12} color={author.streak < 0 ? "#ef4444" : "#f97316"} />
-                                        <Text className="text-gray-500 text-[10px] font-bold">{author.streak || "0"}</Text>
+                                        <Text className="text-gray-500 text-[10px] font-bold flex-shrink-0">{author.streak || "0"}</Text>
                                     </View>
                                     {isTop10 && (
-                                        <View className="bg-white/10 px-1.5 py-0.5 rounded border flex-row items-center gap-1 mt-1" style={{ borderColor: activeGlowColor || aura.color + '40', alignSelf: 'flex-start' }}>
-                                            <MaterialCommunityIcons name={aura.icon} size={8} color={activeGlowColor || aura.color} />
-                                            <Text style={{ color: activeGlowColor || aura.color, fontSize: 7, fontWeight: '900' }}>{aura.label}</Text>
+                                        <View className="bg-white/10 px-1.5 py-0.5 rounded border flex-row items-center gap-1" style={{ borderColor: activeGlowColor || aura.color + '40', alignSelf: 'flex-start' }}>
+                                            <MaterialCommunityIcons name={aura.icon} size={10} color={activeGlowColor || aura.color} />
+                                            <Text style={{ color: activeGlowColor || aura.color, fontSize: 8, fontWeight: '900' }}>{aura.label}</Text>
                                         </View>
                                     )}
                                     <Text className="text-[10px] mt-2 text-gray-500 dark:text-gray-400 font-bold uppercase tracking-tighter">{userRank.rankName || "Verified Author"}</Text>
@@ -700,78 +761,62 @@ const PostCardComponent = ({ post, authorData, clanData, setPosts, isFeed, hideM
                             </View>
 
                             <View className="flex-row items-center gap-2 mt-2">
-                                {customBadge && (
-                                    <View className="bg-white/5 p-1 rounded-full border border-white/10 items-center justify-center">
-                                        <RemoteSvgIcon xml={customBadge.visualConfig?.svgCode || customBadge.visualData?.svgCode} size={25} />
+                                {/* ⚡️ FIXED: Render up to 2 badges safely inline */}
+                                {customBadges.length > 0 && (
+                                    <View className="flex-row items-center gap-1">
+                                        {customBadges.map((badge, idx) => (
+                                            <BadgeIcon key={idx} badge={badge} size={25} />
+                                        ))}
                                     </View>
                                 )}
-                                
-                                {author.peakLevel > 0 ? <View className="flex-row items-center gap-1 bg-purple-500/10 px-2 py-1 rounded-full border border-purple-500/30">
-                                    <PeakBadge level={author.peakLevel} size={25} />
-                                </View> : ""}
+
+                                {author.peakLevel > 0 ? (
+                                    <View className="flex-row items-center gap-1 bg-purple-500/10 px-2 py-1 rounded-full border border-purple-500/30">
+                                        <PeakBadge level={author.peakLevel} size={25} />
+                                    </View>
+                                ) : null}
                             </View>
                         </View>
                     </View>
                 </View>
 
                 <Pressable onPress={() => isFeed && DeviceEventEmitter.emit("navigateSafely", `/post/${post.slug || post?._id}`)} className="mb-4">
-                    <Text className={`font-[900] uppercase italic tracking-tighter leading-tight mb-2 ${isDark ? "text-white" : "text-gray-900"} ${similarPosts ? "text-xl" : isFeed ? "text-2xl" : "text-3xl"}`}>
+                    <Text selectable={true} className={`font-[900] uppercase italic tracking-tighter leading-tight mb-2 ${isDark ? "text-white" : "text-gray-900"} ${isFeed ? "text-2xl" : "text-3xl"}`}>
                         {post?.title}
                     </Text>
                     <View className="opacity-90">{renderContent}</View>
                 </Pressable>
 
-                <View className={`${similarPosts ? "mb-2" : "mb-4"} rounded-2xl overflow-hidden border border-gray-100 dark:border-gray-800`}>
+                <View className="mb-4 rounded-2xl overflow-hidden border border-gray-100 dark:border-gray-800">
                     {renderMediaContent()}
                 </View>
 
                 {post.poll && (
-                    <View className={similarPosts ? "mt-2 pt-3 border-t border-gray-200 dark:border-gray-800" : "mb-6 p-4 bg-gray-50 dark:bg-gray-900/50 rounded-2xl border border-gray-100 dark:border-gray-800"}>
-                        {similarPosts ? (
-                            <View className="flex-row px-3 items-center gap-2">
-                                <MaterialCommunityIcons name="poll" size={20} color={isDark ? "#60a5fa" : "#3b82f6"} />
-                                <Text className="text-sm font-black text-gray-500 uppercase tracking-widest">Includes a poll</Text>
-                            </View>
-                        ) : (
-                            <Poll poll={post.poll} postId={post?._id} deviceId={user?.deviceId} />
-                        )}
+                    <View className="mb-6 p-4 bg-gray-50 dark:bg-gray-900/50 rounded-2xl border border-gray-100 dark:border-gray-800">
+                        <Poll poll={post.poll} postId={post?._id} deviceId={user?.deviceId} />
                     </View>
                 )}
 
-                {similarPosts ? (
-                    <View className="flex-row items-center justify-between mt-2 pt-2 border-t border-gray-50 dark:border-gray-800">
-                        <View className="flex-row items-center gap-4">
-                            <View className="flex-row items-center gap-1">
-                                <Ionicons name="heart" size={14} color="#ef4444" /><Text className="text-[10px] font-bold text-gray-500">{totalLikes}</Text>
-                            </View>
-                            <View className="flex-row items-center gap-1">
-                                <MaterialCommunityIcons name="comment" size={12} color="#9ca3af" /><Text className="text-[10px] font-bold text-gray-500">{totalComments}</Text>
-                            </View>
-                        </View>
-                        <Pressable onPress={() => DeviceEventEmitter.emit("navigateSafely", `/post/${post.slug || post?._id}`)}><Text className="text-[10px] font-black text-blue-500 uppercase">View Post</Text></Pressable>
-                    </View>
-                ) : (
-                    <View className="flex-row items-center justify-between border-t border-gray-100 dark:border-gray-800 pt-4 mt-2">
-                        <View className="flex-row items-center gap-6">
-                            <Pressable onPress={handleLike} disabled={liked} className="flex-row items-center gap-2">
-                                <Ionicons name={liked ? "heart" : "heart-outline"} size={20} color={liked ? "#ef4444" : isDark ? "#9ca3af" : "#4b5563"} />
-                                <Text className={`text-xs font-black ${liked ? "text-red-500" : "text-gray-500"}`}>{totalLikes}</Text>
-                            </Pressable>
-                            <Pressable onPress={() => DeviceEventEmitter.emit("navigateSafely", `/post/${post.slug || post?._id}?comment=open`)} className="flex-row items-center gap-2">
-                                <MaterialCommunityIcons name="comment-text-outline" size={18} color={isDark ? "#9ca3af" : "#4b5563"} />
-                                <Text className="text-xs font-black text-gray-500">{totalComments}</Text>
-                            </Pressable>
-                        </View>
-                        <Pressable onPress={handleNativeShare} className="w-10 h-10 items-center justify-center bg-gray-50 dark:bg-gray-800/80 rounded-full border border-gray-200 dark:border-gray-700">
-                            <Feather name="share-2" size={16} color={isDark ? "#60a5fa" : "#2563eb"} />
+                <View className="flex-row items-center justify-between border-t border-gray-100 dark:border-gray-800 pt-4 mt-2">
+                    <View className="flex-row items-center gap-6">
+                        <Pressable onPress={handleLike} disabled={liked} className="flex-row items-center gap-2">
+                            <Ionicons name={liked ? "heart" : "heart-outline"} size={20} color={liked ? "#ef4444" : isDark ? "#9ca3af" : "#4b5563"} />
+                            <Text className={`text-xs font-black ${liked ? "text-red-500" : "text-gray-500"}`}>{totalLikes}</Text>
+                        </Pressable>
+                        <Pressable onPress={() => DeviceEventEmitter.emit("navigateSafely", `/post/${post.slug || post?._id}?comment=open`)} className="flex-row items-center gap-2">
+                            <MaterialCommunityIcons name="comment-text-outline" size={18} color={isDark ? "#9ca3af" : "#4b5563"} />
+                            <Text className="text-xs font-black text-gray-500">{totalComments}</Text>
                         </Pressable>
                     </View>
-                )}
+                    <Pressable onPress={handleNativeShare} className="w-10 h-10 items-center justify-center bg-gray-50 dark:bg-gray-800/80 rounded-full border border-gray-200 dark:border-gray-700">
+                        <Feather name="share-2" size={16} color={isDark ? "#60a5fa" : "#2563eb"} />
+                    </Pressable>
+                </View>
             </View>
 
             {lightbox.open && (
-                <MediaModal 
-                    isOpen={lightbox.open} 
+                <MediaModal
+                    isOpen={lightbox.open}
                     onClose={closeLightbox}
                     mediaItems={mediaItems}
                     currentIndex={currentAssetIndex}
@@ -787,6 +832,6 @@ const PostCardComponent = ({ post, authorData, clanData, setPosts, isFeed, hideM
 
 export default memo(PostCardComponent, (prevProps, nextProps) => {
     return prevProps.post._id === nextProps.post._id &&
-           prevProps.isVisible === nextProps.isVisible &&
-           prevProps.syncing === nextProps.syncing;
+        prevProps.isVisible === nextProps.isVisible &&
+        prevProps.syncing === nextProps.syncing;
 });
