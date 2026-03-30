@@ -1,26 +1,25 @@
-import AsyncStorage from '@react-native-async-storage/async-storage';
 import { Feather, Ionicons, MaterialCommunityIcons } from "@expo/vector-icons";
-import { useMMKV } from "react-native-mmkv";
 import * as Clipboard from 'expo-clipboard';
 import { useRouter } from 'expo-router';
 import * as Sharing from 'expo-sharing';
 import { useEffect, useMemo, useRef, useState } from 'react';
 import {
     ActivityIndicator,
-    Image,
     DeviceEventEmitter,
-    Keyboard,
     Dimensions,
+    Image,
+    Keyboard,
     Modal,
     Pressable,
     ScrollView,
     Share,
+    StyleSheet,
     TextInput,
     TouchableOpacity,
     useColorScheme,
-    View,
-    StyleSheet
+    View
 } from 'react-native';
+import { useMMKV } from "react-native-mmkv";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { SvgXml } from "react-native-svg";
 import ViewShot from "react-native-view-shot";
@@ -28,17 +27,20 @@ import ViewShot from "react-native-view-shot";
 // ⚡️ Swapped to LegendList for maximum performance
 import { LegendList } from "@legendapp/list";
 
-// ⚡️ ALL ANIMATIONS NOW STRICTLY USE REANIMATED FOR UI THREAD PERFORMANCE
+import * as Haptics from 'expo-haptics'; // ⚡️ ADD THIS
+import LottieView from 'lottie-react-native';
+import { MotiView } from 'moti';
 import Animated, {
-    useSharedValue,
+    Easing, // ⚡️ ADD THIS
+    FadeIn,
+    FadeInDown,
     useAnimatedStyle,
-    withTiming,
+    useSharedValue,
+    withDelay,
     withRepeat,
     withSequence,
-    Easing,
-    runOnJS
+    withTiming
 } from 'react-native-reanimated';
-
 import AnimeLoading from "../../components/AnimeLoading";
 import { ClanBadge } from "../../components/ClanBadge";
 import ClanBorder from "../../components/ClanBorder";
@@ -52,12 +54,236 @@ import { useClan } from '../../context/ClanContext';
 import { useCoins } from "../../context/CoinContext";
 import { useUser } from '../../context/UserContext';
 import apiFetch from "../../utils/apiFetch";
-import LottieView from 'lottie-react-native';
-import { MotiView } from 'moti';
-
 const { width, height: SCREEN_HEIGHT } = Dimensions.get("window");
 
-// 🔹 Global session tracker to ensure heavy loading only shows once per app run
+// ============================================================================
+// ✍️ PREMIUM CINEMATIC WORD REVEAL
+// ============================================================================
+const AnimatedWord = ({ word, index, style }) => {
+    const opacity = useSharedValue(0);
+    const translateY = useSharedValue(10);
+
+    useEffect(() => {
+        // ⚡️ Haptic feedback syncs perfectly with each word appearing
+        setTimeout(() => { Haptics.selectionAsync(); }, index * 60);
+        opacity.value = withDelay(index * 60, withTiming(1, { duration: 400, easing: Easing.out(Easing.ease) }));
+        translateY.value = withDelay(index * 60, withTiming(0, { duration: 400, easing: Easing.out(Easing.back(1.5)) }));
+    }, [word]);
+
+    const animStyle = useAnimatedStyle(() => ({
+        opacity: opacity.value,
+        transform: [{ translateY: translateY.value }]
+    }));
+
+    return <Animated.Text style={[style, animStyle, { marginRight: 6 }]}>{word}</Animated.Text>;
+};
+
+const PremiumTextReveal = ({ text, style }) => {
+    const lines = text.split('\n');
+    let globalWordIndex = 0;
+
+    return (
+        <View style={{ width: '100%' }}>
+            {lines.map((line, lineIndex) => (
+                <View key={`line-${lineIndex}`} style={{ flexDirection: 'row', flexWrap: 'wrap', marginBottom: line === '' ? 12 : 0 }}>
+                    {line.split(' ').map((word, wIndex) => {
+                        if (word === '') return null;
+                        const currentIndex = globalWordIndex++;
+                        return <AnimatedWord key={`word-${currentIndex}`} word={word} index={currentIndex} style={style} />;
+                    })}
+                </View>
+            ))}
+        </View>
+    );
+};
+
+// ============================================================================
+// ⚡️ FULL-SCREEN CINEMATIC ONBOARDING MODAL
+// ============================================================================
+const CinematicClanOnboarding = ({ visible, onClose, isLeader, appBlue }) => {
+    const [step, setStep] = useState(0);
+
+    // Dynamic steps based on permissions
+    const ONBOARDING_STEPS = useMemo(() => {
+        const baseSteps = [
+            {
+                // ⚡️ Groups: Dojo Tab + Shinobi Tab
+                title: "THE_SYNDICATE_DOJO",
+                intel: "SYS: COMMAND_CENTER",
+                desc: "Welcome to your Clan's hub. Track World Rank and Clan Funds in the Dojo, and inspect your fellow operatives in the Shinobi tab. Your alliance's strength is measured here.",
+                icon: "shield", // Fixed invalid icon
+                color: appBlue
+            },
+            {
+                // ⚡️ Groups: Scrolls Tab + Hall Tab
+                title: "INTEL_&_COMMS",
+                intel: "SYS: NETWORK_SYNC",
+                desc: "Read clan-exclusive Transmissions in the Scrolls tab. Coordinate real-time attack strategies with your allies in the Great Hall. Silence is defeat.",
+                icon: "chatbubbles",
+                color: "#a855f7" // Purple
+            },
+            {
+                // ⚡️ Groups: Wars Tab + Top-Right Store/Inventory Modals
+                title: "WARS_&_BLACK_MARKET",
+                intel: "SYS: COMBAT_&_ASSETS",
+                desc: "Review past combat history in the Wars tab. Tap the top-right icons to access the Black Market and Inventory, burning Clan Coins (CC) to unlock and equip legendary visual aesthetics.",
+                icon: "flame",
+                color: "#f59e0b" // Amber
+            }
+        ];
+
+        // ⚡️ Only inject this step if they are a Leader / Anbu Captain
+        if (isLeader) {
+            baseSteps.push({
+                // ⚡️ Groups: Kage Desk Tab (Admin)
+                title: "THE_KAGE_DESK",
+                intel: "SYS: ADMIN_AUTHORITY",
+                desc: "As village brass, you control the gates. Manage recruitment, approve seekers, and banish rogues from the Kage Desk.",
+                icon: "key",
+                color: "#ef4444" // Red
+            });
+        }
+
+        return baseSteps;
+    }, [isLeader, appBlue]);
+
+    if (!visible) return null;
+
+    const currentStep = ONBOARDING_STEPS[step];
+    const isLastStep = step === ONBOARDING_STEPS.length - 1;
+
+    const handleNext = () => {
+        Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
+        if (isLastStep) {
+            onClose();
+        } else {
+            setStep(s => s + 1);
+        }
+    };
+
+    const handlePrev = () => {
+        Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
+        if (step > 0) setStep(step - 1);
+    };
+
+    return (
+        <Modal transparent animationType="fade" visible={visible}>
+            {/* ⚡️ TRUE FULL SCREEN: Fills the entire device, black background */}
+            <View style={{ flex: 1, backgroundColor: '#050505', paddingHorizontal: 30, paddingTop: 60, paddingBottom: 40, justifyContent: 'space-between' }}>
+
+                <Animated.View entering={FadeIn.duration(800)} style={{ position: 'absolute', width: '100%', height: '100%' }} />
+
+                {/* --- TOP NAVIGATION BAR --- */}
+                <View style={{
+                    flexDirection: 'row',
+                    justifyContent: 'space-between',
+                    alignItems: 'center',
+                    zIndex: 10,
+                    borderBottomWidth: 1,
+                    borderBottomColor: '#1a1a1a',
+                    paddingBottom: 20
+                }}>
+                    <View style={{ width: 80 }}>
+                        {step > 0 && (
+                            <TouchableOpacity
+                                onPress={handlePrev}
+                                style={{ flexDirection: 'row', alignItems: 'center', gap: 4 }}
+                            >
+                                <Ionicons name="chevron-back" size={14} color="#60a5fa" />
+                                <Text style={{ fontSize: 10, color: '#60a5fa', fontWeight: 'bold', letterSpacing: 1 }}>PREV</Text>
+                            </TouchableOpacity>
+                        )}
+                    </View>
+
+                    <View style={{ alignItems: 'center' }}>
+                        <Text style={{ fontSize: 9, color: currentStep.color, fontWeight: 'bold', letterSpacing: 2 }}>[ SYNC_PROGRESS: {step + 1}/{ONBOARDING_STEPS.length} ]</Text>
+                    </View>
+
+                    <TouchableOpacity onPress={() => {
+                        Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
+                        onClose();
+                    }}>
+                        <Text style={{ fontSize: 10, color: '#475569', fontWeight: 'bold', letterSpacing: 1 }}>SKIP_SYNC_X</Text>
+                    </TouchableOpacity>
+                </View>
+
+                {/* --- MAIN CONTENT AREA --- */}
+                <View style={{ flex: 1, justifyContent: 'center' }}>
+                    {/* Icon Container with Glow */}
+                    <Animated.View key={`icon-${step}`} entering={FadeIn} style={{ marginBottom: 40 }}>
+                        <View style={{
+                            width: 80, height: 80, borderRadius: 24, backgroundColor: '#000',
+                            borderWidth: 1, borderColor: currentStep.color,
+                            justifyContent: 'center', alignItems: 'center',
+                            shadowColor: currentStep.color, shadowOpacity: 0.4, shadowRadius: 20,
+                            elevation: 10
+                        }}>
+                            <Ionicons name={currentStep.icon} size={40} color={currentStep.color} />
+                        </View>
+                    </Animated.View>
+
+                    {/* Text Content */}
+                    <Animated.View key={`text-${step}`} entering={FadeInDown}>
+                        <Text style={{ fontSize: 11, color: currentStep.color, fontWeight: '900', letterSpacing: 3, marginBottom: 16 }}>
+                            {currentStep.intel}
+                        </Text>
+                        <Text style={{ fontSize: 32, fontWeight: '900', color: '#fff', marginBottom: 24, lineHeight: 38, fontStyle: 'italic' }}>
+                            {currentStep.title.replace(/_/g, ' ')}
+                        </Text>
+
+                        {/* ⚡️ THE CINEMATIC REVEAL */}
+                        <PremiumTextReveal
+                            key={step} // Forces remount to restart typing animation
+                            text={currentStep.desc}
+                            style={{ fontSize: 16, color: '#94a3b8', lineHeight: 26, fontWeight: '500' }}
+                        />
+                    </Animated.View>
+                </View>
+
+                {/* --- FOOTER CONTROLS --- */}
+                <View style={{ marginTop: 20 }}>
+                    {/* Progress Dots */}
+                    <View style={{ flexDirection: 'row', gap: 8, marginBottom: 40, justifyContent: 'center' }}>
+                        {ONBOARDING_STEPS.map((_, i) => (
+                            <View key={i} style={{
+                                height: 4, width: i === step ? 32 : 8, borderRadius: 10,
+                                backgroundColor: i === step ? currentStep.color : '#1e293b'
+                            }} />
+                        ))}
+                    </View>
+
+                    {/* Main Action Button */}
+                    <TouchableOpacity
+                        onPress={handleNext}
+                        activeOpacity={0.8}
+                        style={{
+                            backgroundColor: currentStep.color,
+                            paddingVertical: 20, borderRadius: 20,
+                            alignItems: 'center', flexDirection: 'row',
+                            justifyContent: 'center', gap: 12,
+                            shadowColor: currentStep.color, shadowOpacity: 0.3, shadowRadius: 10
+                        }}
+                    >
+                        <Animated.View entering={FadeIn} style={{ flexDirection: 'row', alignItems: 'center', gap: 10 }}>
+                            <Text style={{ color: '#000', fontWeight: '900', fontSize: 14, letterSpacing: 2 }}>
+                                {isLastStep ? "INITIALIZE_DOJO" : "NEXT_SYNC_LEVEL"}
+                            </Text>
+                            <Ionicons
+                                name={isLastStep ? "flash" : "chevron-forward"}
+                                size={20}
+                                color="#000"
+                            />
+                        </Animated.View>
+                    </TouchableOpacity>
+                </View>
+            </View>
+        </Modal>
+    );
+};
+
+// =================================================================
+// MAIN COMPONENT
+// =================================================================
 let HAS_SHOWN_SESSION_LOADER = false;
 
 const ClanProfile = () => {
@@ -65,7 +291,6 @@ const ClanProfile = () => {
 
     const CustomAlert = useAlert();
     const { user } = useUser();
-    // 🔹 Extract hasUnreadChat and markChatAsRead from the context
     const { userClan, isLoading: clanLoading, canManageClan, userRole, hasUnreadChat, markChatAsRead } = useClan();
     const insets = useSafeAreaInsets();
     const router = useRouter();
@@ -79,14 +304,16 @@ const ClanProfile = () => {
     // 💬 Chat State
     const [localMessages, setLocalMessages] = useState([]);
     const flatListRef = useRef(null);
-
-    // 🔹 Scroll tracking for "Back to Top" button
     const [showTopButton, setShowTopButton] = useState(false);
 
     // Modals
     const [storeModalVisible, setStoreModalVisible] = useState(false);
     const [inventoryModalVisible, setInventoryModalVisible] = useState(false);
     const [isProcessingAction, setIsProcessingAction] = useState(false);
+
+    // ⚡️ ONBOARDING STATE
+    const [showOnboarding, setShowOnboarding] = useState(false);
+
     const colorScheme = useColorScheme();
     const isDark = colorScheme === "dark";
 
@@ -118,14 +345,27 @@ const ClanProfile = () => {
     const { coins, clanCoins, processTransaction, isProcessingTransaction } = useCoins();
 
     const CACHE_KEY = `@clan_data_${userClan?.tag}`;
+    const ONBOARDING_KEY = `@has_seen_clan_onboarding_${userClan?.tag}`;
 
     useEffect(() => {
         if (fullData?.messages) {
             setLocalMessages(fullData.messages);
         }
-    }, [fullData?.messages]);
 
-    // 🔹 NEW: Mark chat as read when the Hall tab is active or messages update while in the Hall
+        // ⚡️ Check Onboarding exactly when fullData is ready
+        if (fullData && !loading) {
+            const hasSeenOnboarding = storage.getBoolean(ONBOARDING_KEY);
+            if (!hasSeenOnboarding) {
+                setShowOnboarding(true);
+            }
+        }
+    }, [fullData, loading]);
+
+    const finishOnboarding = () => {
+        storage.set(ONBOARDING_KEY, true);
+        setShowOnboarding(false);
+    };
+
     useEffect(() => {
         if (activeTab === 'Hall') {
             markChatAsRead();
@@ -144,35 +384,15 @@ const ClanProfile = () => {
     }, [fullData]);
 
     useEffect(() => {
-        // Continuous 360 Spin
-        scanAnim.value = withRepeat(
-            withTiming(1, { duration: 10000, easing: Easing.linear }),
-            -1, // Infinite
-            false // Don't reverse
-        );
-
-        // Continuous Pulse (Scale Up & Down)
+        scanAnim.value = withRepeat(withTiming(1, { duration: 10000, easing: Easing.linear }), -1, false);
         pulseAnim.value = withRepeat(
-            withSequence(
-                withTiming(1.05, { duration: 2500 }),
-                withTiming(1, { duration: 2500 })
-            ),
-            -1, // Infinite
-            false
+            withSequence(withTiming(1.05, { duration: 2500 }), withTiming(1, { duration: 2500 })),
+            -1, false
         );
     }, []);
 
-    const spinStyle = useAnimatedStyle(() => {
-        return {
-            transform: [{ rotate: `${scanAnim.value * 360}deg` }]
-        };
-    });
-
-    const pulseStyle = useAnimatedStyle(() => {
-        return {
-            transform: [{ scale: pulseAnim.value }]
-        };
-    });
+    const spinStyle = useAnimatedStyle(() => ({ transform: [{ rotate: `${scanAnim.value * 360}deg` }] }));
+    const pulseStyle = useAnimatedStyle(() => ({ transform: [{ scale: pulseAnim.value }] }));
 
     // =================================================================
 
@@ -190,7 +410,7 @@ const ClanProfile = () => {
     const initializeClanData = async () => {
         try {
             const cachedData = storage.getString(CACHE_KEY);
-            if (cachedData) {
+            if (cachedData && cachedData !== "") {
                 const parsed = JSON.parse(cachedData);
                 setFullData(parsed);
                 setLocalMessages(parsed.messages || []);
@@ -201,7 +421,6 @@ const ClanProfile = () => {
             }
             await fetchFullDetails();
         } catch (err) {
-            console.error("Cache Initialization Error:", err);
             fetchFullDetails();
         }
     };
@@ -224,9 +443,7 @@ const ClanProfile = () => {
             const data = await res.json();
             setFullData(data);
             setEditData({ name: data.name, description: data.description, logo: data.logo });
-
             storage.set(CACHE_KEY, JSON.stringify(data));
-
             HAS_SHOWN_SESSION_LOADER = true;
         } catch (err) {
             console.error("Fetch Details Error:", err);
@@ -317,7 +534,8 @@ const ClanProfile = () => {
                 if (action === "EDIT_CLAN") setIsEditing(false);
                 if (action === "BUY_STORE_ITEM") CustomAlert("Success", `'${payload.itemName || 'Item'}' applied to the village.`);
                 if (action === "LEAVE_CLAN") {
-                    storage.delete(CACHE_KEY);
+                    storage.set(CACHE_KEY, "");
+                    storage.set(ONBOARDING_KEY, false); // Clean up onboarding flag on leave
                     CustomAlert("Deserted", "You have left the village.");
                     router.replace('/clans');
                 }
@@ -448,7 +666,6 @@ const ClanProfile = () => {
             <View className="p-8 px-2 mt-10 items-center border-b border-gray-100 dark:border-zinc-900">
                 <View className="w-full flex-row justify-center items-center relative">
                     <View className="relative">
-                        {/* ⚡️ USING REANIMATED STYLES */}
                         <Animated.View
                             style={[
                                 {
@@ -585,7 +802,6 @@ const ClanProfile = () => {
 
             <View className="flex-row px-4 border-b border-gray-100 dark:border-zinc-900 mb-6">
                 {['Dojo', 'Shinobi', 'Wars', 'Scrolls', "Hall", canManageClan && 'Kage Desk'].filter(Boolean).map(tab => {
-                    // 🔹 Determine if there is a notification for this specific tab
                     const isHallUnread = tab === 'Hall' && hasUnreadChat && activeTab !== 'Hall';
                     const hasJoinReqs = tab === 'Kage Desk' && fullData?.joinRequests?.length > 0;
 
@@ -595,11 +811,9 @@ const ClanProfile = () => {
                                 <Text style={{ color: activeTab === tab ? APP_BLUE : '#9ca3af' }} className={`font-black text-[8px] uppercase tracking-widest`}>
                                     {tab}
                                 </Text>
-                                {/* Indicator for Chat */}
                                 {isHallUnread && (
                                     <View className="absolute -top-1 -right-2 w-1.5 h-1.5 bg-red-500 rounded-full" />
                                 )}
-                                {/* Indicator for Join Requests */}
                                 {hasJoinReqs && (
                                     <View className="absolute -top-1.5 -right-3 bg-red-500 rounded-full px-1 min-w-[12px] items-center justify-center">
                                         <Text className="text-[6px] text-white font-black">{fullData.joinRequests.length}</Text>
@@ -652,7 +866,6 @@ const ClanProfile = () => {
 
     return (
         <View style={{ flex: 1 }}>
-            {/* ⚡️ Swapped FlatList to LegendList for optimal dynamic cell height rendering */}
             <LegendList
                 ref={flatListRef}
                 onScroll={handleScroll}
@@ -834,7 +1047,6 @@ const ClanProfile = () => {
                 )}
             />
 
-            {/* 🔹 Back to Top Floating Button (Shown when in Hall and scrolled down) */}
             {activeTab === 'Hall' && showTopButton && (
                 <TouchableOpacity
                     onPress={scrollToTop}
@@ -868,6 +1080,14 @@ const ClanProfile = () => {
                 isDark={isDark}
                 user={user}
                 fetchFullDetails={fetchFullDetails}
+            />
+
+            {/* ⚡️ MOUNT THE CINEMATIC ONBOARDING MODAL */}
+            <CinematicClanOnboarding
+                visible={showOnboarding}
+                onClose={finishOnboarding}
+                isLeader={canManageClan}
+                appBlue={APP_BLUE}
             />
         </View>
     );
@@ -1209,7 +1429,7 @@ const ClanStoreModal = ({ visible, fetchFullDetails, onClose, isDark, clan }) =>
             try {
                 // Failsafe: just in case the catalog is empty
                 if (catalog.themes.length === 0 && catalog.standaloneItems.length === 0) {
-                    setLoading(true); 
+                    setLoading(true);
                 }
 
                 const res = await apiFetch(`/store?type=clan`);
@@ -1220,7 +1440,7 @@ const ClanStoreModal = ({ visible, fetchFullDetails, onClose, isDark, clan }) =>
                         themes: data.catalog.themes || [],
                         standaloneItems: data.catalog.standaloneItems || []
                     };
-                    
+
                     setCatalog(newCatalog);
                     storage.set(CACHE_KEY, JSON.stringify(newCatalog));
                     hasFetchedThisSession.current = true;

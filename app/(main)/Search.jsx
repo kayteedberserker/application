@@ -13,7 +13,6 @@ import {
     useColorScheme,
     View
 } from "react-native";
-// ⚡️ Swapped FlashList for LegendList
 import { LegendList } from "@legendapp/list"; 
 import Animated, { FadeIn, FadeInDown, Layout } from "react-native-reanimated";
 import { SafeAreaView } from 'react-native-safe-area-context';
@@ -22,41 +21,68 @@ import { Text } from "../../components/Text";
 import apiFetch from "../../utils/apiFetch";
 
 import { SyncLoading } from "../../components/SyncLoading";
-// ⚡️ Imported PeakBadge
 import PeakBadge from "../../components/PeakBadge";
 
-// --- HELPER: RESOLVE WRITER RANK ---
-const resolveUserRank = (totalPosts) => {
-    const count = totalPosts || 0;
-    if (count >= 200) return { title: "MASTER_WRITER", icon: "👑", color: "#fbbf24", next: 500 };
-    if (count > 150) return { title: "ELITE_WRITER", icon: "💎", color: "#60a5fa", next: 200 };
-    if (count > 100) return { title: "SENIOR_WRITER", icon: "🔥", color: "#f87171", next: 150 };
-    if (count > 50) return { title: "NOVICE_WRITER", icon: "⚔️", color: "#a78bfa", next: 100 };
-    if (count > 25) return { title: "RESEACHER_SR", icon: "📜", color: "#34d399", next: 50 };
-    return { title: "RESEACHER_JR", icon: "🛡️", color: "#94a3b8", next: 25 };
+// ⚡️ HELPER: RESOLVE AURA TIER (Weekly Glory)
+const getAuraTier = (rank) => {
+    const MONARCH_GOLD = '#fbbf24';
+    const CRIMSON_RED = '#ef4444';
+    const SHADOW_PURPLE = '#a855f7';
+    const STEEL_BLUE = '#3b82f6';
+    const REI_WHITE = '#e0f2fe';
+
+    if (!rank || rank > 10 || rank <= 0) return { color: '#3b82f6', label: 'ACTIVE', icon: 'radar' };
+    switch (rank) {
+        case 1: return { color: MONARCH_GOLD, label: 'MONARCH', icon: 'crown' };
+        case 2: return { color: CRIMSON_RED, label: 'YONKO', icon: 'flare' };
+        case 3: return { color: SHADOW_PURPLE, label: 'KAGE', icon: 'moon-waxing-crescent' };
+        case 4: return { color: STEEL_BLUE, label: 'SHOGUN', icon: 'shield-star' };
+        case 5: return { color: REI_WHITE, label: 'ESPADA 0', icon: 'skull' };
+        case 6: return { color: '#cbd5e1', label: 'ESPADA 1', icon: 'sword-cross' };
+        case 7: return { color: '#94a3b8', label: 'ESPADA 2', icon: 'sword-cross' };
+        case 8: return { color: '#64748b', label: 'ESPADA 3', icon: 'sword-cross' };
+        case 9: return { color: '#475569', label: 'ESPADA 4', icon: 'sword-cross' };
+        case 10: return { color: '#334155', label: 'ESPADA 5', icon: 'sword-cross' };
+        default: return { color: '#1e293b', label: 'VANGUARD', icon: 'shield-check' };
+    }
+};
+
+// ⚡️ HELPER: RESOLVE RPG CLASS (Lifetime Aura)
+export const AURA_TIERS = [
+  { level: 1, req: 0, title: "E-Rank Novice", icon: "🌱", color: "#94a3b8" },
+  { level: 2, req: 100, title: "D-Rank Operative", icon: "⚔️", color: "#34d399" }, 
+  { level: 3, req: 300, title: "C-Rank Awakened", icon: "🔥", color: "#f87171" }, 
+  { level: 4, req: 700, title: "B-Rank Elite", icon: "⚡", color: "#a78bfa" }, 
+  { level: 5, req: 1500, title: "A-Rank Champion", icon: "🛡️", color: "#60a5fa" }, 
+  { level: 6, req: 3000, title: "S-Rank Legend", icon: "🌟", color: "#fcd34d" }, 
+  { level: 7, req: 6000, title: "SS-Rank Mythic", icon: "🌀", color: "#f472b6" }, 
+  { level: 8, req: 12000, title: "Monarch", icon: "👑", color: "#fbbf24" }, 
+];
+
+const resolveUserRank = (level, currentAura) => {
+    const safeLevel = Math.max(1, Math.min(8, level || 1));
+    const currentTier = AURA_TIERS[safeLevel - 1];
+    
+    return { 
+        title: currentTier.title.toUpperCase().replace(/ /g, "_"), 
+        icon: currentTier.icon, 
+        color: currentTier.color 
+    };
+};
+
+const formatCoins = (num) => {
+    if (!num) return "0";
+    if (num >= 1000000) return Math.floor(num / 1000000) + 'M+';
+    if (num >= 1000) return Math.floor(num / 1000) + 'k+';
+    return num.toString();
 };
 
 // --- AUTHOR CARD COMPONENT ---
 const AuthorCard = ({ author, isDark }) => {
-    const getAuraVisuals = (rank) => {
-        if (!rank || rank > 10 || rank <= 0) return { color: isDark ? '#1e293b' : '#cbd5e1', label: 'OPERATIVE', icon: 'target' };
-        switch (rank) {
-            case 1: return { color: '#fbbf24', label: 'MONARCH', icon: 'crown' };
-            case 2: return { color: '#ef4444', label: 'YONKO', icon: 'flare' };
-            case 3: return { color: '#a855f7', label: 'KAGE', icon: 'moon-waxing-crescent' };
-            case 4: return { color: '#3b82f6', label: 'SHOGUN', icon: 'shield-star' };
-            case 5: return { color: '#e0f2fe', label: 'ESPADA 0', icon: 'skull' }; 
-            case 6: return { color: '#cbd5e1', label: 'ESPADA 1', icon: 'sword-cross' };
-            case 7: return { color: '#94a3b8', label: 'ESPADA 2', icon: 'sword-cross' };
-            case 8: return { color: '#64748b', label: 'ESPADA 3', icon: 'sword-cross' };
-            case 9: return { color: '#475569', label: 'ESPADA 4', icon: 'sword-cross' };
-            case 10: return { color: '#334155', label: 'ESPADA 5', icon: 'sword-cross' };
-            default: return { color: '#1e293b', label: 'OPERATIVE', icon: 'target' };
-        }
-    };
-
-    const tier = getAuraVisuals(author.previousRank);
-    const writerRank = resolveUserRank(author.postsCount);
+    // ⚡️ Read RPG Class
+    const writerRank = resolveUserRank(author.currentRankLevel, author.aura);
+    // ⚡️ Read Weekly Glory
+    const tier = getAuraTier(author.previousRank);
 
     return (
         <Animated.View entering={FadeInDown.duration(400)} layout={Layout.springify()}>
@@ -80,7 +106,6 @@ const AuthorCard = ({ author, isDark }) => {
                                 <Text numberOfLines={1} className={`font-black italic uppercase tracking-tighter text-lg ${isDark ? 'text-white' : 'text-black'}`}>
                                     {author.username}
                                 </Text>
-                                {/* ⚡️ Peak Badge Next to Name */}
                                 {(author.peakLevel && author.peakLevel > 0) ? (
                                     <View className="ml-1">
                                         <PeakBadge level={author.peakLevel} size={20} />
@@ -93,6 +118,7 @@ const AuthorCard = ({ author, isDark }) => {
                             </View>
                         </View>
 
+                        {/* ⚡️ RENDER RPG CLASS TITLE */}
                         <View className="flex-row items-center mb-1">
                             <Text className="text-[10px] font-black italic" style={{ color: writerRank.color }}>
                                 {writerRank.icon} {writerRank.title}
@@ -109,13 +135,17 @@ const AuthorCard = ({ author, isDark }) => {
                                     <Ionicons name="flame" size={12} color="#f97316" />
                                     <Text className="text-[10px] font-bold ml-1 text-zinc-500">{author.lastStreak || 0}</Text>
                                 </View>
+                                {/* ⚡️ Still showing Docs count as requested */}
                                 <View className="flex-row items-center">
                                     <Ionicons name="document-text" size={12} color="#3b82f6" />
-                                    <Text className="text-[10px] font-bold ml-1 text-zinc-500">{author.postsCount || 0}</Text>
+                                    <Text className="text-[10px] font-bold ml-1 text-zinc-500">{formatCoins(author.postsCount)}</Text>
                                 </View>
                             </View>
+                            {/* ⚡️ Render Lifetime Aura (instead of just weekly) */}
                             <View className={`${isDark ? 'bg-zinc-800' : 'bg-zinc-100'} px-2 py-0.5 rounded-full border ${isDark ? 'border-zinc-700' : 'border-zinc-200'}`}>
-                                <Text style={{ color: tier.color }} className="text-[9px] font-black uppercase">AURA: {author.weeklyAura || 0}</Text>
+                                <Text style={{ color: writerRank.color }} className="text-[9px] font-black uppercase tracking-widest">
+                                    AURA: {formatCoins(author.aura || 0)}
+                                </Text>
                             </View>
                         </View>
                     </View>
@@ -123,6 +153,23 @@ const AuthorCard = ({ author, isDark }) => {
             </TouchableOpacity>
         </Animated.View>
     );
+};
+
+const resolveClanTier = (rank) => {
+    const CLAN_TIERS = {
+        6: { label: 'VI', color: '#ef4444', title: "The Akatsuki" },        
+        5: { label: 'V', color: '#e0f2fe', title: "The Espada" },          
+        4: { label: 'IV', color: '#a855f7', title: "Phantom Troupe" },        
+        3: { label: 'III', color: '#60a5fa', title: "Upper Moon" },          
+        2: { label: 'II', color: '#10b981', title: "Squad 13" },   
+        1: { label: 'I', color: '#94a3b8', title: "Wandering Ronin" },          
+    };
+    if (rank === 1) return CLAN_TIERS[1];
+    if (rank <= 3) return CLAN_TIERS[2];
+    if (rank <= 10) return CLAN_TIERS[3];
+    if (rank <= 25) return CLAN_TIERS[4];
+    if (rank <= 50) return CLAN_TIERS[5];
+    return CLAN_TIERS[6];
 };
 
 const ClanCard = ({ clan, isDark }) => {
@@ -186,14 +233,14 @@ const ClanCard = ({ clan, isDark }) => {
                             <View className="flex-row items-center">
                                 <Ionicons name="people" size={12} color={isDark ? "#a1a1aa" : "#71717a"} />
                                 <Text className={`text-[10px] font-bold ml-1.5 ${isDark ? 'text-zinc-400' : 'text-zinc-500'}`}>
-                                    {clan.memberCount || 0}
+                                    {formatCoins(clan.memberCount || 0)}
                                 </Text>
                             </View>
 
                             <View className="flex-row items-center">
                                 <Ionicons name="heart" size={12} color="#f472b6" />
                                 <Text className={`text-[10px] font-bold ml-1.5 ${isDark ? 'text-zinc-400' : 'text-zinc-500'}`}>
-                                    {clan.followerCount || 0}
+                                    {formatCoins(clan.followerCount || 0)}
                                 </Text>
                             </View>
 
@@ -291,12 +338,10 @@ const SearchScreen = () => {
         }
     }, [storage]);
 
-    // ⚡️ FIX: Removed recentSearches from dependency array to break the infinite loop!
     const saveSearch = useCallback((text) => {
         if (!text || text.length < 2) return;
 
         setRecentSearches(prevSearches => {
-            // Minor optimization: don't save again if it's already the very first item
             if (prevSearches[0] === text) return prevSearches;
 
             const updated = [text, ...prevSearches.filter(s => s !== text)].slice(0, 5);
@@ -447,7 +492,7 @@ const SearchScreen = () => {
                 <>
                     {!isOffline && (
                         <View className="flex-row px-4 py-3 gap-2">
-                            {['all', 'authors', 'clans', 'posts'].map((tab) => (
+                            {['all', 'players', 'clans', 'posts'].map((tab) => (
                                 <TouchableOpacity
                                     key={tab}
                                     onPress={() => setActiveTab(tab)}

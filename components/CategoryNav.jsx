@@ -1,27 +1,27 @@
 import { Ionicons } from '@expo/vector-icons';
-import { usePathname, useRouter } from "expo-router";
-import { memo, useCallback, useEffect, useRef, useState } from "react";
-import { BackHandler, DeviceEventEmitter, FlatList, TouchableOpacity, View } from "react-native";
+import { useGlobalSearchParams, usePathname, useRouter } from "expo-router";
+import { memo, useCallback, useEffect, useRef } from "react";
+import { FlatList, TouchableOpacity, View } from "react-native";
 import { Text } from "./Text";
 
+// ⚡️ ADDED: 'id' field to match your /categories/[id] route
 const categories = [
-    { name: "News", icon: "newspaper-outline", activeIcon: "newspaper" },
-    { name: "Memes", icon: "flash-outline", activeIcon: "flash" },
-    { name: "Fan Art", icon: "brush-outline", activeIcon: "brush" },
-    { name: "Polls", icon: "stats-chart-outline", activeIcon: "stats-chart" },
-    { name: "Review", icon: "star-outline", activeIcon: "star" },
-    { name: "Gaming", icon: "game-controller-outline", activeIcon: "game-controller" },
+    { id: "news", name: "News", icon: "newspaper-outline", activeIcon: "newspaper" },
+    { id: "memes", name: "Memes", icon: "flash-outline", activeIcon: "flash" },
+    { id: "fanart", name: "Fan Art", icon: "brush-outline", activeIcon: "brush" },
+    { id: "polls", name: "Polls", icon: "stats-chart-outline", activeIcon: "stats-chart" },
+    { id: "review", name: "Review", icon: "star-outline", activeIcon: "star" },
+    { id: "gaming", name: "Gaming", icon: "game-controller-outline", activeIcon: "game-controller" },
 ];
 
-const NavPill = memo(({ item, index, isActive, isDark, onPress }) => {
+const NavPill = memo(({ item, isActive, isDark, onPress }) => {
     const displayName = item.name === "Review" ? "Reviews" : item.name;
-    const actualSwiperIndex = index + 1; 
 
     return (
         <TouchableOpacity
-            onPress={() => onPress(actualSwiperIndex)}
+            onPress={() => onPress(item.id)}
             activeOpacity={0.8}
-            style={{ 
+            style={{
                 marginRight: 10,
                 flexDirection: 'row',
                 alignItems: 'center',
@@ -29,14 +29,13 @@ const NavPill = memo(({ item, index, isActive, isDark, onPress }) => {
                 paddingHorizontal: isActive ? 12 : 8,
                 transform: [{ scale: isActive ? 1.05 : 1 }]
             }}
-            className={`rounded-full ${
-                isActive ? "bg-blue-600 shadow-lg shadow-blue-500/40" : "bg-gray-100 dark:bg-gray-800/80"
-            }`}
+            className={`rounded-full ${isActive ? "bg-blue-600 shadow-lg shadow-blue-500/40" : "bg-gray-100 dark:bg-gray-800/80"
+                }`}
         >
-            <Ionicons 
-                name={isActive ? item.activeIcon : item.icon} 
-                size={16} 
-                color={isActive ? "white" : (isDark ? "#94a3b8" : "#64748b")} 
+            <Ionicons
+                name={isActive ? item.activeIcon : item.icon}
+                size={16}
+                color={isActive ? "white" : (isDark ? "#94a3b8" : "#64748b")}
             />
             {isActive && (
                 <Text className="ml-2 text-[10px] font-black uppercase tracking-tight text-white">
@@ -48,97 +47,70 @@ const NavPill = memo(({ item, index, isActive, isDark, onPress }) => {
 }, (prevProps, nextProps) => prevProps.isActive === nextProps.isActive && prevProps.isDark === nextProps.isDark);
 
 export default function CategoryNav({ isDark }) {
-    const [activeIndex, setActiveIndex] = useState(0);
-    const activeIndexRef = useRef(0); 
-    
     const pathname = usePathname();
     const router = useRouter();
+    // ⚡️ NEW: Get the current category ID from the route params to determine active state
+    const { id } = useGlobalSearchParams();
+
     const navListRef = useRef(null);
 
+    // ⚡️ Auto-scroll the nav list to the active pill when the route changes
     useEffect(() => {
-        const sub = DeviceEventEmitter.addListener("pageSwiped", (index) => {
-            if (activeIndexRef.current !== index) {
-                activeIndexRef.current = index;
-                setActiveIndex(index);
-                
-                if (navListRef.current) {
-                    try {
-                        if (index > 0) {
-                            navListRef.current.scrollToIndex({ index: index - 1, animated: true, viewPosition: 0.5 });
-                        } else {
-                            navListRef.current.scrollToOffset({ offset: 0, animated: true });
-                        }
-                    } catch (err) { /* ignore scroll errors */ }
-                }
+        if (id && navListRef.current) {
+            const activeIndex = categories.findIndex(c => c.id === id);
+            if (activeIndex !== -1) {
+                // Short delay to ensure FlatList layout is ready
+                setTimeout(() => {
+                    navListRef.current?.scrollToIndex({ index: activeIndex, animated: true, viewPosition: 0.5 });
+                }, 100);
             }
-        });
-
-        const backAction = () => {
-            if (activeIndexRef.current !== 0 && (pathname === "/" || pathname === "/index")) {
-                handleCategoryPress(0);
-                return true; 
-            }
-            return false;
-        };
-
-        const backHandler = BackHandler.addEventListener("hardwareBackPress", backAction);
-
-        return () => {
-            sub.remove();
-            backHandler.remove();
-        };
-    }, [pathname]);
-
-    const handleCategoryPress = useCallback((actualSwiperIndex) => {
-        setActiveIndex(actualSwiperIndex);
-        activeIndexRef.current = actualSwiperIndex;
-
-        const isHome = pathname === "/" || pathname === "/index";
-
-        if (isHome) {
-            DeviceEventEmitter.emit("scrollToIndex", actualSwiperIndex);
-        } else {
-            router.replace({
-                pathname: "/",
-                params: { initialSector: actualSwiperIndex }
-            });
         }
-    }, [pathname, router]);
+    }, [id]);
 
-    const renderItem = useCallback(({ item, index }) => (
-        <NavPill 
-            item={item} 
-            index={index} 
-            isActive={activeIndex === (index + 1)} 
-            isDark={isDark} 
-            onPress={handleCategoryPress} 
-        />
-    ), [activeIndex, isDark, handleCategoryPress]);
+    const handleCategoryPress = useCallback((categoryId) => {
+        // If they click the category they are already viewing, do nothing
+        if (id === categoryId) return;
+
+        // ⚡️ Direct navigation to the actual category page
+        router.push(`/categories/${categoryId}`);
+    }, [id, router]);
+
+    const renderItem = useCallback(({ item }) => {
+        // ⚡️ Pill is active if the route ID matches the item ID
+        const isActive = id === item.id;
+
+        return (
+            <NavPill
+                item={item}
+                isActive={isActive}
+                isDark={isDark}
+                onPress={handleCategoryPress}
+            />
+        );
+    }, [id, isDark, handleCategoryPress]);
 
     if (pathname === "/Search") return null;
 
     return (
-        <View 
+        <View
             className="bg-transparent w-full"
-            style={{ height: 50, borderBottomWidth: 1, borderBottomColor: isDark ? "rgba(30, 58, 138, 0.3)" : "rgba(229, 231, 235, 1)" }}
+            style={{ height: 40, borderBottomWidth: 1, borderBottomColor: isDark ? "rgba(30, 58, 138, 0.3)" : "rgba(229, 231, 235, 1)" }}
         >
             <FlatList
                 ref={navListRef}
                 horizontal
-                data={categories} 
-                keyExtractor={(item) => item.name}
-                extraData={activeIndex} 
+                data={categories}
+                keyExtractor={(item) => item.id}
+                extraData={id} // ⚡️ Re-render list when route ID changes
                 showsHorizontalScrollIndicator={false}
                 style={{ width: '100%' }}
-                // ⚡️ KEY CHANGE: flexGrow and justifyContent: center
-                contentContainerStyle={{ 
-                    paddingHorizontal: 15, 
+                contentContainerStyle={{
+                    paddingHorizontal: 15,
                     alignItems: 'center',
-                    flexGrow: 1, 
-                    justifyContent: 'center' 
+                    flexGrow: 1,
+                    justifyContent: 'center'
                 }}
                 renderItem={renderItem}
-                // Prevents layout jumping when scrolling to index
                 onScrollToIndexFailed={(info) => {
                     setTimeout(() => {
                         navListRef.current?.scrollToIndex({ index: info.index, animated: true, viewPosition: 0.5 });

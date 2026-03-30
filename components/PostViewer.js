@@ -1,6 +1,6 @@
-import { MaterialCommunityIcons } from '@expo/vector-icons';
+import { MaterialCommunityIcons, Ionicons } from '@expo/vector-icons';
 import { useColorScheme } from "nativewind";
-import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState, memo } from "react";
 import {
     DeviceEventEmitter,
     RefreshControl,
@@ -33,6 +33,32 @@ const SESSION_STATE = {
     memoryCache: null,
     hasFetched: false
 };
+
+// ⚡️ PERFORMANCE FIX 1: Aggressively Memoize the List Item
+// This prevents the ENTIRE list from re-rendering when `visibleIds` changes.
+// It will only re-render the specific post that entered or left the screen.
+const MemoizedPostItem = memo(({ item, isVisible, syncing, mutate, posts }) => {
+    return (
+        <PostCard
+            post={item}
+            authorData={item.authorData} 
+            clanData={item.clanData}
+            isFeed
+            posts={posts}
+            setPosts={mutate}
+            syncing={syncing}
+            isVisible={isVisible}
+        />
+    );
+}, (prevProps, nextProps) => {
+    // Only re-render if the visibility changes, syncing state changes, or the post data itself updates
+    return (
+        prevProps.isVisible === nextProps.isVisible &&
+        prevProps.syncing === nextProps.syncing &&
+        prevProps.item === nextProps.item
+    );
+});
+
 
 export default function PostsViewer() {
     const storage = useMMKV(); 
@@ -88,9 +114,7 @@ export default function PostsViewer() {
     }, []);
 
     const pulseAnimatedStyle = useAnimatedStyle(() => {
-        return {
-            opacity: pulseAnim.value
-        };
+        return { opacity: pulseAnim.value };
     });
 
     const getKey = (pageIndex, previousPageData) => {
@@ -168,21 +192,18 @@ export default function PostsViewer() {
 
     const renderItem = useCallback(({ item }) => {
         return (
-            <PostCard
-                post={item}
-                authorData={item.authorData} 
-                clanData={item.clanData}
-                isFeed
-                posts={posts}
-                setPosts={mutate}
-                syncing={!SESSION_STATE.hasFetched || isValidating}
+            <MemoizedPostItem
+                item={item}
                 isVisible={visibleIds.has(item._id)}
+                syncing={!SESSION_STATE.hasFetched || isValidating}
+                mutate={mutate}
+                posts={posts}
             />
         );
-    }, [posts, visibleIds, isValidating, mutate]);
+    }, [visibleIds, isValidating, mutate, posts]);
 
     const ListHeader = useCallback(() => (
-        <View className="mb-10 pb-2">
+        <View className="mb-5 pb-2">
             <View className="flex-row items-center gap-3 mb-1">
                 <View className={`h-2 w-2 rounded-full ${isOfflineMode ? 'bg-orange-500' : 'bg-blue-600'}`} />
                 <Text className={`text-[10px] font-[900] uppercase tracking-[0.4em] ${isOfflineMode ? 'text-orange-500' : 'text-blue-600'}`}>
@@ -197,6 +218,17 @@ export default function PostsViewer() {
             </View>
         </View>
     ), [isOfflineMode, isDark]);
+
+    // ⚡️ PERFORMANCE FIX 2: Throttled Scroll Emitter
+    const lastScrollY = useRef(0);
+    const handleScroll = useCallback((e) => {
+        const offsetY = e.nativeEvent.contentOffset.y;
+        // Only emit event if scrolled more than 15 pixels to prevent bridge flooding
+        if (Math.abs(offsetY - lastScrollY.current) > 15) {
+            DeviceEventEmitter.emit("onScroll", offsetY);
+            lastScrollY.current = offsetY;
+        }
+    }, []);
 
     if (isLoading && posts.length === 0) {
         return <AnimeLoading tipType={"post"} message="Loading Posts" subMessage="Prepping Otaku content" />
@@ -216,7 +248,7 @@ export default function PostsViewer() {
                 }}
                 renderItem={renderItem}
                 estimatedItemSize={600} 
-                drawDistance={2000} 
+                drawDistance={1500} // Slightly reduced to save RAM rendering off-screen
                 recycleItems={true} 
                 onViewableItemsChanged={onViewableItemsChanged}
                 viewabilityConfig={viewabilityConfig}
@@ -233,10 +265,7 @@ export default function PostsViewer() {
                         progressBackgroundColor={isDark ? "#1a1a1a" : "#ffffff"}
                     />
                 }
-                onScroll={(e) => {
-                    const offsetY = e.nativeEvent.contentOffset.y;
-                    DeviceEventEmitter.emit("onScroll", offsetY);
-                }}
+                onScroll={handleScroll}
                 scrollEventThrottle={16} 
                 ListFooterComponent={
                     <View className="py-12 items-center justify-center min-h-[140px]">

@@ -7,7 +7,8 @@ import { useColorScheme } from "react-native";
 const useAppTheme = () => {
   const colorScheme = useColorScheme();
   const isDark = colorScheme === "dark";
-
+  console.log(isDark);
+  
   const THEME = {
     isDark,
 

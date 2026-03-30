@@ -2,7 +2,7 @@ import { Ionicons, MaterialCommunityIcons } from "@expo/vector-icons";
 import { useLocalSearchParams, useRouter } from "expo-router";
 import * as Sharing from 'expo-sharing';
 import { useColorScheme } from "nativewind";
-import { useCallback, useEffect, useRef, useState, useMemo } from "react";
+import { useCallback, useEffect, useRef, useState, useMemo, memo } from "react";
 import {
     DeviceEventEmitter,
     Dimensions,
@@ -11,7 +11,8 @@ import {
     ScrollView,
     TouchableOpacity,
     View,
-    Image
+    Image,
+    InteractionManager
 } from "react-native";
 import { useMMKV } from 'react-native-mmkv';
 import { LegendList } from "@legendapp/list";
@@ -24,7 +25,8 @@ import Animated, {
     withTiming,
     withSequence,
     Easing,
-    interpolate
+    interpolate,
+    FadeInDown
 } from "react-native-reanimated";
 import AuraAvatar from "../../../components/AuraAvatar";
 import ClanBorder from "../../../components/ClanBorder";
@@ -46,6 +48,14 @@ const { width } = Dimensions.get('window');
 // 🧠 Tier 1: Memory Cache
 const AUTHOR_MEMORY_CACHE = {};
 const AUTHOR_POSTS_MEMORY_CACHE = {};
+
+// ⚡️ Helper function to format large numbers cleanly
+const formatCoins = (num) => {
+    if (!num) return "0";
+    if (num >= 1000000) return Math.floor(num / 1000000) + 'M+';
+    if (num >= 1000) return Math.floor(num / 1000) + 'k+';
+    return num.toString();
+};
 
 const getAuraTier = (rank) => {
     const MONARCH_GOLD = '#fbbf24';
@@ -73,13 +83,61 @@ const getAuraTier = (rank) => {
     }
 };
 
+// ⚡️ NEW: The Master Aura Tiers with injected Colors for the UI
+export const AURA_TIERS = [
+  { level: 1, req: 0, title: "E-Rank Novice", icon: "🌱", color: "#94a3b8" },
+  { level: 2, req: 100, title: "D-Rank Operative", icon: "⚔️", color: "#34d399" }, 
+  { level: 3, req: 300, title: "C-Rank Awakened", icon: "🔥", color: "#f87171" }, 
+  { level: 4, req: 700, title: "B-Rank Elite", icon: "⚡", color: "#a78bfa" }, 
+  { level: 5, req: 1500, title: "A-Rank Champion", icon: "🛡️", color: "#60a5fa" }, 
+  { level: 6, req: 3000, title: "S-Rank Legend", icon: "🌟", color: "#fcd34d" }, 
+  { level: 7, req: 6000, title: "SS-Rank Mythic", icon: "🌀", color: "#f472b6" }, 
+  { level: 8, req: 12000, title: "Monarch", icon: "👑", color: "#fbbf24" }, 
+];
+
+const resolveUserRank = (level, currentAura) => {
+    const safeLevel = Math.max(1, Math.min(8, level || 1));
+    const currentTier = AURA_TIERS[safeLevel - 1];
+    const nextTier = AURA_TIERS[safeLevel] || currentTier; 
+
+    let progress = 100;
+    if (safeLevel < 8) {
+        progress = ((currentAura - currentTier.req) / (nextTier.req - currentTier.req)) * 100;
+    }
+
+    return { 
+        title: currentTier.title.toUpperCase().replace(/ /g, "_"), 
+        icon: currentTier.icon, 
+        color: currentTier.color, 
+        progress: Math.min(Math.max(progress, 0), 100),
+        req: currentTier.req,
+        nextReq: nextTier.req
+    };
+};
+
+// ⚡️ PERFORMANCE FIX 1: Memoized Post Item
+const MemoizedPostItem = memo(({ item, isVisible, authorData }) => {
+    return (
+        <View className="px-3">
+            <PostCard
+                post={item}
+                authorData={authorData}
+                clanData={item.clanData}
+                isFeed
+                isVisible={isVisible}
+            />
+        </View>
+    );
+}, (prevProps, nextProps) => {
+    return prevProps.isVisible === nextProps.isVisible && prevProps.item === nextProps.item;
+});
+
 export default function AuthorPage() {
     const { id } = useLocalSearchParams();
     const router = useRouter();
     const insets = useSafeAreaInsets();
     const { colorScheme } = useColorScheme();
     const isDark = colorScheme === "dark";
-
     const storage = useMMKV();
 
     const CACHE_KEY_AUTHOR = `author_data_${id}`;
@@ -96,6 +154,9 @@ export default function AuthorPage() {
     const [isOffline, setIsOffline] = useState(false);
     const [isInitialMount, setIsInitialMount] = useState(true);
     const [cardPreviewVisible, setCardPreviewVisible] = useState(false);
+    
+    // ⚡️ PERFORMANCE FIX 2: Visibility Tracking State
+    const [visibleIds, setVisibleIds] = useState(new Set());
 
     const scrollRef = useRef(null);
     const playerCardRef = useRef(null);
@@ -105,58 +166,30 @@ export default function AuthorPage() {
     const skeletonFade = useSharedValue(0.3);
 
     const auraRank = author?.previousRank || null;
-
     const aura = getAuraTier(auraRank);
     const equippedGlow = author?.inventory?.find(i => i.category === 'GLOW' && i.isEquipped);
     const activeGlowColor = equippedGlow?.visualConfig?.primaryColor || null;
     const themeColor = activeGlowColor || aura.color;
 
     useEffect(() => {
-        pulseAnim.value = withRepeat(
-            withSequence(
-                withTiming(1.1, { duration: 2000 }),
-                withTiming(1, { duration: 2000 })
-            ),
-            -1,
-            true
-        );
-
-        rotationAnim.value = withRepeat(
-            withTiming(1, { duration: 20000, easing: Easing.linear }),
-            -1,
-            false
-        );
-
-        skeletonFade.value = withRepeat(
-            withSequence(
-                withTiming(0.7, { duration: 800 }),
-                withTiming(0.3, { duration: 800 })
-            ),
-            -1,
-            true
-        );
+        pulseAnim.value = withRepeat(withSequence(withTiming(1.1, { duration: 2000 }), withTiming(1, { duration: 2000 })), -1, true);
+        rotationAnim.value = withRepeat(withTiming(1, { duration: 20000, easing: Easing.linear }), -1, false);
+        skeletonFade.value = withRepeat(withSequence(withTiming(0.7, { duration: 800 }), withTiming(0.3, { duration: 800 })), -1, true);
     }, []);
 
-    const scanAnimatedStyle = useAnimatedStyle(() => {
-        const rotate = interpolate(rotationAnim.value, [0, 1], [0, 360]);
-        return {
-            transform: [{ rotate: `${rotate}deg` }],
-            borderColor: `${themeColor}40`
-        };
-    });
+    const scanAnimatedStyle = useAnimatedStyle(() => ({
+        transform: [{ rotate: `${interpolate(rotationAnim.value, [0, 1], [0, 360])}deg` }],
+        borderColor: `${themeColor}40`
+    }));
 
-    const auraPulseStyle = useAnimatedStyle(() => {
-        return {
-            transform: [{ scale: pulseAnim.value }],
-            backgroundColor: themeColor
-        };
-    });
+    const auraPulseStyle = useAnimatedStyle(() => ({
+        transform: [{ scale: pulseAnim.value }],
+        backgroundColor: themeColor
+    }));
 
-    const skeletonAnimatedStyle = useAnimatedStyle(() => {
-        return {
-            opacity: skeletonFade.value
-        };
-    });
+    const skeletonAnimatedStyle = useAnimatedStyle(() => ({
+        opacity: skeletonFade.value
+    }));
 
     useEffect(() => {
         const sub = DeviceEventEmitter.addListener("doScrollToTop", () => {
@@ -201,7 +234,10 @@ export default function AuthorPage() {
             setIsOffline(true);
         } finally {
             setLoading(false);
-            setTimeout(() => setIsInitialMount(false), 800);
+            // Allow UI to paint before lifting initial mount shield
+            InteractionManager.runAfterInteractions(() => {
+                setTimeout(() => setIsInitialMount(false), 500);
+            });
         }
     }, [id, CACHE_KEY_AUTHOR, CACHE_KEY_POSTS, saveHeavyCache]);
 
@@ -267,6 +303,32 @@ export default function AuthorPage() {
         } catch (error) { console.error("Capture Error:", error); }
     };
 
+    // ⚡️ PERFORMANCE FIX 3: Viewability Config & Callback
+    const onViewableItemsChanged = useRef(({ viewableItems }) => {
+        const newVisible = new Set(viewableItems.map(v => v.item._id));
+        setVisibleIds(newVisible);
+    }).current;
+
+    const viewabilityConfig = useRef({ itemVisiblePercentThreshold: 50 }).current;
+
+    // ⚡️ PERFORMANCE FIX 4: Throttled Scroll Emitter
+    const lastScrollY = useRef(0);
+    const handleScroll = useCallback((e) => {
+        const offsetY = e.nativeEvent.contentOffset.y;
+        if (Math.abs(offsetY - lastScrollY.current) > 20) {
+            DeviceEventEmitter.emit("onScroll", offsetY);
+            lastScrollY.current = offsetY;
+        }
+    }, []);
+
+    const renderItem = useCallback(({ item }) => (
+        <MemoizedPostItem 
+            item={item} 
+            isVisible={visibleIds.has(item._id)} 
+            authorData={author} 
+        />
+    ), [visibleIds, author]);
+
     const AuthorSkeleton = useCallback(() => (
         <View className="px-4 pt-20 pb-6 opacity-40">
             <View className="p-6 bg-gray-100 dark:bg-[#111] border border-gray-200 dark:border-gray-800 rounded-[40px] items-center">
@@ -276,26 +338,14 @@ export default function AuthorPage() {
         </View>
     ), [skeletonAnimatedStyle]);
 
-    const renderItem = useCallback(({ item }) => (
-        <View className="px-3">
-            <PostCard
-                post={item}
-                authorData={item.authorData}
-                clanData={item.clanData}
-                isFeed
-            />
-        </View>
-    ), [author]);
-
     const ListHeader = useCallback(() => {
         if (!author && isOffline) return <AuthorSkeleton />;
         if (!author) return null;
 
-        const count = totalPosts;
-        const rankTitle = count > 200 ? "Master_Writer" : count > 150 ? "Elite_Writer" : count > 100 ? "Senior_Writer" : count > 50 ? "Novice_Writer" : count > 25 ? "Senior_Researcher" : "Novice_Researcher";
-        const rankIcon = count > 200 ? "👑" : count > 150 ? "💎" : count > 100 ? "🔥" : count > 50 ? "⚔️" : count > 25 ? "📜" : "🛡️";
-        const nextMilestone = count > 200 ? 500 : count > 150 ? 200 : count > 100 ? 150 : count > 50 ? 100 : count > 25 ? 50 : 25;
-        const progress = Math.min((count / nextMilestone) * 100, 100);
+        // ⚡️ Update to Use RPG Ranks
+        const totalAura = author.aura || 0;
+        const rankLevel = author.currentRankLevel || 1;
+        const writerRank = resolveUserRank(rankLevel, totalAura);
 
         const favoriteCharacter = author?.preferences?.favCharacter || "NONE_SET";
 
@@ -307,7 +357,6 @@ export default function AuthorPage() {
 
         const HeaderCard = (
             <View className="relative p-6 bg-white dark:bg-[#0a0a0a] shadow-2xl rounded-[25px] overflow-hidden">
-
                 <View className="absolute top-5 right-5 z-50 items-end gap-2">
                     <TouchableOpacity
                         onPress={() => setCardPreviewVisible(true)}
@@ -316,27 +365,15 @@ export default function AuthorPage() {
                     >
                         <Ionicons name="card-outline" size={20} color={isDark ? "white" : "black"} />
                     </TouchableOpacity>
-
-                    {/* ⚡️ Note: Streak removed from here as it is now inside PlayerNameplate */}
                 </View>
 
-                {/* ⚡️ REPLACED HARDCODED BACKGROUND & WATERMARK WITH COMPONENTS */}
                 <PlayerBackground equippedBg={equippedBg} themeColor={themeColor} borderRadius={25} />
                 <PlayerWatermark equippedWatermark={equippedWatermark} isDark={isDark} />
 
                 <View className="flex-col items-center gap-6">
                     <View className="relative items-center justify-center">
                         <Animated.View
-                            style={[
-                                {
-                                    position: 'absolute',
-                                    width: 140,
-                                    height: 140,
-                                    borderRadius: 100,
-                                    opacity: activeGlowColor ? 0.25 : 0.1,
-                                },
-                                auraPulseStyle
-                            ]}
+                            style={[{ position: 'absolute', width: 140, height: 140, borderRadius: 100, opacity: activeGlowColor ? 0.25 : 0.1 }, auraPulseStyle]}
                         />
                         <Animated.View style={[{ width: 160, height: 160 }, scanAnimatedStyle]} className="absolute border border-dashed rounded-full" />
                         <AuraAvatar
@@ -359,7 +396,6 @@ export default function AuthorPage() {
                     </View>
 
                     <View className="items-center w-full mt-2">
-                        {/* ⚡️ REPLACED HARDCODED USERNAME, STREAK, AND PEAK BADGE WITH PLAYERNAMEPLATE */}
                         <View className="items-center justify-center mb-3">
                             <PlayerNameplate
                                 author={author}
@@ -370,7 +406,6 @@ export default function AuthorPage() {
                                 fontSize={24}
                             />
 
-                            {/* ⚡️ EQUIPPED BADGES ROW (MAX 10) */}
                             {equippedBadges.length > 0 && (
                                 <View className="flex-row flex-wrap justify-center gap-2 mt-2 mb-3">
                                     {equippedBadges.map((badge, bIdx) => (
@@ -393,31 +428,27 @@ export default function AuthorPage() {
                         <View className="flex-row gap-8 mt-6 border-y border-gray-100 dark:border-gray-800 w-full py-4 justify-center">
                             <View className="items-center">
                                 <Text className="text-[10px] font-black text-gray-400 uppercase tracking-widest">Aura</Text>
-                                <Text className="text-lg font-black" style={{ color: themeColor }}>+{author.weeklyAura || 0}</Text>
+                                <Text className="text-lg font-black" style={{ color: themeColor }}>{totalAura.toLocaleString()}</Text>
+                            </View>
+                            <View className="items-center">
+                                <Text className="text-[10px] font-black text-gray-400 uppercase tracking-widest">Glory</Text>
+                                <Text className="text-lg font-black" style={{ color: '#ec4899' }}>+{author.weeklyAura || 0}</Text>
                             </View>
                             <View className="items-center">
                                 <Text className="text-[10px] font-black text-gray-400 uppercase tracking-widest">Logs</Text>
                                 <Text className="text-lg font-black dark:text-white">{totalPosts}</Text>
-                            </View>
-                            <View className="items-center">
-                                <Text className="text-[10px] font-black text-gray-400 uppercase tracking-widest">Rank</Text>
-                                <Text className="text-lg font-black dark:text-white" style={{ color: themeColor }}>#{auraRank || '??'}</Text>
                             </View>
                         </View>
 
                         <View className="mt-8 w-full px-2">
                             <View className="flex-row justify-between items-end mb-2">
                                 <View className="flex-row items-center gap-2">
-                                    <Text className="text-2xl">{rankIcon}</Text>
+                                    <Text className="text-2xl">{writerRank.icon}</Text>
                                     <View>
-                                        <Text style={{ color: themeColor }} className="text-[8px] font-mono uppercase tracking-[0.2em] leading-none mb-1">Writer_Class</Text>
-                                        <Text className="text-sm font-black uppercase tracking-tighter dark:text-white">{rankTitle}</Text>
+                                        <Text style={{ color: writerRank.color }} className="text-[8px] font-mono uppercase tracking-[0.2em] leading-none mb-1">Class</Text>
+                                        <Text className="text-sm font-black uppercase tracking-tighter dark:text-white">{writerRank.title}</Text>
                                     </View>
                                 </View>
-                                <Text className="text-[10px] font-mono font-bold text-gray-500 uppercase">EXP: {count} / {nextMilestone}</Text>
-                            </View>
-                            <View className="h-1.5 w-full bg-gray-100 dark:bg-gray-800 rounded-full overflow-hidden">
-                                <View style={{ width: `${progress}%`, backgroundColor: themeColor }} className="h-full shadow-lg shadow-blue-500" />
                             </View>
                         </View>
                     </View>
@@ -468,7 +499,7 @@ export default function AuthorPage() {
 
     return (
         <View className="flex-1 bg-white dark:bg-[#0a0a0a]">
-            {/* ⚡️ Swapped to LegendList */}
+            {/* ⚡️ PERFORMANCE FIX 5: Full LegendList Config */}
             <LegendList
                 ref={scrollRef}
                 data={posts}
@@ -476,10 +507,15 @@ export default function AuthorPage() {
                 renderItem={renderItem}
                 ListHeaderComponent={ListHeader}
 
-                // ⚡️ LegendList Performance Props
                 estimatedItemSize={500}
                 drawDistance={1000}
                 recycleItems={true}
+                
+                onViewableItemsChanged={onViewableItemsChanged}
+                viewabilityConfig={viewabilityConfig}
+                onScroll={handleScroll}
+                scrollEventThrottle={16}
+
                 contentContainerStyle={{ paddingBottom: insets.bottom + 100 }}
 
                 ListFooterComponent={
@@ -500,10 +536,6 @@ export default function AuthorPage() {
                 }
                 onEndReached={fetchMorePosts}
                 onEndReachedThreshold={0.5}
-                onRefresh={() => { setPage(1); fetchInitialData(); }}
-                refreshing={refreshing}
-                onScroll={(e) => { DeviceEventEmitter.emit("onScroll", e.nativeEvent.contentOffset.y); }}
-                scrollEventThrottle={16}
             />
 
             {cardPreviewVisible && (

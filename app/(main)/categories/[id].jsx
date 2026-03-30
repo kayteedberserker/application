@@ -1,29 +1,29 @@
 import { MaterialCommunityIcons } from '@expo/vector-icons';
+import { LegendList } from "@legendapp/list";
+import { useLocalSearchParams } from "expo-router"; // ⚡️ ADDED: To grab the ID from the URL
 import { useColorScheme } from "nativewind";
-import { useCallback, useEffect, useMemo, useRef, useState } from "react"; 
+import { memo, useCallback, useEffect, useMemo, useRef, useState } from "react";
 import {
-    AppState,
     DeviceEventEmitter,
     Dimensions,
+    InteractionManager,
     RefreshControl,
     View
 } from "react-native";
 import { useMMKV } from 'react-native-mmkv';
-import { LegendList } from "@legendapp/list"; 
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import useSWRInfinite from "swr/infinite";
 
-// ⚡️ IMPORT REANIMATED
 import Animated, {
-    useSharedValue,
+    Easing,
     useAnimatedStyle,
+    useSharedValue,
     withRepeat,
     withSequence,
-    withTiming,
-    Easing
+    withTiming
 } from 'react-native-reanimated';
 
-import AnimeLoading from "../../../components/AnimeLoading"; 
+import AnimeLoading from "../../../components/AnimeLoading";
 import PostCard from "../../../components/PostCard";
 import { SyncLoading } from "../../../components/SyncLoading";
 import { Text } from "../../../components/Text";
@@ -35,19 +35,37 @@ const LIMIT = 10;
 const fetcher = (url) => apiFetch(url).then(res => res.json());
 
 const CATEGORY_MEMORY_CACHE = {};
-const CATEGORIES_SYNCED_THIS_SESSION = new Set(); 
+const CATEGORIES_SYNCED_THIS_SESSION = new Set();
 
-export default function CategoryPage({ forcedId }) {
+// ⚡️ PERFORMANCE FIX 1: Aggressively Memoize the List Item
+const MemoizedPostItem = memo(({ item, isVisible, mutate, posts }) => {
+    return (
+        <PostCard
+            post={item}
+            authorData={item.authorData}
+            clanData={item.clanData}
+            isFeed
+            posts={posts}
+            setPosts={mutate}
+            isVisible={isVisible}
+        />
+    );
+}, (prevProps, nextProps) => {
+    return (
+        prevProps.isVisible === nextProps.isVisible &&
+        prevProps.item === nextProps.item
+    );
+});
+
+export default function CategoryPage() {
     const storage = useMMKV();
-    
-    const id = forcedId;
+    // ⚡️ GET THE ID FROM THE ROUTE INSTEAD OF PROPS
+    const { id } = useLocalSearchParams();
+
     const insets = useSafeAreaInsets();
     const { colorScheme } = useColorScheme();
     const isDark = colorScheme === "dark";
 
-    const appState = useRef(AppState.currentState);
-
-    // ⚡️ REANIMATED PULSE
     const pulseAnim = useSharedValue(0);
 
     const categoryName = useMemo(() => {
@@ -60,75 +78,62 @@ export default function CategoryPage({ forcedId }) {
     const CACHE_KEY = `CATEGORY_CACHE_${categoryName.toUpperCase().replace(/[^A-Z0-9]/g, '_')}`;
 
     const [ready, setReady] = useState(false);
-    const [cachedData, setCachedData] = useState(CATEGORY_MEMORY_CACHE[CACHE_KEY] ? [{ posts: CATEGORY_MEMORY_CACHE[CACHE_KEY] }] : null);
+    const [cachedData, setCachedData] = useState(() => {
+        if (CATEGORY_MEMORY_CACHE[CACHE_KEY]) return [{ posts: CATEGORY_MEMORY_CACHE[CACHE_KEY] }];
+        try {
+            const local = storage.getString(CACHE_KEY);
+            if (local) {
+                const parsed = JSON.parse(local);
+                if (parsed?.data && Array.isArray(parsed.data)) {
+                    CATEGORY_MEMORY_CACHE[CACHE_KEY] = parsed.data;
+                    return [{ posts: parsed.data }];
+                }
+            }
+        } catch (e) { console.error(e); }
+        return null;
+    });
+
     const [isOfflineMode, setIsOfflineMode] = useState(false);
     const [refreshing, setRefreshing] = useState(false);
+    const [visibleIds, setVisibleIds] = useState(new Set());
     const scrollRef = useRef(null);
 
     const saveHeavyCache = useCallback((key, data) => {
         try {
             const cacheEntry = { data: data, timestamp: Date.now() };
             storage.set(key, JSON.stringify(cacheEntry));
-        } catch (e) {
-            console.error("Cache Save Error", e);
-        }
+        } catch (e) { console.error("Cache Save Error", e); }
     }, [storage]);
 
     useEffect(() => {
-        let isMounted = true;
-        const prepare = () => {
-            try {
-                if (!CATEGORY_MEMORY_CACHE[CACHE_KEY]) {
-                    const local = storage.getString(CACHE_KEY);
-                    if (local && isMounted) {
-                        const parsed = JSON.parse(local);
-                        if (parsed?.data && Array.isArray(parsed.data)) {
-                            const formattedData = [{ posts: parsed.data }];
-                            setCachedData(formattedData);
-                            CATEGORY_MEMORY_CACHE[CACHE_KEY] = parsed.data;
-                        }
-                    }
-                }
-            } catch (e) {
-                console.error("Cache load error", e);
-            } finally {
-                if (isMounted) setReady(true);
-            }
-        };
-        prepare();
-        return () => { isMounted = false; };
-    }, [id, CACHE_KEY, storage]);
+        // Yield to InteractionManager to avoid freezing during navigation/swipe
+        InteractionManager.runAfterInteractions(() => {
+            setReady(true);
+        });
 
-    // ⚡️ TRIGGER REANIMATED PULSE
-    useEffect(() => {
         pulseAnim.value = withRepeat(
             withSequence(
                 withTiming(1, { duration: 1500, easing: Easing.inOut(Easing.ease) }),
                 withTiming(0, { duration: 1500, easing: Easing.inOut(Easing.ease) })
             ),
-            -1, // Infinite
-            true // Reverse
+            -1,
+            true
         );
     }, []);
 
-    // ⚡️ PULSE ANIMATED STYLE
-    const pulseStyle = useAnimatedStyle(() => {
-        return {
-            opacity: pulseAnim.value
-        };
-    });
+    const pulseStyle = useAnimatedStyle(() => ({ opacity: pulseAnim.value }));
 
     const getKey = (pageIndex, previousPageData) => {
-        if (!ready) return null;
+        if (!ready || !id) return null; // ⚡️ Ensure we don't fetch if no ID is present
         if (previousPageData && previousPageData.posts?.length < LIMIT) return null;
         return `/posts?category=${categoryName}&page=${pageIndex + 1}&limit=${LIMIT}`;
     };
 
     const { data, size, setSize, isLoading, isValidating, mutate } = useSWRInfinite(getKey, fetcher, {
-        revalidateOnFocus: false, 
+        revalidateOnFocus: false,
         revalidateOnReconnect: true,
-        revalidateIfStale: false, 
-        revalidateOnMount: !CATEGORIES_SYNCED_THIS_SESSION.has(CACHE_KEY), 
+        revalidateIfStale: false,
+        revalidateOnMount: !CATEGORIES_SYNCED_THIS_SESSION.has(CACHE_KEY),
         dedupingInterval: 10000,
         fallbackData: cachedData || undefined,
         onSuccess: (newData) => {
@@ -136,7 +141,7 @@ export default function CategoryPage({ forcedId }) {
             setRefreshing(false);
             const flatData = newData.flatMap(page => page.posts || []);
             CATEGORY_MEMORY_CACHE[CACHE_KEY] = flatData;
-            CATEGORIES_SYNCED_THIS_SESSION.add(CACHE_KEY); 
+            CATEGORIES_SYNCED_THIS_SESSION.add(CACHE_KEY);
             saveHeavyCache(CACHE_KEY, flatData);
         },
         onError: () => {
@@ -169,6 +174,24 @@ export default function CategoryPage({ forcedId }) {
 
     const hasMore = data ? data[data.length - 1]?.posts?.length === LIMIT : false;
 
+    // ⚡️ PERFORMANCE FIX 2: Throttled Viewability
+    const onViewableItemsChanged = useRef(({ viewableItems }) => {
+        const newVisible = new Set(viewableItems.map(v => v.item._id));
+        setVisibleIds(newVisible);
+    }).current;
+
+    const viewabilityConfig = useRef({ itemVisiblePercentThreshold: 50 }).current;
+
+    // ⚡️ PERFORMANCE FIX 3: Throttled Scroll Emitter
+    const lastScrollY = useRef(0);
+    const handleScroll = useCallback((e) => {
+        const offsetY = e.nativeEvent.contentOffset.y;
+        if (Math.abs(offsetY - lastScrollY.current) > 20) {
+            DeviceEventEmitter.emit("onScroll", offsetY);
+            lastScrollY.current = offsetY;
+        }
+    }, []);
+
     useEffect(() => {
         const sub = DeviceEventEmitter.addListener("doScrollToTop", () => {
             scrollRef.current?.scrollToOffset({ offset: 0, animated: true });
@@ -177,18 +200,16 @@ export default function CategoryPage({ forcedId }) {
     }, []);
 
     const renderItem = useCallback(({ item }) => (
-        <PostCard 
-            post={item} 
-            authorData={item.authorData} 
-            clanData={item.clanData} 
-            isFeed 
-            posts={posts} 
-            setPosts={mutate} 
+        <MemoizedPostItem
+            item={item}
+            isVisible={visibleIds.has(item._id)}
+            mutate={mutate}
+            posts={posts}
         />
-    ), [posts, mutate]);
+    ), [posts, visibleIds, mutate]);
 
     const ListHeader = useMemo(() => (
-        <View className="px-5 mb-10 pb-6 border-b-2 border-gray-100 dark:border-gray-800">
+        <View className="px-5 mb-5 pb-6 border-b-2 border-gray-100 dark:border-gray-800">
             <View className="flex-row items-center gap-3 mb-2">
                 <View className={`h-2 w-2 rounded-full ${isOfflineMode ? 'bg-orange-500' : 'bg-blue-600'}`} />
                 <Text className={`text-[10px] font-[900] uppercase tracking-[0.4em] ${isOfflineMode ? 'text-orange-500' : 'text-blue-600'}`}>
@@ -203,6 +224,15 @@ export default function CategoryPage({ forcedId }) {
             </View>
         </View>
     ), [isOfflineMode, isDark, categoryName]);
+
+    // ⚡️ Fallback if no ID is provided in the route
+    if (!id) {
+        return (
+            <View className={`flex-1 items-center justify-center ${isDark ? 'bg-[#050505]' : 'bg-white'}`}>
+                <Text className="text-gray-500">No Category Selected</Text>
+            </View>
+        );
+    }
 
     if (!ready || (isLoading && posts.length === 0)) {
         return <AnimeLoading tipType={"post"} message={`Decoding ${categoryName}`} subMessage="Accessing encrypted anime archives..." />
@@ -222,13 +252,15 @@ export default function CategoryPage({ forcedId }) {
                 keyExtractor={(item) => item._id}
                 renderItem={renderItem}
                 ListHeaderComponent={ListHeader}
-                estimatedItemSize={500}
-                drawDistance={1000} 
-                recycleItems={true} 
-                contentContainerStyle={{ 
-                    paddingHorizontal: 16, 
-                    paddingTop: insets.top + 20, 
-                    paddingBottom: insets.bottom + 100 
+                estimatedItemSize={550}
+                drawDistance={1500}
+                recycleItems={true}
+                onViewableItemsChanged={onViewableItemsChanged}
+                viewabilityConfig={viewabilityConfig}
+                contentContainerStyle={{
+                    paddingHorizontal: 16,
+                    paddingTop: insets.top + 20,
+                    paddingBottom: insets.bottom + 120
                 }}
                 refreshControl={
                     <RefreshControl
@@ -252,24 +284,23 @@ export default function CategoryPage({ forcedId }) {
                 }
                 onEndReached={loadMore}
                 onEndReachedThreshold={0.5}
-                onScroll={(e) => DeviceEventEmitter.emit("onScroll", e.nativeEvent.contentOffset.y)}
+                onScroll={handleScroll}
                 scrollEventThrottle={16}
             />
 
-            {/* ⚡️ REANIMATED COMPONENT USAGE */}
             <View
                 className="absolute left-6 flex-row items-center gap-2"
                 style={{ bottom: insets.bottom + 20, opacity: 0.6 }}
                 pointerEvents="none"
             >
                 <MaterialCommunityIcons name={isOfflineMode ? "cloud-off-outline" : "pulse"} size={14} color={isOfflineMode ? "#f97316" : "#2563eb"} />
-                <Animated.Text 
-                    style={pulseStyle} 
+                <Animated.Text
+                    style={pulseStyle}
                     className={`text-[8px] font-[900] uppercase tracking-[0.4em] ${isOfflineMode ? 'text-orange-500' : 'text-blue-600'}`}
                 >
                     {isOfflineMode ? "Cache_Relay_Active" : "Neural_Link_Established"}
                 </Animated.Text>
             </View>
         </View>
-    );
+    )
 }

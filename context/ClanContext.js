@@ -1,7 +1,7 @@
 import apiFetch from "@/utils/apiFetch";
-import { useMMKV } from 'react-native-mmkv';
 import { createContext, useContext, useEffect, useRef, useState } from "react";
-import { DeviceEventEmitter } from "react-native"; 
+import { DeviceEventEmitter } from "react-native";
+import { useMMKV } from 'react-native-mmkv';
 import { useUser } from "./UserContext";
 
 const ClanContext = createContext();
@@ -14,7 +14,7 @@ export const ClanProvider = ({ children }) => {
     const [userClan, setUserClan] = useState(null);
     const [allClans, setAllClans] = useState([]);
     const [isLoading, setIsLoading] = useState(true);
-    const [warActionsCount, setWarActionsCount] = useState(0); 
+    const [warActionsCount, setWarActionsCount] = useState(0);
     const hasSynced = useRef(false);
     const [fullData, setFullData] = useState();
     const [cCoins, setClanCoins] = useState(0);
@@ -27,7 +27,7 @@ export const ClanProvider = ({ children }) => {
     useEffect(() => {
         try {
             const stored = storage.getString("userClan");
-            if (stored) {
+            if (stored && stored !== "") {
                 setUserClan(JSON.parse(stored));
             }
         } catch (e) {
@@ -89,7 +89,7 @@ export const ClanProvider = ({ children }) => {
         try {
             const res = await apiFetch(`/clans/${userClan.tag}?deviceId=${user.deviceId}`);
             const data = await res.json();
-            
+
             setFullData(data?.joinRequests?.length || 0);
             setClanCoins(data?.spendablePoints || 0);
             setClanRank(data?.rank);
@@ -97,7 +97,7 @@ export const ClanProvider = ({ children }) => {
             // 🔹 NEW: Check for unread messages
             // Note: Adjust the path to the timestamp based on how your backend returns the chat!
             // E.g., data?.latestMessage?.createdAt OR data?.chat?.[data.chat.length - 1]?.createdAt
-            const latestMessageAt = data?.latestMessage?.createdAt || data?.messages?.[data?.messages?.length - 1]?.date; 
+            const latestMessageAt = data?.latestMessage?.createdAt || data?.messages?.[data?.messages?.length - 1]?.date;
             if (latestMessageAt) {
                 const lastReadStr = storage.getString(`lastReadChat_${userClan.tag}`);
                 const lastReadTime = lastReadStr ? new Date(lastReadStr).getTime() : 0;
@@ -130,7 +130,7 @@ export const ClanProvider = ({ children }) => {
 
     const refreshClanStatus = async (deviceId) => {
         if (!deviceId) return;
-        
+
         // 🔹 Triggering loading animation for the sync process
         setIsLoading(true);
         try {
@@ -140,17 +140,17 @@ export const ClanProvider = ({ children }) => {
             if (data.userInClan) {
                 setUserClan(data.userClan);
                 setClanRank(data.rank);
-                
+
                 // 🔹 MMKV storage update
                 storage.set("userClan", JSON.stringify(data.userClan));
-                
+
                 checkWarNotifications(data.userClan.tag);
             } else {
                 setUserClan(null);
                 setWarActionsCount(0);
-                
+
                 // 🔹 MMKV storage removal
-                storage.delete("userClan");
+                storage.set("userClan", "");
             }
 
             if (data.clans) {
@@ -166,7 +166,7 @@ export const ClanProvider = ({ children }) => {
     const clearClanData = () => {
         setUserClan(null);
         setWarActionsCount(0);
-        storage.delete("userClan");
+        storage.set("userClan", "");
     };
 
     // Helper values

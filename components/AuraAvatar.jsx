@@ -123,7 +123,7 @@ export default function AuraAvatar({
     const containerSize = size + (24 * sizeRatio); 
     
     // 3. Scale VFX safely (Give it a larger base bounding box so Lotties don't clip)
-    const vfxScale = equippedVfx?.visualConfig?.scale || 1.3; 
+    const vfxScale = equippedVfx?.visualConfig?.zoom || 1.3; 
     const vfxBaseDim = size * 1.5; 
     const vfxWidth = vfxBaseDim * vfxScale; 
     const vfxHeight = vfxBaseDim * vfxScale; 

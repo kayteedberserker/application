@@ -1,21 +1,21 @@
 import { Ionicons, MaterialCommunityIcons } from '@expo/vector-icons';
 import { useRouter } from 'expo-router';
-import React, { useEffect, useState } from 'react';
+import LottieView from 'lottie-react-native';
+import { useEffect, useState } from 'react';
 import { ActivityIndicator, Dimensions, Modal, TouchableOpacity, View } from 'react-native';
 import { useMMKV } from 'react-native-mmkv';
+import { SvgXml } from 'react-native-svg';
 import { useCoins } from '../context/CoinContext';
-import { useUser } from '../context/UserContext';
 import { useEvent } from '../context/EventContext';
+import { useUser } from '../context/UserContext';
 import CoinIcon from './ClanIcon';
 import { Text } from './Text';
 import THEME from './useAppTheme';
-import LottieView from 'lottie-react-native';
-import { SvgXml } from 'react-native-svg';
 
 const { width } = Dimensions.get('window');
 const GLOBAL_COOLDOWN_KEY = "global_promo_cooldown_timestamp";
 
-let hasShownThisSession = false; 
+let hasShownThisSession = false;
 
 const RemoteSvgIcon = ({ xml, lottieUrl, lottieJson, size = 50, color }) => {
     if (lottieJson || lottieUrl) {
@@ -38,7 +38,6 @@ const RemoteSvgIcon = ({ xml, lottieUrl, lottieJson, size = 50, color }) => {
     return <SvgXml xml={xml.replace(/currentColor/g, color || 'white')} width={size} height={size} />;
 };
 
-// ⚡️ NEW: Lightweight Countdown Component (Prevents the whole modal from lagging)
 const CountdownTimer = ({ startsAt, color }) => {
     const [timeLeft, setTimeLeft] = useState(null);
 
@@ -105,27 +104,44 @@ const CountdownTimer = ({ startsAt, color }) => {
     );
 };
 
-
 export default function DailyModal() {
     const storage = useMMKV();
     const router = useRouter();
     const { user } = useUser();
     const { processTransaction, isProcessingTransaction } = useCoins();
-    
     const { activeEvents } = useEvent();
 
     const [visible, setVisible] = useState(false);
     const [targetDay, setTargetDay] = useState(1);
-    const [hasClaimed, setHasClaimed] = useState(false); 
-    const [modalMode, setModalMode] = useState(null); 
+    const [hasClaimed, setHasClaimed] = useState(false);
+    const [modalMode, setModalMode] = useState(null);
     const [currentPromo, setCurrentPromo] = useState(null);
 
-    useEffect(() => {
-        if (!user || hasShownThisSession) return
+    // ⚡️ HELPER: Check if there's an event waiting
+    const getNextEvent = () => {
+        if (!activeEvents || activeEvents.length === 0) return null;
+
+        const now = new Date().getTime();
+        const globalCooldown = storage.getNumber(GLOBAL_COOLDOWN_KEY) || 0;
+        if (now < globalCooldown) return null;
 
         const todayStr = new Date().toDateString();
-        
-        const localClaimedToday = storage.getBoolean(`daily_claimed_${todayStr}`)
+        const eventQueue = activeEvents.map(evt => ({
+            ...evt,
+            tabKey: evt.type === 'gacha' ? 'gacha' : 'claim'
+        }));
+
+        return eventQueue.find(evt => {
+            const dismissedDate = storage.getString(`last_dismissed_${evt.id}`);
+            return dismissedDate !== todayStr;
+        });
+    };
+
+    useEffect(() => {
+        if (!user || hasShownThisSession) return;
+
+        const todayStr = new Date().toDateString();
+        const localClaimedToday = storage.getBoolean(`daily_claimed_${todayStr}`);
         const serverClaimedToday = user.lastClaimedDate ? new Date(user.lastClaimedDate).toDateString() === todayStr : false;
         const canClaimToday = !localClaimedToday && !serverClaimedToday;
         const currentStreak = user.consecutiveStreak || 0;
@@ -136,56 +152,57 @@ export default function DailyModal() {
             setTargetDay((currentStreak % 7) + 1);
         }
 
+        // Check if there is an event waiting
+        const nextPromo = getNextEvent();
+        if (nextPromo) setCurrentPromo(nextPromo);
+
+        // Logic 1: Show Daily Login First
         if (canClaimToday && !hasClaimed) {
             setModalMode('daily');
             const timer = setTimeout(() => setVisible(true), 1500);
             return () => clearTimeout(timer);
-        } 
-        
-        if (activeEvents && activeEvents.length > 0) {
-            const now = new Date().getTime();
-            const globalCooldown = storage.getNumber(GLOBAL_COOLDOWN_KEY) || 0;
-            
-            if (now < globalCooldown) return;
-
-            const eventQueue = activeEvents.map(evt => ({
-                ...evt,
-                tabKey: evt.type === 'gacha' ? 'gacha' : 'claim'
-            }))
-            
-            const nextPromo = eventQueue.find(evt => {
-                const dismissedDate = storage.getString(`last_dismissed_${evt.id}`);
-                return dismissedDate !== todayStr
-            });
-            
-            if (nextPromo) {
-                setCurrentPromo(nextPromo);
-                setModalMode('event');
-                const timer = setTimeout(() => setVisible(true), 1500);
-                return () => clearTimeout(timer);
-            }
         }
-    }, [user, activeEvents, hasClaimed]); 
+
+        // Logic 2: Show Event (if daily login was already claimed previously)
+        if (nextPromo) {
+            setModalMode('event');
+            const timer = setTimeout(() => setVisible(true), 1500);
+            return () => clearTimeout(timer);
+        }
+    }, [user, activeEvents, hasClaimed]);
 
     const handleClaimDaily = async () => {
         if (isProcessingTransaction) return;
-        
+
         const type = targetDay === 7 ? 'daily_login_7' : 'daily_login';
         const result = await processTransaction('claim', type, null, null);
-        
+
         if (result.success) {
             const todayStr = new Date().toDateString();
-            
             setHasClaimed(true);
-            hasShownThisSession = true; 
-            storage.set(`daily_claimed_${todayStr}`, true); 
-            
+            storage.set(`daily_claimed_${todayStr}`, true);
+
+            // Wait 1 second to show the "Acquired" checkmark
             setTimeout(() => {
-                setVisible(false);
-            }, 1500);
+                // ⚡️ IF there is an event waiting, switch to it! Otherwise, close.
+                if (currentPromo) {
+                    setModalMode('event');
+                } else {
+                    hasShownThisSession = true;
+                    setVisible(false);
+                }
+            }, 1000);
         } else {
-            hasShownThisSession = true; 
-            setVisible(false);
+            // Transaction failed (likely a server desync)
+            const todayStr = new Date().toDateString();
+            storage.set(`daily_claimed_${todayStr}`, true);
+
+            if (currentPromo) {
+                setModalMode('event');
+            } else {
+                hasShownThisSession = true;
+                setVisible(false);
+            }
         }
     };
 
@@ -193,41 +210,48 @@ export default function DailyModal() {
         if (modalMode === 'event' && currentPromo) {
             storage.set(`last_dismissed_${currentPromo.id}`, new Date().toDateString());
             const thirtyMinsFromNow = new Date().getTime() + (30 * 60 * 1000);
-            storage.set(GLOBAL_COOLDOWN_KEY, thirtyMinsFromNow)
+            storage.set(GLOBAL_COOLDOWN_KEY, thirtyMinsFromNow);
+        } else if (modalMode === 'daily') {
+            // ⚡️ If they dismiss the daily login without claiming, still check for events!
+            if (currentPromo) {
+                setModalMode('event');
+                return; // Stop here, don't close the modal yet
+            }
         }
-        
-        hasShownThisSession = true 
+
+        hasShownThisSession = true;
         setVisible(false);
     };
 
     const handleGoToEvent = () => {
-        handleDismissEvent(); 
+        handleDismissEvent();
         const targetTab = currentPromo?.id || 'referral';
-        router.push(`/screens/referralevent?tab=${targetTab}`); 
+        router.push(`/screens/referralevent?tab=${targetTab}`);
     };
 
     if (!visible || !modalMode) return null;
 
     const rewardAmount = targetDay === 7 ? 50 : 10;
-    
     const eventColor = currentPromo?.themeColor || '#a855f7';
     const EventIcon = currentPromo?.icon || 'party-popper';
     const tokenVisual = currentPromo?.tokenVisual || null;
 
     const isComingSoon = currentPromo?.isComing || currentPromo?.status === 'coming_soon';
-    const showDismissButton = !isProcessingTransaction && !(modalMode === 'daily' && hasClaimed);
+
+    // ⚡️ FIXED: The dismiss button ONLY hides when a transaction is actively spinning
+    const showDismissButton = !isProcessingTransaction;
 
     return (
         <Modal transparent visible={visible} animationType="fade">
             <View className="flex-1 justify-center items-center bg-black/90 px-6">
-                
-                <View 
-                    style={{ backgroundColor: '#0f172a', borderColor: modalMode === 'daily' ? THEME.accent : eventColor }} 
+
+                <View
+                    style={{ backgroundColor: '#0f172a', borderColor: modalMode === 'daily' ? THEME.accent : eventColor }}
                     className={`w-full rounded-2xl px-6 py-8 border-2 items-center shadow-2xl relative ${modalMode === 'daily' ? 'shadow-blue-500/40' : 'shadow-purple-500/30'}`}
                 >
                     {showDismissButton && (
-                        <TouchableOpacity 
-                            onPress={handleDismissEvent} 
+                        <TouchableOpacity
+                            onPress={handleDismissEvent}
                             className="absolute top-4 right-4 z-50 p-2 bg-white/10 rounded-full"
                             hitSlop={{ top: 15, bottom: 15, left: 15, right: 15 }}
                         >
@@ -292,8 +316,8 @@ export default function DailyModal() {
                     {/* ========================================== */}
                     {modalMode === 'event' && currentPromo && (
                         <View className="w-full items-center mt-2">
-                            <View 
-                                style={{ backgroundColor: `${eventColor}20`, borderLeftColor: eventColor, borderRightColor: eventColor }} 
+                            <View
+                                style={{ backgroundColor: `${eventColor}20`, borderLeftColor: eventColor, borderRightColor: eventColor }}
                                 className="px-4 py-1.5 rounded-sm border-l-2 border-r-2 mb-6 flex-row items-center"
                             >
                                 <Text style={{ color: eventColor }} className="font-black text-[10px] uppercase tracking-[0.2em]">
@@ -302,7 +326,6 @@ export default function DailyModal() {
                             </View>
 
                             <View className="items-center mb-6 w-full">
-                                {/* ⚡️ UPDATED: Added the cool rings for coming soon events */}
                                 <View className="items-center justify-center mb-6 relative">
                                     {isComingSoon && (
                                         <>
@@ -310,7 +333,7 @@ export default function DailyModal() {
                                             <View style={{ borderColor: eventColor, opacity: 0.5 }} className="w-28 h-28 rounded-full border-2 border-dashed absolute" />
                                         </>
                                     )}
-                                    <View 
+                                    <View
                                         style={{ backgroundColor: `${eventColor}10`, borderColor: `${eventColor}40`, shadowColor: eventColor }}
                                         className={`w-24 h-24 rounded-full items-center justify-center border-2 shadow-[0_0_30px_rgba(0,0,0,0.5)] transform ${isComingSoon ? 'rotate-0' : 'rotate-3'}`}
                                     >
@@ -323,7 +346,7 @@ export default function DailyModal() {
                                         )}
                                     </View>
                                 </View>
-                                
+
                                 <Text className="text-white text-2xl font-black italic uppercase text-center tracking-tighter mb-2">
                                     {currentPromo.title}
                                 </Text>
@@ -331,13 +354,12 @@ export default function DailyModal() {
                                     {currentPromo.description}
                                 </Text>
 
-                                {/* ⚡️ NEW: The Countdown is inserted right here! */}
                                 {isComingSoon && currentPromo.startsAt && (
                                     <CountdownTimer startsAt={currentPromo.startsAt} color={eventColor} />
                                 )}
                             </View>
 
-                            <TouchableOpacity 
+                            <TouchableOpacity
                                 onPress={handleGoToEvent}
                                 style={{ backgroundColor: eventColor, shadowColor: eventColor }}
                                 className="w-full h-14 rounded-xl flex-row items-center justify-center shadow-[0_0_20px_rgba(0,0,0,0.4)] mt-2"
@@ -349,9 +371,10 @@ export default function DailyModal() {
                         </View>
                     )}
 
+                    {/* ⚡️ FIXED: The bottom dismiss text is always available when appropriate */}
                     {showDismissButton && (
-                        <TouchableOpacity 
-                            onPress={handleDismissEvent} 
+                        <TouchableOpacity
+                            onPress={handleDismissEvent}
                             activeOpacity={0.5}
                             className="mt-4 pt-4 pb-2 px-10 items-center justify-center z-50"
                             hitSlop={{ top: 20, bottom: 20, left: 20, right: 20 }}

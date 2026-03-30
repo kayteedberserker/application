@@ -10,18 +10,18 @@ import { Stack, usePathname, useRootNavigationState, useRouter } from "expo-rout
 import * as Updates from 'expo-updates';
 import { useColorScheme } from "nativewind";
 import { useCallback, useEffect, useRef, useState } from "react";
-import { AppState, BackHandler, DeviceEventEmitter, Platform, StatusBar, View } from "react-native";
+import { BackHandler, DeviceEventEmitter, Platform, StatusBar, View } from "react-native";
+import { useMMKV } from 'react-native-mmkv';
 import Purchases from 'react-native-purchases';
 import { SafeAreaProvider, initialWindowMetrics } from "react-native-safe-area-context";
 import Toast from 'react-native-toast-message';
-import { useMMKV } from 'react-native-mmkv';
 
 import AnimeLoading from "../components/AnimeLoading";
 import ReviewGate from "../components/ReviewGate";
 import { AlertProvider } from '../context/AlertContext';
 import { ClanProvider } from "../context/ClanContext";
-import { EventProvider } from "../context/EventContext";
 import { CoinProvider } from "../context/CoinContext";
+import { EventProvider } from "../context/EventContext";
 import { StreakProvider, useStreak } from "../context/StreakContext";
 import { UserProvider, useUser } from "../context/UserContext";
 import apiFetch from "../utils/apiFetch";
@@ -121,8 +121,8 @@ function RootLayoutContent() {
             try {
                 const isConfigured = await Purchases.isConfigured();
                 if (!isConfigured) {
-                    await Purchases.configure({ 
-                        apiKey: Platform.OS === 'ios' ? REVENUE_CAT_API_KEYS.ios : REVENUE_CAT_API_KEYS.android 
+                    await Purchases.configure({
+                        apiKey: Platform.OS === 'ios' ? REVENUE_CAT_API_KEYS.ios : REVENUE_CAT_API_KEYS.android
                     });
                 }
                 if (user?.uid || user?.id) {
@@ -152,10 +152,10 @@ function RootLayoutContent() {
                     try {
                         const parsed = JSON.parse(value);
                         if (parsed?.timestamp && (now - parsed.timestamp > expiredTime)) {
-                            storage.delete(key);
+                            storage.set(key, ""); // Clear expired cache
                         }
                     } catch (e) {
-                        storage.delete(key);
+                        storage.set(key, ""); // Clear corrupted cache
                     }
                 }
             } catch (err) { console.error("Janitor failed:", err); }
@@ -202,7 +202,7 @@ function RootLayoutContent() {
 
         const currentPathBase = currentPathRef.current.split('?')[0];
         const targetPathBase = targetPath.split('?')[0];
-        
+
         if (currentPathBase === targetPathBase) {
             if (targetDiscussionId) {
                 DeviceEventEmitter.emit("openCommentSection", { discussionId: targetDiscussionId });

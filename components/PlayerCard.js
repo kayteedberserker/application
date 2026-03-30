@@ -7,7 +7,14 @@ import { Text } from "./Text";
 import PlayerBackground from "./PlayerBackground";
 import PlayerNameplate from "./PlayerNameplate";
 import PlayerWatermark from "./PlayerWatermark";
-import BadgeIcon from "./BadgeIcon"; // ⚡️ Make sure this is imported!
+import BadgeIcon from "./BadgeIcon"; 
+
+const formatCoins = (num) => {
+    if (!num) return "0";
+    if (num >= 1000000) return Math.floor(num / 1000000) + 'M+';
+    if (num >= 1000) return Math.floor(num / 1000) + 'k+';
+    return num.toString();
+};
 
 const getAuraTier = (rank) => {
   const MONARCH_GOLD = '#fbbf24';
@@ -32,17 +39,48 @@ const getAuraTier = (rank) => {
   }
 };
 
+export const AURA_TIERS = [
+  { level: 1, req: 0, title: "E-Rank Novice", icon: "🌱", color: "#94a3b8" },
+  { level: 2, req: 100, title: "D-Rank Operative", icon: "⚔️", color: "#34d399" }, 
+  { level: 3, req: 300, title: "C-Rank Awakened", icon: "🔥", color: "#f87171" }, 
+  { level: 4, req: 700, title: "B-Rank Elite", icon: "⚡", color: "#a78bfa" }, 
+  { level: 5, req: 1500, title: "A-Rank Champion", icon: "🛡️", color: "#60a5fa" }, 
+  { level: 6, req: 3000, title: "S-Rank Legend", icon: "🌟", color: "#fcd34d" }, 
+  { level: 7, req: 6000, title: "SS-Rank Mythic", icon: "🌀", color: "#f472b6" }, 
+  { level: 8, req: 12000, title: "Monarch", icon: "👑", color: "#fbbf24" }, 
+];
+
+const resolveUserRank = (level, currentAura) => {
+    const safeLevel = Math.max(1, Math.min(8, level || 1));
+    const currentTier = AURA_TIERS[safeLevel - 1];
+    const nextTier = AURA_TIERS[safeLevel] || currentTier; 
+
+    let progress = 100;
+    if (safeLevel < 8) {
+        progress = ((currentAura - currentTier.req) / (nextTier.req - currentTier.req)) * 100;
+    }
+
+    return { 
+        title: currentTier.title.toUpperCase().replace(/ /g, "_"), 
+        icon: currentTier.icon, 
+        color: currentTier.color, 
+        progress: Math.min(Math.max(progress, 0), 100),
+        req: currentTier.req,
+        nextReq: nextTier.req
+    };
+};
+
 export default function PlayerCard({ author, totalPosts, isDark }) {
   if (!author) return null;
   
-  const count = totalPosts;
-  const rankTitle = count > 200 ? "Master_Writer" : count > 150 ? "Elite_Writer" : count > 100 ? "Senior_Writer" : count > 50 ? "Novice_Writer" : count > 25 ? "Senior_Researcher" : "Novice_Researcher";
-  const rankIcon = count > 200 ? "👑" : count > 150 ? "💎" : count > 100 ? "🔥" : count > 50 ? "⚔️" : count > 25 ? "📜" : "🛡️";
-  const nextMilestone = count > 200 ? 500 : count > 150 ? 200 : count > 100 ? 150 : count > 50 ? 100 : count > 25 ? 50 : 25;
-  const progress = Math.min((count / nextMilestone) * 100, 100);
+  // ⚡️ Extract New RPG Progression Data
+  const totalAura = author.aura || 0;
+  const rankLevel = author.currentRankLevel || 1;
+  const writerRank = resolveUserRank(rankLevel, totalAura);
 
-  const auraRank = author?.previousRank || 0;
-  const aura = getAuraTier(auraRank);
+  // Extract Weekly Glory Data
+  const weeklyGloryRank = author?.previousRank || 0;
+  const weeklyAuraTier = getAuraTier(weeklyGloryRank);
 
   // --- Inventory Parsing ---
   const equippedGlow = author?.inventory?.find(i => i.category === 'GLOW' && i.isEquipped);
@@ -53,7 +91,8 @@ export default function PlayerCard({ author, totalPosts, isDark }) {
   // ⚡️ EXTRACT UP TO 10 EQUIPPED BADGES
   const equippedBadges = author.inventory?.filter(i => i.category === 'BADGE' && i.isEquipped).slice(0, 10) || [];
   
-  const themeColor = equippedGlow?.visualConfig?.primaryColor || aura.color;
+  // Base theme color defaults to their weekly glory color or their equipped glow
+  const themeColor = equippedGlow?.visualConfig?.primaryColor || weeklyAuraTier.color;
   const favoriteCharacter = author?.preferences?.favCharacter || "NONE_SET";
   const displayId = author.deviceId ? author.deviceId.slice(-11).toUpperCase() : "OP_882749112";
 
@@ -78,19 +117,19 @@ export default function PlayerCard({ author, totalPosts, isDark }) {
       <View className="flex-col items-center gap-6 relative z-10">
         <View className="relative items-center justify-center">
           <AuraAvatar
-            author={{ ...author, rank: auraRank, image: author.profilePic?.url, name: author.username }}
-            aura={aura}
+            author={{ ...author, rank: weeklyGloryRank, image: author.profilePic?.url, name: author.username }}
+            aura={weeklyAuraTier}
             glowColor={equippedGlow?.visualConfig?.primaryColor}
-            isTop10={auraRank > 0 && auraRank <= 10}
+            isTop10={weeklyGloryRank > 0 && weeklyGloryRank <= 10}
             isDark={isDark}
             size={150} 
           />
-          {auraRank > 0 && (
+          {weeklyGloryRank > 0 && (
             <View style={{ backgroundColor: themeColor }} className="absolute -bottom-4 px-5 py-1.5 rounded-full border-2 border-white dark:border-black shadow-lg z-20">
               <View className="flex-row items-center gap-1.5">
-                <MaterialCommunityIcons name={aura.icon} size={12} color={auraRank === 5 || equippedGlow ? "black" : "white"} />
-                <Text style={{ color: auraRank === 5 || equippedGlow ? "black" : "white" }} className="text-[10px] font-black uppercase tracking-widest">
-                  {aura.label} #{auraRank}
+                <MaterialCommunityIcons name={weeklyAuraTier.icon} size={12} color={weeklyGloryRank === 5 || equippedGlow ? "black" : "white"} />
+                <Text style={{ color: weeklyGloryRank === 5 || equippedGlow ? "black" : "white" }} className="text-[10px] font-black uppercase tracking-widest">
+                  {weeklyAuraTier.label} #{weeklyGloryRank}
                 </Text>
               </View>
             </View>
@@ -104,7 +143,7 @@ export default function PlayerCard({ author, totalPosts, isDark }) {
               author={author} 
               themeColor={themeColor} 
               equippedGlow={equippedGlow}
-              auraRank={auraRank}
+              auraRank={weeklyGloryRank}
               isDark={isDark}
               showFlame={true}
               showPeakBadge={true}
@@ -132,39 +171,41 @@ export default function PlayerCard({ author, totalPosts, isDark }) {
             </Text>
           </View>
 
+          {/* ⚡️ UPDATED: 3-COLUMN STATS LAYOUT */}
           <View className="flex-row gap-10 mt-4 border-y border-gray-100 dark:border-gray-800 w-full py-5 justify-center">
             <View className="items-center">
               <Text className="text-[11px] font-black text-gray-400 uppercase tracking-widest">Aura</Text>
-              <Text className="text-xl font-black" style={{ color: themeColor }}>+{author.weeklyAura || 0}</Text>
+              <Text className="text-xl font-black" style={{ color: writerRank.color }}>{formatCoins(totalAura)}</Text>
             </View>
             <View className="items-center">
-              <Text className="text-[11px] font-black text-gray-400 uppercase tracking-widest">Logs</Text>
-              <Text className="text-xl font-black dark:text-white">{totalPosts}</Text>
+              <Text className="text-[11px] font-black text-gray-400 uppercase tracking-widest">Glory</Text>
+              <Text className="text-xl font-black" style={{ color: '#ec4899' }}>+{formatCoins(author.weeklyAura || 0)}</Text>
             </View>
             <View className="items-center">
-              <Text className="text-[11px] font-black text-gray-400 uppercase tracking-widest">Rank</Text>
-              <Text className="text-xl font-black dark:text-white" style={{ color: themeColor }}>#{auraRank || '??'}</Text>
+              <Text className="text-[11px] font-black text-gray-400 uppercase tracking-widest">Docs</Text>
+              <Text className="text-xl font-black dark:text-white">{formatCoins(totalPosts)}</Text>
             </View>
           </View>
 
+          {/* ⚡️ UPDATED: RPG RANK PROGRESS BAR */}
           <View className="mt-10 w-full px-2">
             <View className="flex-row justify-between items-end mb-2.5">
               <View className="flex-row items-center gap-2">
-                <Text className="text-3xl">{rankIcon}</Text>
+                <Text className="text-3xl">{writerRank.icon}</Text>
                 <View>
-                  <Text style={{ color: themeColor }} className="text-[9px] font-mono uppercase tracking-[0.2em] leading-none mb-1">Writer_Class</Text>
+                  <Text style={{ color: writerRank.color }} className="text-[9px] font-mono uppercase tracking-[0.2em] leading-none mb-1">RPG_CLASS</Text>
                   <Text className="text-base font-black uppercase tracking-tighter dark:text-white">
-                    {rankTitle}
+                    {writerRank.title}
                   </Text>
                 </View>
               </View>
               <Text className="text-[11px] font-mono font-bold text-gray-500 uppercase">
-                EXP: {count} / {nextMilestone}
+                EXP: {formatCoins(totalAura)} / {formatCoins(writerRank.nextReq)}
               </Text>
             </View>
 
             <View className="h-2 w-full bg-gray-100 dark:bg-gray-800 rounded-full overflow-hidden">
-              <View style={{ width: `${progress}%`, backgroundColor: themeColor }} className="h-full shadow-lg shadow-blue-500" />
+              <View style={{ width: `${writerRank.progress}%`, backgroundColor: writerRank.color }} className="h-full shadow-lg shadow-blue-500" />
             </View>
           </View>
         </View>

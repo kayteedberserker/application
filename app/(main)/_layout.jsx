@@ -1,6 +1,5 @@
-import AsyncStorage from '@react-native-async-storage/async-storage'; 
 import { Ionicons, MaterialCommunityIcons } from "@expo/vector-icons";
-import { useMMKV } from "react-native-mmkv";
+import AsyncStorage from '@react-native-async-storage/async-storage';
 import { Redirect, Stack, usePathname, useRouter } from "expo-router";
 import { useColorScheme as useNativeWind } from "nativewind";
 import { useEffect, useState } from "react";
@@ -13,6 +12,7 @@ import {
     useColorScheme as useSystemScheme,
     View
 } from "react-native";
+import { useMMKV } from "react-native-mmkv";
 import { SafeAreaView, useSafeAreaInsets } from "react-native-safe-area-context";
 
 // ⚡️ IMPORT REANIMATED
@@ -22,14 +22,16 @@ import Animated, {
     interpolate,
     useAnimatedStyle,
     useSharedValue,
+    withDelay,
     withRepeat,
     withSequence,
     withSpring,
-    withTiming,
-    withDelay
+    withTiming
 } from "react-native-reanimated";
 
 import AnimeLoading from "../../components/AnimeLoading";
+import DailyModal from '../../components/DailyModal';
+import GlobalMarquee from '../../components/GlobalMarquee';
 import UpdateHandler from "../../components/UpdateModal";
 import { useClan } from "../../context/ClanContext";
 import { useUser } from "../../context/UserContext";
@@ -37,18 +39,17 @@ import apiFetch from "../../utils/apiFetch";
 import "../globals.css";
 import CategoryNav from "./../../components/CategoryNav";
 import TopBar from "./../../components/Topbar";
-import DailyModal from '../../components/DailyModal';
 
 export default function MainLayout() {
     const { colorScheme, setColorScheme } = useNativeWind();
     const systemScheme = useSystemScheme();
     const router = useRouter();
     const pathname = usePathname();
-    const insets = useSafeAreaInsets(); 
+    const insets = useSafeAreaInsets();
     const [isActive, setIsActive] = useState(false);
-    
+
     const storage = useMMKV();
-    
+
     useEffect(() => {
         if (pathname === "/Search" || pathname === "/" || pathname === "/authordiary" || pathname === "/profile") {
             setIsActive(true);
@@ -58,13 +59,13 @@ export default function MainLayout() {
     }, [pathname]);
 
     const { warActionsCount, canManageClan, fullData, hasUnreadChat } = useClan();
-    
+
     const [lastOffset, setLastOffset] = useState(0);
     const [isNavVisible, setIsNavVisible] = useState(true);
     const [showTop, setShowTop] = useState(false);
     const [showClanMenu, setShowClanMenu] = useState(false);
-    
-    const { user, setUser, contextLoading } = useUser(); 
+
+    const { user, setUser, contextLoading } = useUser();
 
     // ⚡️ CLAN HINT STATE
     const [showClanHint, setShowClanHint] = useState(false);
@@ -78,7 +79,7 @@ export default function MainLayout() {
     const clanHintBounce = useSharedValue(0); // ⚡️ For the Gold clan hint
 
     const [isUserAuthenticated, setIsUserAuthenticated] = useState(() => {
-        return storage.getString("mobileUser") ? true : null;
+        return storage.getString("mobileUser") !== "null" && storage.getString("mobileUser") ? true : null;
     });
 
     const [userInClan, setUserInClan] = useState(false);
@@ -110,7 +111,7 @@ export default function MainLayout() {
 
             // 3. Auto hide after 10 seconds total (2s wait + 8s display)
             const hideTimer = setTimeout(() => setShowClanHint(false), 10000);
-            
+
             return () => {
                 clearTimeout(showTimer);
                 clearTimeout(hideTimer);
@@ -138,21 +139,21 @@ export default function MainLayout() {
                 withTiming(1.05, { duration: 1200 }),
                 withTiming(1, { duration: 1200 })
             ),
-            -1, 
+            -1,
             false
         );
 
-        eventSpin.value = 0; 
+        eventSpin.value = 0;
         eventSpin.value = withRepeat(
             withTiming(1, { duration: 3500, easing: Easing.linear }),
-            -1, 
+            -1,
             false
         );
 
         // Attractor Tooltip Animation
         tooltipAnim.value = withSequence(
-            withSpring(1, { damping: 12, stiffness: 100 }), 
-            withDelay(4000, withTiming(0, { duration: 500 })) 
+            withSpring(1, { damping: 12, stiffness: 100 }),
+            withDelay(4000, withTiming(0, { duration: 500 }))
         );
     }, []);
 
@@ -160,11 +161,12 @@ export default function MainLayout() {
         if (isUserAuthenticated !== null) return;
         try {
             const legacyUserStr = await AsyncStorage.getItem("mobileUser");
+
             if (legacyUserStr) {
                 console.log("Gatekeeper: Migrating veteran operative to MMKV...");
                 storage.set("mobileUser", legacyUserStr);
                 const parsed = JSON.parse(legacyUserStr);
-                setUser(parsed); 
+                setUser(parsed);
                 setIsUserAuthenticated(true);
                 return;
             }
@@ -232,11 +234,11 @@ export default function MainLayout() {
     };
 
     const NotificationBadge = ({ count, hasUnRead, size = 12 }) => {
-        
+
         if (!hasUnRead && (!count || count <= 0)) return null;
         if (!hasUnRead && !canManageClan) return null;
         return (
-            <View 
+            <View
                 className="absolute -top-1 -right-1 bg-red-500 rounded-full items-center justify-center border-2 border-white dark:border-slate-900"
                 style={{ minWidth: size, height: size, paddingHorizontal: 2 }}
             >
@@ -302,7 +304,7 @@ export default function MainLayout() {
         }
         DeviceEventEmitter.emit("navigateSafely", route);
     };
-    
+
     if (contextLoading) {
         return <AnimeLoading tipType={"general"} message="LOADING_PAGE" subMessage="Syncing Account" />;
     }
@@ -315,7 +317,7 @@ export default function MainLayout() {
         <View style={{ flex: 1, backgroundColor: isDark ? "#000" : "#fff" }}>
             <StatusBar barStyle={isDark ? "light-content" : "dark-content"} />
 
-            <SafeAreaView 
+            <SafeAreaView
                 edges={['top', 'left', 'right']}
                 style={{
                     zIndex: 100,
@@ -334,13 +336,14 @@ export default function MainLayout() {
                         right: 0,
                         height: 40,
                         zIndex: 90,
-                        backgroundColor: "transparent", 
+                        backgroundColor: "transparent",
                     },
                     navStyle
                 ]}
             >
                 <CategoryNav isDark={isDark} />
             </Animated.View>
+            <GlobalMarquee isDark={isDark} />
 
             <UpdateHandler />
 
@@ -365,8 +368,8 @@ export default function MainLayout() {
                         onPress={() => navigateTo("/screens/referralevent")}
                         activeOpacity={0.8}
                         style={[
-                            styles.eventButton, 
-                            { 
+                            styles.eventButton,
+                            {
                                 backgroundColor: isDark ? "#111111" : "#ffffff",
                                 borderColor: "#f59e0b",
                                 shadowColor: "#f59e0b",
@@ -376,9 +379,9 @@ export default function MainLayout() {
                         <Animated.View style={rouletteSpinStyle}>
                             <Ionicons name="aperture" size={26} color="#f59e0b" />
                         </Animated.View>
-                        
+
                         <View style={[
-                            styles.eventBadge, 
+                            styles.eventBadge,
                             { backgroundColor: "#f59e0b", borderColor: isDark ? "#111111" : "#ffffff" }
                         ]}>
                             <Text style={styles.eventBadgeText}>EVENT</Text>
@@ -411,9 +414,9 @@ export default function MainLayout() {
                 {tabs.map((tab) => {
                     const active = tab.match(pathname);
                     return (
-                        <TouchableOpacity 
+                        <TouchableOpacity
                             key={tab.id}
-                            onPress={() => navigateTo(tab.route)} 
+                            onPress={() => navigateTo(tab.route)}
                             activeOpacity={0.9}
                             style={{
                                 height: 44,
@@ -432,7 +435,7 @@ export default function MainLayout() {
                                 color={active ? "#fff" : (isDark ? "#64748b" : "#94a3b8")}
                             />
                             {active && (
-                                <Text 
+                                <Text
                                     style={{ fontSize: 11, fontWeight: '900', color: "#fff", marginLeft: 8 }}
                                 >
                                     {tab.label}
@@ -453,14 +456,14 @@ export default function MainLayout() {
                 />
             )}
 
-            <View 
+            <View
                 style={[styles.container, { bottom: insets.bottom + 22 }]}
-                pointerEvents="box-none" 
+                pointerEvents="box-none"
             >
                 <Animated.View pointerEvents={showClanMenu ? "auto" : "none"} style={[fab3Style, { marginBottom: 10 }]}>
-                    <TouchableOpacity 
-                        onPress={() => { setShowClanMenu(false); navigateTo("/screens/war"); }} 
-                        activeOpacity={0.8} 
+                    <TouchableOpacity
+                        onPress={() => { setShowClanMenu(false); navigateTo("/screens/war"); }}
+                        activeOpacity={0.8}
                         style={[styles.subFab, { backgroundColor: "#ef4444" }]}
                     >
                         <MaterialCommunityIcons name="sword-cross" size={20} color="#fff" />
@@ -470,9 +473,9 @@ export default function MainLayout() {
 
                 {userInClan && (
                     <Animated.View pointerEvents={showClanMenu ? "auto" : "none"} style={[fab2Style, { marginBottom: 10 }]}>
-                        <TouchableOpacity 
-                            onPress={() => { setShowClanMenu(false); navigateTo("/clanprofile"); }} 
-                            activeOpacity={0.8} 
+                        <TouchableOpacity
+                            onPress={() => { setShowClanMenu(false); navigateTo("/clanprofile"); }}
+                            activeOpacity={0.8}
                             style={[styles.subFab, { backgroundColor: "#3b82f6" }]}
                         >
                             <Ionicons name="shield" size={20} color="#fff" />
@@ -482,9 +485,9 @@ export default function MainLayout() {
                 )}
 
                 <Animated.View pointerEvents={showClanMenu ? "auto" : "none"} style={[fab1Style, { marginBottom: 12 }]}>
-                    <TouchableOpacity 
-                        onPress={() => { setShowClanMenu(false); navigateTo("/screens/discover"); }} 
-                        activeOpacity={0.8} 
+                    <TouchableOpacity
+                        onPress={() => { setShowClanMenu(false); navigateTo("/screens/discover"); }}
+                        activeOpacity={0.8}
                         style={[styles.subFab, { backgroundColor: isDark ? "#1e293b" : "#475569" }]}
                     >
                         <Ionicons name="search" size={20} color="#fff" />
@@ -492,9 +495,9 @@ export default function MainLayout() {
                 </Animated.View>
 
                 {showTop && (
-                    <TouchableOpacity 
-                        onPress={handleBackToTop} 
-                        activeOpacity={0.7} 
+                    <TouchableOpacity
+                        onPress={handleBackToTop}
+                        activeOpacity={0.7}
                         style={[styles.mainFab, { marginBottom: 12, backgroundColor: isDark ? "#111111" : "#f8fafc", borderColor: isDark ? "#1e293b" : "#e2e8f0" }]}
                     >
                         <Ionicons name="chevron-up" size={24} color="#3b82f6" />
@@ -503,14 +506,14 @@ export default function MainLayout() {
 
                 {/* ⚡️ WRAPPER FOR MAIN FAB + VERTICAL FLOATING HINT */}
                 <View className="relative items-center justify-center z-50">
-                    
+
                     {/* ⚡️ VERTICAL BOUNCING GOLD HINT */}
                     {showClanHint && !showClanMenu && (
-                        <Animated.View 
-                            style={[clanHintAnimatedStyle, { position: 'absolute', bottom: 40, right: 10, alignItems: 'center' }]} 
+                        <Animated.View
+                            style={[clanHintAnimatedStyle, { position: 'absolute', bottom: 40, right: 10, alignItems: 'center' }]}
                             className="z-[100]"
                         >
-                            <View 
+                            <View
                                 style={{ backgroundColor: '#f59e0b', shadowColor: '#f59e0b' }}
                                 className="px-4 py-3 rounded-xl shadow-[0_0_15px_rgba(245,158,11,0.6)] min-w-[100] border border-yellow-300 items-center justify-center"
                             >
@@ -524,51 +527,51 @@ export default function MainLayout() {
                                     Tap To Access
                                 </Text>
                             </View>
-                            
-                            <Ionicons 
-                                name="caret-down" 
-                                size={28} 
-                                color="#f59e0b" 
-                                style={{ 
-                                    marginTop: -8, 
+
+                            <Ionicons
+                                name="caret-down"
+                                size={28}
+                                color="#f59e0b"
+                                style={{
+                                    marginTop: -8,
                                     position: "absolute",
                                     right: 0,
                                     bottom: 0,
-                                    textShadowColor: 'rgba(245, 158, 11, 0.5)', 
+                                    textShadowColor: 'rgba(245, 158, 11, 0.5)',
                                     textShadowOffset: { width: 0, height: 2 },
-                                    textShadowRadius: 6 
-                                }} 
+                                    textShadowRadius: 6
+                                }}
                             />
                         </Animated.View>
                     )}
 
-                    <TouchableOpacity 
-                        onPress={handleClanPress} 
-                        activeOpacity={0.8} 
+                    <TouchableOpacity
+                        onPress={handleClanPress}
+                        activeOpacity={0.8}
                         style={[
-                            styles.mainFab, 
-                            { 
-                                borderColor: showClanMenu ? (isDark ? "#fff" : "#3b82f6") : (isDark ? "#1e293b" : "#e2e8f0"), 
-                                borderWidth: 2, 
-                                backgroundColor: showClanMenu ? (isDark ? "#1e293b" : "#3b82f6") : (isDark ? "#111111" : "#f8fafc") 
+                            styles.mainFab,
+                            {
+                                borderColor: showClanMenu ? (isDark ? "#fff" : "#3b82f6") : (isDark ? "#1e293b" : "#e2e8f0"),
+                                borderWidth: 2,
+                                backgroundColor: showClanMenu ? (isDark ? "#1e293b" : "#3b82f6") : (isDark ? "#111111" : "#f8fafc")
                             }
                         ]}
                     >
                         <Animated.View style={mainFabIconStyle}>
-                            <Ionicons 
-                                name={showClanMenu ? "close" : "shield-half"} 
-                                size={24} 
-                                color={showClanMenu ? "#fff" : "#3b82f6"} 
+                            <Ionicons
+                                name={showClanMenu ? "close" : "shield-half"}
+                                size={24}
+                                color={showClanMenu ? "#fff" : "#3b82f6"}
                             />
                         </Animated.View>
-                        
+
                         {(!showClanMenu && canManageClan && (warActionsCount > 0 || fullData > 0)) || hasUnreadChat && (
-                            <View 
+                            <View
                                 style={{
                                     position: 'absolute', top: -2, right: -2, width: 14, height: 14,
                                     borderRadius: 7, backgroundColor: '#ef4444', borderWidth: 2,
                                     borderColor: isDark ? '#111111' : '#f8fafc'
-                                }} 
+                                }}
                             />
                         )}
                     </TouchableOpacity>
@@ -587,7 +590,7 @@ const styles = StyleSheet.create({
     eventButton: { width: 40, height: 40, borderRadius: 25, justifyContent: 'center', alignItems: 'center', elevation: 10, shadowOffset: { width: 0, height: 4 }, shadowOpacity: 0.4, shadowRadius: 5, borderWidth: 2 },
     eventBadge: { position: 'absolute', top: -6, left: -8, borderRadius: 12, paddingHorizontal: 6, paddingVertical: 2, borderWidth: 1.5 },
     eventBadgeText: { fontSize: 6, color: '#ffffff', fontWeight: '900' },
-    
+
     // ⚡️ Tooltip Styles for Event Button
     tooltipContainer: { backgroundColor: '#f59e0b', paddingHorizontal: 10, paddingVertical: 6, borderRadius: 8, marginRight: 10, elevation: 5, shadowColor: '#f59e0b', shadowOpacity: 0.8, shadowRadius: 8, shadowOffset: { width: 0, height: 2 } },
     tooltipText: { color: 'white', fontSize: 9, fontWeight: '900', letterSpacing: 1 },

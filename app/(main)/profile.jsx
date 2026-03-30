@@ -1,7 +1,5 @@
 import { Feather, Ionicons, MaterialCommunityIcons } from "@expo/vector-icons";
-import { useMMKV } from "react-native-mmkv"; // 🔹 Swapped to MMKV
 import * as Clipboard from 'expo-clipboard';
-import { Image } from "expo-image";
 import * as ImagePicker from "expo-image-picker";
 import { useRouter } from "expo-router";
 import * as Sharing from "expo-sharing";
@@ -20,6 +18,7 @@ import {
     TouchableOpacity,
     View
 } from "react-native";
+import { useMMKV } from "react-native-mmkv"; // 🔹 Swapped to MMKV
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { SvgXml } from "react-native-svg";
 import Toast from "react-native-toast-message";
@@ -37,19 +36,20 @@ import { useCoins } from "../../context/CoinContext";
 import { useUser } from "../../context/UserContext";
 import apiFetch from "../../utils/apiFetch";
 // ⚡️ Correct Reanimated Imports
+import AsyncStorage from "@react-native-async-storage/async-storage";
+import LottieView from 'lottie-react-native'; // ⚡️ Added for Inventory Previews
+import { MotiView } from 'moti';
 import Animated, {
-    useSharedValue,
+    Easing,
+    interpolate,
     useAnimatedStyle,
+    useSharedValue,
     withRepeat,
     withSequence,
-    withTiming,
     withSpring,
-    Easing,
-    interpolate
+    withTiming
 } from "react-native-reanimated";
 import AuraAvatar from "../../components/AuraAvatar"; // ⚡️ Needed for the preview
-import { MotiView } from 'moti';
-import LottieView from 'lottie-react-native'; // ⚡️ Added for Inventory Previews
 
 const { width, height } = Dimensions.get("window");
 const API_BASE = "https://oreblogda.com/api";
@@ -179,10 +179,10 @@ const ItemPreviewModal = ({
 
     return (
         <Modal visible={isVisible} transparent={true} animationType="none" onRequestClose={onClose}>
-            
+
             {/* ⚡️ FIXED: Pressable background to close on tap outside */}
             <Pressable style={previewStyles.overlay} onPress={onClose} disabled={isProcessing}>
-                
+
                 <MotiView
                     from={{ opacity: 0, translateY: 100, scale: 0.9 }}
                     animate={{ opacity: 1, translateY: 0, scale: 1 }}
@@ -193,13 +193,13 @@ const ItemPreviewModal = ({
                 >
                     {/* ⚡️ FIXED: Inner Pressable stops background tap from triggering when clicking the card */}
                     <Pressable style={{ flexShrink: 1, width: '100%' }} onPress={(e) => e.stopPropagation()}>
-                        
+
                         <TouchableOpacity onPress={onClose} style={previewStyles.closeButton} disabled={isProcessing}>
                             <Ionicons name="close" size={20} color="#fff" />
                         </TouchableOpacity>
 
                         {/* ⚡️ FIXED: Scrollable area for the PlayerCard so it fits on small phones */}
-                        <ScrollView 
+                        <ScrollView
                             contentContainerStyle={{ alignItems: 'center', paddingBottom: 20 }}
                             showsVerticalScrollIndicator={false}
                             bounces={false}
@@ -341,9 +341,9 @@ const previewStyles = StyleSheet.create({
 
 // 🔹 2. THE MAIN STORE COMPONENT
 const AuthorStoreModal = ({ visible, onClose, user, isDark, setInventory }) => {
-    const { coins, clanCoins, processTransaction, isProcessingTransaction } = useCoins(); 
-    const storage = useMMKV(); 
-    const CustomAlert = useAlert(); 
+    const { coins, clanCoins, processTransaction, isProcessingTransaction } = useCoins();
+    const storage = useMMKV();
+    const CustomAlert = useAlert();
 
     // ⚡️ CACHE CONFIGURATION
     const CACHE_KEY = "STORE_CATALOG_CACHE";
@@ -389,9 +389,9 @@ const AuthorStoreModal = ({ visible, onClose, user, isDark, setInventory }) => {
             try {
                 // Failsafe: just in case the catalog is empty
                 if (catalog.themes.length === 0 && catalog.standaloneItems.length === 0) {
-                    setLoading(true); 
+                    setLoading(true);
                 }
-                
+
                 const res = await apiFetch(`/store?type=author`);
                 const data = await res.json();
 
@@ -400,7 +400,7 @@ const AuthorStoreModal = ({ visible, onClose, user, isDark, setInventory }) => {
                         themes: data.catalog.themes || [],
                         standaloneItems: data.catalog.standaloneItems || []
                     };
-                    
+
                     setCatalog(newCatalog);
                     storage.set(CACHE_KEY, JSON.stringify(newCatalog));
                     hasFetchedThisSession.current = true;
@@ -431,7 +431,7 @@ const AuthorStoreModal = ({ visible, onClose, user, isDark, setInventory }) => {
             currency: itemCurrency,
             visualConfig: item.visualData || item.visualConfig,
             expiresInDays: item.expiresInDays,
-            rarity: item.rarity 
+            rarity: item.rarity
         });
 
         if (result.success) {
@@ -524,7 +524,7 @@ const AuthorStoreModal = ({ visible, onClose, user, isDark, setInventory }) => {
                         <Text className="text-green-600 dark:text-green-500 font-black text-[10px] mr-1">{item.price}</Text>
                         <CoinIcon type={item.currency || "OC"} size={10} />
                     </View>
-                    <View style={{backgroundColor: cardRarityColor}} className="p-1.5 rounded-full shadow-lg shadow-blue-500/30">
+                    <View style={{ backgroundColor: cardRarityColor }} className="p-1.5 rounded-full shadow-lg shadow-blue-500/30">
                         <Ionicons name="eye" size={12} color="white" />
                     </View>
                 </View>
@@ -945,13 +945,43 @@ const getAuraTier = (rank) => {
         default: return { color: '#1e293b', label: 'VANGUARD', icon: 'shield-check' };
     }
 };
+export const AURA_TIERS = [
+    { level: 1, req: 0, title: "E-Rank Novice", icon: "🌱", color: "#94a3b8" },
+    { level: 2, req: 100, title: "D-Rank Operative", icon: "⚔️", color: "#34d399" },
+    { level: 3, req: 300, title: "C-Rank Awakened", icon: "🔥", color: "#f87171" },
+    { level: 4, req: 700, title: "B-Rank Elite", icon: "⚡", color: "#a78bfa" },
+    { level: 5, req: 1500, title: "A-Rank Champion", icon: "🛡️", color: "#60a5fa" },
+    { level: 6, req: 3000, title: "S-Rank Legend", icon: "🌟", color: "#fcd34d" },
+    { level: 7, req: 6000, title: "SS-Rank Mythic", icon: "🌀", color: "#f472b6" },
+    { level: 8, req: 12000, title: "Monarch", icon: "👑", color: "#fbbf24" },
+];
+
+const resolveUserRank = (level, currentAura) => {
+    const safeLevel = Math.max(1, Math.min(8, level || 1));
+    const currentTier = AURA_TIERS[safeLevel - 1];
+    const nextTier = AURA_TIERS[safeLevel] || currentTier;
+
+    let progress = 100;
+    if (safeLevel < 8) {
+        progress = ((currentAura - currentTier.req) / (nextTier.req - currentTier.req)) * 100;
+    }
+
+    return {
+        title: currentTier.title.toUpperCase().replace(/ /g, "_"),
+        icon: currentTier.icon,
+        color: currentTier.color,
+        progress: Math.min(Math.max(progress, 0), 100),
+        req: currentTier.req,
+        nextReq: nextTier.req
+    };
+};
 
 export default function MobileProfilePage() {
     const storage = useMMKV();
-
     const CustomAlert = useAlert();
     const [theinventory, setInventory] = useState([])
     const { user, setUser, contextLoading } = useUser();
+
     const { colorScheme } = useNativeWind();
     const isDark = colorScheme === "dark";
     const router = useRouter();
@@ -983,24 +1013,30 @@ export default function MobileProfilePage() {
 
     const [isOnboarding, setIsOnboarding] = useState(false);
     const [onboardingStep, setOnboardingStep] = useState(0);
-    const [currentPosTop, setcurrentPosTop] = useState(0)
+    const [currentPosTop, setcurrentPosTop] = useState(0);
 
     const scanAnim = useSharedValue(0);
     const loadingAnim = useSharedValue(0);
     const pulseAnim = useSharedValue(1);
-
     const tooltipY = useSharedValue(0);
     const pointerX = useSharedValue(0);
 
     const CACHE_KEY_USER_EXTRAS = `user_profile_cache_${user?.deviceId || 'temp'}`;
 
-    // Safely fallback user properties to prevent render crashes during initial sign-up flow
-    const currentAuraPoints = user?.weeklyAura || 0;
-    const aura = useMemo(() => getAuraVisuals(user?.previousRank) || { color: '#3b82f6', icon: 'shield-outline', label: 'NOVICE', description: 'Operator initializing...' }, [user?.previousRank]);
+    // ⚡️ EXTRACT RPG PROGRESSION DATA
+    const totalAura = user?.aura || 0;
+    const rankLevel = user?.currentRankLevel || 1;
+    const writerRank = useMemo(() => resolveUserRank(rankLevel, totalAura), [rankLevel, totalAura]);
+
+    // ⚡️ EXTRACT WEEKLY GLORY DATA
+    const weeklyGloryRank = user?.previousRank || 0;
+    const weeklyAuraTier = useMemo(() => getAuraTier(weeklyGloryRank), [weeklyGloryRank]);
+    const weeklyGloryPoints = user?.weeklyAura || 0;
+
+    // ⚡️ INVENTORY
     const equippedGlow = user?.inventory?.find(i => i.category === 'GLOW' && i.isEquipped);
     const activeGlowColor = equippedGlow?.visualConfig?.primaryColor || null;
-    const dynamicAuraColor = activeGlowColor || aura?.color || '#3b82f6';
-    const filledBoxes = Math.min(Math.floor(currentAuraPoints / 10), 10);
+    const dynamicAuraColor = activeGlowColor || weeklyAuraTier?.color || '#3b82f6';
 
     useEffect(() => {
         const hasSeenOnboarding = storage.getBoolean('has_seen_profile_onboarding');
@@ -1052,6 +1088,7 @@ export default function MobileProfilePage() {
             storage.set('has_seen_profile_onboarding', true);
         }
     };
+
     const prevOnboardingStep = () => {
         if (onboardingStep > 0) {
             setOnboardingStep(prev => prev - 1);
@@ -1064,8 +1101,10 @@ export default function MobileProfilePage() {
     };
 
     const copyToClipboard = async () => {
-        if (user?.deviceId) {
-            await Clipboard.setStringAsync(user.deviceId);
+        console.log(user?.uid);
+
+        if (user?.uid) {
+            await Clipboard.setStringAsync(user.uid);
             setCopied(true);
             setTimeout(() => setCopied(false), 2000);
         }
@@ -1127,13 +1166,12 @@ export default function MobileProfilePage() {
         }
     }, [isUpdating]);
 
-    // Fixed: Removed unsafe string concatenation for color opacity
     const scanAnimatedStyle = useAnimatedStyle(() => {
         const rotate = interpolate(scanAnim.value, [0, 1], [0, 360]);
-        return { 
-            transform: [{ rotate: `${rotate}deg` }], 
+        return {
+            transform: [{ rotate: `${rotate}deg` }],
             borderColor: dynamicAuraColor,
-            opacity: 0.4 
+            opacity: 0.4
         };
     });
 
@@ -1150,7 +1188,7 @@ export default function MobileProfilePage() {
         if (!user?.deviceId) return;
         try {
             const cached = storage.getString(CACHE_KEY_USER_EXTRAS);
-            if (cached) {
+            if (cached && cached !== "") {
                 const data = JSON.parse(cached);
                 if (data.username) setUsername(data.username);
                 if (data.description) setDescription(data.description);
@@ -1162,7 +1200,68 @@ export default function MobileProfilePage() {
         } catch (e) {
             console.error("Cache load error", e);
         }
-    }, []);
+    }, [user?.deviceId]);
+    const handleLogout = () => {
+        CustomAlert("De-Synchronize", "Hibernating neural link... Your operative environment will be preserved for quick re-entry.", [
+            { text: "Cancel", style: "cancel" },
+            {
+                text: "Disconnect",
+                style: "destructive",
+                onPress: async () => {
+                    try {
+                        // ⚡️ 1. EXTRACT ALL DATA INTO A LOCAL OBJECT FIRST
+                        const allKeys = storage.getAllKeys();
+                        const userDataArchive = {};
+                        console.log(allKeys);
+
+                        allKeys.forEach(key => {
+                            // We capture everything EXCEPT the history itself
+                            if (key !== "session_history") {
+                                const val = storage.getString(key);
+                                if (val) userDataArchive[key] = val;
+                            }
+                        });
+
+                        // ⚡️ 2. PREPARE THE NEW HISTORY
+                        const rawHistory = storage.getString("session_history");
+                        const sessionHistory = rawHistory ? JSON.parse(rawHistory) : [];
+
+                        const currentSession = {
+                            uid: user.uid || user.deviceId,
+                            username: user.username,
+                            pfp: user.profilePic?.url || user.image,
+                            hibernateBox: userDataArchive // 📦 The snapshotted environment
+                        };
+
+                        const updatedHistory = [
+                            currentSession,
+                            ...sessionHistory.filter(s => s.uid !== currentSession.uid)
+                        ].slice(0, 3);
+
+                        // ⚡️ 3. THE SWAP
+                        // Since useMMKV storage doesn't have .delete, we use .clearAll() 
+                        // to wipe the slate entirely clean for the next user.
+                        const cleared = storage.clearAll();
+                        console.log("storage_cleared_on_logout", { success: cleared });
+                        // ⚡️ 4. RE-INJECT THE HISTORY
+                        console.log(storage.getAllKeys());
+
+                        // Now that the storage is empty, we put the history back in.
+                        storage.set("session_history", JSON.stringify(updatedHistory));
+
+                        // ⚡️ 5. CLEANUP & REDIRECT
+                        await AsyncStorage.removeItem("mobileUser");
+                        setUser(null);
+                        router.replace("/screens/FirstLaunchScreen");
+
+                    } catch (error) {
+                        console.error("Hibernation Error:", error);
+                        Toast.show({ type: 'error', text1: 'Hibernation Failed' });
+                    }
+                },
+            },
+        ]);
+    };
 
     useEffect(() => {
         const syncUserWithDB = async () => {
@@ -1176,7 +1275,6 @@ export default function MobileProfilePage() {
                     setDescription(dbUser.description || "");
                     setUsername(dbUser.username || "");
 
-                    // Safe array checks before joining
                     const dbAnimes = Array.isArray(dbUser.preferences?.favAnimes) ? dbUser.preferences.favAnimes.join(', ') : "";
                     const dbGenres = Array.isArray(dbUser.preferences?.favGenres) ? dbUser.preferences.favGenres.join(', ') : "";
                     const dbChar = dbUser.preferences?.favCharacter || "";
@@ -1224,15 +1322,7 @@ export default function MobileProfilePage() {
     const isReachingEnd = data && data[data.length - 1]?.posts?.length < LIMIT;
     const isFetchingNextPage = isValidating && data && typeof data[size - 1] === "undefined";
 
-    const count = totalPosts;
-    const rankTitle = count > 200 ? "Master_Writer" : count > 150 ? "Elite_Writer" : count > 100 ? "Senior_Writer" : count > 50 ? "Novice_Writer" : count > 25 ? "Senior_Researcher" : "Novice_Researcher";
-    const rankIcon = count > 200 ? "👑" : count > 150 ? "💎" : count > 100 ? "🔥" : count > 50 ? "⚔️" : count > 25 ? "📜" : "🛡️";
-    const nextMilestone = count > 200 ? 500 : count > 150 ? 200 : count > 100 ? 150 : count > 50 ? 100 : count > 25 ? 50 : 25;
-    const progress = Math.min((count / nextMilestone) * 100, 100);
-
     const pickImage = async () => {
-        console.log("picking image");
-
         const result = await ImagePicker.launchImageLibraryAsync({
             mediaTypes: ImagePicker.MediaTypeOptions.Images,
             allowsEditing: true,
@@ -1339,194 +1429,211 @@ export default function MobileProfilePage() {
         ]);
     };
 
-    const listHeader = useMemo(() => (
-        <View className="px-6 mt-3">
-            <View className="bg-white dark:bg-[#0a0a0a]">
-                <View className="flex-row items-center gap-4 mb-10 border-b border-gray-100 dark:border-gray-800 pb-6">
-                    <View className="w-2 h-8" style={{ backgroundColor: dynamicAuraColor }} />
-                    <Text className="text-3xl font-black italic tracking-tighter uppercase dark:text-white">Player Profile</Text>
-                </View>
+    const listHeader = useMemo(() => {
+        return (
+            <View className="px-6 mt-6">
+                <View className="bg-white dark:bg-[#0a0a0a]">
+                    <View className="flex-row items-center gap-4 mb-10 border-b border-gray-100 dark:border-gray-800 pb-6">
+                        <View className="w-2 h-8" style={{ backgroundColor: dynamicAuraColor }} />
+                        <Text className="text-3xl font-black italic tracking-tighter uppercase dark:text-white">Player Profile</Text>
+                    </View>
 
-                <View style={{ position: "relative" }} className="flex-row flex items-center justify-center mb-10 pr-2">
-                    <View className="relative shrink-0 items-center justify-center">
+                    <View style={{ position: "relative" }} className="flex-row flex items-center justify-center mb-10 pr-2">
+                        <View className="relative shrink-0 items-center justify-center">
 
-                        {/* ⚡️ FIXED: Passed onPress directly to AuraAvatar. Removed outer TouchableOpacity. */}
-                        <AuraAvatar
-                            author={{
-                                ...user,
-                                // 1. Force the image to be the preview if it exists, otherwise use their normal PFP
-                                image: preview || user?.profilePic?.url,
-                                // 2. If they have a preview active, temporarily "unequip" their Lottie avatar in the UI so they can see the photo
-                                inventory: preview
-                                    ? user?.inventory?.map(item => item.category === 'AVATAR' ? { ...item, isEquipped: false } : item)
-                                    : user?.inventory
-                            }}
-                            aura={getAuraTier(user?.rank || 100)}
-                            isTop10={(user?.rank || 100) <= 10 && (user?.rank || 100) > 0}
-                            isDark={isDark}
-                            size={160}
-                            glowColor={dynamicAuraColor}
-                            onPress={pickImage} // 👈 AuraAvatar will now handle the click
-                        />
+                            <AuraAvatar
+                                author={{
+                                    ...user,
+                                    rank: weeklyGloryRank,
+                                    image: preview || user?.profilePic?.url,
+                                    inventory: preview
+                                        ? user?.inventory?.map(item => item.category === 'AVATAR' ? { ...item, isEquipped: false } : item)
+                                        : user?.inventory
+                                }}
+                                aura={weeklyAuraTier}
+                                isTop10={weeklyGloryRank > 0 && weeklyGloryRank <= 10}
+                                isDark={isDark}
+                                size={160}
+                                glowColor={dynamicAuraColor}
+                                onPress={pickImage}
+                            />
 
-                        {/* ⚡️ THE "CHANGE DNA" OVERLAY */}
-                        {/* pointerEvents="none" is crucial here so clicks pass through to the Avatar */}
-                        <View
-                            className="absolute items-center justify-center rounded-full overflow-hidden"
-                            pointerEvents="none"
-                            style={{
-                                width: 160,
-                                height: 160,
-                                zIndex: 10,
-                                // If they are rank 1, the avatar is rotated 45deg, so we counter-rotate the overlay
-                                transform: [(user?.rank || 100) === 1 ? { rotate: '-45deg' } : { rotate: '0deg' }]
-                            }}
-                        >
-                            <View className="absolute inset-0 bg-black/40 items-center justify-center">
-                                <Text className="text-[10px] font-black uppercase tracking-widest text-white">
-                                    Change DNA
-                                </Text>
+                            <View
+                                className="absolute items-center justify-center rounded-full overflow-hidden"
+                                pointerEvents="none"
+                                style={{
+                                    width: 160,
+                                    height: 160,
+                                    zIndex: 10,
+                                    transform: [(weeklyGloryRank || 100) === 1 ? { rotate: '-45deg' } : { rotate: '0deg' }]
+                                }}
+                            >
+                                <View className="absolute inset-0 bg-black/40 items-center justify-center">
+                                    <Text className="text-[10px] font-black uppercase tracking-widest text-white">
+                                        Change DNA
+                                    </Text>
+                                </View>
+                            </View>
+
+                        </View>
+
+                        <View style={{ position: "absolute", left: -5, zIndex: 100 }} className="flex-col items-center">
+                            <ProfileActionButton icon="archive-outline" color="#3b82f6" label="Items" onPress={() => setInventoryVisible(true)} />
+                            <ProfileActionButton icon="cog-outline" color="#a855f7" label="Prefs" onPress={() => setPrefsVisible(true)} />
+                            <ProfileActionButton icon="cart-outline" color="#22c55e" label="Store" onPress={() => setStoreVisible(true)} />
+                            <ProfileActionButton icon="card-account-details-outline" color="#f59e0b" label="Card" onPress={() => setCardPreviewVisible(true)} />
+
+                            {isOnboarding && (
+                                <Animated.View
+                                    style={[
+                                        tooltipAnimatedStyle,
+                                        { position: 'absolute', left: 60, top: currentPosTop, width: 220, zIndex: 110 }
+                                    ]}
+                                    className="bg-blue-600 dark:bg-blue-900 rounded-2xl p-4 shadow-2xl flex-row items-start"
+                                >
+                                    <Animated.View style={pointerAnimatedStyle} className="absolute -left-3 top-4">
+                                        <Ionicons name="caret-back" size={24} color={isDark ? "#1e3a8a" : "#2563eb"} />
+                                    </Animated.View>
+                                    <View className="flex-1">
+                                        <Text className="text-white font-black text-sm uppercase tracking-widest">
+                                            {onboardingSteps[onboardingStep].title}
+                                        </Text>
+                                        <Text className="text-blue-100 text-[10px] mt-1 font-medium leading-relaxed">
+                                            {onboardingSteps[onboardingStep].desc}
+                                        </Text>
+                                        <View className="flex-row justify-between items-center mt-3 pt-3 border-t border-blue-400/30">
+                                            <TouchableOpacity onPress={skipOnboarding}>
+                                                <Text className="text-blue-200 text-[10px] font-bold uppercase tracking-widest">Skip</Text>
+                                            </TouchableOpacity>
+                                            <View className="flex-row gap-2">
+                                                {onboardingStep > 0 && (
+                                                    <TouchableOpacity onPress={prevOnboardingStep} className="bg-blue-500/50 px-3 py-1.5 rounded-lg active:scale-95">
+                                                        <Text className="text-white text-[10px] font-black uppercase tracking-widest">Back</Text>
+                                                    </TouchableOpacity>
+                                                )}
+                                                <TouchableOpacity onPress={nextOnboardingStep} className="bg-white px-3 py-1.5 rounded-lg active:scale-95">
+                                                    <Text className="text-blue-600 dark:text-blue-900 text-[10px] font-black uppercase tracking-widest">
+                                                        {onboardingStep === 3 ? "Done" : "Next"}
+                                                    </Text>
+                                                </TouchableOpacity>
+                                            </View>
+                                        </View>
+                                    </View>
+                                </Animated.View>
+                            )}
+                        </View>
+                    </View>
+
+                    <View className="items-center mb-6">
+                        <Pressable onPress={() => setAuraModalVisible(true)} className="items-center">
+                            <PlayerNameplate
+                                author={user}
+                                themeColor={dynamicAuraColor}
+                                equippedGlow={equippedGlow}
+                                auraRank={weeklyGloryRank}
+                                isDark={isDark}
+                                fontSize={24}
+                            />
+
+                            {/* ⚡️ GLORY PILL UNDER NAME */}
+                            <View className="px-2 py-0.5 rounded-full border mt-1 overflow-hidden" style={{ borderColor: dynamicAuraColor }}>
+                                <View style={{ position: 'absolute', top: 0, left: 0, right: 0, bottom: 0, backgroundColor: dynamicAuraColor, opacity: 0.1 }} />
+                                <Text style={{ color: dynamicAuraColor, fontSize: 8, fontWeight: '900', zIndex: 1 }}>{weeklyAuraTier?.label || 'NOVICE'} {weeklyGloryPoints.toLocaleString()}</Text>
+                            </View>
+                        </Pressable>
+
+                        <Text className="text-[10px] font-bold text-gray-500 uppercase tracking-[0.3em] mt-3">Class: {writerRank.title}</Text>
+                    </View>
+
+                    {/* ⚡️ 4-COLUMN STATS */}
+                    <View className="flex-row gap-6 mt-6 border-y border-gray-100 dark:border-gray-800 w-full py-4 justify-center">
+                        <View className="items-center">
+                            <Text className="text-[10px] font-black text-gray-400 uppercase tracking-widest">Aura</Text>
+                            <Text className="text-lg font-black" style={{ color: writerRank.color }}>{totalAura.toLocaleString()}</Text>
+                        </View>
+                        <View className="items-center">
+                            <Text className="text-[10px] font-black text-gray-400 uppercase tracking-widest">Glory</Text>
+                            <Text className="text-lg font-black" style={{ color: '#ec4899' }}>+{weeklyGloryPoints.toLocaleString()}</Text>
+                        </View>
+                        <View className="items-center">
+                            <Text className="text-[10px] font-black text-gray-400 uppercase tracking-widest">Docs</Text>
+                            <Text className="text-lg font-black dark:text-white">{totalPosts.toLocaleString()}</Text>
+                        </View>
+                        <View className="items-center">
+                            <Text className="text-[10px] font-black text-gray-400 uppercase tracking-widest">Rank</Text>
+                            <Text className="text-lg font-black dark:text-white" style={{ color: dynamicAuraColor }}>#{weeklyGloryRank || '??'}</Text>
+                        </View>
+                    </View>
+
+                    {/* ⚡️ RPG PROGRESS BAR */}
+                    <View className="mt-8 w-full px-2 mb-8">
+                        <Pressable onPress={() => setRankModalVisible(true)} className="flex-row justify-between items-end mb-2">
+                            <View className="flex-row items-center gap-2">
+                                <Text className="text-2xl">{writerRank.icon}</Text>
+                                <View>
+                                    <Text style={{ color: writerRank.color }} className="text-[8px] font-mono uppercase tracking-[0.2em] leading-none mb-1">RPG_CLASS</Text>
+                                    <Text className="text-[10px] font-black uppercase tracking-widest dark:text-white">{writerRank.title}</Text>
+                                </View>
+                            </View>
+                            <Text className="text-[10px] font-mono font-bold text-gray-500">EXP: {totalAura.toLocaleString()} / {writerRank.nextReq.toLocaleString()}</Text>
+                        </Pressable>
+                        <View className="h-1.5 w-full bg-gray-100 dark:bg-gray-800 rounded-full overflow-hidden border border-gray-200 dark:border-white/10">
+                            <View style={{ width: `${writerRank.progress}%`, backgroundColor: writerRank.color }} className="h-full shadow-lg" />
+                        </View>
+                    </View>
+
+                    <View className="space-y-6">
+                        <View className="space-y-1">
+                            <Text className="text-[9px] font-black uppercase tracking-widest text-gray-400 ml-1">Display Name / Alias</Text>
+                            <TextInput defaultValue={username} onChangeText={setUsername} placeholder="Enter alias..." placeholderTextColor="#4b5563" className="w-full bg-gray-50 dark:bg-gray-900 border border-gray-100 dark:border-gray-800 p-4 rounded-2xl text-sm font-bold dark:text-white" />
+                        </View>
+
+                        <View className="space-y-1 mt-4">
+                            <Text className="text-[9px] font-black uppercase tracking-widest text-gray-400 ml-1">User Id(UID) - <Text className="text-[9px] font-black tracking-widest text-gray-500">Used for recovery</Text></Text>
+                            <View className="bg-gray-50 dark:bg-[#0a0a0a] border border-gray-100 dark:border-gray-800 p-4 rounded-2xl flex-row justify-between items-center">
+                                <View className="flex-1 mr-4"><Text numberOfLines={1} ellipsizeMode="middle" className={`text-xs font-bold font-mono ${showId ? 'text-gray-500 dark:text-gray-400' : 'text-blue-500/40'}`}>{showId ? (user?.uid || "SEARCHING...") : "XXXX-XXXX-XXXX-XXXX-XXXX-XXXX"}</Text></View>
+                                <View className="flex-row items-center gap-2">
+                                    <Pressable onPress={() => setShowId(!showId)} className="p-2 rounded-xl bg-gray-100 dark:bg-gray-800"><Feather name={showId ? "eye-off" : "eye"} size={16} color={isDark ? "#94a3b8" : "#64748b"} /></Pressable>
+                                    <Pressable onPress={copyToClipboard} className={`p-2 rounded-xl ${copied ? 'bg-green-500/10' : 'bg-blue-500/10'}`}><Feather name={copied ? "check" : "copy"} size={16} color={copied ? "#22c55e" : "#3b82f6"} /></Pressable>
+                                </View>
                             </View>
                         </View>
 
-                    </View>
-
-                    <View style={{ position: "absolute", left: -5, zIndex: 100 }} className="flex-col items-center">
-                        <ProfileActionButton icon="archive-outline" color="#3b82f6" label="Items" onPress={() => setInventoryVisible(true)} />
-                        <ProfileActionButton icon="cog-outline" color="#a855f7" label="Prefs" onPress={() => setPrefsVisible(true)} />
-                        <ProfileActionButton icon="cart-outline" color="#22c55e" label="Store" onPress={() => setStoreVisible(true)} />
-                        <ProfileActionButton icon="card-account-details-outline" color="#f59e0b" label="Card" onPress={() => setCardPreviewVisible(true)} />
-
-                        {isOnboarding && (
-                            <Animated.View
-                                style={[
-                                    tooltipAnimatedStyle,
-                                    { position: 'absolute', left: 60, top: currentPosTop, width: 220, zIndex: 110 }
-                                ]}
-                                className="bg-blue-600 dark:bg-blue-900 rounded-2xl p-4 shadow-2xl flex-row items-start"
-                            >
-                                <Animated.View style={pointerAnimatedStyle} className="absolute -left-3 top-4">
-                                    <Ionicons name="caret-back" size={24} color={isDark ? "#1e3a8a" : "#2563eb"} />
-                                </Animated.View>
-                                <View className="flex-1">
-                                    <Text className="text-white font-black text-sm uppercase tracking-widest">
-                                        {onboardingSteps[onboardingStep].title}
-                                    </Text>
-                                    <Text className="text-blue-100 text-[10px] mt-1 font-medium leading-relaxed">
-                                        {onboardingSteps[onboardingStep].desc}
-                                    </Text>
-                                    <View className="flex-row justify-between items-center mt-3 pt-3 border-t border-blue-400/30">
-                                        <TouchableOpacity onPress={skipOnboarding}>
-                                            <Text className="text-blue-200 text-[10px] font-bold uppercase tracking-widest">Skip</Text>
-                                        </TouchableOpacity>
-                                        <View className="flex-row gap-2">
-                                            {onboardingStep > 0 && (
-                                                <TouchableOpacity onPress={prevOnboardingStep} className="bg-blue-500/50 px-3 py-1.5 rounded-lg active:scale-95">
-                                                    <Text className="text-white text-[10px] font-black uppercase tracking-widest">Back</Text>
-                                                </TouchableOpacity>
-                                            )}
-                                            <TouchableOpacity onPress={nextOnboardingStep} className="bg-white px-3 py-1.5 rounded-lg active:scale-95">
-                                                <Text className="text-blue-600 dark:text-blue-900 text-[10px] font-black uppercase tracking-widest">
-                                                    {onboardingStep === 3 ? "Done" : "Next"}
-                                                </Text>
-                                            </TouchableOpacity>
-                                        </View>
-                                    </View>
+                        <View className="space-y-1 mt-4">
+                            <Text className="text-[9px] font-black uppercase tracking-widest text-gray-400 ml-1">Recruitment Directive - <Text className="text-[9px] font-black tracking-widest text-gray-500">Share to build ranks</Text></Text>
+                            <View className="bg-gray-50 dark:bg-[#0a0a0a] border border-gray-100 dark:border-gray-800 p-4 rounded-2xl flex-row justify-between items-center">
+                                <View className="flex-1 mr-4"><Text numberOfLines={1} ellipsizeMode="tail" className="text-xs font-bold font-mono text-purple-500/80 dark:text-purple-400">{user?.referralCode ? `play.google.com/...referrer=${user.referralCode}` : "SYNCHRONIZING_ID..."}</Text></View>
+                                <View className="flex-row items-center gap-2">
+                                    <View className="bg-purple-500/10 px-2 py-1.5 rounded-lg mr-1 border border-purple-500/20"><Text className="text-[9px] font-black text-purple-500 uppercase tracking-widest">{user?.referralCount || 0} Recruits</Text></View>
+                                    <Pressable onPress={copyReferralToClipboard} className={`p-2 rounded-xl ${refCopied ? 'bg-green-500/10' : 'bg-purple-500/10'}`}><Feather name={refCopied ? "check" : "share-2"} size={16} color={refCopied ? "#22c55e" : "#a855f7"} /></Pressable>
                                 </View>
-                            </Animated.View>
-                        )}
-                    </View>
-                </View>
-
-                <View className="items-center mb-6">
-                    {/* ⚡️ REPLACED WITH PLAYERNAMEPLATE */}
-                    <Pressable onPress={() => setAuraModalVisible(true)} className="items-center">
-                        <PlayerNameplate
-                            author={user}
-                            themeColor={dynamicAuraColor}
-                            equippedGlow={equippedGlow}
-                            auraRank={user?.previousRank || 0} // Safe fallback added
-                            isDark={isDark}
-                            fontSize={24}
-                        />
-
-                        {/* Fixed: Replaced ${dynamicAuraColor}10 with explicit safe opacity View */}
-                        <View className="px-2 py-0.5 rounded-full border mt-1 overflow-hidden" style={{ borderColor: dynamicAuraColor }}>
-                            <View style={{ position: 'absolute', top: 0, left: 0, right: 0, bottom: 0, backgroundColor: dynamicAuraColor, opacity: 0.1 }} />
-                            <Text style={{ color: dynamicAuraColor, fontSize: 8, fontWeight: '900', zIndex: 1 }}>{aura?.label || 'NOVICE'} {currentAuraPoints}</Text>
+                            </View>
                         </View>
-                    </Pressable>
 
-                    <View className="mt-3 items-center">
-                        <View className="flex-row gap-1 mb-1">
-                            {[...Array(10)].map((_, i) => (
-                                <View key={i} className="h-1.5 w-4 rounded-sm" style={{ backgroundColor: i < filledBoxes ? dynamicAuraColor : (isDark ? '#1f2937' : '#e5e7eb'), opacity: i < filledBoxes ? 1 : 0.3 }} />
-                            ))}
+                        <View className="space-y-1 mt-4">
+                            <Text className="text-[9px] font-black uppercase tracking-widest text-gray-400 ml-1">Biography / Lore</Text>
+                            <TextInput multiline defaultValue={description} onChangeText={setDescription} placeholder="Write your player bio here..." placeholderTextColor="#4b5563" className="w-full bg-white dark:bg-black/40 border-2 border-gray-100 dark:border-gray-800 rounded-2xl p-4 text-sm font-medium dark:text-white min-h-[120px]" style={{ textAlignVertical: 'top' }} />
                         </View>
-                        <Text style={{ color: dynamicAuraColor }} className="text-[8px] font-black uppercase tracking-[0.2em]">Aura Power: {filledBoxes}/10</Text>
+
+                        <TouchableOpacity onPress={handleUpdate} disabled={isUpdating} style={{ backgroundColor: dynamicAuraColor }} className="relative w-full h-14 rounded-2xl overflow-hidden items-center justify-center mt-6">
+                            <Text className="relative z-10 text-white font-black uppercase italic tracking-widest text-xs">{isUpdating ? "Syncing Changes..." : "Update Character Data"}</Text>
+                            {isUpdating && <Animated.View className="absolute bottom-0 h-1 bg-white/40 w-full" style={progressAnimatedStyle} />}
+                        </TouchableOpacity>
+                        {/* ⚡️ NEW: De-Synchronize (Logout) Button */}
+                        <TouchableOpacity
+                            onPress={handleLogout}
+                            className="relative w-full h-14 rounded-2xl overflow-hidden items-center justify-center mt-4 border-2 border-red-500/30 bg-red-500/10 active:bg-red-500/20 transition-all"
+                        >
+                            <View className="flex-row items-center gap-2">
+                                <Ionicons name="power" size={16} color="#ef4444" />
+                                <Text className="text-red-500 font-black uppercase italic tracking-widest text-xs">De-Synchronize (Log Out)</Text>
+                            </View>
+                        </TouchableOpacity>
                     </View>
-                    <Text className="text-[10px] font-bold text-gray-500 uppercase tracking-[0.3em] mt-1">Class: {rankTitle}</Text>
                 </View>
             </View>
-
-            <View className="mt-4 w-full px-4 mb-8">
-                <Pressable onPress={() => setRankModalVisible(true)} className="flex-row justify-between items-end mb-2">
-                    <View className="flex-row items-center gap-2">
-                        <Text className="text-xl">{rankIcon}</Text>
-                        <Text className="text-[10px] font-black uppercase tracking-widest dark:text-white">{rankTitle}</Text>
-                    </View>
-                    <Text className="text-[10px] font-mono font-bold text-gray-500">EXP: {count} / {count > 200 ? "MAX" : nextMilestone}</Text>
-                </Pressable>
-                <View className="h-1.5 w-full bg-gray-100 dark:bg-gray-800 rounded-full overflow-hidden border border-gray-200 dark:border-white/10">
-                    <View style={{ width: `${progress}%`, backgroundColor: dynamicAuraColor }} className="h-full shadow-lg" />
-                </View>
-            </View>
-
-            <View className="space-y-6">
-                <View className="space-y-1">
-                    <Text className="text-[9px] font-black uppercase tracking-widest text-gray-400 ml-1">Display Name / Alias</Text>
-                    <TextInput defaultValue={username} onChangeText={setUsername} placeholder="Enter alias..." placeholderTextColor="#4b5563" className="w-full bg-gray-50 dark:bg-gray-900 border border-gray-100 dark:border-gray-800 p-4 rounded-2xl text-sm font-bold dark:text-white" />
-                </View>
-
-                <View className="space-y-1 mt-4">
-                    <Text className="text-[9px] font-black uppercase tracking-widest text-gray-400 ml-1">Neural Uplink - <Text className="text-[9px] font-black tracking-widest text-gray-500">Used for recovery</Text></Text>
-                    <View className="bg-gray-50 dark:bg-[#0a0a0a] border border-gray-100 dark:border-gray-800 p-4 rounded-2xl flex-row justify-between items-center">
-                        <View className="flex-1 mr-4"><Text numberOfLines={1} ellipsizeMode="middle" className={`text-xs font-bold font-mono ${showId ? 'text-gray-500 dark:text-gray-400' : 'text-blue-500/40'}`}>{showId ? (user?.deviceId || "SEARCHING...") : "XXXX-XXXX-XXXX-XXXX-XXXX-XXXX"}</Text></View>
-                        <View className="flex-row items-center gap-2">
-                            <Pressable onPress={() => setShowId(!showId)} className="p-2 rounded-xl bg-gray-100 dark:bg-gray-800"><Feather name={showId ? "eye-off" : "eye"} size={16} color={isDark ? "#94a3b8" : "#64748b"} /></Pressable>
-                            <Pressable onPress={copyToClipboard} className={`p-2 rounded-xl ${copied ? 'bg-green-500/10' : 'bg-blue-500/10'}`}><Feather name={copied ? "check" : "copy"} size={16} color={copied ? "#22c55e" : "#3b82f6"} /></Pressable>
-                        </View>
-                    </View>
-                </View>
-
-                <View className="space-y-1 mt-4">
-                    <Text className="text-[9px] font-black uppercase tracking-widest text-gray-400 ml-1">Recruitment Directive - <Text className="text-[9px] font-black tracking-widest text-gray-500">Share to build ranks</Text></Text>
-                    <View className="bg-gray-50 dark:bg-[#0a0a0a] border border-gray-100 dark:border-gray-800 p-4 rounded-2xl flex-row justify-between items-center">
-                        <View className="flex-1 mr-4"><Text numberOfLines={1} ellipsizeMode="tail" className="text-xs font-bold font-mono text-purple-500/80 dark:text-purple-400">{user?.referralCode ? `play.google.com/...referrer=${user.referralCode}` : "SYNCHRONIZING_ID..."}</Text></View>
-                        <View className="flex-row items-center gap-2">
-                            <View className="bg-purple-500/10 px-2 py-1.5 rounded-lg mr-1 border border-purple-500/20"><Text className="text-[9px] font-black text-purple-500 uppercase tracking-widest">{user?.referralCount || 0} Recruits</Text></View>
-                            <Pressable onPress={copyReferralToClipboard} className={`p-2 rounded-xl ${refCopied ? 'bg-green-500/10' : 'bg-purple-500/10'}`}><Feather name={refCopied ? "check" : "share-2"} size={16} color={refCopied ? "#22c55e" : "#a855f7"} /></Pressable>
-                        </View>
-                    </View>
-                </View>
-
-                <View className="space-y-1 mt-4">
-                    <Text className="text-[9px] font-black uppercase tracking-widest text-gray-400 ml-1">Biography / Lore</Text>
-                    <TextInput multiline defaultValue={description} onChangeText={setDescription} placeholder="Write your player bio here..." placeholderTextColor="#4b5563" className="w-full bg-white dark:bg-black/40 border-2 border-gray-100 dark:border-gray-800 rounded-2xl p-4 text-sm font-medium dark:text-white min-h-[120px]" style={{ textAlignVertical: 'top' }} />
-                </View>
-
-                <TouchableOpacity onPress={handleUpdate} disabled={isUpdating} style={{ backgroundColor: dynamicAuraColor }} className="relative w-full h-14 rounded-2xl overflow-hidden items-center justify-center mt-6">
-                    <Text className="relative z-10 text-white font-black uppercase italic tracking-widest text-xs">{isUpdating ? "Syncing Changes..." : "Update Character Data"}</Text>
-                    {isUpdating && <Animated.View className="absolute bottom-0 h-1 bg-white/40 w-full" style={progressAnimatedStyle} />}
-                </TouchableOpacity>
-            </View>
-
-            <View className="flex-row items-center gap-4 mt-16 mb-8">
-                <Text className="text-xl font-black uppercase tracking-tighter italic dark:text-white">Transmission Logs</Text>
-                <View className="h-[1px] flex-1 bg-gray-100 dark:bg-gray-800" />
-            </View>
-        </View>
-    ), [user, preview, description, username, isUpdating, totalPosts, copied, refCopied, rankTitle, rankIcon, progress, nextMilestone, count, showId, isDark, aura, filledBoxes, currentAuraPoints, dynamicAuraColor, pickImage, handleUpdate, captureAndShare, isOnboarding, onboardingStep, tooltipAnimatedStyle, pointerAnimatedStyle, scanAnimatedStyle, pulseAnimatedStyle, progressAnimatedStyle]);
+        );
+    }, [user, preview, description, username, isUpdating, totalPosts, copied, refCopied, writerRank, weeklyAuraTier, weeklyGloryRank, weeklyGloryPoints, totalAura, rankLevel, showId, isDark, dynamicAuraColor, pickImage, handleUpdate, captureAndShare, isOnboarding, onboardingStep, currentPosTop, tooltipAnimatedStyle, pointerAnimatedStyle, scanAnimatedStyle, pulseAnimatedStyle, progressAnimatedStyle]);
 
     return (
         <View className="flex-1 bg-white dark:bg-[#0a0a0a]" style={{ paddingTop: insets.top }}>
@@ -1539,6 +1646,7 @@ export default function MobileProfilePage() {
                 keyExtractor={(item) => item._id}
                 ListHeaderComponent={listHeader}
                 scrollEnabled={!isOnboarding}
+                showsVerticalScrollIndicator={false}
                 onEndReached={() => { if (!isReachingEnd && !isValidating) setSize(size + 1); }}
                 onEndReachedThreshold={0.5}
                 renderItem={({ item }) => (
@@ -1571,14 +1679,45 @@ export default function MobileProfilePage() {
                 </ViewShot>
             </View>
 
+            {/* ⚡️ RANK MODAL (RPG CLASS/AURA) */}
             <Modal visible={rankModalVisible} transparent animationType="fade">
                 <View className="flex-1 bg-black/80 items-center justify-center p-6">
-                    <View className="bg-white dark:bg-[#0d1117] w-full p-8 rounded-[40px] border border-gray-200 dark:border-gray-800">
-                        <View className="w-20 h-20 bg-blue-100 dark:bg-blue-900/20 rounded-full items-center justify-center mb-6 self-center"><Text style={{ fontSize: 40 }}>{rankIcon}</Text></View>
-                        <Text className="text-2xl font-black text-center uppercase tracking-tighter dark:text-white mb-2">{rankTitle.replace('_', ' ')}</Text>
+                    <View className="bg-white dark:bg-[#0d1117] w-full p-8 rounded-[40px] border border-gray-200 dark:border-gray-800" style={{ borderColor: writerRank.color }}>
+                        <View className="w-20 h-20 rounded-full items-center justify-center mb-6 self-center" style={{ backgroundColor: writerRank.color + '20' }}>
+                            <Text style={{ fontSize: 40 }}>{writerRank.icon}</Text>
+                        </View>
+                        <Text className="text-2xl font-black text-center uppercase tracking-tighter dark:text-white mb-2" style={{ color: writerRank.color }}>
+                            {writerRank.title.replace(/_/g, ' ')}
+                        </Text>
                         <Text className="text-gray-500 text-center font-bold text-xs uppercase tracking-widest mb-6">Current Standing</Text>
-                        <Text className="text-gray-600 dark:text-gray-400 text-center leading-6 mb-8">You have transmitted <Text className="font-black text-blue-600">{count}</Text> logs.{count < 200 ? ` Reach ${nextMilestone} posts to evolve into the next class.` : " You have reached the pinnacle of researchers."}</Text>
-                        <TouchableOpacity onPress={() => setRankModalVisible(false)} className="bg-blue-600 p-4 rounded-2xl items-center"><Text className="text-white font-black uppercase tracking-widest text-xs">Close Intel</Text></TouchableOpacity>
+                        <Text className="text-gray-600 dark:text-gray-400 text-center leading-6 mb-8">
+                            You have amassed <Text className="font-black" style={{ color: writerRank.color }}>{totalAura.toLocaleString()} Aura</Text>.
+                            {rankLevel < 8 ? ` Reach ${writerRank.nextReq.toLocaleString()} Aura to evolve into the next class.` : " You have reached the pinnacle of power."}
+                        </Text>
+                        <TouchableOpacity onPress={() => setRankModalVisible(false)} style={{ backgroundColor: writerRank.color }} className="p-4 rounded-2xl items-center shadow-lg">
+                            <Text className="text-black font-black uppercase tracking-widest text-xs">Close Intel</Text>
+                        </TouchableOpacity>
+                    </View>
+                </View>
+            </Modal>
+
+            {/* ⚡️ GLORY MODAL (WEEKLY COMPETITIVE) */}
+            <Modal visible={auraModalVisible} transparent animationType="fade">
+                <View className="flex-1 bg-black/80 items-center justify-center p-6">
+                    <View className="bg-white dark:bg-[#0d1117] w-full p-8 rounded-[40px] border-2" style={{ borderColor: dynamicAuraColor }}>
+                        <MaterialCommunityIcons name={weeklyAuraTier?.icon || 'shield-outline'} size={60} color={dynamicAuraColor} style={{ alignSelf: 'center', marginBottom: 20 }} />
+                        <Text style={{ color: dynamicAuraColor }} className="text-3xl font-black text-center uppercase tracking-widest mb-2">
+                            {weeklyAuraTier?.label || 'NOVICE'} STATUS
+                        </Text>
+                        <Text className="text-gray-500 text-center font-bold text-[10px] uppercase tracking-[0.3em] mb-4">
+                            Total Weekly Glory: {weeklyGloryPoints.toLocaleString()}
+                        </Text>
+                        <Text className="text-gray-600 dark:text-gray-400 text-center leading-7 mb-8 font-medium">
+                            This is your competitive ranking for the week. Dominate the leaderboards to earn higher statuses and seasonal rewards!
+                        </Text>
+                        <TouchableOpacity onPress={() => setAuraModalVisible(false)} style={{ backgroundColor: dynamicAuraColor }} className="p-4 rounded-2xl items-center shadow-lg">
+                            <Text className="text-white font-black uppercase tracking-widest text-xs">Acknowledge</Text>
+                        </TouchableOpacity>
                     </View>
                 </View>
             </Modal>
@@ -1628,20 +1767,6 @@ export default function MobileProfilePage() {
                 user={user}
                 isDark={isDark}
             />
-
-            <Modal visible={auraModalVisible} transparent animationType="fade">
-                <View className="flex-1 bg-black/80 items-center justify-center p-6">
-                    <View className="bg-white dark:bg-[#0d1117] w-full p-8 rounded-[40px] border-2" style={{ borderColor: dynamicAuraColor }}>
-                        {/* Fixed: Safe fallback for icon name to prevent another native crash */}
-                        <MaterialCommunityIcons name={aura?.icon || 'shield-outline'} size={60} color={dynamicAuraColor} style={{ alignSelf: 'center', marginBottom: 20 }} />
-                        <Text style={{ color: dynamicAuraColor }} className="text-3xl font-black text-center uppercase tracking-widest mb-2">{aura?.label || 'NOVICE'} POWER</Text>
-                        <Text className="text-gray-500 text-center font-bold text-[10px] uppercase tracking-[0.3em] mb-2">Total Points: {currentAuraPoints}</Text>
-                        <View className="flex-row justify-center gap-1 mb-6">{[...Array(10)].map((_, i) => (<View key={i} className="h-2 w-4 rounded-sm" style={{ backgroundColor: i < filledBoxes ? dynamicAuraColor : '#374151' }} />))}</View>
-                        <Text className="text-gray-600 dark:text-gray-400 text-center leading-7 mb-8 font-medium">{aura?.description || 'Operator initializing...'}</Text>
-                        <TouchableOpacity onPress={() => setAuraModalVisible(false)} style={{ backgroundColor: dynamicAuraColor }} className="p-4 rounded-2xl items-center shadow-lg"><Text className="text-white font-black uppercase tracking-widest text-xs">Acknowledge</Text></TouchableOpacity>
-                    </View>
-                </View>
-            </Modal>
 
             <Modal visible={cardPreviewVisible} transparent animationType="slide">
                 <View className="flex-1 bg-black/90">

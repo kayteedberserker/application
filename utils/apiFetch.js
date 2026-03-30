@@ -14,22 +14,24 @@ export const apiFetch = async (endpoint, options = {}) => {
   const baseUrl = "https://oreblogda.com/api";
   const cleanEndpoint = endpoint.startsWith('/') ? endpoint : `/${endpoint}`;
   const url = endpoint.startsWith('http') ? endpoint : `${baseUrl}${cleanEndpoint}`;
-  
+
   let userCountry = "Unknown";
-  let userAnimes = ""; 
-  let userGenres = ""; 
-  let userCharacter = ""; 
+  let userAnimes = "";
+  let userGenres = "";
+  let userCharacter = "";
   let userId = "";
 
   // 🔹 Instantly read from the RAM variable
   if (activeUser) {
     userCountry = activeUser.country || "Unknown";
     userId = activeUser.deviceId;
-    
+
     if (activeUser.preferences) {
-      if (Array.isArray(activeUser.preferences.favAnimes)) {
-        userAnimes = activeUser.preferences.favAnimes.join(",");
-      }
+      // ⚡️ Combine Anime and Games into the single userAnimes header
+      const animes = Array.isArray(activeUser.preferences.favAnimes) ? activeUser.preferences.favAnimes : [];
+      const games = Array.isArray(activeUser.preferences.favGames) ? activeUser.preferences.favGames : [];
+      userAnimes = [...animes, ...games].join(",");
+
       if (Array.isArray(activeUser.preferences.favGenres)) {
         userGenres = activeUser.preferences.favGenres.join(",");
       }
@@ -63,8 +65,8 @@ export const apiFetch = async (endpoint, options = {}) => {
     // 🛡️ SECURITY & VERSION CHECK
     // Android 7 is API level 24/25. If it fails here, it's almost certainly an SSL issue.
     if (
-      error.message.includes("Network request failed") && 
-      Platform.OS === 'android' && 
+      error.message.includes("Network request failed") &&
+      Platform.OS === 'android' &&
       Platform.Version <= 25
     ) {
       console.error("Detected Android 7 SSL Security Conflict");

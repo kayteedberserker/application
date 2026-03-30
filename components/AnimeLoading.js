@@ -1,3 +1,4 @@
+import { MaterialCommunityIcons } from "@expo/vector-icons"; // ⚡️ ADDED IMPORT
 import { BlurMask, Canvas, Circle } from "@shopify/react-native-skia";
 import React, { useEffect, useState } from 'react';
 import { Dimensions, Text as RNText, View } from 'react-native';
@@ -12,35 +13,35 @@ import Animated, {
 
 const { width, height } = Dimensions.get('window');
 
-// 🎮 SCOPED GAME TIPS DICTIONARY
+// 🎮 SCOPED GAME TIPS DICTIONARY (UPDATED WITH LORE)
 const SYSTEM_TIPS = {
     general: [
-        "TIP: Maintain your daily streak, easily restore with OC once broken.",
-        "TIP: Lost in the meta? Consult the System Directory for complete intel.",
-        "TIP: Ensure your network connection is stable to prevent data loss.",
-        "TIP: Customizing your profile helps you stand out in the global feed.",
-        "TIP: Customize your Player Card by equipping borders, watermarks and glow, share your unique Player Card to others."
+        "SYSTEM: Maintain your daily login streak. A broken streak can be restored by burning OC.",
+        "SYSTEM: Lost in the meta? Consult the System Directory for complete operational intel.",
+        "SYSTEM: Ensure your neural link (network connection) is stable to prevent transmission failure.",
+        "SYSTEM: Modify your Operator Signature. A customized profile commands respect in the global feed.",
+        "SYSTEM: Augment your Player Scroll with borders, watermarks, and glows, then dispatch it to the network."
     ],
     post: [
-        "TIP: Authors with the highest AURA gain special profile and Player Card glow.",
-        "TIP: Engage in the comments to increase your visibility.",
-        "TIP: Polls are a great way to settle debates in the community.",
-        "TIP: You earn AURA when others interact with your posts and you join discussions.",
-        "TIP: Consistency is power. Post regularly to ascend your rank.",
+        "SYSTEM: Monarchs of the network who hoard the most AURA emit a unique visual resonance on their Player Card.",
+        "SYSTEM: Cross-comm engagement is vital. Comment on allied transmissions to boost your algorithm presence.",
+        "SYSTEM: Deploy Poll Transmissions to let the global network vote and settle syndicate disputes.",
+        "SYSTEM: AURA is generated through network resonance. Broadcast high-value intel to farm it rapidly.",
+        "SYSTEM: Consistency is power. Maintain a steady transmission rate to accelerate your Awakening."
     ],
     clan: [
-        "TIP: Clan Wars are a good way to earn points easily.",
-        "TIP: A clan with negative points clears the debt after earning 1 point.",
-        "TIP: A clan with negative points will be disbanded after reaching -3000.",
-        "TIP: Equip clan badges to show your syndicate's achievements.",
-        "TIP: Work with your clanmates to maintain your Global Leaderboard rank."
+        "SYSTEM: Initiate Clan Wars to plunder rival syndicates and secure massive point spikes.",
+        "SYSTEM: In debt? A single successful transmission triggers the REDEMPTION protocol, resetting your balance to zero.",
+        "WARNING: Syndicates that sink to -3,000 points are classified as dead weight and permanently purged by THE SYSTEM.",
+        "SYSTEM: Display your acquired Clan Badges on your scroll to flex your syndicate's combat history.",
+        "SYSTEM: Coordinate with your clanmates. The weekly point decay spares no one on the Global Leaderboard."
     ],
     wallet: [
-        "TIP: Use OC in the Vault to unlock exclusive profile borders.",
-        "TIP: Clan Coins (CC) are used exclusively for Clan Vault items.",
-        "TIP: Reaching Peak Level 10 unlocks the Mythic status and exclusive rewards.",
-        "TIP: You earn Peak points by purchasing OC.",
-        "TIP: You can transfer OC to other operatives to help them out."
+        "SYSTEM: Burn OC in the Vault to decrypt exclusive player borders, backgrounds, and visual augments.",
+        "SYSTEM: Clan Coins (CC) are locked to the Syndicate Vault. Pool resources to buff your entire clan.",
+        "SYSTEM: Ascend to Peak Level 10 to unlock MYTHIC status and rewrite your system permissions.",
+        "SYSTEM: Injecting external funds to acquire OC yields Peak Points. Ascend the VIP ranks.",
+        "SYSTEM: Need to fund an ally? Execute a peer-to-peer OC transfer to keep their operations active."
     ]
 };
 
@@ -84,7 +85,7 @@ const AnimeLoading = ({ message = "FETCHING", subMessage = "Synchronizing Univer
 
         // 5. Progress Bar
         barProgress.value = withRepeat(withTiming(160, { duration: 1200 }), -1, false);
-    }, [tipType]); // Added tipType to dependency array just in case it changes dynamically
+    }, [tipType, rotation, pulse, float, wave, barProgress]); 
 
     // Animated Styles
     const outerRingStyle = useAnimatedStyle(() => ({
@@ -112,10 +113,16 @@ const AnimeLoading = ({ message = "FETCHING", subMessage = "Synchronizing Univer
         transform: [{ translateX: barProgress.value }],
     }));
 
+    // ⚡️ TIP PARSING LOGIC
+    const isWarning = currentTip.startsWith("WARNING:");
+    const prefix = isWarning ? "WARNING:" : "SYSTEM:";
+    const cleanMessage = currentTip.replace(prefix, "").trim();
+    const prefixColor = isWarning ? "#ef4444" : "#06b6d4"; // Red for Warning, Cyan for System
+
     return (
         <View className="flex-1 justify-center items-center bg-[#f8fafc] dark:bg-[#020617] relative px-6">
             
-            {/* ⚡️ SKIA BACKGROUND GLOW (Replacing the old View blur for 60fps performance) */}
+            {/* ⚡️ SKIA BACKGROUND GLOW */}
             <View className="absolute inset-0 pointer-events-none items-center justify-center">
                 <Canvas style={{ width: 300, height: 300 }}>
                     <Circle cx={150} cy={150} r={80} color="rgba(6, 182, 212, 0.15)">
@@ -218,12 +225,25 @@ const AnimeLoading = ({ message = "FETCHING", subMessage = "Synchronizing Univer
                 </View>
             </Animated.View>
 
-            {/* 🎮 SCOPED SYSTEM TIPS (Positioned at the bottom) */}
+            {/* ⚡️ SCOPED SYSTEM TIPS (Positioned at the bottom, dynamically styled) */}
             {currentTip ? (
                 <Animated.View entering={FadeInDown.duration(800).delay(300)} className="absolute bottom-[80px] px-8 w-full items-center">
-                    <View className="bg-slate-900/5 dark:bg-white/5 border border-slate-900/10 dark:border-white/10 p-4 rounded-2xl w-full max-w-sm">
-                        <RNText className="text-cyan-600 dark:text-cyan-400 font-bold text-[10px] text-center uppercase tracking-widest leading-relaxed">
-                            {currentTip}
+                    <View className="bg-slate-900/5 dark:bg-white/5 border border-slate-900/10 dark:border-white/10 p-4 rounded-2xl w-full max-w-sm flex-row items-start">
+                        {/* ⚡️ Dynamic Icon */}
+                        <View className="mt-0.5 mr-2 opacity-80">
+                            <MaterialCommunityIcons
+                                name={isWarning ? "alert-octagon" : "console"}
+                                size={14}
+                                color={prefixColor}
+                            />
+                        </View>
+                        
+                        {/* ⚡️ Dynamic Text Coloring */}
+                        <RNText className="text-slate-600 dark:text-slate-300 font-bold text-[10px] uppercase tracking-widest leading-relaxed flex-1">
+                            <RNText style={{ color: prefixColor, fontWeight: '900' }}>
+                                {prefix} 
+                            </RNText>
+                            {" " + cleanMessage}
                         </RNText>
                     </View>
                 </Animated.View>

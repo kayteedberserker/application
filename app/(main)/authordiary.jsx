@@ -1,26 +1,28 @@
-import { Ionicons } from "@expo/vector-icons";
+import { Ionicons, MaterialCommunityIcons } from "@expo/vector-icons";
 import { Image } from "expo-image";
 import * as ImagePicker from 'expo-image-picker';
 import * as Notifications from 'expo-notifications';
 import { Link, useRouter } from "expo-router";
-import { useEffect, useMemo, useRef, useState, useCallback } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import {
     ActivityIndicator,
     DeviceEventEmitter,
     Linking,
+    Modal,
     Platform,
+    Pressable,
     ScrollView,
     StatusBar,
     Switch, TextInput, TouchableOpacity,
+    useColorScheme,
     View
 } from "react-native";
 import Toast from "react-native-toast-message";
 import useSWR from "swr";
 // ⚡️ Swapped to AsyncStorage
 import AsyncStorage from '@react-native-async-storage/async-storage';
-import * as FileSystem from 'expo-file-system';
-import * as MediaLibrary from 'expo-media-library';
 
+import { useMMKV } from "react-native-mmkv";
 import AnimeLoading from "../../components/AnimeLoading";
 import CoinIcon from "../../components/ClanIcon";
 import { Text } from "../../components/Text";
@@ -31,6 +33,20 @@ import { useCoins } from "../../context/CoinContext";
 import { useStreak } from "../../context/StreakContext";
 import { useUser } from "../../context/UserContext";
 import apiFetch from "../../utils/apiFetch";
+// ⚡️ MAX PREMIUM REANIMATED IMPORTS
+import * as Haptics from 'expo-haptics';
+import Animated, {
+    Easing,
+    FadeIn,
+    FadeInDown,
+    FadeInRight, FadeOutLeft,
+    SlideInRight, SlideOutLeft,
+    useAnimatedStyle,
+    useSharedValue,
+    withDelay,
+    withTiming,
+    ZoomIn
+} from "react-native-reanimated";
 
 // 🔹 Notification Handler Configuration
 Notifications.setNotificationHandler({
@@ -45,59 +61,40 @@ const COOLDOWN_NOTIFICATION_KEY = "cooldown_notification_id";
 const API_BASE = "https://oreblogda.com/api";
 const fetcher = (url) => apiFetch(url).then((res) => res.json());
 
-// Helper to fetch total posts
-async function getUserTotalPosts(deviceId) {
-    if (!deviceId) return 0;
-    try {
-        const res = await apiFetch(`/posts?author=${deviceId}`);
-        if (!res.ok) throw new Error("Failed to fetch posts");
-        const data = await res.json();
-        return data?.total;
-    } catch (err) {
-        console.error("Error fetching total posts:");
-        return null;
-    }
-}
+// ===================== ⚡️ NEW RANK SYSTEM HELPERS ===========
+export const AURA_TIERS = [
+    { level: 1, req: 0, title: "E-Rank Novice", icon: "🌱", postLimit: 2 },
+    { level: 2, req: 100, title: "D-Rank Operative", icon: "⚔️", postLimit: 3 },
+    { level: 3, req: 300, title: "C-Rank Awakened", icon: "🔥", postLimit: 3 },
+    { level: 4, req: 700, title: "B-Rank Elite", icon: "⚡", postLimit: 4 },
+    { level: 5, req: 1500, title: "A-Rank Champion", icon: "🛡️", postLimit: 4 },
+    { level: 6, req: 3000, title: "S-Rank Legend", icon: "🌟", postLimit: 5 },
+    { level: 7, req: 6000, title: "SS-Rank Mythic", icon: "🌀", postLimit: 5 },
+    { level: 8, req: 12000, title: "Monarch", icon: "👑", postLimit: 6 }, // Unlimited/Max
+];
 
-/* ===================== RANK SYSTEM HELPERS ===========*/
-const resolveUserRank = (totalPosts) => {
-    const count = totalPosts || 0;
-    const rankTitle =
-        count >= 200 ? "Master_Writer" :
-            count > 150 ? "Elite_Writer" :
-                count > 100 ? "Senior_Writer" :
-                    count > 50 ? "Novice_Writer" :
-                        count > 25 ? "Senior_Researcher" :
-                            "Novice_Researcher";
+const resolveUserRank = (level) => {
+    const safeLevel = Math.max(1, Math.min(8, level || 1));
+    const currentTier = AURA_TIERS[safeLevel - 1];
 
-    const rankIcon =
-        count > 200 ? "👑" :
-            count > 150 ? "💎" :
-                count > 100 ? "🔥" :
-                    count > 50 ? "⚔️" :
-                        count > 25 ? "📜" :
-                            "🛡️";
-
-    const postLimit =
-        rankTitle === "Master_Writer" ? 5 :
-            rankTitle === "Elite_Writer" ? 4 :
-                rankTitle === "Senior_Writer" ? 4 :
-                    rankTitle === "Novice_Writer" ? 3 :
-                        rankTitle === "Senior_Researcher" ? 3 :
-                            2;
-
-    return { rankTitle, rankIcon, postLimit };
+    return {
+        rankTitle: currentTier.title.replace(/ /g, "_").toUpperCase(),
+        rankIcon: currentTier.icon,
+        postLimit: currentTier.postLimit
+    };
 };
 
 export default function AuthorDiaryDashboard() {
     const CustomAlert = useAlert();
+    const storage = useMMKV()
     const { user, loading: contextLoading } = useUser();
+    // console.log(user, "is user");
+
     const { userClan, isInClan } = useClan();
     const { streak, refreshStreak } = useStreak();
     const fingerprint = user?.deviceId;
     const router = useRouter();
     const { coins, processTransaction, isProcessingTransaction } = useCoins();
-
     const notificationListener = useRef();
     const messageInputRef = useRef(null);
 
@@ -121,27 +118,42 @@ export default function AuthorDiaryDashboard() {
     const [additionalSlot, setAdditionalSlot] = useState(0);
 
     // Rank & Post Limit State
-    const [userRank, setUserRank] = useState({ rankTitle: "Novice_Researcher", rankIcon: "🛡️", postLimit: 2 });
+    const [userRank, setUserRank] = useState(() => resolveUserRank(user?.currentRankLevel || 1));
     const [canPostAgain, setCanPostAgain] = useState(false);
 
     const [isLoadingNotifications, setIsLoadingNotifications] = useState(true);
     const [pickedImage, setPickedImage] = useState(false);
 
-    // ⚡️ Draft restoring states
+    // Draft restoring states
     const [saveStatus, setSaveStatus] = useState("synced");
     const [lastSavedTime, setLastSavedTime] = useState("");
     const [isOfflineMode, setIsOfflineMode] = useState(false);
 
     const [cachedTodayPosts, setCachedTodayPosts] = useState(null);
-
+    const [firstPostModal, setFirstPostModal] = useState({ visible: false, stats: null, postData: null });
+    // FIRST POST CINEMATIC STATES
+    const [isFirstPostFlow, setIsFirstPostFlow] = useState(false);
+    const [introStep, setIntroStep] = useState(0);
     const [showMissionLog, setShowMissionLog] = useState(false);
+    const isDark = useColorScheme() == "dark"
 
     const CACHE_KEY_TODAY = `CACHE_TODAY_POSTS_${fingerprint}`;
-    const CACHE_KEY_RANK = `CACHE_RANK_${fingerprint}`;
     const DRAFT_KEY = `draft_${fingerprint}`;
 
     // =================================================================
-    // 2. INITIALIZATION: RESTORE DRAFTS AND CACHED DATA (Async)
+    // 1. INTERCEPT: CHECK FOR FIRST POST FLAG
+    // =================================================================
+    useEffect(() => {
+        const checkFirstPost = storage.getNumber("trigger_first_post");
+        console.log(checkFirstPost);
+
+        if (checkFirstPost !== 0 && checkFirstPost !== undefined) {
+            setIsFirstPostFlow(true);
+        }
+    }, []);
+
+    // =================================================================
+    // 2. INITIALIZATION: RESTORE DRAFTS AND CACHED DATA
     // =================================================================
     useEffect(() => {
         if (!fingerprint) return;
@@ -165,14 +177,7 @@ export default function AuthorDiaryDashboard() {
                 const savedPosts = await AsyncStorage.getItem(CACHE_KEY_TODAY);
                 if (savedPosts) setCachedTodayPosts(JSON.parse(savedPosts));
 
-                // C. Restore Cached Rank
-                const savedRank = await AsyncStorage.getItem(CACHE_KEY_RANK);
-                if (savedRank) {
-                    const rankData = JSON.parse(savedRank);
-                    setUserRank(resolveUserRank(rankData));
-                }
-
-                // D. Restore Extra Slot
+                // C. Restore Extra Slot
                 const savedSlot = await AsyncStorage.getItem("additionalSlot");
                 if (savedSlot === "1") {
                     setAdditionalSlot(1);
@@ -183,23 +188,18 @@ export default function AuthorDiaryDashboard() {
         };
 
         restoreData();
-    }, [fingerprint, DRAFT_KEY, CACHE_KEY_TODAY, CACHE_KEY_RANK]);
+    }, [fingerprint, DRAFT_KEY, CACHE_KEY_TODAY]);
 
     // =================================================================
-    // 3. DATA FETCHING (OPTIMIZED WITH SWR & CACHING)
+    // 3. DATA FETCHING & RANK SYNC
     // =================================================================
+
+    // ⚡️ INSTANT RANK SYNC: Always use the level provided by the user context
     useEffect(() => {
-        const fetchTotalPosts = async () => {
-            if (!user?.deviceId) return;
-            const total = await getUserTotalPosts(user?.deviceId);
-            if (total !== null) {
-                const rank = resolveUserRank(total);
-                setUserRank(rank);
-                await AsyncStorage.setItem(CACHE_KEY_RANK, JSON.stringify(total));
-            }
-        };
-        fetchTotalPosts();
-    }, [user?.deviceId, CACHE_KEY_RANK]);
+        if (user?.currentRankLevel) {
+            setUserRank(resolveUserRank(user.currentRankLevel));
+        }
+    }, [user?.currentRankLevel]);
 
     const { data: todayPostsData, mutate: mutateTodayPosts } = useSWR(
         user?.deviceId ? `/posts?author=${user.deviceId}&last24Hours=true` : null,
@@ -221,6 +221,8 @@ export default function AuthorDiaryDashboard() {
 
     const todayPost = todayPosts[0] || null;
     const postsLast24h = todayPosts.length;
+
+    // ⚡️ UPDATED MAX POSTS LOGIC: Reads directly from AURA_TIERS
     const maxPostsToday = isInClan ? userRank.postLimit + 2 + additionalSlot : userRank.postLimit + additionalSlot;
 
     // =================================================================
@@ -236,7 +238,6 @@ export default function AuthorDiaryDashboard() {
                 const draftData = {
                     title, message, category, clanSubCategory, hasPoll, pollOptions, timestamp: now
                 };
-                // ⚡️ Async AsyncStorage Save
                 await AsyncStorage.setItem(DRAFT_KEY, JSON.stringify(draftData));
                 setLastSavedTime(now);
                 setSaveStatus("synced");
@@ -303,7 +304,7 @@ export default function AuthorDiaryDashboard() {
         }
     }, []);
 
-    /* 🔹 UPDATED TIMER LOGIC WITH SPAM PROTECTION */
+    /* TIMER LOGIC WITH SPAM PROTECTION */
     useEffect(() => {
         let interval;
 
@@ -316,8 +317,8 @@ export default function AuthorDiaryDashboard() {
                 const referenceTime = new Date(post.statusChangedAt || post.updatedAt || post.createdAt).getTime();
                 let cooldownMs = 0;
 
-                if (post.status === 'approved') cooldownMs = 24 * 60 * 60 * 1000;
-                else if (post.status === 'rejected') cooldownMs = 12 * 60 * 60 * 1000;
+                if (post.status === 'approved') cooldownMs = 6 * 60 * 60 * 1000;
+                else if (post.status === 'rejected') cooldownMs = 2 * 60 * 60 * 1000;
                 else return;
 
                 const endTime = referenceTime + cooldownMs;
@@ -338,7 +339,6 @@ export default function AuthorDiaryDashboard() {
 
                 if (triggerInSeconds <= 0) return;
 
-                // 🚀 SPAM PREVENTION: Async AsyncStorage check
                 const lastScheduledStr = await AsyncStorage.getItem("LAST_SCHEDULED_TARGET");
                 const lastScheduledTarget = lastScheduledStr ? parseInt(lastScheduledStr) : 0;
 
@@ -499,8 +499,6 @@ export default function AuthorDiaryDashboard() {
                     if (cloudRes.ok) {
                         let finalUrl = cloudData.secure_url;
                         const videoTransform = "c_limit,w_720,br_1.5m,q_auto,vc_auto";
-
-                        // For images, we should also limit the width so 12MP photos don't eat data
                         const imageTransform = "c_limit,w_1080,f_auto,q_auto";
 
                         const transform = isVideo ? videoTransform : imageTransform;
@@ -541,7 +539,13 @@ export default function AuthorDiaryDashboard() {
     const handleSubmit = async () => {
         if (!title.trim() || !message.trim()) { CustomAlert("Error", "Title and Message are required."); return; }
         if (isOfflineMode) { CustomAlert("Offline", "Cannot transmit data while offline."); return; }
-
+        if (hasPoll && (pollOptions[0] == "" || pollOptions.length < 2)) {
+            CustomAlert("Error", "Polls require at least 2 option, disable poll if no options")
+            return
+        } else if (category == "Polls" && !hasPoll) {
+            CustomAlert("Error", "Polls category are for posts that includes polls")
+            return
+        }
         setSubmitting(true);
         try {
             let finalCategory = category;
@@ -574,7 +578,13 @@ export default function AuthorDiaryDashboard() {
 
             await AsyncStorage.removeItem(DRAFT_KEY);
             DeviceEventEmitter.emit("POST_CREATED_SUCCESS");
-            CustomAlert("Success", "Your entry has been submitted for approval!");
+            // ⚡️ INTERCEPT FIRST POST LOGIC
+            if (data.isFirstPost && data.auraStats) {
+                Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
+                setFirstPostModal({ visible: true, stats: data.auraStats, postData: data.post });
+            } else {
+                CustomAlert("Success", "Your entry has been submitted for approval!");
+            }
             updateStreak(fingerprint);
             refreshStreak();
 
@@ -586,10 +596,8 @@ export default function AuthorDiaryDashboard() {
             setPickedImage(false);
             mutateTodayPosts();
 
-            // 🔹 FIX: Calculate base limit to know exactly when to clear the slot
             const baseLimit = isInClan ? userRank.postLimit + 2 : userRank.postLimit;
 
-            // If they have an extra slot AND this new post hits their newly extended limit
             if (additionalSlot === 1 && (todayPosts.length + 1) >= (baseLimit + 1)) {
                 setAdditionalSlot(0);
                 await AsyncStorage.setItem("additionalSlot", "0");
@@ -780,6 +788,198 @@ export default function AuthorDiaryDashboard() {
         />
     }
 
+    const primaryTextColor = isDark ? '#ffffff' : '#0f172a';
+
+    // =================================================================
+    // ⚡️ RENDER 1: THE FIRST POST CINEMATIC OVERLAY
+    // =================================================================
+    if (isFirstPostFlow) {
+        const handlePromptSelection = (selectedTitle, selectedMessage, selectedCategory) => {
+            Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Heavy);
+            setTitle(selectedTitle);
+            setCategory(selectedCategory)
+            if (selectedMessage) setMessage(selectedMessage);
+
+            setIntroStep(3);
+
+            setTimeout(() => {
+                storage.set("trigger_first_post", 0);
+                setIsFirstPostFlow(false);
+            }, 2500);
+        };
+
+        const HOOKS = [
+            { title: "Hot Take: My top 3 overrated anime", icon: "fire", color: "#ef4444", category: "Review" },
+            { title: "Who wins in a 1v1? (Discussion)", icon: "sword-cross", color: "#3b82f6", category: "Review" },
+            { title: "I just started watching [Blank] and...", icon: "television-play", color: "#a855f7", category: "Review" },
+            { title: "", custom: true, icon: "pencil", color: "#10b981", label: "I'll forge my own path" }
+        ];
+
+        return (
+            <View style={{ flex: 1, backgroundColor: isDark ? '#020617' : '#f8fafc' }}>
+                <View className="flex-1 px-6 pt-16 justify-center">
+
+                    {/* STEP 0: THE UPLINK */}
+                    {introStep === 0 && (
+                        <Animated.View entering={FadeInRight.duration(600).springify()} exiting={FadeOutLeft.duration(300)} className="items-center px-2 mb-10">
+                            <Animated.View style={{ backgroundColor: isDark ? 'rgba(0,0,0,0.6)' : 'rgba(255,255,255,0.8)', borderColor: THEME.accent, shadowColor: THEME.accent }} className="w-28 h-28 rounded-[36px] items-center justify-center mb-10 border-[3px] shadow-[0_0_40px_rgba(0,0,0,0.3)]">
+                                <MaterialCommunityIcons name="satellite-uplink" size={54} color={THEME.accent} />
+                            </Animated.View>
+
+                            <Text style={{ color: THEME.accent }} className="font-black text-[13px] uppercase tracking-[0.4em] mb-8 text-center opacity-90">
+                                {">"} SYSTEM_READY
+                            </Text>
+
+                            <View style={{ backgroundColor: isDark ? 'rgba(0,0,0,0.5)' : 'rgba(255,255,255,0.7)', borderColor: isDark ? 'rgba(255,255,255,0.05)' : 'rgba(0,0,0,0.05)' }} className="w-full p-8 rounded-[30px] border shadow-2xl mb-12">
+                                <PremiumTextReveal
+                                    text={`Uplink established, ${user?.username || 'Operative'}.\n\nThe village is waiting to hear your voice. It is time for your first transmission.`}
+                                    style={{ color: primaryTextColor, fontSize: 20, lineHeight: 28, fontWeight: '900', fontStyle: 'italic', textTransform: 'uppercase' }}
+                                />
+                            </View>
+
+                            <Pressable
+                                onPress={() => { Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium); setIntroStep(1); }}
+                                className="w-full py-5 rounded-[24px] flex-row justify-center items-center bg-blue-600 shadow-lg shadow-blue-500/50"
+                            >
+                                <Text className="font-black italic uppercase tracking-[0.3em] text-lg mr-3 text-white">
+                                    Initiate Uplink
+                                </Text>
+                                <Ionicons name="arrow-forward" size={22} color="white" />
+                            </Pressable>
+                        </Animated.View>
+                    )}
+
+                    {/* NEW STEP 1: TRANSMISSION PROTOCOLS */}
+                    {introStep === 1 && (
+                        <ScrollView showsVerticalScrollIndicator={false}>
+                            <Animated.View entering={SlideInRight.duration(500).springify()} exiting={SlideOutLeft.duration(300)} className="w-full">
+                                <View className="items-center mb-6">
+                                    <MaterialCommunityIcons name="shield-alert-outline" size={46} color={THEME.accent} className="mb-3" />
+                                    <Text className="text-2xl font-black italic uppercase text-center mb-2" style={{ color: primaryTextColor }}>
+                                        Transmission Protocols
+                                    </Text>
+                                    <Text style={{ color: THEME.textSecondary }} className="font-black uppercase text-[10px] tracking-[0.2em] text-center opacity-80">
+                                        Read carefully before broadcasting to the network.
+                                    </Text>
+                                </View>
+
+                                <View className="space-y-3 mb-8">
+                                    {/* Rule 1: Formatting */}
+                                    <Animated.View entering={FadeInRight.delay(100).springify()} style={{ backgroundColor: isDark ? 'rgba(0,0,0,0.4)' : 'rgba(255,255,255,0.8)', borderColor: isDark ? '#334155' : '#e2e8f0' }} className="border p-4 rounded-2xl flex-row items-center">
+                                        <View style={{ backgroundColor: '#a855f720' }} className="w-12 h-12 rounded-full items-center justify-center mr-4">
+                                            <MaterialCommunityIcons name="format-text" size={22} color="#a855f7" />
+                                        </View>
+                                        <View className="flex-1">
+                                            <Text style={{ color: primaryTextColor }} className="font-black text-[12px] uppercase tracking-wider mb-1">Formatting & Preview</Text>
+                                            <Text style={{ color: THEME.textSecondary }} className="text-[11px] font-bold leading-4">Use tags like s() and h() for effects. Always preview your intel before posting.</Text>
+                                        </View>
+                                    </Animated.View>
+
+                                    {/* Rule 2: Media */}
+                                    <Animated.View entering={FadeInRight.delay(250).springify()} style={{ backgroundColor: isDark ? 'rgba(0,0,0,0.4)' : 'rgba(255,255,255,0.8)', borderColor: isDark ? '#334155' : '#e2e8f0' }} className="border p-4 rounded-2xl flex-row items-center">
+                                        <View style={{ backgroundColor: '#3b82f620' }} className="w-12 h-12 rounded-full items-center justify-center mr-4">
+                                            <MaterialCommunityIcons name="multimedia" size={22} color="#3b82f6" />
+                                        </View>
+                                        <View className="flex-1">
+                                            <Text style={{ color: primaryTextColor }} className="font-black text-[12px] uppercase tracking-wider mb-1">Media Payload</Text>
+                                            <Text style={{ color: THEME.textSecondary }} className="text-[11px] font-bold leading-4">Attach up to 15 assets. Size limits: 25MB max for Video, 5MB max for Image.</Text>
+                                        </View>
+                                    </Animated.View>
+
+                                    {/* Rule 3: Categories */}
+                                    <Animated.View entering={FadeInRight.delay(400).springify()} style={{ backgroundColor: isDark ? 'rgba(0,0,0,0.4)' : 'rgba(255,255,255,0.8)', borderColor: isDark ? '#334155' : '#e2e8f0' }} className="border p-4 rounded-2xl flex-row items-center">
+                                        <View style={{ backgroundColor: '#f59e0b20' }} className="w-12 h-12 rounded-full items-center justify-center mr-4">
+                                            <MaterialCommunityIcons name="folder-network" size={22} color="#f59e0b" />
+                                        </View>
+                                        <View className="flex-1">
+                                            <Text style={{ color: primaryTextColor }} className="font-black text-[12px] uppercase tracking-wider mb-1">Data Routing</Text>
+                                            <Text style={{ color: THEME.textSecondary }} className="text-[11px] font-bold leading-4">Select the correct category or clan sub-channel. Misrouted data will be purged.</Text>
+                                        </View>
+                                    </Animated.View>
+
+                                    {/* Rule 4: Polls */}
+                                    <Animated.View entering={FadeInRight.delay(550).springify()} style={{ backgroundColor: isDark ? 'rgba(0,0,0,0.4)' : 'rgba(255,255,255,0.8)', borderColor: isDark ? '#334155' : '#e2e8f0' }} className="border p-4 rounded-2xl flex-row items-center">
+                                        <View style={{ backgroundColor: '#10b98120' }} className="w-12 h-12 rounded-full items-center justify-center mr-4">
+                                            <MaterialCommunityIcons name="poll" size={22} color="#10b981" />
+                                        </View>
+                                        <View className="flex-1">
+                                            <Text style={{ color: primaryTextColor }} className="font-black text-[12px] uppercase tracking-wider mb-1">Polling Modules</Text>
+                                            <Text style={{ color: THEME.textSecondary }} className="text-[11px] font-bold leading-4">Deploy polls to gather intel and initiate interactive votes with the community.</Text>
+                                        </View>
+                                    </Animated.View>
+
+                                    {/* Rule 5: System Judgment */}
+                                    <Animated.View entering={FadeInRight.delay(700).springify()} style={{ backgroundColor: isDark ? 'rgba(239,68,68,0.1)' : 'rgba(239,68,68,0.05)', borderColor: '#ef444450' }} className="border p-4 rounded-2xl flex-row items-center">
+                                        <View style={{ backgroundColor: '#ef444420' }} className="w-12 h-12 rounded-full items-center justify-center mr-4">
+                                            <MaterialCommunityIcons name="eye-outline" size={22} color="#ef4444" />
+                                        </View>
+                                        <View className="flex-1">
+                                            <Text style={{ color: '#ef4444' }} className="font-black text-[12px] uppercase tracking-wider mb-1">System Judgment</Text>
+                                            <Text style={{ color: THEME.textSecondary }} className="text-[11px] font-bold leading-4">All posts are decrypted by THE SYSTEM. Follow guidelines to avoid rejection.</Text>
+                                        </View>
+                                    </Animated.View>
+                                </View>
+
+                                <Pressable
+                                    onPress={() => { Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium); setIntroStep(2); }}
+                                    className="w-full py-5 rounded-[24px] flex-row justify-center items-center bg-blue-600 shadow-lg shadow-blue-500/50"
+                                >
+                                    <Text className="font-black italic uppercase tracking-[0.2em] text-sm mr-3 text-white">
+                                        Acknowledge Protocols
+                                    </Text>
+                                    <Ionicons name="checkmark-done" size={20} color="white" />
+                                </Pressable>
+                            </Animated.View>
+                        </ScrollView>
+                    )}
+
+                    {/* STEP 2: SELECT A HOOK */}
+                    {introStep === 2 && (
+                        <Animated.View entering={SlideInRight.duration(500).springify()} exiting={SlideOutLeft.duration(300)} className="w-full">
+                            <Text className="text-3xl font-black italic uppercase text-center mb-4" style={{ color: primaryTextColor }}>
+                                Select a Hook
+                            </Text>
+                            <Text style={{ color: THEME.textSecondary }} className="font-black uppercase text-[10px] mb-8 tracking-[0.2em] text-center opacity-80">
+                                Every legend starts with a single word. Pick a prompt to begin.
+                            </Text>
+
+                            <View className="space-y-4">
+                                {HOOKS.map((hook, index) => (
+                                    <TouchableOpacity
+                                        key={index}
+                                        onPress={() => handlePromptSelection(hook.custom ? "" : hook.title, "", hook.category)}
+                                        style={{ backgroundColor: isDark ? 'rgba(0,0,0,0.6)' : 'rgba(255,255,255,0.8)', borderColor: hook.color }}
+                                        className="w-full border-2 rounded-[24px] p-5 flex-row items-center shadow-lg mb-4"
+                                    >
+                                        <View style={{ backgroundColor: hook.color + '20' }} className="w-12 h-12 rounded-full items-center justify-center mr-4">
+                                            <MaterialCommunityIcons name={hook.icon} size={24} color={hook.color} />
+                                        </View>
+                                        <View className="flex-1">
+                                            <Text style={{ color: primaryTextColor }} className="font-black italic uppercase text-sm">
+                                                {hook.custom ? hook.label : hook.title}
+                                            </Text>
+                                        </View>
+                                    </TouchableOpacity>
+                                ))}
+                            </View>
+                        </Animated.View>
+                    )}
+
+                    {/* STEP 3: LOADING TRANSITION */}
+                    {introStep === 3 && (
+                        <Animated.View entering={ZoomIn.duration(600).springify()} className="items-center justify-center py-20">
+                            <MaterialCommunityIcons name="shield-check" size={80} color="#22c55e" style={{ marginBottom: 30 }} />
+                            <Text className="text-3xl font-black italic uppercase text-center leading-10 mb-8" style={{ color: primaryTextColor }}>
+                                Hook Selected. Opening Interface...
+                            </Text>
+                            <ActivityIndicator size="large" color="#22c55e" />
+                        </Animated.View>
+                    )}
+                </View>
+            </View>
+        );
+    }
+
     return (
         <View style={{ flex: 1, backgroundColor: THEME.bg }}>
             <StatusBar barStyle="light-content" />
@@ -864,7 +1064,7 @@ export default function AuthorDiaryDashboard() {
                                 </TouchableOpacity>
                             </Link>
                             <TouchableOpacity
-                                className="w-fit py-4 px-3 rounded-2xl flex-row items-center gap-1 justify-center space-x-2"
+                                className="w-fit py-4 px-3 rounded-2xl flex-row items-center gap-1 justify-center space-x-2 mt-4"
                                 onPress={handleAdditionalSlot}
                                 style={{ backgroundColor: THEME.glowOrange }}
                                 disabled={isProcessingTransaction}>
@@ -875,7 +1075,7 @@ export default function AuthorDiaryDashboard() {
                         {isProcessingTransaction && (
                             <View className="absolute inset-0 bg-black/60 flex items-center justify-center z-[100]">
                                 <View style={{ backgroundColor: THEME.card }} className="p-10 rounded-[40px] items-center border-2 border-white/10">
-                                    <ActivityIndicator size="large" color={THEME.streak} />
+                                    <ActivityIndicator size="large" color={THEME.accent} />
                                     <Text style={{ color: THEME.text }} className="font-black uppercase mt-4 tracking-widest text-xs">
                                         Syncing Wallet...
                                     </Text>
@@ -891,7 +1091,7 @@ export default function AuthorDiaryDashboard() {
                         <View className="mb-8 flex-row justify-between items-center bg-gray-900/50 p-4 rounded-2xl border border-gray-800">
                             <View>
                                 <Text className="text-[9px] font-black text-gray-500 uppercase tracking-widest">Active Rank</Text>
-                                <Text className="text-white font-black italic">{userRank.rankIcon} {userRank.rankTitle.toUpperCase()}</Text>
+                                <Text className="text-white font-black italic">{userRank.rankIcon} {userRank.rankTitle}</Text>
                             </View>
                             <View className="items-end">
                                 <Text className="text-[9px] font-black text-gray-500 uppercase tracking-widest">Daily Quota</Text>
@@ -915,7 +1115,7 @@ export default function AuthorDiaryDashboard() {
 
                         {/* --- FORM SECTION --- */}
                         <View className="flex-row justify-between items-center mb-6 mt-4">
-                            <Text className="text-lg font-black uppercase italic text-white">{showPreview ? "Intel Preview" : "Create New Intel"}</Text>
+                            <Text className="text-lg font-black uppercase italic">{showPreview ? "Intel Preview" : "Create New Intel"}</Text>
 
                             <View className="flex-row gap-2">
                                 <TouchableOpacity onPress={handleClearAll} className="bg-red-600/10 px-4 py-2 rounded-xl border border-red-600/20">
@@ -932,14 +1132,6 @@ export default function AuthorDiaryDashboard() {
                             <View style={{ backgroundColor: THEME.card, borderColor: THEME.border }} className="mb-6 rounded-3xl border-2 p-2">{renderPreviewContent()}</View>
                         ) : (
                             <View className="space-y-6">
-                                <Link href={"/screens/Instructions"} asChild>
-                                    <TouchableOpacity className="mt-4">
-                                        <Text className="text-gray-600 font-bold uppercase tracking-tighter text-xs">
-                                            Don't understand how to go about this? Check out this page for clear explanation
-                                        </Text>
-                                    </TouchableOpacity>
-                                </Link>
-
                                 <View>
                                     <Text className="text-[9px] font-black uppercase text-gray-500 mb-2 ml-1">Subject Title</Text>
                                     <TextInput
@@ -979,7 +1171,7 @@ export default function AuthorDiaryDashboard() {
                                         onSelectionChange={(e) => setSelection(e.nativeEvent.selection)}
                                         multiline
                                         style={{ backgroundColor: THEME.card, borderColor: THEME.border, textAlignVertical: 'top', color: THEME.text }}
-                                        className="border-2 p-5 rounded-3xl font-medium h-64"
+                                        className="border-2 p-5 rounded-3xl font-medium h-64 text-white"
                                     />
                                 </View>
 
@@ -1027,7 +1219,7 @@ export default function AuthorDiaryDashboard() {
 
                                     {mediaList.length > 0 && (
                                         <View className="mb-2">
-                                            <Text className="text-[9px] font-black uppercase text-gray-500 mb-3 ml-1">Linked Assets ({mediaList.length}/5)</Text>
+                                            <Text className="text-[9px] font-black uppercase text-gray-500 mb-3 ml-1">Linked Assets ({mediaList.length}/15)</Text>
                                             <ScrollView horizontal showsHorizontalScrollIndicator={false} className="flex-row py-2">
                                                 {mediaList.map((item, index) => (
                                                     <View key={index} className="mr-3 relative">
@@ -1049,16 +1241,6 @@ export default function AuthorDiaryDashboard() {
                                                         </TouchableOpacity>
                                                     </View>
                                                 ))}
-
-                                                {mediaList.length < 5 && (
-                                                    <TouchableOpacity
-                                                        onPress={pickImage}
-                                                        style={{ borderColor: THEME.border, backgroundColor: THEME.card }}
-                                                        className="w-24 h-24 rounded-2xl border-2 border-dashed justify-center items-center"
-                                                    >
-                                                        <Ionicons name="add" size={24} color={THEME.accent} />
-                                                    </TouchableOpacity>
-                                                )}
                                             </ScrollView>
                                         </View>
                                     )}
@@ -1068,7 +1250,7 @@ export default function AuthorDiaryDashboard() {
                                             onPress={pickImage}
                                             disabled={uploading}
                                             style={{ backgroundColor: THEME.card, borderColor: THEME.border }}
-                                            className="p-8 rounded-3xl items-center border-2 border-dashed"
+                                            className="p-8 rounded-3xl mt-4 items-center border-2 border-dashed"
                                         >
                                             {uploading ? (
                                                 <View className="items-center">
@@ -1105,6 +1287,7 @@ export default function AuthorDiaryDashboard() {
                                                         placeholder={`Option ${i + 1}`}
                                                         value={option}
                                                         onChangeText={(t) => updatePollOption(t, i)}
+                                                        placeholderTextColor="#4b5563"
                                                         style={{ backgroundColor: THEME.card, borderColor: THEME.border, color: THEME.text }}
                                                         className="flex-1 border p-4 rounded-xl text-white font-bold"
                                                     />
@@ -1130,6 +1313,98 @@ export default function AuthorDiaryDashboard() {
                     </View>
                 )}
             </ScrollView>
+            {/* ⚡️ FIRST POST SUCCESS MODAL */}
+            <Modal visible={firstPostModal.visible} transparent animationType="fade">
+                <View className="flex-1 bg-black/95 items-center justify-center p-6">
+                    <Animated.View entering={ZoomIn.duration(600).springify()} className="w-full p-8 rounded-[40px] border border-blue-500/50 bg-[#0d1117] items-center relative overflow-hidden">
+
+                        {/* Background glow */}
+                        <View className="absolute top-0 left-0 w-4 h-4 rounded-full bg-blue-600/10" pointerEvents="none" />
+
+                        <Animated.View entering={FadeInDown.delay(300)} className="w-24 h-24 bg-blue-600/20 rounded-full items-center justify-center mb-6 border border-blue-500/50">
+                            <MaterialCommunityIcons name="auto-fix" size={40} color="#3b82f6" />
+                        </Animated.View>
+
+                        <Animated.Text entering={FadeInDown.delay(500)} className="text-2xl font-black text-center uppercase tracking-tighter text-white mb-2">
+                            Transmission Successful!
+                        </Animated.Text>
+
+                        <Animated.Text entering={FadeInDown.delay(700)} className="text-blue-400 text-center font-bold text-xs uppercase tracking-widest mb-8">
+                            First Scroll Etched
+                        </Animated.Text>
+
+                        {/* ⚡️ CINEMATIC REVEAL TEXT */}
+                        <View className="mb-8 w-full min-h-[100px] justify-center items-center">
+                            {firstPostModal.visible && (
+                                <PremiumTextReveal
+                                    key={firstPostModal.postData?._id || "reveal"}
+                                    text={`Great! Your scroll was received and granted you +${firstPostModal.stats?.earned} AURA.\n\nYou have ${firstPostModal.stats?.pointsNeeded} Aura left to level up.\n\nYour journey has finally begun, Operator. Let's see how far you can go.`}
+                                    style={{ color: '#9ca3af', fontSize: 15, lineHeight: 24, fontWeight: '700' }}
+                                />
+                            )}
+                        </View>
+
+                        {/* ⚡️ DELAYED BUTTON (Waits 3 seconds for text to finish typing) */}
+                        <Animated.View entering={FadeIn.delay(3000).duration(800)} className="w-full">
+                            <TouchableOpacity
+                                onPress={() => {
+                                    setFirstPostModal({ visible: false, stats: null, postData: null });
+                                    // Navigate to the newly created post
+                                    if (firstPostModal.postData?._id) {
+                                        router.push(`/post/${firstPostModal.postData.slug || firstPostModal.postData._id}`);
+                                    }
+                                }}
+                                className="bg-blue-600 w-full p-5 rounded-2xl items-center shadow-lg shadow-blue-500/30"
+                            >
+                                <Text className="text-white font-black uppercase tracking-widest text-sm italic">
+                                    View Transmission
+                                </Text>
+                            </TouchableOpacity>
+                        </Animated.View>
+
+                    </Animated.View>
+                </View>
+            </Modal>
         </View>
     );
 }
+// ============================================================================
+// ✍️ PREMIUM CINEMATIC WORD REVEAL (From Onboarding)
+// ============================================================================
+const AnimatedWord = ({ word, index, style }) => {
+    const opacity = useSharedValue(0);
+    const translateY = useSharedValue(10);
+
+    useEffect(() => {
+        setTimeout(() => { Haptics.selectionAsync(); }, index * 150);
+        opacity.value = withDelay(index * 150, withTiming(1, { duration: 600, easing: Easing.out(Easing.ease) }));
+        translateY.value = withDelay(index * 150, withTiming(0, { duration: 600, easing: Easing.out(Easing.back(1.5)) }));
+    }, [word]);
+
+    const animStyle = useAnimatedStyle(() => ({
+        opacity: opacity.value,
+        transform: [{ translateY: translateY.value }]
+    }));
+
+    return <Animated.Text style={[style, animStyle, { marginRight: 6 }]}>{word}</Animated.Text>;
+};
+
+const PremiumTextReveal = ({ text, style }) => {
+    const lines = text.split('\n');
+    let globalWordIndex = 0;
+
+    return (
+        <View style={{ alignItems: 'center', width: '100%' }}>
+            {lines.map((line, lineIndex) => (
+                <View key={`line-${lineIndex}`} style={{ flexDirection: 'row', flexWrap: 'wrap', justifyContent: 'center', marginBottom: line === '' ? 12 : 0 }}>
+                    {line.split(' ').map((word, wIndex) => {
+                        if (word === '') return null;
+                        const currentIndex = globalWordIndex++;
+                        return <AnimatedWord key={`word-${currentIndex}`} word={word} index={currentIndex} style={style} />;
+                    })}
+                </View>
+            ))}
+        </View>
+    );
+};
+

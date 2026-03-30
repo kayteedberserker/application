@@ -1,5 +1,5 @@
 import { Ionicons, MaterialCommunityIcons } from '@expo/vector-icons';
-import { useMMKV } from "react-native-mmkv";
+import * as Haptics from 'expo-haptics'; // ⚡️ ADDED HAPTICS
 import { useEffect, useState } from "react";
 import {
     Dimensions,
@@ -7,15 +7,65 @@ import {
     TouchableOpacity,
     View
 } from "react-native";
+import { useMMKV } from "react-native-mmkv";
 import Animated, {
+    Easing,
     FadeIn,
     FadeInDown,
-    ScaleIn
-} from "react-native-reanimated";
+    ScaleIn,
+    useAnimatedStyle,
+    useSharedValue,
+    withDelay,
+    withTiming
+} from "react-native-reanimated"; // ⚡️ ADDED REANIMATED UTILS
 import { Text } from "./Text";
 
 const { height } = Dimensions.get('window');
 
+// ============================================================================
+// ✍️ PREMIUM CINEMATIC WORD REVEAL (Left-Aligned for Onboarding)
+// ============================================================================
+const AnimatedWord = ({ word, index, style }) => {
+    const opacity = useSharedValue(0);
+    const translateY = useSharedValue(10);
+
+    useEffect(() => {
+        // ⚡️ Faster delay (70ms) since onboarding text is longer
+        setTimeout(() => { Haptics.selectionAsync(); }, index * 70);
+        opacity.value = withDelay(index * 70, withTiming(1, { duration: 400, easing: Easing.out(Easing.ease) }));
+        translateY.value = withDelay(index * 70, withTiming(0, { duration: 400, easing: Easing.out(Easing.back(1.5)) }));
+    }, [word]);
+
+    const animStyle = useAnimatedStyle(() => ({
+        opacity: opacity.value,
+        transform: [{ translateY: translateY.value }]
+    }));
+
+    return <Animated.Text style={[style, animStyle, { marginRight: 6 }]}>{word}</Animated.Text>;
+};
+
+const PremiumTextReveal = ({ text, style }) => {
+    const lines = text.split('\n');
+    let globalWordIndex = 0;
+
+    return (
+        <View style={{ width: '100%' }}>
+            {lines.map((line, lineIndex) => (
+                <View key={`line-${lineIndex}`} style={{ flexDirection: 'row', flexWrap: 'wrap', marginBottom: line === '' ? 12 : 0 }}>
+                    {line.split(' ').map((word, wIndex) => {
+                        if (word === '') return null;
+                        const currentIndex = globalWordIndex++;
+                        return <AnimatedWord key={`word-${currentIndex}`} word={word} index={currentIndex} style={style} />;
+                    })}
+                </View>
+            ))}
+        </View>
+    );
+};
+
+// ============================================================================
+// MAIN COMPONENT
+// ============================================================================
 export default function AppOnboarding() {
     // 🔹 Strictly use useMMKV hook for the storage instance
     const storage = useMMKV();
@@ -26,22 +76,15 @@ export default function AppOnboarding() {
 
     const allFeatures = [
         {
-            title: "SUMMONING_&_SCROLLS",
-            desc: "Welcome to Oreblogda! Submit your scrolls to the High Council. Every chapter is reviewed by THE SYSTEM to ensure it's not FILLER before being ARCHIVED.",
-            icon: "sparkles",
-            color: "#6366f1",
-            intel: "STATUS: HERO_AWAKENED"
-        },
-        {
             title: "THE_NINJA_CODE",
-            desc: "Keep your Spirit Streak burning by posting every 48 hours. Beware the Judgment Gate: Cursed Spirits (spam) will have their streaks sealed by THE SYSTEM.",
+            desc: "Welcome to Oreblogda! Keep your Spirit Streak burning by posting every 48 hours. Beware the Judgment Gate: Cursed Spirits (spam) will have their streaks sealed by THE SYSTEM.",
             icon: "shield-checkmark",
             color: "#f87171",
             intel: "MANA: CONSISTENCY_CHECK"
         },
         {
             title: "AURA_&_PRESTIGE",
-            desc: "Earn Aura Points through high engagement. The top 200 legends are etched into the Hall of Fame. Stay consistent to keep your glowing badges of prestige.",
+            desc: "Earn Aura Points through high engagement to rank up. The top 200 legends are etched into the Hall of Fame. Stay consistent to keep your glowing badges of prestige.",
             icon: "auto-fix",
             color: "#a78bfa",
             intel: "AURA: SOUL_VIBRATION"
@@ -54,33 +97,11 @@ export default function AppOnboarding() {
             intel: "GUILD: CLAN_SYSTEM_ACTIVE"
         },
         {
-            title: "CLAN_WARS",
-            desc: "The ultimate battlefield. Compete in CLAN WARS to show off whichs the best CLAN. Rank up to unlock titles like 'The Pirate King' and 'The Pillars' for your entire alliance.",
-            icon: "flash",
-            color: "#f59e0b",
-            intel: "WAR: TERRITORY_BATTLE"
-        },
-        {
-            title: "CLAN_COINS_&_TREASURY",
-            desc: "Amass wealth for your alliance! Use Clan Coins (CC) or OC to purchase legendary frames and premium status. Earn CC daily or through direct treasury boosts. Claim 10 OC daily and 50 every 7 days",
-            icon: "diamond",
-            color: "#fbbf24",
-            intel: "CURRENCY: CC_SYSTEM_LOADED"
-        },
-        {
             title: "THE_BLACK_MARKET",
             desc: "The marketplace is open. Spend your CC/OC on Phantom-class themes, limited-edition watermarks, and tactical clan boosts to dominate the leaderboards. There are different categories of products in the store...",
             icon: "cart",
             color: "#22d3ee",
             intel: "STORE: MARKET_ACCESS_GRANTED"
-        },
-        // ⚡️ NEW: The Peak System Slide
-        {
-            title: "THE_PEAK_SYSTEM",
-            desc: "Support the network and ascend! Purchasing OC contributes to your total Peak Level. Reach higher Peak Tiers to unlock exclusive 3D crests, daily claim bonuses, and elite status on the leaderboards.",
-            icon: "rocket", 
-            color: "#ec4899", // Magenta/Pink to make it pop
-            intel: "STATUS: ASCENSION_PROTOCOL"
         },
         {
             title: "ADVENTURE_AWAITS",
@@ -92,7 +113,7 @@ export default function AppOnboarding() {
     ];
 
     // ⚡️ Show ONLY the new Peak System and Adventure Awaits for returning users
-    const updateOnlyFeatures = allFeatures.slice(7, 9); 
+    const updateOnlyFeatures = allFeatures.slice(7, 9);
 
     const currentFeatures = isUpdateOnly ? updateOnlyFeatures : allFeatures;
 
@@ -124,6 +145,7 @@ export default function AppOnboarding() {
     };
 
     const handleComplete = () => {
+        Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
         try {
             // 🔹 Synchronous update to MMKV
             storage.set("HAS_SEEN_WELCOME", "true");
@@ -138,11 +160,13 @@ export default function AppOnboarding() {
     };
 
     const nextStep = () => {
+        Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
         if (step < currentFeatures.length - 1) setStep(step + 1);
         else handleComplete();
     };
 
     const prevStep = () => {
+        Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
         if (step > 0) setStep(step - 1);
     };
 
@@ -150,42 +174,42 @@ export default function AppOnboarding() {
 
     return (
         <Modal transparent visible={isVisible} animationType="none">
-            <View style={{ 
-                flex: 1, 
-                backgroundColor: 'rgba(0,0,0,0.96)', 
-                justifyContent: 'center', 
+            <View style={{
+                flex: 1,
+                backgroundColor: 'rgba(0,0,0,0.96)',
+                justifyContent: 'center',
                 alignItems: 'center',
-                padding: 20 
+                padding: 20
             }}>
                 <Animated.View entering={FadeIn} style={{ position: 'absolute', width: '100%', height: '100%' }} />
 
-                <Animated.View 
+                <Animated.View
                     entering={ScaleIn}
-                    style={{ 
-                        width: '100%', 
-                        height: height * 0.78, 
-                        backgroundColor: '#050505', 
-                        borderRadius: 32, 
-                        borderWidth: 1, 
+                    style={{
+                        width: '100%',
+                        height: height * 0.78,
+                        backgroundColor: '#050505',
+                        borderRadius: 32,
+                        borderWidth: 1,
                         borderColor: '#1e293b',
                         padding: 30,
                         justifyContent: 'space-between'
                     }}
                 >
                     {/* --- TOP NAVIGATION BAR --- */}
-                    <View style={{ 
-                        flexDirection: 'row', 
-                        justifyContent: 'space-between', 
-                        alignItems: 'center', 
+                    <View style={{
+                        flexDirection: 'row',
+                        justifyContent: 'space-between',
+                        alignItems: 'center',
                         zIndex: 10,
                         borderBottomWidth: 1,
                         borderBottomColor: '#111',
                         paddingBottom: 15
                     }}>
-                        <View style={{ width: 80 }}> 
+                        <View style={{ width: 80 }}>
                             {step > 0 && (
-                                <TouchableOpacity 
-                                    onPress={prevStep} 
+                                <TouchableOpacity
+                                    onPress={prevStep}
                                     style={{ flexDirection: 'row', alignItems: 'center', gap: 4 }}
                                 >
                                     <Ionicons name="chevron-back" size={14} color="#60a5fa" />
@@ -193,9 +217,9 @@ export default function AppOnboarding() {
                                 </TouchableOpacity>
                             )}
                         </View>
-                        
+
                         <View style={{ alignItems: 'center' }}>
-                           {isUpdateOnly && <Text style={{ fontSize: 9, color: '#22d3ee', fontWeight: 'bold' }}>[ NEW_UPDATE_V5 ]</Text>}
+                            {isUpdateOnly && <Text style={{ fontSize: 9, color: '#22d3ee', fontWeight: 'bold' }}>[ NEW_UPDATE_V5 ]</Text>}
                         </View>
 
                         <TouchableOpacity onPress={handleComplete}>
@@ -206,15 +230,15 @@ export default function AppOnboarding() {
                     <View>
                         {/* Icon Container with Glow */}
                         <Animated.View key={`icon-${step}`} entering={FadeIn} style={{ marginBottom: 30, marginTop: 10 }}>
-                            <View style={{ 
-                                width: 68, height: 68, borderRadius: 20, backgroundColor: '#000', 
-                                borderWidth: 1, borderColor: currentFeatures[step].color, 
+                            <View style={{
+                                width: 68, height: 68, borderRadius: 20, backgroundColor: '#000',
+                                borderWidth: 1, borderColor: currentFeatures[step].color,
                                 justifyContent: 'center', alignItems: 'center',
                                 shadowColor: currentFeatures[step].color, shadowOpacity: 0.3, shadowRadius: 15,
                                 elevation: 5
                             }}>
                                 {currentFeatures[step].icon === "auto-fix" ? (
-                                     <MaterialCommunityIcons name="auto-fix" size={34} color={currentFeatures[step].color} />
+                                    <MaterialCommunityIcons name="auto-fix" size={34} color={currentFeatures[step].color} />
                                 ) : (
                                     <Ionicons name={currentFeatures[step].icon} size={34} color={currentFeatures[step].color} />
                                 )}
@@ -229,9 +253,13 @@ export default function AppOnboarding() {
                             <Text style={{ fontSize: 28, fontWeight: '900', color: '#fff', marginBottom: 18, lineHeight: 34 }}>
                                 {currentFeatures[step].title.replace(/_/g, ' ')}
                             </Text>
-                            <Text style={{ fontSize: 15, color: '#94a3b8', lineHeight: 24 }}>
-                                {currentFeatures[step].desc}
-                            </Text>
+
+                            {/* ⚡️ REPLACED STATIC TEXT WITH PREMIUM WORD REVEAL */}
+                            <PremiumTextReveal
+                                key={step} // CRITICAL: Forces remount and restarts animation when step changes
+                                text={currentFeatures[step].desc}
+                                style={{ fontSize: 15, color: '#94a3b8', lineHeight: 24 }}
+                            />
                         </Animated.View>
                     </View>
 
@@ -239,9 +267,9 @@ export default function AppOnboarding() {
                         {/* Progress Dots */}
                         <View style={{ flexDirection: 'row', gap: 6, marginBottom: 30 }}>
                             {currentFeatures.map((_, i) => (
-                                <View key={i} style={{ 
-                                    height: 4, width: i === step ? 24 : 6, borderRadius: 10, 
-                                    backgroundColor: i === step ? currentFeatures[step].color : '#1e293b' 
+                                <View key={i} style={{
+                                    height: 4, width: i === step ? 24 : 6, borderRadius: 10,
+                                    backgroundColor: i === step ? currentFeatures[step].color : '#1e293b'
                                 }} />
                             ))}
                         </View>
@@ -261,10 +289,10 @@ export default function AppOnboarding() {
                                 <Text style={{ color: '#000', fontWeight: '900', fontSize: 14, letterSpacing: 2 }}>
                                     {step === currentFeatures.length - 1 ? "INITIALIZE_CORE" : "NEXT_SYNC_LEVEL"}
                                 </Text>
-                                <Ionicons 
-                                    name={step === currentFeatures.length - 1 ? "flash" : "chevron-forward"} 
-                                    size={20} 
-                                    color="#000" 
+                                <Ionicons
+                                    name={step === currentFeatures.length - 1 ? "flash" : "chevron-forward"}
+                                    size={20}
+                                    color="#000"
                                 />
                             </Animated.View>
                         </TouchableOpacity>

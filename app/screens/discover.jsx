@@ -4,8 +4,8 @@ import { useRouter } from 'expo-router';
 import { useColorScheme } from "nativewind";
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { ActivityIndicator, Clipboard, DeviceEventEmitter, Modal, ScrollView, Text, TextInput, TouchableOpacity, View } from 'react-native';
-// ⚡️ Swapped FlashList for LegendList
 import { LegendList } from "@legendapp/list"; 
+import Animated, { FadeInDown, Layout } from "react-native-reanimated";
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import ClanCrest from '../../components/ClanCrest';
 import CoinIcon from '../../components/ClanIcon';
@@ -14,20 +14,48 @@ import { useCoins } from '../../context/CoinContext';
 import { useStreak } from "../../context/StreakContext";
 import { useUser } from "../../context/UserContext";
 import apiFetch from '../../utils/apiFetch';
+import PeakBadge from "../../components/PeakBadge";
 
 let CLANS_MEMORY_CACHE = [];
 let USER_STATS_MEMORY_CACHE = null;
 
 const CLANS_CACHE_KEY = 'cached_clans_list';
 const USER_STATS_CACHE_KEY = 'clan_user_stats_cache';
-const MIN_POSTS_REQUIRED = 25;
+
+// ⚡️ UPDATED REQUIREMENTS: Level 4 corresponds to the old 25 post requirement (700+ Aura)
+const MIN_RANK_REQUIRED = 4; 
 const MIN_STREAK_REQUIRED = 5;
+
+// ⚡️ IMPORTED AURA TIERS
+// ⚡️ IMPORTED AURA TIERS
+export const AURA_TIERS = [
+  { level: 1, req: 0, title: "E-Rank Novice", icon: "🌱", color: "#94a3b8" },
+  { level: 2, req: 100, title: "D-Rank Operative", icon: "⚔️", color: "#34d399" }, 
+  { level: 3, req: 300, title: "C-Rank Awakened", icon: "🔥", color: "#f87171" }, 
+  { level: 4, req: 700, title: "B-Rank Elite", icon: "⚡", color: "#a78bfa" }, 
+  { level: 5, req: 1500, title: "A-Rank Champion", icon: "🛡️", color: "#60a5fa" }, 
+  { level: 6, req: 3000, title: "S-Rank Legend", icon: "🌟", color: "#fcd34d" }, 
+  { level: 7, req: 6000, title: "SS-Rank Mythic", icon: "🌀", color: "#f472b6" }, 
+  { level: 8, req: 12000, title: "Monarch", icon: "👑", color: "#fbbf24" }, 
+];
+
+const resolveUserRank = (level) => {
+    const safeLevel = Math.max(1, Math.min(8, level || 1));
+    const currentTier = AURA_TIERS[safeLevel - 1];
+    return { 
+        title: currentTier.title.toUpperCase().replace(/ /g, "_"), 
+        icon: currentTier.icon, 
+        color: currentTier.color,
+        level: currentTier.level
+    };
+};
+
+
 
 export default function ClanDiscover() {
     const storage = useMMKV();
     const { colorScheme } = useColorScheme();
     const isDark = colorScheme === "dark";
-    console.log(isDark);
     
     const router = useRouter();
     const insets = useSafeAreaInsets();
@@ -36,7 +64,8 @@ export default function ClanDiscover() {
     const { streak: streakData } = useStreak();
 
     const [clans, setClans] = useState(CLANS_MEMORY_CACHE);
-    const [userPostCount, setUserPostCount] = useState(USER_STATS_MEMORY_CACHE?.posts || 0);
+    // ⚡️ Optimized: Read Rank Level directly from the User Context
+    const userRankLevel = user?.currentRankLevel || 1;
     
     const [search, setSearch] = useState('');
     const [page, setPage] = useState(1);
@@ -49,7 +78,27 @@ export default function ClanDiscover() {
     const [alertConfig, setAlertConfig] = useState({ visible: false, title: '', message: '', type: 'error' });
 
     const searchTimeout = useRef(null);
-    const scrollRef = useRef(null); // Added reference for the list
+    const scrollRef = useRef(null); 
+
+    useEffect(() => {
+        if (CLANS_MEMORY_CACHE.length === 0) {
+            const cached = storage.getString(CLANS_CACHE_KEY);
+            if (cached) {
+                const parsed = JSON.parse(cached);
+                CLANS_MEMORY_CACHE = parsed.data || [];
+                setClans(CLANS_MEMORY_CACHE);
+            }
+        }
+        fetchClans(1, search, true);
+    }, [storage]);
+
+    useEffect(() => {
+        if (searchTimeout.current) clearTimeout(searchTimeout.current);
+        searchTimeout.current = setTimeout(() => {
+            fetchClans(1, search, true);
+        }, 500);
+        return () => clearTimeout(searchTimeout.current);
+    }, [search, fetchClans]);
 
     const showAlert = (title, message, type = 'error') => {
         setAlertConfig({ visible: true, title, message, type });
@@ -97,51 +146,7 @@ export default function ClanDiscover() {
         }
     }, [clans.length, saveToDisk, user?.deviceId]);
 
-    const fetchUserPostCount = useCallback(async () => {
-        if (!user?.deviceId) return;
-        try {
-            const res = await apiFetch(`/posts?authorId=${user.deviceId}&limit=1`);
-            const data = await res.json();
-            if (data.total !== undefined) {
-                setUserPostCount(data.total);
-                USER_STATS_MEMORY_CACHE = { posts: data.total };
-                saveToDisk(USER_STATS_CACHE_KEY, { posts: data.total });
-            }
-        } catch (err) {
-            console.error("Failed to fetch user post count:", err);
-        }
-    }, [saveToDisk, user?.deviceId]);
-
-    useEffect(() => {
-        if (CLANS_MEMORY_CACHE.length === 0) {
-            const cached = storage.getString(CLANS_CACHE_KEY);
-            if (cached) {
-                const parsed = JSON.parse(cached);
-                CLANS_MEMORY_CACHE = parsed.data || [];
-                setClans(CLANS_MEMORY_CACHE);
-            }
-        }
-
-        if (!USER_STATS_MEMORY_CACHE) {
-            const cachedStats = storage.getString(USER_STATS_CACHE_KEY);
-            if (cachedStats) {
-                const parsed = JSON.parse(cachedStats);
-                USER_STATS_MEMORY_CACHE = parsed.data;
-                setUserPostCount(USER_STATS_MEMORY_CACHE.posts);
-            }
-        }
-
-        fetchClans(1, search, true);
-        fetchUserPostCount();
-    }, [fetchUserPostCount, storage]);
-
-    useEffect(() => {
-        if (searchTimeout.current) clearTimeout(searchTimeout.current);
-        searchTimeout.current = setTimeout(() => {
-            fetchClans(1, search, true);
-        }, 500);
-        return () => clearTimeout(searchTimeout.current);
-    }, [search, fetchClans]);
+    
 
     const handleLoadMore = () => {
         if (!loadingMore && hasMore && !loading) {
@@ -155,14 +160,14 @@ export default function ClanDiscover() {
 
     const handlePressCreate = () => {
         const currentStreak = streakData?.streak || 0;
-        if (userPostCount < MIN_POSTS_REQUIRED || currentStreak < MIN_STREAK_REQUIRED) {
+        // ⚡️ Check against new MIN_RANK_REQUIRED (Level 4) using the Context Level
+        if (userRankLevel < MIN_RANK_REQUIRED || currentStreak < MIN_STREAK_REQUIRED) {
             setShowReqModal(true);
         } else {
             setCreateModalVisible(true);
         }
     };
 
-    // ⚡️ Memoized render function for LegendList
     const renderItem = useCallback(({ item, index }) => (
         <ClanCard
             clan={item}
@@ -218,17 +223,15 @@ export default function ClanDiscover() {
                 </View>
             ) : (
                 <View style={{ flex: 1 }}>
-                    {/* ⚡️ LegendList Implementation */}
                     <LegendList
                         ref={scrollRef}
                         data={clans}
                         keyExtractor={(item) => item.tag}
                         renderItem={renderItem}
                         
-                        // ⚡️ LegendList Props
-                        estimatedItemSize={450} // Rough estimate of a ClanCard
-                        drawDistance={1000} // Keeps rendering smooth
-                        recycleItems={true} // Super important for complex cards like ClanCards
+                        estimatedItemSize={450} 
+                        drawDistance={1000} 
+                        recycleItems={true} 
                         
                         contentContainerStyle={{ paddingHorizontal: 24, paddingBottom: 120, paddingTop: 10 }}
                         showsVerticalScrollIndicator={false}
@@ -249,19 +252,8 @@ export default function ClanDiscover() {
             <RequirementModal
                 visible={showReqModal}
                 onClose={() => setShowReqModal(false)}
-                stats={{ posts: userPostCount, streak: streakData?.streak || 0 }}
+                stats={{ rankLevel: userRankLevel, aura: user?.aura || 0, streak: streakData?.streak || 0 }}
                 isDark={isDark}
-            />
-
-            <CreateClanModal
-                visible={isCreateModalVisible}
-                isDark={isDark}
-                onClose={() => setCreateModalVisible(false)}
-                showAlert={showAlert}
-                onSuccess={(newClan) => {
-                    setClans(prev => [newClan, ...prev]);
-                    setCreateModalVisible(false);
-                }}
             />
 
             <CustomAlert
@@ -272,6 +264,86 @@ export default function ClanDiscover() {
         </View>
     );
 }
+
+// ⚡️ UPDATED: Requirement Modal explicitly stating the Target Level and Rank Name
+const RequirementModal = ({ visible, onClose, stats, isDark }) => {
+    
+    // ⚡️ Added flex-1 and text wrapping so long rank titles don't break the layout
+    const RequirementRow = ({ label, currentStr, targetStr, progress, icon, activeColor }) => (
+        <View className={`mb-6 p-5 rounded-[30px] border ${isDark ? "bg-black border-zinc-800" : "bg-zinc-50 border-zinc-200 shadow-sm"}`}>
+            <View className="flex-row justify-between items-center mb-3">
+                <View className="flex-row items-center flex-1 pr-2">
+                    <View className={`w-8 h-8 rounded-full items-center justify-center shrink-0`} style={{ backgroundColor: `${activeColor}20` }}>
+                        <Ionicons name={icon} size={16} color={activeColor} />
+                    </View>
+                    <Text numberOfLines={2} className={`ml-3 flex-1 font-black text-[11px] uppercase tracking-widest ${isDark ? "text-zinc-400" : "text-zinc-500"}`}>
+                        {label}
+                    </Text>
+                </View>
+                <Text className="font-black text-base shrink-0" style={{ color: activeColor }}>
+                    {currentStr}<Text className="text-zinc-500 font-medium text-xs"> / {targetStr}</Text>
+                </Text>
+            </View>
+            <View className={`h-2 w-full rounded-full overflow-hidden ${isDark ? "bg-zinc-900" : "bg-zinc-200"}`}>
+                <View
+                    style={{ width: `${Math.min(progress, 100)}%`, backgroundColor: activeColor }}
+                    className="h-full rounded-full shadow-lg"
+                />
+            </View>
+        </View>
+    );
+
+    // ⚡️ Resolve the target rank dynamically so it automatically reads "B-Rank Elite"
+    const targetRank = resolveUserRank(MIN_RANK_REQUIRED);
+    const currRank = resolveUserRank(stats.rankLevel || 1);
+    
+    const targetAura = AURA_TIERS[MIN_RANK_REQUIRED - 1].req;
+    const currentAura = stats.aura || 0;
+    
+    // ⚡️ Dynamic Colors: Green if completed, otherwise use the color of their current Tier
+    const auraColor = currentAura >= targetAura ? "#10b981" : currRank.color; 
+    const streakColor = stats.streak >= MIN_STREAK_REQUIRED ? "#10b981" : "#f97316";
+
+    return (
+        <Modal visible={visible} transparent animationType="fade">
+            <View className="flex-1 justify-center items-center bg-black/90 px-8">
+                <View className={`w-full rounded-[45px] p-8 border ${isDark ? "bg-zinc-900 border-zinc-800" : "bg-white border-zinc-200"}`}>
+                    <View className="items-center mb-8">
+                        <View className="w-20 h-20 bg-blue-600/10 rounded-full items-center justify-center mb-4 border border-blue-600/20">
+                            <Ionicons name="lock-closed" size={38} color="#2563eb" />
+                        </View>
+                        <Text className={`text-2xl font-black text-center tracking-tighter ${isDark ? "text-white" : "text-zinc-900"}`}>INSUFFICIENT LEGACY</Text>
+                        <Text className="text-blue-600 font-bold text-[10px] uppercase tracking-[2px] text-center mt-1">Foundational requirements not met</Text>
+                    </View>
+                    
+                    {/* ⚡️ Now it explicitly tells them to reach Level 4 and shows the exact Rank Title */}
+                    <RequirementRow 
+                        label={`Reach Lv.${MIN_RANK_REQUIRED} ${targetRank.title.replace(/_/g, ' ')}`} 
+                        currentStr={currentAura.toLocaleString()} 
+                        targetStr={targetAura.toLocaleString()} 
+                        progress={(currentAura / targetAura) * 100}
+                        icon="flash" 
+                        activeColor={auraColor}
+                    />
+
+                    {/* ⚡️ Updated the label here too for clarity */}
+                    <RequirementRow 
+                        label={`Maintain a ${MIN_STREAK_REQUIRED}-Day Streak`} 
+                        currentStr={stats.streak} 
+                        targetStr={MIN_STREAK_REQUIRED} 
+                        progress={(stats.streak / MIN_STREAK_REQUIRED) * 100}
+                        icon="flame" 
+                        activeColor={streakColor}
+                    />
+                    
+                    <TouchableOpacity onPress={onClose} className="bg-blue-600 p-6 rounded-[28px] items-center shadow-xl shadow-blue-600/40 mt-2">
+                        <Text className="text-white font-black uppercase tracking-widest text-xs">I Understand</Text>
+                    </TouchableOpacity>
+                </View>
+            </View>
+        </Modal>
+    );
+};
 
 // ... CustomAlert, RequirementModal, ClanCard components remain unchanged
 
@@ -297,50 +369,6 @@ const CustomAlert = ({ config, onClose, isDark }) => {
     );
 };
 
-const RequirementModal = ({ visible, onClose, stats, isDark }) => {
-    const RequirementRow = ({ label, current, target, icon }) => (
-        <View className={`mb-6 p-5 rounded-[30px] border ${isDark ? "bg-black border-zinc-800" : "bg-zinc-50 border-zinc-200 shadow-sm"}`}>
-            <View className="flex-row justify-between items-center mb-3">
-                <View className="flex-row items-center">
-                    <View className={`w-8 h-8 rounded-full items-center justify-center ${current >= target ? "bg-emerald-500/10" : "bg-blue-600/10"}`}>
-                        <Ionicons name={icon} size={16} color={current >= target ? "#10b981" : "#2563eb"} />
-                    </View>
-                    <Text className={`ml-3 font-black text-[11px] uppercase tracking-widest ${isDark ? "text-zinc-400" : "text-zinc-500"}`}>{label}</Text>
-                </View>
-                <Text className={`font-black text-base ${current >= target ? "text-emerald-500" : "text-blue-600"}`}>
-                    {current}<Text className="text-zinc-500 font-medium text-xs"> / {target}</Text>
-                </Text>
-            </View>
-            <View className={`h-2 w-full rounded-full overflow-hidden ${isDark ? "bg-zinc-900" : "bg-zinc-200"}`}>
-                <View
-                    style={{ width: `${Math.min((current / target) * 100, 100)}%` }}
-                    className={`h-full rounded-full ${current >= target ? "bg-emerald-500" : "bg-blue-600"}`}
-                />
-            </View>
-        </View>
-    );
-
-    return (
-        <Modal visible={visible} transparent animationType="fade">
-            <View className="flex-1 justify-center items-center bg-black/90 px-8">
-                <View className={`w-full rounded-[45px] p-8 border ${isDark ? "bg-zinc-900 border-zinc-800" : "bg-white border-zinc-200"}`}>
-                    <View className="items-center mb-8">
-                        <View className="w-20 h-20 bg-blue-600/10 rounded-full items-center justify-center mb-4 border border-blue-600/20">
-                            <Ionicons name="lock-closed" size={38} color="#2563eb" />
-                        </View>
-                        <Text className={`text-2xl font-black text-center tracking-tighter ${isDark ? "text-white" : "text-zinc-900"}`}>INSUFFICIENT LEGACY</Text>
-                        <Text className="text-blue-600 font-bold text-[10px] uppercase tracking-[2px] text-center mt-1">Foundational requirements not met</Text>
-                    </View>
-                    <RequirementRow label="Legacy Posts" current={stats.posts} target={MIN_POSTS_REQUIRED} icon="document-text" />
-                    <RequirementRow label="Active Streak" current={stats.streak} target={MIN_STREAK_REQUIRED} icon="flame" />
-                    <TouchableOpacity onPress={onClose} className="bg-blue-600 p-6 rounded-[28px] items-center shadow-xl shadow-blue-600/40 mt-2">
-                        <Text className="text-white font-black uppercase tracking-widest text-xs">I Understand</Text>
-                    </TouchableOpacity>
-                </View>
-            </View>
-        </Modal>
-    );
-};
 
 const ClanCard = ({ clan, lbRank, isDark, refreshClans, showAlert }) => {
     const storage = useMMKV();

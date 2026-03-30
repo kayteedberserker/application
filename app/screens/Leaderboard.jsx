@@ -1,4 +1,4 @@
-import { Ionicons, MaterialCommunityIcons } from '@expo/vector-icons';
+import { Ionicons, MaterialCommunityIcons, Feather } from '@expo/vector-icons';
 import { useMMKV } from 'react-native-mmkv'; 
 import { useRouter } from "expo-router";
 import { useEffect, useMemo, useState } from "react";
@@ -9,10 +9,8 @@ import {
     View,
     useColorScheme
 } from "react-native";
-// ⚡️ Swapped FlashList for LegendList
 import { LegendList } from "@legendapp/list"; 
 import Animated, {
-    FadeInDown,
     FadeInRight,
     useAnimatedStyle,
     useSharedValue,
@@ -22,10 +20,8 @@ import useSWR from 'swr';
 import { SyncLoading } from '../../components/SyncLoading';
 import { Text } from "../../components/Text";
 import apiFetch from "../../utils/apiFetch";
-
-// ⚡️ Imports
 import PeakBadge from '../../components/PeakBadge';
-import PlayerNameplate from '../../components/PlayerNameplate'; // ⚡️ ADDED: Imported PlayerNameplate
+import PlayerNameplate from '../../components/PlayerNameplate';
 
 const { width } = Dimensions.get('window');
 const API_URL = "https://oreblogda.com";
@@ -67,12 +63,40 @@ const resolveClanTier = (rank) => {
     return CLAN_TIERS[6];
 };
 
-// ⚡️ Helper function to format large coin amounts
 const formatCoins = (num) => {
     if (!num) return "0";
     if (num >= 1000000) return Math.floor(num / 1000000) + 'M+';
     if (num >= 1000) return Math.floor(num / 1000) + 'k+';
     return num.toString();
+};
+
+export const AURA_TIERS = [
+  { level: 1, req: 0, title: "E-Rank Novice", icon: "🌱", color: "#94a3b8" },
+  { level: 2, req: 100, title: "D-Rank Operative", icon: "⚔️", color: "#34d399" }, 
+  { level: 3, req: 300, title: "C-Rank Awakened", icon: "🔥", color: "#f87171" }, 
+  { level: 4, req: 700, title: "B-Rank Elite", icon: "⚡", color: "#a78bfa" }, 
+  { level: 5, req: 1500, title: "A-Rank Champion", icon: "🛡️", color: "#60a5fa" }, 
+  { level: 6, req: 3000, title: "S-Rank Legend", icon: "🌟", color: "#fcd34d" }, 
+  { level: 7, req: 6000, title: "SS-Rank Mythic", icon: "🌀", color: "#f472b6" }, 
+  { level: 8, req: 12000, title: "Monarch", icon: "👑", color: "#fbbf24" }, 
+];
+
+const resolveUserRank = (level, currentAura) => {
+    const safeLevel = Math.max(1, Math.min(8, level || 1));
+    const currentTier = AURA_TIERS[safeLevel - 1];
+    const nextTier = AURA_TIERS[safeLevel] || currentTier; 
+
+    let progress = 100;
+    if (safeLevel < 8) {
+        progress = ((currentAura - currentTier.req) / (nextTier.req - currentTier.req)) * 100;
+    }
+
+    return { 
+        title: currentTier.title.toUpperCase().replace(/ /g, "_"), 
+        icon: currentTier.icon, 
+        color: currentTier.color, 
+        progress: Math.min(Math.max(progress, 0), 100) 
+    };
 };
 
 export default function Leaderboard() {
@@ -82,7 +106,7 @@ export default function Leaderboard() {
     const isDark = colorScheme === 'dark';
     
     const [category, setCategory] = useState("authors"); 
-    const [type, setType] = useState("posts");
+    const [type, setType] = useState("level");
     const [cachedData, setCachedData] = useState(null);
     const [isOfflineMode, setIsOfflineMode] = useState(false);
 
@@ -92,7 +116,7 @@ export default function Leaderboard() {
         if (category === "clans") {
             setType("points");
         } else {
-            setType("posts");
+            setType("level"); 
         }
     }, [category]);
 
@@ -126,8 +150,7 @@ export default function Leaderboard() {
     const tabOffset = useSharedValue(0);
     const TOGGLE_WIDTH = width - 32;
     
-    // ⚡️ Added "peak" to author tabs
-    const authorTabs = ["posts", "streak", "aura", "peak"];
+    const authorTabs = ["level", "aura", "posts", "streak", "peak"];
     const clanTabs = ["points", "followers", "weekly", "badges"];
     const currentTabs = category === "authors" ? authorTabs : clanTabs;
     const TAB_WIDTH = (TOGGLE_WIDTH - 8) / currentTabs.length;
@@ -141,31 +164,23 @@ export default function Leaderboard() {
     const animatedSliderStyle = useAnimatedStyle(() => ({
         transform: [{ translateX: tabOffset.value }],
         backgroundColor: category === "authors" 
-            ? (type === "posts" ? (isDark ? '#1e293b' : '#3b82f6') 
-             : type === "streak" ? '#f59e0b' 
-             : type === "aura" ? '#8b5cf6' 
-             : '#10b981') // ⚡️ Emerald green for Peak tab
+            ? (type === "level" ? (isDark ? '#1e293b' : '#3b82f6') 
+             : type === "aura" ? '#ec4899'  // Pink for Weekly Glory
+             : type === "posts" ? '#8b5cf6' // Purple for Posts
+             : type === "streak" ? '#f59e0b' // Orange for Streak
+             : '#10b981') // Emerald for Peak
             : (isDark ? '#1e293b' : '#3b82f6'),
         borderColor: category === "authors"
-            ? (type === "posts" ? '#60a5fa' 
-             : type === "streak" ? '#fbbf24' 
-             : type === "aura" ? '#a78bfa' 
-             : '#34d399') // ⚡️ Emerald border for Peak tab
+            ? (type === "level" ? '#60a5fa' 
+             : type === "aura" ? '#f472b6' 
+             : type === "posts" ? '#a78bfa' 
+             : type === "streak" ? '#fbbf24'
+             : '#34d399') 
             : '#60a5fa',
         width: TAB_WIDTH
     }));
 
     const statusColor = isOfflineMode ? "#f59e0b" : "#60a5fa";
-
-    const resolveUserRank = (totalPosts) => {
-        const count = totalPosts || 0;
-        if (count >= 200) return { title: "MASTER_WRITER", icon: "👑", color: "#fbbf24", next: 500 };
-        if (count > 150) return { title: "ELITE_WRITER", icon: "💎", color: "#60a5fa", next: 200 };
-        if (count > 100) return { title: "SENIOR_WRITER", icon: "🔥", color: "#f87171", next: 150 };
-        if (count > 50) return { title: "NOVICE_WRITER", icon: "⚔️", color: "#a78bfa", next: 100 };
-        if (count > 25) return { title: "RESEACHER_SR", icon: "📜", color: "#34d399", next: 50 };
-        return { title: "RESEACHER_JR", icon: "🛡️", color: "#94a3b8", next: 25 };
-    }
 
     const renderItem = ({ item, index }) => {
         if (!item) return null; 
@@ -179,13 +194,14 @@ export default function Leaderboard() {
         if (category === "authors") {
             const postCount = item.postCount || 0;
             const streakCount = item.streak || 0;
-            const auraPoints = item.weeklyAura || 0;
             const peakLvl = item.peakLevel || 0;
-            
             const purchasedCoins = item.totalPurchasedCoins || 0;
-            const writerRank = resolveUserRank(postCount);
-            const aura = getAuraTier(item.previousRank); 
-            const progress = Math.min((postCount / writerRank.next) * 100, 100);
+            
+            const totalAura = item.aura || 0; 
+            const rankLevel = item.currentRankLevel || 1;
+
+            const writerRank = resolveUserRank(rankLevel, totalAura);
+            const weeklyAuraRank = getAuraTier(item.previousRank); 
 
             return (
                 <View
@@ -197,19 +213,17 @@ export default function Leaderboard() {
                         paddingHorizontal: 12,
                         borderRadius: isTop3 ? 16 : 0,
                         marginBottom: isTop3 ? 8 : 0,
-                        borderLeftWidth: isTop3 ? 4 : (aura ? 2 : 0),
-                        borderLeftColor: isTop3 ? highlightColor : (aura ? aura.color : 'transparent'),
+                        borderLeftWidth: isTop3 ? 4 : (weeklyAuraRank ? 2 : 0),
+                        borderLeftColor: isTop3 ? highlightColor : (weeklyAuraRank ? weeklyAuraRank.color : 'transparent'),
                     }}
                 >
                     <View style={{ flexDirection: 'row', alignItems: 'center' }}>
-                        {/* Rank POS */}
                         <View style={{ width: 30, alignItems: 'center' }}>
                             <Text style={{ fontSize: isTop3 ? 18 : 14, fontWeight: '900', color: isTop3 ? highlightColor : (isDark ? '#475569' : '#94a3b8') }}>
                                 {String(index + 1).padStart(2, '0')}
                             </Text>
                         </View>
 
-                        {/* ⚡️ Peak Badge before the Username */}
                         <View style={{ width: 32, alignItems: 'center', marginRight: 6 }}>
                             {peakLvl > 0 ? (
                                 <PeakBadge level={peakLvl} size={28} />
@@ -218,13 +232,11 @@ export default function Leaderboard() {
                             )}
                         </View>
 
-                        {/* Operative Info */}
                         <TouchableOpacity style={{ flex: 1 }} onPress={() => DeviceEventEmitter.emit("navigateSafely", { pathname: "/author/[userId]", params: { userId: item.userId } })}>
                             
-                            {/* ⚡️ REPLACED TEXT WITH PLAYERNAMEPLATE */}
                             <PlayerNameplate 
                                 author={item} 
-                                themeColor={aura ? aura.color : (isDark ? '#fff' : '#000')} 
+                                themeColor={weeklyAuraRank ? weeklyAuraRank.color : (isDark ? '#fff' : '#000')} 
                                 equippedGlow={item.equippedGlow} 
                                 auraRank={item.previousRank || 999} 
                                 isDark={isDark} 
@@ -233,9 +245,9 @@ export default function Leaderboard() {
                                 showPeakBadge={false} 
                             />
 
-                            {aura && (
-                                <View style={{ backgroundColor: aura.color, paddingHorizontal: 4, borderRadius: 4, alignSelf: 'flex-start', marginTop: 2 }}>
-                                    <Text style={{ fontSize: 9, fontWeight: 'bold', color: '#000' }}>{aura.label}</Text>
+                            {weeklyAuraRank && (
+                                <View style={{ backgroundColor: weeklyAuraRank.color, paddingHorizontal: 4, borderRadius: 4, alignSelf: 'flex-start', marginTop: 2 }}>
+                                    <Text style={{ fontSize: 9, fontWeight: 'bold', color: '#000' }}>{weeklyAuraRank.label}</Text>
                                 </View>
                             )}
                             <View style={{ flexDirection: 'row', alignItems: 'center', marginTop: 3 }}>
@@ -244,26 +256,29 @@ export default function Leaderboard() {
                                 </Text>
                             </View>
                             <View style={{ height: 3, width: '80%', backgroundColor: isDark ? '#0f172a' : '#e2e8f0', borderRadius: 2, marginTop: 10, overflow: 'hidden' }}>
-                                <Animated.View entering={FadeInRight.delay(300).duration(800)} style={{ height: '100%', width: `${progress}%`, backgroundColor: writerRank.color }} />
+                                <Animated.View entering={FadeInRight.delay(300).duration(800)} style={{ height: '100%', width: `${writerRank.progress}%`, backgroundColor: writerRank.color }} />
                             </View>
                         </TouchableOpacity>
 
-                        {/* Performance Stats */}
-                        <View style={{ flexDirection: 'row', alignItems: 'center', gap: 6, width: 140, justifyContent: 'flex-end' }}>
-                            <View style={{ alignItems: 'center', width: 28 }}>
-                                <Text style={{ fontSize: 6, color: '#64748b', fontWeight: 'bold' }}>DOCS</Text>
-                                <Text style={{ fontSize: 11, fontWeight: '900', color: isDark ? '#fff' : '#000' }}>{postCount}</Text>
+                        {/* ⚡️ REORDERED TO MATCH TABS: AURA -> GLRY -> DOCS -> STRK -> PEAK */}
+                        <View style={{ flexDirection: 'row', alignItems: 'center', gap: 2, width: 140, justifyContent: 'flex-end' }}>
+                            <View style={{ alignItems: 'center', width: 26 }}>
+                                <Text style={{ fontSize: 6, color: '#3b82f6', fontWeight: 'bold' }}>AURA</Text>
+                                <Text style={{ fontSize: 11, fontWeight: '900', color: '#3b82f6' }}>{formatCoins(totalAura)}</Text>
                             </View>
-                            <View style={{ alignItems: 'center', width: 28 }}>
+                            <View style={{ alignItems: 'center', width: 26 }}>
+                                <Text style={{ fontSize: 6, color: '#ec4899', fontWeight: 'bold' }}>GLRY</Text>
+                                <Text style={{ fontSize: 11, fontWeight: '900', color: '#ec4899' }}>{formatCoins(item.weeklyAura || 0)}</Text>
+                            </View>
+                            <View style={{ alignItems: 'center', width: 26 }}>
+                                <Text style={{ fontSize: 6, color: '#8b5cf6', fontWeight: 'bold' }}>DOCS</Text>
+                                <Text style={{ fontSize: 11, fontWeight: '900', color: isDark ? '#fff' : '#000' }}>{formatCoins(postCount)}</Text>
+                            </View>
+                            <View style={{ alignItems: 'center', width: 26 }}>
                                 <Text style={{ fontSize: 6, color: '#f59e0b', fontWeight: 'bold' }}>STRK</Text>
                                 <Text style={{ fontSize: 11, fontWeight: '900', color: '#f59e0b' }}>{streakCount}</Text>
                             </View>
-                            <View style={{ alignItems: 'center', width: 28 }}>
-                                <Text style={{ fontSize: 6, color: '#a78bfa', fontWeight: 'bold' }}>AURA</Text>
-                                <Text style={{ fontSize: 11, fontWeight: '900', color: '#a78bfa' }}>{auraPoints}</Text>
-                            </View>
-                            {/* ⚡️ Peak Coins Column */}
-                            <View style={{ alignItems: 'center', width: 34 }}>
+                            <View style={{ alignItems: 'center', width: 26 }}>
                                 <Text style={{ fontSize: 6, color: '#10b981', fontWeight: 'bold' }}>PEAK</Text>
                                 <Text style={{ fontSize: 11, fontWeight: '900', color: '#10b981' }}>{formatCoins(purchasedCoins)}</Text>
                             </View>
@@ -294,8 +309,6 @@ export default function Leaderboard() {
                             </Text>
                         </View>
                         <TouchableOpacity style={{ flex: 1, paddingLeft: 10 }} onPress={() => DeviceEventEmitter.emit("navigateSafely", { pathname: "/clans/[tag]", params: { tag: item.tag } })}>
-                            
-                            {/* ⚡️ REPLACED TEXT WITH PLAYERNAMEPLATE FOR CLANS */}
                             <PlayerNameplate 
                                 author={item} 
                                 themeColor={clanTier.color} 
@@ -306,7 +319,6 @@ export default function Leaderboard() {
                                 showFlame={false} 
                                 showPeakBadge={false} 
                             />
-
                             <View style={{ backgroundColor: '#111', paddingHorizontal: 4, borderRadius: 4, alignSelf: 'flex-start', marginTop: 2, borderWidth: 1, borderColor: clanTier.color }}>
                                 <Text style={{ fontSize: 7, fontWeight: 'bold', color: clanTier.color }}>{item.tag}</Text>
                             </View>
@@ -356,7 +368,7 @@ export default function Leaderboard() {
                         <View style={{ flexDirection: 'row', alignItems: 'center' }}>
                             <View style={{ width: 6, height: 6, borderRadius: 4, backgroundColor: statusColor, marginRight: 6 }} />
                             <Text style={{ fontSize: 8, color: statusColor, fontWeight: 'bold', letterSpacing: 1.5 }}>
-                                {category === "authors" ? "OPERATIVE_INTEL" : "CLAN_HIERARCHY"} 
+                                {category === "authors" ? "PLAYER_INTEL" : "CLAN_HIERARCHY"} 
                             </Text>
                         </View>
                     </View>
@@ -375,7 +387,7 @@ export default function Leaderboard() {
                         }}
                     >
                         <Text style={{ fontSize: 10, fontWeight: '900', color: category === cat ? '#fff' : '#64748b' }}>
-                            {cat === "authors" ? "OPERATIVES" : "CLANS"}
+                            {cat === "authors" ? "PLAYERS" : "CLANS"}
                         </Text>
                     </TouchableOpacity>
                 ))}
@@ -397,7 +409,10 @@ export default function Leaderboard() {
                             onPress={() => setType(tab)} 
                             style={{ flex: 1, alignItems: 'center', justifyContent: 'center' }}
                         >
-                            <Text style={{ fontWeight: '900', fontSize: 10, color: type === tab ? '#fff' : '#64748b' }}>{tab.toUpperCase()}</Text>
+                            {/* ⚡️ RENDER LOGIC: If type="aura", display "GLORY" */}
+                            <Text style={{ fontWeight: '900', fontSize: 10, color: type === tab ? '#fff' : '#64748b' }}>
+                                {tab === "aura" ? "GLORY" : tab.toUpperCase()}
+                            </Text>
                         </TouchableOpacity>
                     ))}
                 </View>
@@ -405,9 +420,7 @@ export default function Leaderboard() {
 
             <View style={{ flexDirection: 'row', paddingHorizontal: 12, paddingVertical: 12, borderBottomWidth: 1, borderBottomColor: isDark ? '#1e293b' : '#e2e8f0' }}>
                 <Text style={{ width: 30, fontSize: 10, fontWeight: 'bold', color: '#475569' }}>POS</Text>
-                {/* ⚡️ Increased width slightly for Peak badge */}
-                <Text style={{ flex: 1, fontSize: 10, fontWeight: 'bold', color: '#475569', paddingLeft: 42 }}>{category === "authors" ? "OPERATIVE_NAME" : "CLAN_NAME"}</Text>
-                {/* ⚡️ Unified Performance Header Width so both Author & Clan match nicely */}
+                <Text style={{ flex: 1, fontSize: 10, fontWeight: 'bold', color: '#475569', paddingLeft: 42 }}>{category === "authors" ? "PLAYER_NAME" : "CLAN_NAME"}</Text>
                 <Text style={{ width: 140, fontSize: 10, fontWeight: 'bold', color: '#475569', textAlign: 'center' }}>PERFORMANCE</Text>
             </View>
 
@@ -422,13 +435,12 @@ export default function Leaderboard() {
                 </View>
             ) : (
                 <View style={{ flex: 1 }}>
-                    {/* ⚡️ Swapped to LegendList */}
                     <LegendList
                         data={leaderboardData}
                         keyExtractor={(item, idx) => (item.userId || item.clanId || idx).toString()}
                         renderItem={renderItem}
                         estimatedItemSize={80}
-                        recycleItems={true} // ⚡️ Ensure cell recycling is active
+                        recycleItems={true} 
                         showsVerticalScrollIndicator={false}
                         contentContainerStyle={{ paddingBottom: 40 }}
                     />

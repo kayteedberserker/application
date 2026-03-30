@@ -1,10 +1,9 @@
 import { Feather, Ionicons, MaterialCommunityIcons } from "@expo/vector-icons";
 import * as FileSystem from 'expo-file-system/legacy';
+import { Image } from "expo-image";
 import * as MediaLibrary from 'expo-media-library';
-import { useNavigation, usePathname, useRouter } from "expo-router";
 import { useVideoPlayer, VideoView } from "expo-video";
 import { memo, useEffect, useMemo, useState } from "react";
-import { Image } from "expo-image";
 import {
     ActivityIndicator,
     BackHandler,
@@ -23,25 +22,24 @@ import { WebView } from "react-native-webview";
 import YoutubePlayer from "react-native-youtube-iframe";
 import useSWR from "swr";
 
-import { useIsFocused } from '@react-navigation/native';
-import Svg, { Defs, LinearGradient, Rect, Stop, SvgXml } from "react-native-svg";
+import * as Clipboard from 'expo-clipboard';
+import * as Haptics from 'expo-haptics';
+import { SvgXml } from "react-native-svg";
 import { useAlert } from "../context/AlertContext";
 import { useUser } from "../context/UserContext";
 import apiFetch from "../utils/apiFetch";
 import AuraAvatar from "./AuraAvatar";
-import PlayerWatermark from "./PlayerWatermark";
-import PlayerNameplate from "./PlayerNameplate";
-import PlayerBackground from "./PlayerBackground";
+import BadgeIcon from "./BadgeIcon";
 import ClanBorder from "./ClanBorder";
 import ClanCrest from "./ClanCrest";
+import PeakBadge from "./PeakBadge";
+import PlayerBackground from "./PlayerBackground";
+import PlayerNameplate from "./PlayerNameplate";
+import PlayerWatermark from "./PlayerWatermark";
 import Poll from "./Poll";
 import { SyncLoading } from "./SyncLoading";
 import { Text } from "./Text";
 import THEME from "./useAppTheme";
-import PeakBadge from "./PeakBadge";
-import BadgeIcon from "./BadgeIcon";
-import * as Clipboard from 'expo-clipboard';
-import * as Haptics from 'expo-haptics';
 const { width: SCREEN_WIDTH, height: SCREEN_HEIGHT } = Dimensions.get('window');
 const fetcher = (url) => apiFetch(url).then((res) => res.json());
 
@@ -74,18 +72,32 @@ const getAuraVisuals = (rank) => {
     }
 };
 
-const resolveUserRank = (totalPosts) => {
-    const count = totalPosts;
-    const rankTitle =
-        count > 200 ? "Master_Writer" :
-            count > 150 ? "Elite_Writer" :
-                count > 100 ? "Senior_Writer" :
-                    count > 50 ? "Novice_Writer" :
-                        count > 25 ? "Senior_Researcher" :
-                            "Novice_Researcher";
+const AURA_TIERS = [
+    { level: 1, req: 0, title: "E-Rank Novice", icon: "🌱", postLimit: 2 },
+    { level: 2, req: 100, title: "D-Rank Operative", icon: "⚔️", postLimit: 2 },
+    { level: 3, req: 300, title: "C-Rank Awakened", icon: "🔥", postLimit: 3 },
+    { level: 4, req: 700, title: "B-Rank Elite", icon: "⚡", postLimit: 3 },
+    { level: 5, req: 1500, title: "A-Rank Champion", icon: "🛡️", postLimit: 4 },
+    { level: 6, req: 3000, title: "S-Rank Legend", icon: "🌟", postLimit: 4 },
+    { level: 7, req: 6000, title: "SS-Rank Mythic", icon: "🌀", postLimit: 5 },
+    { level: 8, req: 12000, title: "Monarch", icon: "👑", postLimit: 5 }, // Max
+];
 
-    const rankIcon = count > 200 ? "👑" : count > 150 ? "💎" : count > 100 ? "🔥" : count > 50 ? "⚔️" : count > 25 ? "📜" : "🛡️";
-    return { rankName: rankIcon + rankTitle };
+const resolveUserRank = (level) => {
+    // Fallback to level 1 if something goes wrong, cap at 8
+    const safeLevel = Math.max(1, Math.min(8, level || 1));
+    // Arrays are 0-indexed, so level 1 is index 0
+    const currentTier = AURA_TIERS[safeLevel - 1];
+
+    return {
+        level: currentTier.level,
+        rankTitle: currentTier.title,
+        rankIcon: currentTier.icon,
+        postLimit: currentTier.postLimit,
+
+        // Formatted exactly how you had it before for backward compatibility
+        rankName: `${currentTier.icon} ${currentTier.title}`
+    };
 };
 
 const formatViews = (views) => {
@@ -357,7 +369,7 @@ const MemoizedClanHeader = memo(({ clanInfo, postId, isDark }) => {
     );
 });
 
-// ⚡️ MAIN COMPONENT - Removed `similarPosts` entirely
+// ⚡️ MAIN COMPONENT
 const PostCardComponent = ({ post, authorData, clanData, setPosts, isFeed, hideMedia, syncing, isVisible = true }) => {
     const CustomAlert = useAlert();
     const { user } = useUser();
@@ -376,7 +388,8 @@ const PostCardComponent = ({ post, authorData, clanData, setPosts, isFeed, hideM
         image: null,
         streak: null,
         rank: null,
-        postsCount: 0,
+        rankLevel: 1,
+        aura: 0,
         equippedGlow: null,
         equippedBadges: [],
         inventory: [],
@@ -422,20 +435,27 @@ const PostCardComponent = ({ post, authorData, clanData, setPosts, isFeed, hideM
         return () => backHandler.remove();
     }, [lightbox.open]);
 
-    const { data: postData, mutate } = useSWR(syncing ? null :
-        post?._id ? `/posts/${post._id}` : null,
+    // ⚡️ PERFORMANCE UPGRADE: Conditional SWR Fetching + Instant Hydration
+    const { data: postData, mutate } = useSWR(
+        // Only fetch network data if it's NOT syncing, has an ID, AND is currently visible on screen!
+        (!syncing && post?._id && isVisible) ? `/posts/${post._id}` : null,
         fetcher,
-        { refreshInterval: 120000 }
+        {
+            refreshInterval: 120000,
+            fallbackData: post, // ⚡️ Instantly populates cache with feed data (Stops the flashing 0s)
+            revalidateOnMount: false // Prevents useless double-fetching on initial load
+        }
     );
 
-    const totalLikes = postData?.likes?.length || 0;
-    const totalComments = postData?.comments?.length || 0;
-    const totalViews = postData?.views || 0;
-    const totalAuthorPost = author.postsCount || 0;
-    const userRank = useMemo(() => resolveUserRank(totalAuthorPost), [totalAuthorPost]);
+    // ⚡️ BULLETPROOF COUNTS: Safely checks both arrays (from post page) and counts (from search/feed)
+    const totalLikes = postData?.likesCount ?? postData?.likes?.length ?? post?.likesCount ?? post?.likes?.length ?? 0;
+    const totalComments = postData?.commentsCount ?? postData?.comments?.length ?? post?.commentsCount ?? post?.comments?.length ?? 0;
+    const totalViews = postData?.viewsCount ?? postData?.views ?? post?.viewsCount ?? post?.views ?? 0;
+
+    const userRank = useMemo(() => resolveUserRank(author.rankLevel), [author.rankLevel]);
 
     useEffect(() => {
-        if (!post?._id || !user?.deviceId || syncing) return;
+        if (!post?._id || !user?.deviceId || syncing || !isVisible) return; // Only track view if visible
         const handleView = async () => {
             try {
                 const viewedKey = "viewedPosts";
@@ -456,7 +476,7 @@ const PostCardComponent = ({ post, authorData, clanData, setPosts, isFeed, hideM
             } catch (err) { console.error("View track err:", err); }
         };
         handleView();
-    }, [post?._id, user?.deviceId, syncing, storage]);
+    }, [post?._id, user?.deviceId, syncing, isVisible, storage]);
 
     const handleLike = async () => {
         if (liked || !user) {
@@ -470,34 +490,40 @@ const PostCardComponent = ({ post, authorData, clanData, setPosts, isFeed, hideM
         const fingerprint = user?.deviceId;
         const previousData = postData;
 
+        // ⚡️ 1. Get the absolute current number of likes before adding ours
+        const currentLikes = postData?.likesCount ?? postData?.likes?.length ?? post?.likesCount ?? post?.likes?.length ?? 0;
+
+        // ⚡️ 2. INSTANT UI UPDATE
         setLiked(true);
-        mutate({ ...postData, likes: [...(postData?.likes || []), { fingerprint }] }, false);
+        mutate({
+            ...postData,
+            likesCount: currentLikes + 1, // FORCE the count up for the UI calculation
+            likes: [...(postData?.likes || []), { fingerprint }]
+        }, false);
 
         try {
             const res = await apiFetch(`/posts/${post?._id}`, {
                 method: "PATCH",
                 body: JSON.stringify({ action: "like", fingerprint }),
             });
-            if (res.status == 400) {
+
+            // If the server says "You already liked this" (400), we treat it as a success!
+            // DO NOT mutate(previousData) here, or you will revert the UI to unliked.
+            if (res.status === 400 || res.ok) {
                 const savedLikesStr = storage.getString('user_likes');
                 const likedList = savedLikesStr ? JSON.parse(savedLikesStr) : [];
+
                 if (!likedList.includes(post?._id)) {
                     likedList.push(post?._id);
                     storage.set('user_likes', JSON.stringify(likedList));
                 }
-                mutate(previousData, false);
-            } else if (!res.ok) {
-                throw new Error("Server rejected like request");
             } else {
-                const savedLikesStr = storage.getString('user_likes');
-                const likedList = savedLikesStr ? JSON.parse(savedLikesStr) : [];
-                if (!likedList.includes(post?._id)) {
-                    likedList.push(post?._id);
-                    storage.set('user_likes', JSON.stringify(likedList));
-                }
+                throw new Error("Server rejected like request");
             }
+
         } catch (err) {
             console.error("Network Like Logic Failed", err);
+            // ⚡️ 3. ROLLBACK ONLY ON ACTUAL FAILURE
             setLiked(false);
             mutate(previousData, false);
             CustomAlert("Sync Error", "Could not register your like. Please check your connection.");
@@ -574,27 +600,22 @@ const PostCardComponent = ({ post, authorData, clanData, setPosts, isFeed, hideM
         return parts;
     };
 
-    // ⚡️ INVENTORY EXTRACTION - Setup to slice up to 2 badges
     const activeGlowColor = author.equippedGlow?.visualConfig?.primaryColor || author.equippedGlow?.visualConfig?.glowColor || null;
     const customBadges = author.equippedBadges?.slice(0, 2) || [];
     const equippedWatermark = author.inventory?.find(i => i.category === 'WATERMARK' && i.isEquipped);
-    const handleCopyFullText = async () => {
-        // 1. Replace your custom break tags with actual newlines
-        let cleanText = post.message.replace(/br\(\)|\[br\]/g, '\n');
 
-        // 2. Strip the rest of the formatting tags, keeping only the inner text
+    const handleCopyFullText = async () => {
+        let cleanText = post.message.replace(/br\(\)|\[br\]/g, '\n');
         cleanText = cleanText.replace(
             /s\((.*?)\)|\[section\](.*?)\[\/section\]|h\((.*?)\)|\[h\](.*?)\[\/h\]|l\((.*?)\)|\[li\](.*?)\[\/li\]|link\((.*?)\)-text\((.*?)\)|\[source="(.*?)" text:(.*?)\]/gs,
             (match, p1, p2, p3, p4, p5, p6, p8, p10) => p1 || p2 || p3 || p4 || p5 || p6 || p8 || p10 || ''
         ).trim();
 
-        // 3. Save to clipboard
         await Clipboard.setStringAsync(cleanText);
-
-        // 4. Give the user some feedback
         Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
         CustomAlert("Scroll Copied", "The full text has been copied to your clipboard.");
     };
+
     const renderContent = useMemo(() => {
         const maxLength = 150;
 
@@ -608,7 +629,6 @@ const PostCardComponent = ({ post, authorData, clanData, setPosts, isFeed, hideM
 
         const parts = parseCustomSyntax(post.message);
 
-        // Map your parts normally without selectable={true}
         const contentNodes = parts.map((part, i) => {
             switch (part.type) {
                 case "text": return <Text key={i} className="text-base leading-7 text-gray-800 dark:text-gray-200">{part.content}</Text>;
@@ -621,12 +641,8 @@ const PostCardComponent = ({ post, authorData, clanData, setPosts, isFeed, hideM
             }
         });
 
-        // Wrap everything in a Pressable to catch the long press
         return (
-            <Pressable
-                onLongPress={handleCopyFullText}
-                delayLongPress={300} // How long they have to hold it (in milliseconds)
-            >
+            <Pressable onLongPress={handleCopyFullText} delayLongPress={300}>
                 {contentNodes}
             </Pressable>
         );
@@ -761,7 +777,6 @@ const PostCardComponent = ({ post, authorData, clanData, setPosts, isFeed, hideM
                             </View>
 
                             <View className="flex-row items-center gap-2 mt-2">
-                                {/* ⚡️ FIXED: Render up to 2 badges safely inline */}
                                 {customBadges.length > 0 && (
                                     <View className="flex-row items-center gap-1">
                                         {customBadges.map((badge, idx) => (
@@ -801,11 +816,11 @@ const PostCardComponent = ({ post, authorData, clanData, setPosts, isFeed, hideM
                     <View className="flex-row items-center gap-6">
                         <Pressable onPress={handleLike} disabled={liked} className="flex-row items-center gap-2">
                             <Ionicons name={liked ? "heart" : "heart-outline"} size={20} color={liked ? "#ef4444" : isDark ? "#9ca3af" : "#4b5563"} />
-                            <Text className={`text-xs font-black ${liked ? "text-red-500" : "text-gray-500"}`}>{totalLikes}</Text>
+                            <Text className={`text-xs font-black ${liked ? "text-red-500" : "text-gray-500"}`}>{formatViews(totalLikes)}</Text>
                         </Pressable>
                         <Pressable onPress={() => DeviceEventEmitter.emit("navigateSafely", `/post/${post.slug || post?._id}?comment=open`)} className="flex-row items-center gap-2">
                             <MaterialCommunityIcons name="comment-text-outline" size={18} color={isDark ? "#9ca3af" : "#4b5563"} />
-                            <Text className="text-xs font-black text-gray-500">{totalComments}</Text>
+                            <Text className="text-xs font-black text-gray-500">{formatViews(totalComments)}</Text>
                         </Pressable>
                     </View>
                     <Pressable onPress={handleNativeShare} className="w-10 h-10 items-center justify-center bg-gray-50 dark:bg-gray-800/80 rounded-full border border-gray-200 dark:border-gray-700">
@@ -831,6 +846,7 @@ const PostCardComponent = ({ post, authorData, clanData, setPosts, isFeed, hideM
 };
 
 export default memo(PostCardComponent, (prevProps, nextProps) => {
+    // ⚡️ PERFORMANCE OPTIMIZATION: Only re-render if it becomes visible or syncing state changes
     return prevProps.post._id === nextProps.post._id &&
         prevProps.isVisible === nextProps.isVisible &&
         prevProps.syncing === nextProps.syncing;
