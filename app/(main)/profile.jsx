@@ -1185,9 +1185,13 @@ export default function MobileProfilePage() {
     });
 
     useEffect(() => {
+        console.log(user);
         if (!user?.deviceId) return;
+
         try {
             const cached = storage.getString(CACHE_KEY_USER_EXTRAS);
+            console.log(cached);
+
             if (cached && cached !== "") {
                 const data = JSON.parse(cached);
                 if (data.username) setUsername(data.username);
@@ -1212,7 +1216,6 @@ export default function MobileProfilePage() {
                         // ⚡️ 1. EXTRACT ALL DATA INTO A LOCAL OBJECT FIRST
                         const allKeys = storage.getAllKeys();
                         const userDataArchive = {};
-                        console.log(allKeys);
 
                         allKeys.forEach(key => {
                             // We capture everything EXCEPT the history itself
@@ -1242,15 +1245,13 @@ export default function MobileProfilePage() {
                         // Since useMMKV storage doesn't have .delete, we use .clearAll() 
                         // to wipe the slate entirely clean for the next user.
                         const cleared = storage.clearAll();
-                        console.log("storage_cleared_on_logout", { success: cleared });
                         // ⚡️ 4. RE-INJECT THE HISTORY
-                        console.log(storage.getAllKeys());
 
                         // Now that the storage is empty, we put the history back in.
                         storage.set("session_history", JSON.stringify(updatedHistory));
 
                         // ⚡️ 5. CLEANUP & REDIRECT
-                        await AsyncStorage.removeItem("mobileUser");
+                        await AsyncStorage.clear(); // Clear any AsyncStorage data as well
                         setUser(null);
                         router.replace("/screens/FirstLaunchScreen");
 
@@ -1431,16 +1432,17 @@ export default function MobileProfilePage() {
 
     const listHeader = useMemo(() => {
         return (
-            <View className="px-6 mt-6">
-                <View className="bg-white dark:bg-[#0a0a0a]">
-                    <View className="flex-row items-center gap-4 mb-10 border-b border-gray-100 dark:border-gray-800 pb-6">
-                        <View className="w-2 h-8" style={{ backgroundColor: dynamicAuraColor }} />
+            <View className="px-6 mt-4">
+                <View className="bg-transparent">
+                    {/* Header Title */}
+                    <View className="flex-row items-center gap-4 mb-3 border-b border-gray-200 dark:border-gray-800 pb-5">
+                        <View className="w-2 h-8 rounded-full" style={{ backgroundColor: dynamicAuraColor }} />
                         <Text className="text-3xl font-black italic tracking-tighter uppercase dark:text-white">Player Profile</Text>
                     </View>
 
-                    <View style={{ position: "relative" }} className="flex-row flex items-center justify-center mb-10 pr-2">
+                    {/* Avatar Section */}
+                    <View style={{ position: "relative" }} className="flex-row items-center justify-center mb-3">
                         <View className="relative shrink-0 items-center justify-center">
-
                             <AuraAvatar
                                 author={{
                                     ...user,
@@ -1468,63 +1470,67 @@ export default function MobileProfilePage() {
                                     transform: [(weeklyGloryRank || 100) === 1 ? { rotate: '-45deg' } : { rotate: '0deg' }]
                                 }}
                             >
-                                <View className="absolute inset-0 bg-black/40 items-center justify-center">
-                                    <Text className="text-[10px] font-black uppercase tracking-widest text-white">
+                                <View className="absolute inset-0 bg-black/30 items-center justify-center">
+                                    <Text className="text-[10px] font-black uppercase tracking-widest text-white drop-shadow-md">
                                         Change DNA
                                     </Text>
                                 </View>
                             </View>
-
                         </View>
 
-                        <View style={{ position: "absolute", left: -5, zIndex: 100 }} className="flex-col items-center">
+                        {/* Action Buttons Floating Left */}
+                        {/* ⚡️ FIXED: Added zIndex: 200 and elevation: 200 to break out of the FlatList context */}
+                        <View style={{ position: "absolute", left: -10, zIndex: 200, elevation: 200 }} className="flex-col gap-y-3 items-center">
                             <ProfileActionButton icon="archive-outline" color="#3b82f6" label="Items" onPress={() => setInventoryVisible(true)} />
                             <ProfileActionButton icon="cog-outline" color="#a855f7" label="Prefs" onPress={() => setPrefsVisible(true)} />
                             <ProfileActionButton icon="cart-outline" color="#22c55e" label="Store" onPress={() => setStoreVisible(true)} />
                             <ProfileActionButton icon="card-account-details-outline" color="#f59e0b" label="Card" onPress={() => setCardPreviewVisible(true)} />
+                        </View>
 
-                            {isOnboarding && (
-                                <Animated.View
-                                    style={[
-                                        tooltipAnimatedStyle,
-                                        { position: 'absolute', left: 60, top: currentPosTop, width: 220, zIndex: 110 }
-                                    ]}
-                                    className="bg-blue-600 dark:bg-blue-900 rounded-2xl p-4 shadow-2xl flex-row items-start"
-                                >
-                                    <Animated.View style={pointerAnimatedStyle} className="absolute -left-3 top-4">
-                                        <Ionicons name="caret-back" size={24} color={isDark ? "#1e3a8a" : "#2563eb"} />
-                                    </Animated.View>
-                                    <View className="flex-1">
-                                        <Text className="text-white font-black text-sm uppercase tracking-widest">
-                                            {onboardingSteps[onboardingStep].title}
-                                        </Text>
-                                        <Text className="text-blue-100 text-[10px] mt-1 font-medium leading-relaxed">
-                                            {onboardingSteps[onboardingStep].desc}
-                                        </Text>
-                                        <View className="flex-row justify-between items-center mt-3 pt-3 border-t border-blue-400/30">
-                                            <TouchableOpacity onPress={skipOnboarding}>
-                                                <Text className="text-blue-200 text-[10px] font-bold uppercase tracking-widest">Skip</Text>
-                                            </TouchableOpacity>
-                                            <View className="flex-row gap-2">
-                                                {onboardingStep > 0 && (
-                                                    <TouchableOpacity onPress={prevOnboardingStep} className="bg-blue-500/50 px-3 py-1.5 rounded-lg active:scale-95">
-                                                        <Text className="text-white text-[10px] font-black uppercase tracking-widest">Back</Text>
-                                                    </TouchableOpacity>
-                                                )}
-                                                <TouchableOpacity onPress={nextOnboardingStep} className="bg-white px-3 py-1.5 rounded-lg active:scale-95">
-                                                    <Text className="text-blue-600 dark:text-blue-900 text-[10px] font-black uppercase tracking-widest">
-                                                        {onboardingStep === 3 ? "Done" : "Next"}
-                                                    </Text>
+                        {/* Onboarding Tooltip Overlay */}
+                        {isOnboarding && (
+                            <Animated.View
+                                style={[
+                                    tooltipAnimatedStyle,
+                                    // ⚡️ FIXED: Pushed zIndex and elevation extremely high to sit above the shield
+                                    { position: 'absolute', left: 70, top: currentPosTop, width: 230, zIndex: 999, elevation: 999 }
+                                ]}
+                                className="bg-blue-600 dark:bg-blue-900 rounded-2xl p-5 shadow-2xl flex-row items-start"
+                            >
+                                <Animated.View style={pointerAnimatedStyle} className="absolute -left-3 top-5">
+                                    <Ionicons name="caret-back" size={24} color={isDark ? "#1e3a8a" : "#2563eb"} />
+                                </Animated.View>
+                                <View className="flex-1">
+                                    <Text className="text-white font-black text-sm uppercase tracking-widest mb-1">
+                                        {onboardingSteps[onboardingStep].title}
+                                    </Text>
+                                    <Text className="text-blue-100 text-xs font-medium leading-relaxed">
+                                        {onboardingSteps[onboardingStep].desc}
+                                    </Text>
+                                    <View className="flex-row justify-between items-center mt-4 pt-4 border-t border-blue-400/30">
+                                        <TouchableOpacity onPress={skipOnboarding} className="px-2 py-1">
+                                            <Text className="text-blue-200 text-[10px] font-bold uppercase tracking-widest">Skip</Text>
+                                        </TouchableOpacity>
+                                        <View className="flex-row gap-2">
+                                            {onboardingStep > 0 && (
+                                                <TouchableOpacity onPress={prevOnboardingStep} className="bg-blue-500/40 px-4 py-2 rounded-lg active:scale-95">
+                                                    <Text className="text-white text-[10px] font-black uppercase tracking-widest">Back</Text>
                                                 </TouchableOpacity>
-                                            </View>
+                                            )}
+                                            <TouchableOpacity onPress={nextOnboardingStep} className="bg-white px-4 py-2 rounded-lg active:scale-95">
+                                                <Text className="text-blue-600 dark:text-blue-900 text-[10px] font-black uppercase tracking-widest">
+                                                    {onboardingStep === 3 ? "Done" : "Next"}
+                                                </Text>
+                                            </TouchableOpacity>
                                         </View>
                                     </View>
-                                </Animated.View>
-                            )}
-                        </View>
+                                </View>
+                            </Animated.View>
+                        )}
                     </View>
 
-                    <View className="items-center mb-6">
+                    {/* Nameplate & Class */}
+                    <View className="items-center mb-8">
                         <Pressable onPress={() => setAuraModalVisible(true)} className="items-center">
                             <PlayerNameplate
                                 author={user}
@@ -1535,98 +1541,145 @@ export default function MobileProfilePage() {
                                 fontSize={24}
                             />
 
-                            {/* ⚡️ GLORY PILL UNDER NAME */}
-                            <View className="px-2 py-0.5 rounded-full border mt-1 overflow-hidden" style={{ borderColor: dynamicAuraColor }}>
-                                <View style={{ position: 'absolute', top: 0, left: 0, right: 0, bottom: 0, backgroundColor: dynamicAuraColor, opacity: 0.1 }} />
-                                <Text style={{ color: dynamicAuraColor, fontSize: 8, fontWeight: '900', zIndex: 1 }}>{weeklyAuraTier?.label || 'NOVICE'} {weeklyGloryPoints.toLocaleString()}</Text>
+                            <View className="px-3 py-1 rounded-full border mt-2 overflow-hidden" style={{ borderColor: dynamicAuraColor }}>
+                                <View style={{ position: 'absolute', inset: 0, backgroundColor: dynamicAuraColor, opacity: 0.15 }} />
+                                <Text style={{ color: dynamicAuraColor, fontSize: 9, fontWeight: '900', zIndex: 1, letterSpacing: 1 }}>
+                                    {weeklyAuraTier?.label || 'NOVICE'} {weeklyGloryPoints.toLocaleString()}
+                                </Text>
                             </View>
                         </Pressable>
 
-                        <Text className="text-[10px] font-bold text-gray-500 uppercase tracking-[0.3em] mt-3">Class: {writerRank.title}</Text>
+                        <Text className="text-[11px] font-bold text-gray-500 uppercase tracking-[0.3em] mt-4">
+                            Class: {writerRank.title}
+                        </Text>
                     </View>
 
-                    {/* ⚡️ 4-COLUMN STATS */}
-                    <View className="flex-row gap-6 mt-6 border-y border-gray-100 dark:border-gray-800 w-full py-4 justify-center">
-                        <View className="items-center">
-                            <Text className="text-[10px] font-black text-gray-400 uppercase tracking-widest">Aura</Text>
+                    {/* 4-COLUMN STATS */}
+                    <View className="flex-row justify-between mt-2 border-y border-gray-200 dark:border-gray-800 w-full py-5 px-2">
+                        <View className="items-center flex-1">
+                            <Text className="text-[10px] font-black text-gray-400 uppercase tracking-widest mb-1">Aura</Text>
                             <Text className="text-lg font-black" style={{ color: writerRank.color }}>{totalAura.toLocaleString()}</Text>
                         </View>
-                        <View className="items-center">
-                            <Text className="text-[10px] font-black text-gray-400 uppercase tracking-widest">Glory</Text>
+                        <View className="items-center flex-1 border-l border-gray-200 dark:border-gray-800">
+                            <Text className="text-[10px] font-black text-gray-400 uppercase tracking-widest mb-1">Glory</Text>
                             <Text className="text-lg font-black" style={{ color: '#ec4899' }}>+{weeklyGloryPoints.toLocaleString()}</Text>
                         </View>
-                        <View className="items-center">
-                            <Text className="text-[10px] font-black text-gray-400 uppercase tracking-widest">Docs</Text>
+                        <View className="items-center flex-1 border-l border-gray-200 dark:border-gray-800">
+                            <Text className="text-[10px] font-black text-gray-400 uppercase tracking-widest mb-1">Docs</Text>
                             <Text className="text-lg font-black dark:text-white">{totalPosts.toLocaleString()}</Text>
                         </View>
-                        <View className="items-center">
-                            <Text className="text-[10px] font-black text-gray-400 uppercase tracking-widest">Rank</Text>
+                        <View className="items-center flex-1 border-l border-gray-200 dark:border-gray-800">
+                            <Text className="text-[10px] font-black text-gray-400 uppercase tracking-widest mb-1">Rank</Text>
                             <Text className="text-lg font-black dark:text-white" style={{ color: dynamicAuraColor }}>#{weeklyGloryRank || '??'}</Text>
                         </View>
                     </View>
 
-                    {/* ⚡️ RPG PROGRESS BAR */}
-                    <View className="mt-8 w-full px-2 mb-8">
-                        <Pressable onPress={() => setRankModalVisible(true)} className="flex-row justify-between items-end mb-2">
-                            <View className="flex-row items-center gap-2">
-                                <Text className="text-2xl">{writerRank.icon}</Text>
+                    {/* RPG PROGRESS BAR */}
+                    <View className="mt-8 w-full mb-10">
+                        <Pressable onPress={() => setRankModalVisible(true)} className="flex-row justify-between items-end mb-3 px-1">
+                            <View className="flex-row items-center gap-3">
+                                <Text className="text-3xl">{writerRank.icon}</Text>
                                 <View>
-                                    <Text style={{ color: writerRank.color }} className="text-[8px] font-mono uppercase tracking-[0.2em] leading-none mb-1">RPG_CLASS</Text>
-                                    <Text className="text-[10px] font-black uppercase tracking-widest dark:text-white">{writerRank.title}</Text>
+                                    <Text style={{ color: writerRank.color }} className="text-[9px] font-mono uppercase tracking-[0.2em] leading-none mb-1">PLAYER_CLASS</Text>
+                                    <Text className="text-xs font-black uppercase tracking-widest dark:text-white">{writerRank.title}</Text>
                                 </View>
                             </View>
-                            <Text className="text-[10px] font-mono font-bold text-gray-500">EXP: {totalAura.toLocaleString()} / {writerRank.nextReq.toLocaleString()}</Text>
+                            <Text className="text-[10px] font-mono font-bold text-gray-500 mb-1">
+                                EXP: {totalAura.toLocaleString()} / {writerRank.nextReq.toLocaleString()}
+                            </Text>
                         </Pressable>
-                        <View className="h-1.5 w-full bg-gray-100 dark:bg-gray-800 rounded-full overflow-hidden border border-gray-200 dark:border-white/10">
-                            <View style={{ width: `${writerRank.progress}%`, backgroundColor: writerRank.color }} className="h-full shadow-lg" />
+                        <View className="h-2 w-full bg-gray-200 dark:bg-gray-800 rounded-full overflow-hidden">
+                            <View style={{ width: `${writerRank.progress}%`, backgroundColor: writerRank.color }} className="h-full" />
                         </View>
                     </View>
 
-                    <View className="space-y-6">
-                        <View className="space-y-1">
-                            <Text className="text-[9px] font-black uppercase tracking-widest text-gray-400 ml-1">Display Name / Alias</Text>
-                            <TextInput defaultValue={username} onChangeText={setUsername} placeholder="Enter alias..." placeholderTextColor="#4b5563" className="w-full bg-gray-50 dark:bg-gray-900 border border-gray-100 dark:border-gray-800 p-4 rounded-2xl text-sm font-bold dark:text-white" />
+                    {/* Profile Form */}
+                    <View className="space-y-6 mb-4">
+                        <View className="space-y-2">
+                            <Text className="text-[10px] font-black uppercase tracking-widest text-gray-400 ml-1">Display Name / Alias</Text>
+                            <TextInput
+                                defaultValue={username}
+                                onChangeText={setUsername}
+                                placeholder="Enter alias..."
+                                placeholderTextColor="#9ca3af"
+                                className="w-full bg-gray-100 dark:bg-[#121212] border border-gray-200 dark:border-gray-800 p-4 rounded-2xl text-sm font-bold text-gray-900 dark:text-white"
+                            />
                         </View>
 
-                        <View className="space-y-1 mt-4">
-                            <Text className="text-[9px] font-black uppercase tracking-widest text-gray-400 ml-1">User Id(UID) - <Text className="text-[9px] font-black tracking-widest text-gray-500">Used for recovery</Text></Text>
-                            <View className="bg-gray-50 dark:bg-[#0a0a0a] border border-gray-100 dark:border-gray-800 p-4 rounded-2xl flex-row justify-between items-center">
-                                <View className="flex-1 mr-4"><Text numberOfLines={1} ellipsizeMode="middle" className={`text-xs font-bold font-mono ${showId ? 'text-gray-500 dark:text-gray-400' : 'text-blue-500/40'}`}>{showId ? (user?.uid || "SEARCHING...") : "XXXX-XXXX-XXXX-XXXX-XXXX-XXXX"}</Text></View>
+                        <View className="space-y-2 mt-2">
+                            <Text className="text-[10px] font-black uppercase tracking-widest text-gray-400 ml-1">
+                                User Id(UID) <Text className="text-gray-500 tracking-normal capitalize lowercase">- Used for recovery</Text>
+                            </Text>
+                            <View className="bg-gray-100 dark:bg-[#121212] border border-gray-200 dark:border-gray-800 p-4 rounded-2xl flex-row justify-between items-center">
+                                <View className="flex-1 mr-4">
+                                    <Text numberOfLines={1} ellipsizeMode="middle" className={`text-xs font-bold font-mono ${showId ? 'text-gray-700 dark:text-gray-300' : 'text-blue-500/50'}`}>
+                                        {showId ? (user?.uid || "SEARCHING...") : "XXXX-XXXX-XXXX-XXXX-XXXX-XXXX"}
+                                    </Text>
+                                </View>
                                 <View className="flex-row items-center gap-2">
-                                    <Pressable onPress={() => setShowId(!showId)} className="p-2 rounded-xl bg-gray-100 dark:bg-gray-800"><Feather name={showId ? "eye-off" : "eye"} size={16} color={isDark ? "#94a3b8" : "#64748b"} /></Pressable>
-                                    <Pressable onPress={copyToClipboard} className={`p-2 rounded-xl ${copied ? 'bg-green-500/10' : 'bg-blue-500/10'}`}><Feather name={copied ? "check" : "copy"} size={16} color={copied ? "#22c55e" : "#3b82f6"} /></Pressable>
+                                    <Pressable onPress={() => setShowId(!showId)} className="p-2.5 rounded-xl bg-gray-200 dark:bg-gray-800 active:scale-95">
+                                        <Feather name={showId ? "eye-off" : "eye"} size={16} color={isDark ? "#94a3b8" : "#475569"} />
+                                    </Pressable>
+                                    <Pressable onPress={copyToClipboard} className={`p-2.5 rounded-xl active:scale-95 ${copied ? 'bg-green-500/20' : 'bg-blue-500/20'}`}>
+                                        <Feather name={copied ? "check" : "copy"} size={16} color={copied ? "#22c55e" : "#3b82f6"} />
+                                    </Pressable>
                                 </View>
                             </View>
                         </View>
 
-                        <View className="space-y-1 mt-4">
-                            <Text className="text-[9px] font-black uppercase tracking-widest text-gray-400 ml-1">Recruitment Directive - <Text className="text-[9px] font-black tracking-widest text-gray-500">Share to build ranks</Text></Text>
-                            <View className="bg-gray-50 dark:bg-[#0a0a0a] border border-gray-100 dark:border-gray-800 p-4 rounded-2xl flex-row justify-between items-center">
-                                <View className="flex-1 mr-4"><Text numberOfLines={1} ellipsizeMode="tail" className="text-xs font-bold font-mono text-purple-500/80 dark:text-purple-400">{user?.referralCode ? `play.google.com/...referrer=${user.referralCode}` : "SYNCHRONIZING_ID..."}</Text></View>
+                        <View className="space-y-2 mt-2">
+                            <Text className="text-[10px] font-black uppercase tracking-widest text-gray-400 ml-1">
+                                Recruitment Directive <Text className="text-gray-500 tracking-normal capitalize lowercase">- Share to build ranks</Text>
+                            </Text>
+                            <View className="bg-gray-100 dark:bg-[#121212] border border-gray-200 dark:border-gray-800 p-4 rounded-2xl flex-row justify-between items-center">
+                                <View className="flex-1 mr-4">
+                                    <Text numberOfLines={1} ellipsizeMode="tail" className="text-xs font-bold font-mono text-purple-600 dark:text-purple-400 opacity-90">
+                                        {user?.referralCode ? `play.google.com/...referrer=${user.referralCode}` : "SYNCHRONIZING_ID..."}
+                                    </Text>
+                                </View>
                                 <View className="flex-row items-center gap-2">
-                                    <View className="bg-purple-500/10 px-2 py-1.5 rounded-lg mr-1 border border-purple-500/20"><Text className="text-[9px] font-black text-purple-500 uppercase tracking-widest">{user?.referralCount || 0} Recruits</Text></View>
-                                    <Pressable onPress={copyReferralToClipboard} className={`p-2 rounded-xl ${refCopied ? 'bg-green-500/10' : 'bg-purple-500/10'}`}><Feather name={refCopied ? "check" : "share-2"} size={16} color={refCopied ? "#22c55e" : "#a855f7"} /></Pressable>
+                                    <View className="bg-purple-500/10 px-3 py-2 rounded-xl border border-purple-500/20">
+                                        <Text className="text-[10px] font-black text-purple-600 dark:text-purple-400 uppercase tracking-widest">{user?.referralCount || 0} Recruits</Text>
+                                    </View>
+                                    <Pressable onPress={copyReferralToClipboard} className={`p-2.5 rounded-xl active:scale-95 ${refCopied ? 'bg-green-500/20' : 'bg-purple-500/20'}`}>
+                                        <Feather name={refCopied ? "check" : "share-2"} size={16} color={refCopied ? "#22c55e" : "#a855f7"} />
+                                    </Pressable>
                                 </View>
                             </View>
                         </View>
 
-                        <View className="space-y-1 mt-4">
-                            <Text className="text-[9px] font-black uppercase tracking-widest text-gray-400 ml-1">Biography / Lore</Text>
-                            <TextInput multiline defaultValue={description} onChangeText={setDescription} placeholder="Write your player bio here..." placeholderTextColor="#4b5563" className="w-full bg-white dark:bg-black/40 border-2 border-gray-100 dark:border-gray-800 rounded-2xl p-4 text-sm font-medium dark:text-white min-h-[120px]" style={{ textAlignVertical: 'top' }} />
+                        <View className="space-y-2 mt-2">
+                            <Text className="text-[10px] font-black uppercase tracking-widest text-gray-400 ml-1">Biography / Lore</Text>
+                            <TextInput
+                                multiline
+                                defaultValue={description}
+                                onChangeText={setDescription}
+                                placeholder="Write your player bio here..."
+                                placeholderTextColor="#9ca3af"
+                                className="w-full bg-gray-100 dark:bg-[#121212] border border-gray-200 dark:border-gray-800 rounded-2xl p-4 text-sm font-medium text-gray-900 dark:text-white min-h-[120px]"
+                                style={{ textAlignVertical: 'top' }}
+                            />
                         </View>
 
-                        <TouchableOpacity onPress={handleUpdate} disabled={isUpdating} style={{ backgroundColor: dynamicAuraColor }} className="relative w-full h-14 rounded-2xl overflow-hidden items-center justify-center mt-6">
-                            <Text className="relative z-10 text-white font-black uppercase italic tracking-widest text-xs">{isUpdating ? "Syncing Changes..." : "Update Character Data"}</Text>
+                        <TouchableOpacity
+                            onPress={handleUpdate}
+                            disabled={isUpdating}
+                            style={{ backgroundColor: dynamicAuraColor }}
+                            className="relative w-full h-14 rounded-2xl overflow-hidden items-center justify-center mt-6 active:opacity-80 shadow-md"
+                        >
+                            <Text className="relative z-10 text-white font-black uppercase tracking-widest text-[13px]">
+                                {isUpdating ? "Syncing Changes..." : "Update Character Data"}
+                            </Text>
                             {isUpdating && <Animated.View className="absolute bottom-0 h-1 bg-white/40 w-full" style={progressAnimatedStyle} />}
                         </TouchableOpacity>
-                        {/* ⚡️ NEW: De-Synchronize (Logout) Button */}
+
                         <TouchableOpacity
                             onPress={handleLogout}
-                            className="relative w-full h-14 rounded-2xl overflow-hidden items-center justify-center mt-4 border-2 border-red-500/30 bg-red-500/10 active:bg-red-500/20 transition-all"
+                            className="relative w-full h-14 rounded-2xl items-center justify-center mt-2 border-2 border-red-500/20 bg-red-500/5 active:bg-red-500/10 transition-all"
                         >
                             <View className="flex-row items-center gap-2">
                                 <Ionicons name="power" size={16} color="#ef4444" />
-                                <Text className="text-red-500 font-black uppercase italic tracking-widest text-xs">De-Synchronize (Log Out)</Text>
+                                <Text className="text-red-500 font-black uppercase tracking-widest text-[11px]">De-Synchronize (Log Out)</Text>
                             </View>
                         </TouchableOpacity>
                     </View>
@@ -1637,7 +1690,20 @@ export default function MobileProfilePage() {
 
     return (
         <View className="flex-1 bg-white dark:bg-[#0a0a0a]" style={{ paddingTop: insets.top }}>
+
+            {/* ⚡️ BLOCK CLICKS TO BACKGROUND WHEN ONBOARDING */}
+            {/* {isOnboarding && (
+                <Pressable
+                    onPress={console.log("clicked me")
+                    }
+                    style={StyleSheet.absoluteFillObject}
+                    className="z-[10]"
+                // This creates an invisible shield. Clicks hit this instead of the UI underneath.
+                // The tooltip has a higher zIndex (110) so its buttons still work.
+                />
+            )} */}
             <AppOnboarding />
+
             <View className="absolute top-0 right-0 w-80 h-80 bg-blue-600/5 rounded-full" pointerEvents="none" />
             <View className="absolute bottom-0 left-0 w-60 h-60 bg-purple-600/5 rounded-full" pointerEvents="none" />
 
@@ -1651,28 +1717,42 @@ export default function MobileProfilePage() {
                 onEndReachedThreshold={0.5}
                 renderItem={({ item }) => (
                     <View className="px-6 mb-4">
-                        <View className="bg-white dark:bg-gray-900 border border-gray-100 dark:border-gray-800 p-5 rounded-2xl flex-row justify-between items-center">
+                        <View className="bg-gray-50 dark:bg-[#121212] border border-gray-200 dark:border-gray-800 p-5 rounded-2xl flex-row justify-between items-center shadow-sm">
                             <Pressable onPress={() => router.push(`/post/${item.slug || item._id}`)} className="flex-1 pr-4">
-                                <Text className="font-black text-sm uppercase tracking-tight text-gray-800 dark:text-gray-200" numberOfLines={1}>{item.title || item.message}</Text>
-                                <Text className="text-[9px] font-bold text-blue-600 uppercase tracking-widest mt-1">{new Date(item.createdAt).toLocaleDateString()}</Text>
-                                <View className="flex-row items-center gap-4 mt-2">
-                                    <View className="flex-row items-center gap-1"><Ionicons name="heart-outline" size={12} color="#9ca3af" /><Text className="text-gray-500 text-[10px] font-bold">{item.likes?.length || 0}</Text></View>
-                                    <View className="flex-row items-center gap-1"><Ionicons name="chatbubble-outline" size={12} color="#9ca3af" /><Text className="text-gray-500 text-[10px] font-bold">{item.comments?.length || 0}</Text></View>
-                                    <View className="flex-row items-center gap-1"><Ionicons name="eye-outline" size={12} color="#9ca3af" /><Text className="text-gray-500 text-[10px] font-bold">{item.views || 0}</Text></View>
+                                <Text className="font-black text-sm uppercase tracking-tight text-gray-900 dark:text-white" numberOfLines={1}>{item.title || item.message}</Text>
+                                <Text className="text-[9px] font-bold text-blue-600 dark:text-blue-400 uppercase tracking-widest mt-1.5">{new Date(item.createdAt).toLocaleDateString()}</Text>
+                                <View className="flex-row items-center gap-5 mt-3">
+                                    <View className="flex-row items-center gap-1.5">
+                                        <Ionicons name="heart-outline" size={14} color={isDark ? "#9ca3af" : "#6b7280"} />
+                                        <Text className="text-gray-600 dark:text-gray-400 text-[10px] font-bold">{item.likes?.length || 0}</Text>
+                                    </View>
+                                    <View className="flex-row items-center gap-1.5">
+                                        <Ionicons name="chatbubble-outline" size={14} color={isDark ? "#9ca3af" : "#6b7280"} />
+                                        <Text className="text-gray-600 dark:text-gray-400 text-[10px] font-bold">{item.comments?.length || 0}</Text>
+                                    </View>
+                                    <View className="flex-row items-center gap-1.5">
+                                        <Ionicons name="eye-outline" size={14} color={isDark ? "#9ca3af" : "#6b7280"} />
+                                        <Text className="text-gray-600 dark:text-gray-400 text-[10px] font-bold">{item.views || 0}</Text>
+                                    </View>
                                 </View>
                             </Pressable>
-                            <TouchableOpacity onPress={() => handleDelete(item._id)} className="p-3 bg-red-500/10 rounded-xl"><Ionicons name="trash-outline" size={18} color="#ef4444" /></TouchableOpacity>
+                            <TouchableOpacity onPress={() => handleDelete(item._id)} className="p-3 bg-red-500/10 rounded-xl active:bg-red-500/20 transition-colors">
+                                <Ionicons name="trash-outline" size={18} color="#ef4444" />
+                            </TouchableOpacity>
                         </View>
                     </View>
                 )}
                 ListEmptyComponent={() => isLoadingInitialData ? <SyncLoading /> : (
-                    <View className="mx-6 p-12 bg-gray-50 dark:bg-gray-900/50 rounded-3xl border-2 border-dashed border-gray-100 dark:border-gray-800 items-center">
-                        <Text className="text-[10px] font-black uppercase tracking-widest text-gray-400">Empty Logs - Go Post Something!</Text>
+                    <View className="mx-6 p-10 bg-gray-50 dark:bg-[#121212] rounded-3xl border-2 border-dashed border-gray-200 dark:border-gray-800 items-center my-4">
+                        <Ionicons name="document-text-outline" size={32} color={isDark ? "#4b5563" : "#9ca3af"} className="mb-3" />
+                        <Text className="text-[11px] font-black uppercase tracking-widest text-gray-500 dark:text-gray-400 mt-2">Empty Logs</Text>
+                        <Text className="text-xs text-gray-400 dark:text-gray-500 mt-1 font-medium text-center">Your intel diary is empty. Start writing to build your archive.</Text>
                     </View>
                 )}
-                ListFooterComponent={() => <View style={{ paddingBottom: insets.bottom + 100 }}>{isFetchingNextPage && <ActivityIndicator className="py-4" color="#2563eb" />}</View>}
+                ListFooterComponent={() => <View style={{ paddingBottom: insets.bottom + 100 }}>{isFetchingNextPage && <ActivityIndicator className="py-6" color="#2563eb" />}</View>}
             />
 
+            {/* --- Modals and Overlays follow below exactly as they were... --- */}
             <View style={{ position: 'absolute', left: -10000, opacity: 0 }} pointerEvents="none">
                 <ViewShot ref={playerCardRef} options={{ format: "png", quality: 1 }}>
                     <PlayerCard author={user} totalPosts={totalPosts} isDark={isDark} />
@@ -1686,15 +1766,15 @@ export default function MobileProfilePage() {
                         <View className="w-20 h-20 rounded-full items-center justify-center mb-6 self-center" style={{ backgroundColor: writerRank.color + '20' }}>
                             <Text style={{ fontSize: 40 }}>{writerRank.icon}</Text>
                         </View>
-                        <Text className="text-2xl font-black text-center uppercase tracking-tighter dark:text-white mb-2" style={{ color: writerRank.color }}>
+                        <Text className="text-2xl font-black text-center uppercase tracking-tighter text-gray-900 dark:text-white mb-2" style={{ color: writerRank.color }}>
                             {writerRank.title.replace(/_/g, ' ')}
                         </Text>
                         <Text className="text-gray-500 text-center font-bold text-xs uppercase tracking-widest mb-6">Current Standing</Text>
-                        <Text className="text-gray-600 dark:text-gray-400 text-center leading-6 mb-8">
+                        <Text className="text-gray-600 dark:text-gray-400 text-center leading-6 mb-8 px-2">
                             You have amassed <Text className="font-black" style={{ color: writerRank.color }}>{totalAura.toLocaleString()} Aura</Text>.
                             {rankLevel < 8 ? ` Reach ${writerRank.nextReq.toLocaleString()} Aura to evolve into the next class.` : " You have reached the pinnacle of power."}
                         </Text>
-                        <TouchableOpacity onPress={() => setRankModalVisible(false)} style={{ backgroundColor: writerRank.color }} className="p-4 rounded-2xl items-center shadow-lg">
+                        <TouchableOpacity onPress={() => setRankModalVisible(false)} style={{ backgroundColor: writerRank.color }} className="p-4 rounded-2xl items-center shadow-lg active:opacity-80">
                             <Text className="text-black font-black uppercase tracking-widest text-xs">Close Intel</Text>
                         </TouchableOpacity>
                     </View>
@@ -1709,13 +1789,13 @@ export default function MobileProfilePage() {
                         <Text style={{ color: dynamicAuraColor }} className="text-3xl font-black text-center uppercase tracking-widest mb-2">
                             {weeklyAuraTier?.label || 'NOVICE'} STATUS
                         </Text>
-                        <Text className="text-gray-500 text-center font-bold text-[10px] uppercase tracking-[0.3em] mb-4">
+                        <Text className="text-gray-500 text-center font-bold text-[10px] uppercase tracking-[0.3em] mb-5">
                             Total Weekly Glory: {weeklyGloryPoints.toLocaleString()}
                         </Text>
-                        <Text className="text-gray-600 dark:text-gray-400 text-center leading-7 mb-8 font-medium">
+                        <Text className="text-gray-600 dark:text-gray-400 text-center leading-6 mb-8 font-medium px-2">
                             This is your competitive ranking for the week. Dominate the leaderboards to earn higher statuses and seasonal rewards!
                         </Text>
-                        <TouchableOpacity onPress={() => setAuraModalVisible(false)} style={{ backgroundColor: dynamicAuraColor }} className="p-4 rounded-2xl items-center shadow-lg">
+                        <TouchableOpacity onPress={() => setAuraModalVisible(false)} style={{ backgroundColor: dynamicAuraColor }} className="p-4 rounded-2xl items-center shadow-lg active:opacity-80">
                             <Text className="text-white font-black uppercase tracking-widest text-xs">Acknowledge</Text>
                         </TouchableOpacity>
                     </View>
@@ -1733,29 +1813,31 @@ export default function MobileProfilePage() {
 
             <Modal visible={prefsVisible} animationType="fade" transparent>
                 <View className="flex-1 bg-black/80 items-center justify-center p-6">
-                    <View className="bg-white dark:bg-[#0d1117] w-full p-8 rounded-[40px] border-2 border-purple-500">
-                        <Text className="text-2xl font-black uppercase italic dark:text-white mb-6 text-center">Neural Prefs</Text>
-                        <ScrollView className="space-y-4" showsVerticalScrollIndicator={false}>
-                            <View>
-                                <Text className="text-[10px] font-black uppercase text-gray-400 mb-2">Absolute GOAT Character</Text>
-                                <TextInput defaultValue={favCharacter} onChangeText={setFavCharacter} placeholder="E.G. ITACHI" placeholderTextColor="#4b5563" className="bg-gray-50 dark:bg-gray-900 p-4 rounded-2xl dark:text-white font-black italic border border-purple-500/20" />
+                    <View className="bg-white dark:bg-[#0d1117] w-full p-8 rounded-[40px] border-2 border-purple-500 shadow-2xl shadow-purple-500/20">
+                        <Text className="text-2xl font-black uppercase italic text-gray-900 dark:text-white mb-6 text-center">Neural Prefs</Text>
+                        <ScrollView className="space-y-5" showsVerticalScrollIndicator={false} style={{ maxHeight: 400 }}>
+                            <View className="space-y-2">
+                                <Text className="text-[10px] font-black uppercase text-gray-500 tracking-widest ml-1">Absolute GOAT Character</Text>
+                                <TextInput defaultValue={favCharacter} onChangeText={setFavCharacter} placeholder="E.G. ITACHI" placeholderTextColor="#9ca3af" className="bg-gray-50 dark:bg-gray-900/50 p-4 rounded-2xl text-gray-900 dark:text-white font-black italic border border-purple-500/20" />
                             </View>
 
-                            <View className="mt-4">
-                                <Text className="text-[10px] font-black uppercase text-gray-400 mb-2">Favorite Animes (Comma separated)</Text>
-                                <TextInput defaultValue={favAnimes} onChangeText={setFavAnimes} placeholder="One Piece, Naruto, Bleach" placeholderTextColor="#4b5563" className="bg-gray-50 dark:bg-gray-900 p-4 rounded-2xl dark:text-white font-black italic border border-purple-500/20" />
+                            <View className="space-y-2 mt-4">
+                                <Text className="text-[10px] font-black uppercase text-gray-500 tracking-widest ml-1">Favorite Animes (Comma separated)</Text>
+                                <TextInput defaultValue={favAnimes} onChangeText={setFavAnimes} placeholder="One Piece, Naruto, Bleach" placeholderTextColor="#9ca3af" className="bg-gray-50 dark:bg-gray-900/50 p-4 rounded-2xl text-gray-900 dark:text-white font-black italic border border-purple-500/20" />
                             </View>
 
-                            <View className="mt-4">
-                                <Text className="text-[10px] font-black uppercase text-gray-400 mb-2">Favorite Genres (Comma separated)</Text>
-                                <TextInput defaultValue={favGenres} onChangeText={setFavGenres} placeholder="Action, Seinen, Psychological" placeholderTextColor="#4b5563" className="bg-gray-50 dark:bg-gray-900 p-4 rounded-2xl dark:text-white font-black italic border border-purple-500/20" />
+                            <View className="space-y-2 mt-4 mb-2">
+                                <Text className="text-[10px] font-black uppercase text-gray-500 tracking-widest ml-1">Favorite Genres (Comma separated)</Text>
+                                <TextInput defaultValue={favGenres} onChangeText={setFavGenres} placeholder="Action, Seinen, Psychological" placeholderTextColor="#9ca3af" className="bg-gray-50 dark:bg-gray-900/50 p-4 rounded-2xl text-gray-900 dark:text-white font-black italic border border-purple-500/20" />
                             </View>
                         </ScrollView>
 
-                        <TouchableOpacity onPress={handleUpdate} disabled={isUpdating} className="bg-purple-600 p-5 rounded-2xl items-center shadow-lg mt-8">
-                            {isUpdating ? <ActivityIndicator color="white" /> : <Text className="text-white font-black uppercase tracking-widest text-xs">Sync Preferences</Text>}
+                        <TouchableOpacity onPress={handleUpdate} disabled={isUpdating} className="bg-purple-600 p-5 rounded-2xl items-center shadow-lg shadow-purple-600/30 mt-8 active:opacity-80">
+                            {isUpdating ? <ActivityIndicator color="white" /> : <Text className="text-white font-black uppercase tracking-widest text-[13px]">Sync Preferences</Text>}
                         </TouchableOpacity>
-                        <TouchableOpacity onPress={() => setPrefsVisible(false)} className="mt-4 items-center"><Text className="text-gray-500 text-[10px] font-black uppercase">Cancel</Text></TouchableOpacity>
+                        <TouchableOpacity onPress={() => setPrefsVisible(false)} className="mt-4 p-2 items-center">
+                            <Text className="text-gray-500 text-[11px] font-black uppercase tracking-widest underline">Cancel</Text>
+                        </TouchableOpacity>
                     </View>
                 </View>
             </Modal>
@@ -1769,22 +1851,22 @@ export default function MobileProfilePage() {
             />
 
             <Modal visible={cardPreviewVisible} transparent animationType="slide">
-                <View className="flex-1 bg-black/90">
+                <View className="flex-1 bg-black/95">
                     <ScrollView
                         contentContainerStyle={{ flexGrow: 1, justifyContent: 'center', alignItems: 'center', padding: 20 }}
                         showsVerticalScrollIndicator={false}
                     >
                         <View className="w-full items-center">
-                            <View className="w-full flex-row pt-10 justify-between items-center">
+                            <View className="w-full flex-row pt-10 pb-6 justify-between items-center">
                                 <View>
                                     <Text className="text-white font-black text-xl italic uppercase tracking-widest">Operator Identity</Text>
                                     <Text className="text-gray-500 font-bold text-[9px] uppercase tracking-[0.4em] mt-1">Classification Preview</Text>
                                 </View>
                                 <Pressable
                                     onPress={() => setCardPreviewVisible(false)}
-                                    className="w-12 h-12 bg-white/10 rounded-full items-center justify-center"
+                                    className="w-12 h-12 bg-white/10 rounded-full items-center justify-center active:bg-white/20"
                                 >
-                                    <Ionicons name="close" size={28} color="white" />
+                                    <Ionicons name="close" size={24} color="white" />
                                 </Pressable>
                             </View>
 
@@ -1792,28 +1874,29 @@ export default function MobileProfilePage() {
                                 style={{
                                     transform: [{ scale: Math.min(1, (width - 40) / 380) }],
                                     width: 380,
-                                    alignItems: 'center'
+                                    alignItems: 'center',
+                                    marginVertical: 20
                                 }}
                                 className="shadow-2xl shadow-blue-500/20"
                             >
                                 <PlayerCard author={user} totalPosts={totalPosts} isDark={isDark} />
                             </View>
 
-                            <View className="w-full">
+                            <View className="w-full mt-6">
                                 <TouchableOpacity
                                     onPress={captureAndShare}
                                     style={{ backgroundColor: dynamicAuraColor }}
-                                    className="flex-row items-center justify-center gap-3 w-full h-16 rounded-[30px] shadow-lg"
+                                    className="flex-row items-center justify-center gap-3 w-full h-16 rounded-3xl shadow-lg active:opacity-80"
                                 >
-                                    <MaterialCommunityIcons name="share-variant-outline" size={24} color="white" />
+                                    <MaterialCommunityIcons name="share-variant-outline" size={22} color="white" />
                                     <Text className="text-white font-black uppercase tracking-[0.2em] text-sm italic">Broadcast Card</Text>
                                 </TouchableOpacity>
 
                                 <Pressable
                                     onPress={() => setCardPreviewVisible(false)}
-                                    className="mt-6 items-center py-2"
+                                    className="mt-6 items-center p-3"
                                 >
-                                    <Text className="text-gray-500 text-[10px] font-black uppercase tracking-widest underline">Cancel Operation</Text>
+                                    <Text className="text-gray-500 text-[11px] font-black uppercase tracking-widest underline">Cancel Operation</Text>
                                 </Pressable>
                             </View>
                         </View>

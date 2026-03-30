@@ -83,7 +83,18 @@ export default function MainLayout() {
     });
 
     const [userInClan, setUserInClan] = useState(false);
+    const [isFirstPostFlow, setIsFirstPostFlow] = useState(false);
+    // =================================================================
+    // 1. INTERCEPT: CHECK FOR FIRST POST FLAG
+    // =================================================================
+    useEffect(() => {
+        const checkFirstPost = storage.getNumber("trigger_first_post");
+        console.log(checkFirstPost);
 
+        if (checkFirstPost !== 0 && checkFirstPost !== undefined) {
+            setIsFirstPostFlow(true);
+        }
+    }, []);
     const tabs = [
         { id: 'home', label: 'HOME', icon: 'home', route: '/', color: '#3b82f6', match: (p) => p === "/" || p.startsWith("/categories") },
         { id: 'search', label: 'SEARCH', icon: 'search', route: '/Search', color: '#a855f7', match: (p) => p === "/Search" },
@@ -357,11 +368,13 @@ export default function MainLayout() {
             </Stack>
 
             {/* ⚡️ THE GOLD ROULETTE EVENT BUTTON + TOOLTIP */}
-            <View style={styles.eventButtonContainer}>
-                <Animated.View style={[styles.tooltipContainer, tooltipStyle]}>
-                    <Text style={styles.tooltipText}>NEW EVENT!</Text>
-                    <View style={styles.tooltipArrow} />
-                </Animated.View>
+            <View style={styles.eventButtonContainer} pointerEvents="box-none">
+                {!isFirstPostFlow && (
+                    <Animated.View style={[styles.tooltipContainer, tooltipStyle]}>
+                        <Text style={styles.tooltipText}>NEW EVENT!</Text>
+                        <View style={styles.tooltipArrow} />
+                    </Animated.View>
+                )}
 
                 <Animated.View style={eventBtnStyle}>
                     <TouchableOpacity
@@ -508,10 +521,11 @@ export default function MainLayout() {
                 <View className="relative items-center justify-center z-50">
 
                     {/* ⚡️ VERTICAL BOUNCING GOLD HINT */}
-                    {showClanHint && !showClanMenu && (
+                    {!isFirstPostFlow && showClanHint && !showClanMenu && (
                         <Animated.View
                             style={[clanHintAnimatedStyle, { position: 'absolute', bottom: 40, right: 10, alignItems: 'center' }]}
                             className="z-[100]"
+                            pointerEvents="none"
                         >
                             <View
                                 style={{ backgroundColor: '#f59e0b', shadowColor: '#f59e0b' }}

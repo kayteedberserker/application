@@ -49,7 +49,7 @@ export default function GlobalMarquee({ isDark }) {
     const clanId = userClan?.tag || '';
     const endpoint = `/message-pills?userId=${userId}&clanId=${clanId}`;
 
-    const { data } = useSWR(endpoint, fetcher, { refreshInterval: 180000 });
+    const { data } = useSWR(endpoint, fetcher, { refreshInterval: 300000 });
 
     const [viewCounts, setViewCounts] = useState(() => {
         try {

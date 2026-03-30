@@ -436,9 +436,10 @@ export default function FirstLaunchScreen() {
 			if (!res) throw new Error("No response from server.");
 			const data = await res.json();
 			if (!res.ok) throw new Error(data.message || "Operation failed");
+			console.log(data);
 
 			const userData = {
-				deviceId: data?.deviceId,
+				deviceId: data.user?.deviceId,
 				uid: data.user?.uid,
 				username: data.user?.username || username.trim(),
 				pushToken: pushToken || data.user?.pushToken,

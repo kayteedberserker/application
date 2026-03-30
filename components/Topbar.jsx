@@ -1,6 +1,6 @@
 import { Ionicons } from "@expo/vector-icons";
 import { Image } from "expo-image";
-import { usePathname, useRouter } from "expo-router";
+import { usePathname } from "expo-router";
 import { useEffect, useState } from "react";
 import {
     ActivityIndicator,
@@ -8,6 +8,7 @@ import {
     TouchableOpacity,
     View
 } from "react-native";
+import { useMMKV } from "react-native-mmkv";
 import Animated, {
     useAnimatedStyle,
     useSharedValue,
@@ -15,25 +16,24 @@ import Animated, {
     withSequence,
     withTiming
 } from "react-native-reanimated";
-import { useMMKV } from "react-native-mmkv"; 
 import { useAlert } from "../context/AlertContext";
 import { useCoins } from "../context/CoinContext";
 import { useStreak } from "../context/StreakContext";
 import { useUser } from "../context/UserContext";
 import apiFetch from "../utils/apiFetch";
 import CoinIcon from "./ClanIcon";
-import { Text } from "./Text";
 import PeakBadge from "./PeakBadge";
+import { Text } from "./Text";
 
 // ⚡️ Global session flag: Resets to false only when the app is completely restarted.
 let hasShownThisSession = false;
 
 export default function TopBar({ isDark }) {
-    const storage = useMMKV(); 
+    const storage = useMMKV();
     const CustomAlert = useAlert();
     const { streak, loading, refreshStreak } = useStreak();
     const { user, refreshUser } = useUser();
-    const { coins, clanCoins, peakLevel, processTransaction, isProcessingTransaction } = useCoins(); 
+    const { coins, clanCoins, peakLevel, processTransaction, isProcessingTransaction } = useCoins();
     const pathName = usePathname();
 
     const pulse = useSharedValue(1);
@@ -44,7 +44,18 @@ export default function TopBar({ isDark }) {
     // ⚡️ WALLET HINT STATE & ANIMATION
     const [showWalletHint, setShowWalletHint] = useState(false);
     const hintBounce = useSharedValue(0);
+    const [isFirstPostFlow, setIsFirstPostFlow] = useState(false);
+    // =================================================================
+    // 1. INTERCEPT: CHECK FOR FIRST POST FLAG
+    // =================================================================
+    useEffect(() => {
+        const checkFirstPost = storage.getNumber("trigger_first_post");
+        console.log(checkFirstPost);
 
+        if (checkFirstPost !== 0 && checkFirstPost !== undefined) {
+            setIsFirstPostFlow(true);
+        }
+    }, []);
     // ⚡️ DEV TOOLS CHECK
     // Shows if app is running locally in dev mode OR if it's your specific device in production
     const showDevTools = __DEV__ || user?.deviceId === "4bfe2b53-7591-462f-927e-68eedd7a6447";
@@ -55,7 +66,7 @@ export default function TopBar({ isDark }) {
 
         // ⚡️ Check how many times we've shown this hint overall
         const hintCount = storage.getNumber('wallet_hint_count2') || 0;
-        
+
         if (hintCount < 10) {
             hasShownThisSession = true; // Mark as shown for this session
             setShowWalletHint(true);
@@ -96,7 +107,7 @@ export default function TopBar({ isDark }) {
 
     const handleRestoreStreak = async () => {
         if (!user?.deviceId) return;
-        
+
         if (coins < 50) {
             CustomAlert("Insufficient OC", "You need 50 OC 🪙 to revive your streak.");
             return;
@@ -107,11 +118,11 @@ export default function TopBar({ isDark }) {
             "Spend 50 OC to restore your broken streak and keep your progress alive!",
             [
                 { text: "Cancel", style: "cancel" },
-                { 
-                    text: "Confirm", 
+                {
+                    text: "Confirm",
                     onPress: async () => {
                         try {
-                            const result = await processTransaction('spend', 'streak_restore'); 
+                            const result = await processTransaction('spend', 'streak_restore');
                             if (!result.success) {
                                 CustomAlert("System Notification", result.error || "Unable to restore streak.");
                                 return;
@@ -126,11 +137,11 @@ export default function TopBar({ isDark }) {
 
                             if (!response.ok) {
                                 CustomAlert("System Error", streakResult.message || "Streak failed to revive.");
-                                processTransaction('refund', 'streak_restore'); 
+                                processTransaction('refund', 'streak_restore');
                             } else {
                                 CustomAlert("Streak Revived!", `50 OC spent. Your ${streakResult.streak} day streak is back!`);
                                 refreshStreak();
-                                if (refreshUser) refreshUser(); 
+                                if (refreshUser) refreshUser();
                             }
                         } catch (err) {
                             CustomAlert("Connection Error", "Failed to reach the server.");
@@ -159,7 +170,7 @@ export default function TopBar({ isDark }) {
         ? require("../assets/images/logowhite.png")
         : require("../assets/images/og-image.png");
 
-    if (pathName == "/Search") return null; 
+    if (pathName == "/Search") return null;
 
     return (
         <View className={`flex-row items-center justify-between px-1 pl-4 h-14 ${isDark ? "bg-[#050505] border-b border-blue-900/30" : "bg-white border-b border-gray-200"} z-50`}>
@@ -168,10 +179,10 @@ export default function TopBar({ isDark }) {
                 style={{ width: 94, height: 52, resizeMode: "contain" }}
             />
             <View className="flex-row items-center gap-1 relative">
-                
+
                 {/* ⚡️ WRAPPED WALLET BUTTON IN A RELATIVE CONTAINER */}
                 <View className="relative z-50">
-                    <TouchableOpacity 
+                    <TouchableOpacity
                         onPress={handleWalletClick}
                         className={`flex-row items-center pl-1.5 pr-2 py-1 gap-1.5 rounded-xl border ${isDark ? "bg-white/5 border-white/10" : "bg-gray-50 border-gray-200"}`}
                     >
@@ -187,7 +198,7 @@ export default function TopBar({ isDark }) {
                             </View>
                             {clanCoins > 0 ? (
                                 <View className="flex-row items-center mt-[1px]">
-                                    <Text style={{color: isDark ? "#c084fc" : "#9333ea"}} className="font-black text-[11px] mr-1">{clanCoins}</Text>
+                                    <Text style={{ color: isDark ? "#c084fc" : "#9333ea" }} className="font-black text-[11px] mr-1">{clanCoins}</Text>
                                     <CoinIcon type="CC" size={14} />
                                 </View>
                             ) : null}
@@ -195,23 +206,23 @@ export default function TopBar({ isDark }) {
                     </TouchableOpacity>
 
                     {/* ⚡️ THE FLOATING HUD HINT (UPDATED STYLING) */}
-                    {showWalletHint && (
-                        <Animated.View 
-                            style={hintAnimatedStyle} 
+                    {!isFirstPostFlow && showWalletHint && (
+                        <Animated.View
+                            style={hintAnimatedStyle}
                             className="absolute top-[80%] right-0 items-end z-[100]"
                         >
-                            <Ionicons 
-                                name="caret-up" 
-                                size={24} 
+                            <Ionicons
+                                name="caret-up"
+                                size={24}
                                 color="#f59e0b" // ⚡️ Amber color to match OC
-                                style={{ 
-                                    marginBottom: -10, 
-                                    marginRight: 15, 
+                                style={{
+                                    marginBottom: -10,
+                                    marginRight: 15,
                                     textShadowColor: 'rgba(245, 158, 11, 0.5)', // Glow effect
-                                    textShadowRadius: 6 
-                                }} 
+                                    textShadowRadius: 6
+                                }}
                             />
-                            <View 
+                            <View
                                 style={{ backgroundColor: '#f59e0b', shadowColor: '#f59e0b' }}
                                 className="px-4 py-3 rounded-xl shadow-[0_0_15px_rgba(245,158,11,0.6)] border border-yellow-300 flex-row items-center min-w-[120px] justify-center"
                             >
@@ -230,7 +241,7 @@ export default function TopBar({ isDark }) {
                         onPress={showRestoreUI ? handleRestoreStreak : () => CustomAlert("Streak", "Stay active to grow your streak!")}
                         activeOpacity={showRestoreUI ? 0.7 : 1}
                     >
-                        <Animated.View 
+                        <Animated.View
                             style={showRestoreUI ? urgentButtonStyle : {}}
                             className={`px-1.5 py-1 rounded-xl flex-row items-center border-2 ${showRestoreUI ? "bg-red-500/20 border-red-500 animate-pulse" : isZeroStreak ? "bg-gray-500/5 border-gray-500/10" : "bg-orange-500/10 border-orange-500/20 border"}`}
                         >
@@ -258,7 +269,7 @@ export default function TopBar({ isDark }) {
                         </Animated.View>
                     </TouchableOpacity>
                 ) : null}
-                
+
                 <View className="flex-row items-center gap-1">
                     {/* ⚡️ DEV TOOLS BUTTON (Only renders if condition is met) */}
                     {showDevTools && (

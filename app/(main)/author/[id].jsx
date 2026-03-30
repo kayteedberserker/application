@@ -1,33 +1,31 @@
 import { Ionicons, MaterialCommunityIcons } from "@expo/vector-icons";
+import { LegendList } from "@legendapp/list";
 import { useLocalSearchParams, useRouter } from "expo-router";
 import * as Sharing from 'expo-sharing';
 import { useColorScheme } from "nativewind";
-import { useCallback, useEffect, useRef, useState, useMemo, memo } from "react";
+import { memo, useCallback, useEffect, useRef, useState } from "react";
 import {
     DeviceEventEmitter,
     Dimensions,
+    InteractionManager,
     Modal,
     Pressable,
     ScrollView,
     TouchableOpacity,
-    View,
-    Image,
-    InteractionManager
+    View
 } from "react-native";
 import { useMMKV } from 'react-native-mmkv';
-import { LegendList } from "@legendapp/list";
-import { useSafeAreaInsets } from "react-native-safe-area-context";
-import ViewShot from "react-native-view-shot";
 import Animated, {
-    useSharedValue,
-    useAnimatedStyle,
-    withRepeat,
-    withTiming,
-    withSequence,
     Easing,
     interpolate,
-    FadeInDown
+    useAnimatedStyle,
+    useSharedValue,
+    withRepeat,
+    withSequence,
+    withTiming
 } from "react-native-reanimated";
+import { useSafeAreaInsets } from "react-native-safe-area-context";
+import ViewShot from "react-native-view-shot";
 import AuraAvatar from "../../../components/AuraAvatar";
 import ClanBorder from "../../../components/ClanBorder";
 import PlayerCard from "../../../components/PlayerCard";
@@ -37,10 +35,10 @@ import { Text } from "../../../components/Text";
 import apiFetch from "../../../utils/apiFetch";
 
 // ⚡️ IMPORTED EXTRACTED COMPONENTS
-import PlayerNameplate from "../../../components/PlayerNameplate";
-import PlayerBackground from "../../../components/PlayerBackground";
-import PlayerWatermark from "../../../components/PlayerWatermark";
 import BadgeIcon from "../../../components/BadgeIcon";
+import PlayerBackground from "../../../components/PlayerBackground";
+import PlayerNameplate from "../../../components/PlayerNameplate";
+import PlayerWatermark from "../../../components/PlayerWatermark";
 
 const API_BASE = "https://oreblogda.com/api";
 const { width } = Dimensions.get('window');
@@ -85,30 +83,30 @@ const getAuraTier = (rank) => {
 
 // ⚡️ NEW: The Master Aura Tiers with injected Colors for the UI
 export const AURA_TIERS = [
-  { level: 1, req: 0, title: "E-Rank Novice", icon: "🌱", color: "#94a3b8" },
-  { level: 2, req: 100, title: "D-Rank Operative", icon: "⚔️", color: "#34d399" }, 
-  { level: 3, req: 300, title: "C-Rank Awakened", icon: "🔥", color: "#f87171" }, 
-  { level: 4, req: 700, title: "B-Rank Elite", icon: "⚡", color: "#a78bfa" }, 
-  { level: 5, req: 1500, title: "A-Rank Champion", icon: "🛡️", color: "#60a5fa" }, 
-  { level: 6, req: 3000, title: "S-Rank Legend", icon: "🌟", color: "#fcd34d" }, 
-  { level: 7, req: 6000, title: "SS-Rank Mythic", icon: "🌀", color: "#f472b6" }, 
-  { level: 8, req: 12000, title: "Monarch", icon: "👑", color: "#fbbf24" }, 
+    { level: 1, req: 0, title: "E-Rank Novice", icon: "🌱", color: "#94a3b8" },
+    { level: 2, req: 100, title: "D-Rank Operative", icon: "⚔️", color: "#34d399" },
+    { level: 3, req: 300, title: "C-Rank Awakened", icon: "🔥", color: "#f87171" },
+    { level: 4, req: 700, title: "B-Rank Elite", icon: "⚡", color: "#a78bfa" },
+    { level: 5, req: 1500, title: "A-Rank Champion", icon: "🛡️", color: "#60a5fa" },
+    { level: 6, req: 3000, title: "S-Rank Legend", icon: "🌟", color: "#fcd34d" },
+    { level: 7, req: 6000, title: "SS-Rank Mythic", icon: "🌀", color: "#f472b6" },
+    { level: 8, req: 12000, title: "Monarch", icon: "👑", color: "#fbbf24" },
 ];
 
 const resolveUserRank = (level, currentAura) => {
     const safeLevel = Math.max(1, Math.min(8, level || 1));
     const currentTier = AURA_TIERS[safeLevel - 1];
-    const nextTier = AURA_TIERS[safeLevel] || currentTier; 
+    const nextTier = AURA_TIERS[safeLevel] || currentTier;
 
     let progress = 100;
     if (safeLevel < 8) {
         progress = ((currentAura - currentTier.req) / (nextTier.req - currentTier.req)) * 100;
     }
 
-    return { 
-        title: currentTier.title.toUpperCase().replace(/ /g, "_"), 
-        icon: currentTier.icon, 
-        color: currentTier.color, 
+    return {
+        title: currentTier.title.toUpperCase().replace(/ /g, "_"),
+        icon: currentTier.icon,
+        color: currentTier.color,
         progress: Math.min(Math.max(progress, 0), 100),
         req: currentTier.req,
         nextReq: nextTier.req
@@ -117,11 +115,12 @@ const resolveUserRank = (level, currentAura) => {
 
 // ⚡️ PERFORMANCE FIX 1: Memoized Post Item
 const MemoizedPostItem = memo(({ item, isVisible, authorData }) => {
+
     return (
         <View className="px-3">
             <PostCard
                 post={item}
-                authorData={authorData}
+                authorData={item.authorData}
                 clanData={item.clanData}
                 isFeed
                 isVisible={isVisible}
@@ -154,7 +153,7 @@ export default function AuthorPage() {
     const [isOffline, setIsOffline] = useState(false);
     const [isInitialMount, setIsInitialMount] = useState(true);
     const [cardPreviewVisible, setCardPreviewVisible] = useState(false);
-    
+
     // ⚡️ PERFORMANCE FIX 2: Visibility Tracking State
     const [visibleIds, setVisibleIds] = useState(new Set());
 
@@ -322,10 +321,10 @@ export default function AuthorPage() {
     }, []);
 
     const renderItem = useCallback(({ item }) => (
-        <MemoizedPostItem 
-            item={item} 
-            isVisible={visibleIds.has(item._id)} 
-            authorData={author} 
+        <MemoizedPostItem
+            item={item}
+            isVisible={visibleIds.has(item._id)}
+            authorData={author}
         />
     ), [visibleIds, author]);
 
@@ -510,7 +509,7 @@ export default function AuthorPage() {
                 estimatedItemSize={500}
                 drawDistance={1000}
                 recycleItems={true}
-                
+
                 onViewableItemsChanged={onViewableItemsChanged}
                 viewabilityConfig={viewabilityConfig}
                 onScroll={handleScroll}

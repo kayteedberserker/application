@@ -395,6 +395,8 @@ const PostCardComponent = ({ post, authorData, clanData, setPosts, isFeed, hideM
         inventory: [],
         peakLevel: 0
     };
+    console.log(author.rankLevel);
+
     const clanInfo = clanData || null;
 
     useEffect(() => {

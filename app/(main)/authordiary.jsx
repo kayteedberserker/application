@@ -817,29 +817,36 @@ export default function AuthorDiaryDashboard() {
 
         return (
             <View style={{ flex: 1, backgroundColor: isDark ? '#020617' : '#f8fafc' }}>
-                <View className="flex-1 px-6 pt-16 justify-center">
-
+                {/* ⚡️ FIX: Added ScrollView wrapper so nothing ever gets cut off */}
+                <ScrollView
+                    contentContainerStyle={{ flexGrow: 1, justifyContent: 'center', paddingHorizontal: 24, paddingVertical: 40 }}
+                    showsVerticalScrollIndicator={false}
+                >
                     {/* STEP 0: THE UPLINK */}
                     {introStep === 0 && (
-                        <Animated.View entering={FadeInRight.duration(600).springify()} exiting={FadeOutLeft.duration(300)} className="items-center px-2 mb-10">
-                            <Animated.View style={{ backgroundColor: isDark ? 'rgba(0,0,0,0.6)' : 'rgba(255,255,255,0.8)', borderColor: THEME.accent, shadowColor: THEME.accent }} className="w-28 h-28 rounded-[36px] items-center justify-center mb-10 border-[3px] shadow-[0_0_40px_rgba(0,0,0,0.3)]">
-                                <MaterialCommunityIcons name="satellite-uplink" size={54} color={THEME.accent} />
+                        <Animated.View entering={FadeInRight.duration(600).springify()} exiting={FadeOutLeft.duration(300)} className="items-center px-2">
+                            {/* ⚡️ FIX: Reduced icon size and mb-10 to mb-6 */}
+                            <Animated.View style={{ backgroundColor: isDark ? 'rgba(0,0,0,0.6)' : 'rgba(255,255,255,0.8)', borderColor: THEME.accent, shadowColor: THEME.accent }} className="w-24 h-24 rounded-[32px] items-center justify-center mb-6 border-[3px] shadow-[0_0_40px_rgba(0,0,0,0.3)]">
+                                <MaterialCommunityIcons name="satellite-uplink" size={48} color={THEME.accent} />
                             </Animated.View>
 
-                            <Text style={{ color: THEME.accent }} className="font-black text-[13px] uppercase tracking-[0.4em] mb-8 text-center opacity-90">
+                            {/* ⚡️ FIX: Reduced mb-8 to mb-4 */}
+                            <Text style={{ color: THEME.accent }} className="font-black text-[13px] uppercase tracking-[0.4em] mb-4 text-center opacity-90">
                                 {">"} SYSTEM_READY
                             </Text>
 
-                            <View style={{ backgroundColor: isDark ? 'rgba(0,0,0,0.5)' : 'rgba(255,255,255,0.7)', borderColor: isDark ? 'rgba(255,255,255,0.05)' : 'rgba(0,0,0,0.05)' }} className="w-full p-8 rounded-[30px] border shadow-2xl mb-12">
+                            {/* ⚡️ FIX: Reduced padding to p-6 and mb-12 to mb-6 */}
+                            <View style={{ backgroundColor: isDark ? 'rgba(0,0,0,0.5)' : 'rgba(255,255,255,0.7)', borderColor: isDark ? 'rgba(255,255,255,0.05)' : 'rgba(0,0,0,0.05)' }} className="w-full p-6 rounded-[30px] border shadow-2xl mb-6">
                                 <PremiumTextReveal
                                     text={`Uplink established, ${user?.username || 'Operative'}.\n\nThe village is waiting to hear your voice. It is time for your first transmission.`}
-                                    style={{ color: primaryTextColor, fontSize: 20, lineHeight: 28, fontWeight: '900', fontStyle: 'italic', textTransform: 'uppercase' }}
+                                    style={{ color: primaryTextColor, fontSize: 18, lineHeight: 26, fontWeight: '900', fontStyle: 'italic', textTransform: 'uppercase' }}
                                 />
                             </View>
 
+                            {/* ⚡️ FIX: Reduced py-5 to py-4 */}
                             <Pressable
                                 onPress={() => { Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium); setIntroStep(1); }}
-                                className="w-full py-5 rounded-[24px] flex-row justify-center items-center bg-blue-600 shadow-lg shadow-blue-500/50"
+                                className="w-full py-4 rounded-[24px] flex-row justify-center items-center bg-blue-600 shadow-lg shadow-blue-500/50"
                             >
                                 <Text className="font-black italic uppercase tracking-[0.3em] text-lg mr-3 text-white">
                                     Initiate Uplink
@@ -849,113 +856,113 @@ export default function AuthorDiaryDashboard() {
                         </Animated.View>
                     )}
 
-                    {/* NEW STEP 1: TRANSMISSION PROTOCOLS */}
+                    {/* STEP 1: TRANSMISSION PROTOCOLS */}
                     {introStep === 1 && (
-                        <ScrollView showsVerticalScrollIndicator={false}>
-                            <Animated.View entering={SlideInRight.duration(500).springify()} exiting={SlideOutLeft.duration(300)} className="w-full">
-                                <View className="items-center mb-6">
-                                    <MaterialCommunityIcons name="shield-alert-outline" size={46} color={THEME.accent} className="mb-3" />
-                                    <Text className="text-2xl font-black italic uppercase text-center mb-2" style={{ color: primaryTextColor }}>
-                                        Transmission Protocols
-                                    </Text>
-                                    <Text style={{ color: THEME.textSecondary }} className="font-black uppercase text-[10px] tracking-[0.2em] text-center opacity-80">
-                                        Read carefully before broadcasting to the network.
-                                    </Text>
-                                </View>
+                        <Animated.View entering={SlideInRight.duration(500).springify()} exiting={SlideOutLeft.duration(300)} className="w-full mb-10">
+                            <View className="items-center mb-6">
+                                <MaterialCommunityIcons name="shield-alert-outline" size={46} color={THEME.accent} className="mb-3" />
+                                <Text className="text-2xl font-black italic uppercase text-center mb-2" style={{ color: primaryTextColor }}>
+                                    Transmission Protocols
+                                </Text>
+                                <Text style={{ color: THEME.textSecondary }} className="font-black uppercase text-[10px] tracking-[0.2em] text-center opacity-80">
+                                    Read carefully before broadcasting to the network.
+                                </Text>
+                            </View>
 
-                                <View className="space-y-3 mb-8">
-                                    {/* Rule 1: Formatting */}
-                                    <Animated.View entering={FadeInRight.delay(100).springify()} style={{ backgroundColor: isDark ? 'rgba(0,0,0,0.4)' : 'rgba(255,255,255,0.8)', borderColor: isDark ? '#334155' : '#e2e8f0' }} className="border p-4 rounded-2xl flex-row items-center">
-                                        <View style={{ backgroundColor: '#a855f720' }} className="w-12 h-12 rounded-full items-center justify-center mr-4">
-                                            <MaterialCommunityIcons name="format-text" size={22} color="#a855f7" />
-                                        </View>
-                                        <View className="flex-1">
-                                            <Text style={{ color: primaryTextColor }} className="font-black text-[12px] uppercase tracking-wider mb-1">Formatting & Preview</Text>
-                                            <Text style={{ color: THEME.textSecondary }} className="text-[11px] font-bold leading-4">Use tags like s() and h() for effects. Always preview your intel before posting.</Text>
-                                        </View>
-                                    </Animated.View>
+                            {/* ⚡️ FIX: Reduced mb-8 to mb-6 */}
+                            <View className="space-y-3 mb-6">
+                                {/* Rule 1: Formatting */}
+                                <Animated.View entering={FadeInRight.delay(100).springify()} style={{ backgroundColor: isDark ? 'rgba(0,0,0,0.4)' : 'rgba(255,255,255,0.8)', borderColor: isDark ? '#334155' : '#e2e8f0' }} className="border p-4 rounded-2xl flex-row items-center">
+                                    <View style={{ backgroundColor: '#a855f720' }} className="w-12 h-12 rounded-full items-center justify-center mr-4">
+                                        <MaterialCommunityIcons name="format-text" size={22} color="#a855f7" />
+                                    </View>
+                                    <View className="flex-1">
+                                        <Text style={{ color: primaryTextColor }} className="font-black text-[12px] uppercase tracking-wider mb-1">Formatting & Preview</Text>
+                                        <Text style={{ color: THEME.textSecondary }} className="text-[11px] font-bold leading-4">Use tags like s() and h() for effects. Always preview your intel before posting.</Text>
+                                    </View>
+                                </Animated.View>
 
-                                    {/* Rule 2: Media */}
-                                    <Animated.View entering={FadeInRight.delay(250).springify()} style={{ backgroundColor: isDark ? 'rgba(0,0,0,0.4)' : 'rgba(255,255,255,0.8)', borderColor: isDark ? '#334155' : '#e2e8f0' }} className="border p-4 rounded-2xl flex-row items-center">
-                                        <View style={{ backgroundColor: '#3b82f620' }} className="w-12 h-12 rounded-full items-center justify-center mr-4">
-                                            <MaterialCommunityIcons name="multimedia" size={22} color="#3b82f6" />
-                                        </View>
-                                        <View className="flex-1">
-                                            <Text style={{ color: primaryTextColor }} className="font-black text-[12px] uppercase tracking-wider mb-1">Media Payload</Text>
-                                            <Text style={{ color: THEME.textSecondary }} className="text-[11px] font-bold leading-4">Attach up to 15 assets. Size limits: 25MB max for Video, 5MB max for Image.</Text>
-                                        </View>
-                                    </Animated.View>
+                                {/* Rule 2: Media */}
+                                <Animated.View entering={FadeInRight.delay(250).springify()} style={{ backgroundColor: isDark ? 'rgba(0,0,0,0.4)' : 'rgba(255,255,255,0.8)', borderColor: isDark ? '#334155' : '#e2e8f0' }} className="border p-4 rounded-2xl flex-row items-center">
+                                    <View style={{ backgroundColor: '#3b82f620' }} className="w-12 h-12 rounded-full items-center justify-center mr-4">
+                                        <MaterialCommunityIcons name="multimedia" size={22} color="#3b82f6" />
+                                    </View>
+                                    <View className="flex-1">
+                                        <Text style={{ color: primaryTextColor }} className="font-black text-[12px] uppercase tracking-wider mb-1">Media Payload</Text>
+                                        <Text style={{ color: THEME.textSecondary }} className="text-[11px] font-bold leading-4">Attach up to 15 assets. Size limits: 25MB max for Video, 5MB max for Image.</Text>
+                                    </View>
+                                </Animated.View>
 
-                                    {/* Rule 3: Categories */}
-                                    <Animated.View entering={FadeInRight.delay(400).springify()} style={{ backgroundColor: isDark ? 'rgba(0,0,0,0.4)' : 'rgba(255,255,255,0.8)', borderColor: isDark ? '#334155' : '#e2e8f0' }} className="border p-4 rounded-2xl flex-row items-center">
-                                        <View style={{ backgroundColor: '#f59e0b20' }} className="w-12 h-12 rounded-full items-center justify-center mr-4">
-                                            <MaterialCommunityIcons name="folder-network" size={22} color="#f59e0b" />
-                                        </View>
-                                        <View className="flex-1">
-                                            <Text style={{ color: primaryTextColor }} className="font-black text-[12px] uppercase tracking-wider mb-1">Data Routing</Text>
-                                            <Text style={{ color: THEME.textSecondary }} className="text-[11px] font-bold leading-4">Select the correct category or clan sub-channel. Misrouted data will be purged.</Text>
-                                        </View>
-                                    </Animated.View>
+                                {/* Rule 3: Categories */}
+                                <Animated.View entering={FadeInRight.delay(400).springify()} style={{ backgroundColor: isDark ? 'rgba(0,0,0,0.4)' : 'rgba(255,255,255,0.8)', borderColor: isDark ? '#334155' : '#e2e8f0' }} className="border p-4 rounded-2xl flex-row items-center">
+                                    <View style={{ backgroundColor: '#f59e0b20' }} className="w-12 h-12 rounded-full items-center justify-center mr-4">
+                                        <MaterialCommunityIcons name="folder-network" size={22} color="#f59e0b" />
+                                    </View>
+                                    <View className="flex-1">
+                                        <Text style={{ color: primaryTextColor }} className="font-black text-[12px] uppercase tracking-wider mb-1">Data Routing</Text>
+                                        <Text style={{ color: THEME.textSecondary }} className="text-[11px] font-bold leading-4">Select the correct category or clan sub-channel. Misrouted data will be purged.</Text>
+                                    </View>
+                                </Animated.View>
 
-                                    {/* Rule 4: Polls */}
-                                    <Animated.View entering={FadeInRight.delay(550).springify()} style={{ backgroundColor: isDark ? 'rgba(0,0,0,0.4)' : 'rgba(255,255,255,0.8)', borderColor: isDark ? '#334155' : '#e2e8f0' }} className="border p-4 rounded-2xl flex-row items-center">
-                                        <View style={{ backgroundColor: '#10b98120' }} className="w-12 h-12 rounded-full items-center justify-center mr-4">
-                                            <MaterialCommunityIcons name="poll" size={22} color="#10b981" />
-                                        </View>
-                                        <View className="flex-1">
-                                            <Text style={{ color: primaryTextColor }} className="font-black text-[12px] uppercase tracking-wider mb-1">Polling Modules</Text>
-                                            <Text style={{ color: THEME.textSecondary }} className="text-[11px] font-bold leading-4">Deploy polls to gather intel and initiate interactive votes with the community.</Text>
-                                        </View>
-                                    </Animated.View>
+                                {/* Rule 4: Polls */}
+                                <Animated.View entering={FadeInRight.delay(550).springify()} style={{ backgroundColor: isDark ? 'rgba(0,0,0,0.4)' : 'rgba(255,255,255,0.8)', borderColor: isDark ? '#334155' : '#e2e8f0' }} className="border p-4 rounded-2xl flex-row items-center">
+                                    <View style={{ backgroundColor: '#10b98120' }} className="w-12 h-12 rounded-full items-center justify-center mr-4">
+                                        <MaterialCommunityIcons name="poll" size={22} color="#10b981" />
+                                    </View>
+                                    <View className="flex-1">
+                                        <Text style={{ color: primaryTextColor }} className="font-black text-[12px] uppercase tracking-wider mb-1">Polling Modules</Text>
+                                        <Text style={{ color: THEME.textSecondary }} className="text-[11px] font-bold leading-4">Deploy polls to gather intel and initiate interactive votes with the community.</Text>
+                                    </View>
+                                </Animated.View>
 
-                                    {/* Rule 5: System Judgment */}
-                                    <Animated.View entering={FadeInRight.delay(700).springify()} style={{ backgroundColor: isDark ? 'rgba(239,68,68,0.1)' : 'rgba(239,68,68,0.05)', borderColor: '#ef444450' }} className="border p-4 rounded-2xl flex-row items-center">
-                                        <View style={{ backgroundColor: '#ef444420' }} className="w-12 h-12 rounded-full items-center justify-center mr-4">
-                                            <MaterialCommunityIcons name="eye-outline" size={22} color="#ef4444" />
-                                        </View>
-                                        <View className="flex-1">
-                                            <Text style={{ color: '#ef4444' }} className="font-black text-[12px] uppercase tracking-wider mb-1">System Judgment</Text>
-                                            <Text style={{ color: THEME.textSecondary }} className="text-[11px] font-bold leading-4">All posts are decrypted by THE SYSTEM. Follow guidelines to avoid rejection.</Text>
-                                        </View>
-                                    </Animated.View>
-                                </View>
+                                {/* Rule 5: System Judgment */}
+                                <Animated.View entering={FadeInRight.delay(700).springify()} style={{ backgroundColor: isDark ? 'rgba(239,68,68,0.1)' : 'rgba(239,68,68,0.05)', borderColor: '#ef444450' }} className="border p-4 rounded-2xl flex-row items-center">
+                                    <View style={{ backgroundColor: '#ef444420' }} className="w-12 h-12 rounded-full items-center justify-center mr-4">
+                                        <MaterialCommunityIcons name="eye-outline" size={22} color="#ef4444" />
+                                    </View>
+                                    <View className="flex-1">
+                                        <Text style={{ color: '#ef4444' }} className="font-black text-[12px] uppercase tracking-wider mb-1">System Judgment</Text>
+                                        <Text style={{ color: THEME.textSecondary }} className="text-[11px] font-bold leading-4">All posts are decrypted by THE SYSTEM. Follow guidelines to avoid rejection.</Text>
+                                    </View>
+                                </Animated.View>
+                            </View>
 
-                                <Pressable
-                                    onPress={() => { Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium); setIntroStep(2); }}
-                                    className="w-full py-5 rounded-[24px] flex-row justify-center items-center bg-blue-600 shadow-lg shadow-blue-500/50"
-                                >
-                                    <Text className="font-black italic uppercase tracking-[0.2em] text-sm mr-3 text-white">
-                                        Acknowledge Protocols
-                                    </Text>
-                                    <Ionicons name="checkmark-done" size={20} color="white" />
-                                </Pressable>
-                            </Animated.View>
-                        </ScrollView>
+                            <Pressable
+                                onPress={() => { Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium); setIntroStep(2); }}
+                                className="w-full py-4 rounded-[24px] flex-row justify-center items-center bg-blue-600 shadow-lg shadow-blue-500/50"
+                            >
+                                <Text className="font-black italic uppercase tracking-[0.2em] text-sm mr-3 text-white">
+                                    Acknowledge Protocols
+                                </Text>
+                                <Ionicons name="checkmark-done" size={20} color="white" />
+                            </Pressable>
+                        </Animated.View>
                     )}
 
                     {/* STEP 2: SELECT A HOOK */}
                     {introStep === 2 && (
                         <Animated.View entering={SlideInRight.duration(500).springify()} exiting={SlideOutLeft.duration(300)} className="w-full">
-                            <Text className="text-3xl font-black italic uppercase text-center mb-4" style={{ color: primaryTextColor }}>
+                            <Text className="text-3xl font-black italic uppercase text-center mb-2" style={{ color: primaryTextColor }}>
                                 Select a Hook
                             </Text>
-                            <Text style={{ color: THEME.textSecondary }} className="font-black uppercase text-[10px] mb-8 tracking-[0.2em] text-center opacity-80">
+                            {/* ⚡️ FIX: Reduced mb-8 to mb-6 */}
+                            <Text style={{ color: THEME.textSecondary }} className="font-black uppercase text-[10px] mb-6 tracking-[0.2em] text-center opacity-80">
                                 Every legend starts with a single word. Pick a prompt to begin.
                             </Text>
 
-                            <View className="space-y-4">
+                            <View className="space-y-3">
                                 {HOOKS.map((hook, index) => (
                                     <TouchableOpacity
                                         key={index}
                                         onPress={() => handlePromptSelection(hook.custom ? "" : hook.title, "", hook.category)}
                                         style={{ backgroundColor: isDark ? 'rgba(0,0,0,0.6)' : 'rgba(255,255,255,0.8)', borderColor: hook.color }}
-                                        className="w-full border-2 rounded-[24px] p-5 flex-row items-center shadow-lg mb-4"
+                                        className="w-full border-2 rounded-[24px] p-4 flex-row items-center shadow-lg"
                                     >
-                                        <View style={{ backgroundColor: hook.color + '20' }} className="w-12 h-12 rounded-full items-center justify-center mr-4">
-                                            <MaterialCommunityIcons name={hook.icon} size={24} color={hook.color} />
+                                        <View style={{ backgroundColor: hook.color + '20' }} className="w-10 h-10 rounded-full items-center justify-center mr-4">
+                                            <MaterialCommunityIcons name={hook.icon} size={20} color={hook.color} />
                                         </View>
                                         <View className="flex-1">
-                                            <Text style={{ color: primaryTextColor }} className="font-black italic uppercase text-sm">
+                                            <Text style={{ color: primaryTextColor }} className="font-black italic uppercase text-xs">
                                                 {hook.custom ? hook.label : hook.title}
                                             </Text>
                                         </View>
@@ -975,7 +982,7 @@ export default function AuthorDiaryDashboard() {
                             <ActivityIndicator size="large" color="#22c55e" />
                         </Animated.View>
                     )}
-                </View>
+                </ScrollView>
             </View>
         );
     }
@@ -1020,7 +1027,7 @@ export default function AuthorDiaryDashboard() {
                                 )}
                             </View>
                         </View>
-                        <Text className="text-3xl font-black italic uppercase">
+                        <Text className="text-3xl font-black italic uppercase text-white">
                             Welcome, <Text className="text-blue-600">{user?.username}</Text>
                         </Text>
                     </View>
@@ -1091,7 +1098,7 @@ export default function AuthorDiaryDashboard() {
                         <View className="mb-8 flex-row justify-between items-center bg-gray-900/50 p-4 rounded-2xl border border-gray-800">
                             <View>
                                 <Text className="text-[9px] font-black text-gray-500 uppercase tracking-widest">Active Rank</Text>
-                                <Text className="text-white font-black italic">{userRank.rankIcon} {userRank.rankTitle}</Text>
+                                <Text className="text-white font-black italic">{userRank.rankIcon} {userRank.rankTitle.toUpperCase()}</Text>
                             </View>
                             <View className="items-end">
                                 <Text className="text-[9px] font-black text-gray-500 uppercase tracking-widest">Daily Quota</Text>
@@ -1106,7 +1113,7 @@ export default function AuthorDiaryDashboard() {
                         >
                             <View className="flex-row items-center">
                                 <Ionicons name="receipt-outline" size={20} color={THEME.accent} />
-                                <Text className="font-black uppercase italic ml-3 text-xs">Recent Mission History</Text>
+                                <Text className="font-black uppercase italic ml-3 text-xs text-white">Recent Mission History</Text>
                             </View>
                             <Ionicons name={showMissionLog ? "chevron-up" : "chevron-down"} size={20} color={THEME.accent} />
                         </TouchableOpacity>
@@ -1115,7 +1122,7 @@ export default function AuthorDiaryDashboard() {
 
                         {/* --- FORM SECTION --- */}
                         <View className="flex-row justify-between items-center mb-6 mt-4">
-                            <Text className="text-lg font-black uppercase italic">{showPreview ? "Intel Preview" : "Create New Intel"}</Text>
+                            <Text className="text-lg font-black uppercase italic text-white">{showPreview ? "Intel Preview" : "Create New Intel"}</Text>
 
                             <View className="flex-row gap-2">
                                 <TouchableOpacity onPress={handleClearAll} className="bg-red-600/10 px-4 py-2 rounded-xl border border-red-600/20">
@@ -1133,7 +1140,7 @@ export default function AuthorDiaryDashboard() {
                         ) : (
                             <View className="space-y-6">
                                 <View>
-                                    <Text className="text-[9px] font-black uppercase text-gray-500 mb-2 ml-1">Subject Title</Text>
+                                    <Text className="text-[12px] font-black uppercase text-gray-500 mb-2 ml-1">Subject Title</Text>
                                     <TextInput
                                         placeholder="ENTER POST TITLE..."
                                         value={title}
@@ -1175,8 +1182,8 @@ export default function AuthorDiaryDashboard() {
                                     />
                                 </View>
 
-                                <View>
-                                    <Text className="text-[9px] font-black uppercase text-gray-500 mb-2 ml-1">Archive Category</Text>
+                                <View className="mt-3">
+                                    <Text className="text-[12px] font-black uppercase text-gray-500 mb-2 ml-1">Pick Category</Text>
                                     <ScrollView horizontal showsHorizontalScrollIndicator={false}>
                                         {(isInClan ? ["Clan", "News", "Memes", "Fanart", "Polls", "Gaming", "Review"] : ["News", "Memes", "Fanart", "Polls", "Gaming", "Review"]).map((cat) => (
                                             <TouchableOpacity
@@ -1208,14 +1215,6 @@ export default function AuthorDiaryDashboard() {
                                 </View>
 
                                 <View className="space-y-4 mt-3">
-                                    <TextInput
-                                        placeholder="External Uplink (URL)"
-                                        value={mediaUrlLink}
-                                        onChangeText={setMediaUrlLink}
-                                        placeholderTextColor="#334155"
-                                        style={{ backgroundColor: THEME.card, borderColor: THEME.border, color: THEME.text }}
-                                        className="border-2 p-5 rounded-2xl text-white font-bold"
-                                    />
 
                                     {mediaList.length > 0 && (
                                         <View className="mb-2">
@@ -1233,14 +1232,29 @@ export default function AuthorDiaryDashboard() {
                                                                 <Image style={{ width: "100%", height: "100%" }} source={{ uri: item.url }} contentFit="cover" />
                                                             )}
                                                         </View>
+                                                        {/* ⚡️ ADDED REMOVE BUTTON */}
                                                         <TouchableOpacity
                                                             onPress={() => removeMedia(index)}
-                                                            className="absolute -top-2 -right-2 bg-red-600 w-6 h-6 rounded-full items-center justify-center border-2 border-black"
+                                                            className="absolute -top-2 -right-2 bg-red-600 w-6 h-6 rounded-full items-center justify-center border-2 border-black z-50"
                                                         >
                                                             <Ionicons name="close" size={14} color="white" />
                                                         </TouchableOpacity>
                                                     </View>
                                                 ))}
+                                                {/* ⚡️ ADDED ADD BUTTON */}
+                                                {mediaList.length < 15 && (
+                                                    <TouchableOpacity
+                                                        onPress={pickImage}
+                                                        style={{ borderColor: THEME.border, backgroundColor: THEME.card }}
+                                                        className="w-24 h-24 rounded-2xl border-2 border-dashed justify-center items-center self-center ml-2"
+                                                    >
+                                                        {uploading ? (
+                                                            <ActivityIndicator color={THEME.accent} />
+                                                        ) : (
+                                                            <Ionicons name="add" size={24} color={THEME.accent} />
+                                                        )}
+                                                    </TouchableOpacity>
+                                                )}
                                             </ScrollView>
                                         </View>
                                     )}
@@ -1250,7 +1264,7 @@ export default function AuthorDiaryDashboard() {
                                             onPress={pickImage}
                                             disabled={uploading}
                                             style={{ backgroundColor: THEME.card, borderColor: THEME.border }}
-                                            className="p-8 rounded-3xl mt-4 items-center border-2 border-dashed"
+                                            className="p-8 rounded-3xl mt-3 items-center border-2 border-dashed"
                                         >
                                             {uploading ? (
                                                 <View className="items-center">
@@ -1271,7 +1285,7 @@ export default function AuthorDiaryDashboard() {
 
                                 <View style={{ backgroundColor: THEME.card, borderColor: hasPoll ? THEME.accent : THEME.border }} className="p-6 rounded-3xl border-2 mt-4">
                                     <View className="flex-row justify-between items-center mb-4">
-                                        <Text className="font-black uppercase tracking-widest text-[11px]">Deploy Poll Module</Text>
+                                        <Text className="font-black uppercase tracking-widest text-[11px] text-white">Deploy Poll Module</Text>
                                         <Switch
                                             value={hasPoll}
                                             onValueChange={setHasPoll}
@@ -1313,12 +1327,12 @@ export default function AuthorDiaryDashboard() {
                     </View>
                 )}
             </ScrollView>
+
             {/* ⚡️ FIRST POST SUCCESS MODAL */}
             <Modal visible={firstPostModal.visible} transparent animationType="fade">
                 <View className="flex-1 bg-black/95 items-center justify-center p-6">
                     <Animated.View entering={ZoomIn.duration(600).springify()} className="w-full p-8 rounded-[40px] border border-blue-500/50 bg-[#0d1117] items-center relative overflow-hidden">
 
-                        {/* Background glow */}
                         <View className="absolute top-0 left-0 w-4 h-4 rounded-full bg-blue-600/10" pointerEvents="none" />
 
                         <Animated.View entering={FadeInDown.delay(300)} className="w-24 h-24 bg-blue-600/20 rounded-full items-center justify-center mb-6 border border-blue-500/50">
@@ -1333,7 +1347,6 @@ export default function AuthorDiaryDashboard() {
                             First Scroll Etched
                         </Animated.Text>
 
-                        {/* ⚡️ CINEMATIC REVEAL TEXT */}
                         <View className="mb-8 w-full min-h-[100px] justify-center items-center">
                             {firstPostModal.visible && (
                                 <PremiumTextReveal
@@ -1344,12 +1357,10 @@ export default function AuthorDiaryDashboard() {
                             )}
                         </View>
 
-                        {/* ⚡️ DELAYED BUTTON (Waits 3 seconds for text to finish typing) */}
                         <Animated.View entering={FadeIn.delay(3000).duration(800)} className="w-full">
                             <TouchableOpacity
                                 onPress={() => {
                                     setFirstPostModal({ visible: false, stats: null, postData: null });
-                                    // Navigate to the newly created post
                                     if (firstPostModal.postData?._id) {
                                         router.push(`/post/${firstPostModal.postData.slug || firstPostModal.postData._id}`);
                                     }
@@ -1361,19 +1372,19 @@ export default function AuthorDiaryDashboard() {
                                 </Text>
                             </TouchableOpacity>
                         </Animated.View>
-
                     </Animated.View>
                 </View>
             </Modal>
         </View>
     );
 }
+
 // ============================================================================
 // ✍️ PREMIUM CINEMATIC WORD REVEAL (From Onboarding)
 // ============================================================================
 const AnimatedWord = ({ word, index, style }) => {
     const opacity = useSharedValue(0);
-    const translateY = useSharedValue(10);
+    const translateY = useSharedValue(10)
 
     useEffect(() => {
         setTimeout(() => { Haptics.selectionAsync(); }, index * 150);
