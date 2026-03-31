@@ -46,22 +46,22 @@ export const CoinProvider = ({ children }) => {
             const cachedTotalPurchased = storage.getString(STORAGE_KEYS.TOTAL_PURCHASED);
             const cachedPeakLevel = storage.getString(STORAGE_KEYS.PEAK_LEVEL);
 
-            if (cachedCoins !== undefined && cachedCoins !== null) {
-                setCoins(Number(cachedCoins));
-            }
-            if (cachedClanCoins !== undefined && cachedClanCoins !== null) {
-                setClanCoins(Number(cachedClanCoins));
-            }
-            if (cachedTotalPurchased !== undefined && cachedTotalPurchased !== null) {
-                setTotalPurchasedCoins(Number(cachedTotalPurchased));
-            }
-            if (cachedPeakLevel !== undefined && cachedPeakLevel !== null) {
-                setPeakLevel(Number(cachedPeakLevel));
-            }
+            if (cachedCoins !== undefined && cachedCoins !== null) setCoins(Number(cachedCoins));
+            else setCoins(0);
+
+            if (cachedClanCoins !== undefined && cachedClanCoins !== null) setClanCoins(Number(cachedClanCoins));
+            else setClanCoins(0);
+
+            if (cachedTotalPurchased !== undefined && cachedTotalPurchased !== null) setTotalPurchasedCoins(Number(cachedTotalPurchased));
+            else setTotalPurchasedCoins(0);
+
+            if (cachedPeakLevel !== undefined && cachedPeakLevel !== null) setPeakLevel(Number(cachedPeakLevel));
+            else setPeakLevel(0);
+
         } catch (e) {
             console.error("Failed to hydrate coins from MMKV", e);
         }
-    }, [storage]);
+    }, [storage, user?.deviceId]);
 
     const updateCoins = (newVal) => {
         setCoins(newVal);
@@ -112,17 +112,16 @@ export const CoinProvider = ({ children }) => {
         }
     }, [storage]);
 
-    // ⚡️ FIXED: If user drops clan status (logout or kicked), zero out the clan coins.
+    // ⚡️ FIXED: Reverted back to using .set("", "") instead of .delete()
     useEffect(() => {
         if (!userClan) {
             setClanCoins(0);
-            storage.delete(STORAGE_KEYS.CLAN_COINS);
+            storage.set(STORAGE_KEYS.CLAN_COINS, "");
         } else {
             updateClanCoins(cCoins || 0);
         }
     }, [userClan, cCoins]);
 
-    // ⚡️ FIXED: Clear personal coins from React memory immediately upon logout
     useEffect(() => {
         if (user?.deviceId) {
             fetchCoins();

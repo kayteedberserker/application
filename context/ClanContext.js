@@ -25,6 +25,8 @@ export const ClanProvider = ({ children }) => {
             const stored = storage.getString("userClan");
             if (stored && stored !== "") {
                 setUserClan(JSON.parse(stored));
+            } else {
+                setUserClan(null);
             }
         } catch (e) {
             console.error("Failed to load clan from MMKV", e);
@@ -33,9 +35,9 @@ export const ClanProvider = ({ children }) => {
                 setIsLoading(false);
             }
         }
-    }, [storage]);
+    }, [storage, user?.deviceId]);
 
-    // ⚡️ FIXED: Clean React state memory when logging out
+    // ⚡️ FIXED: Reverted back to using .set("", "") instead of .delete()
     const clearClanData = () => {
         setUserClan(null);
         setWarActionsCount(0);
@@ -43,15 +45,13 @@ export const ClanProvider = ({ children }) => {
         setClanCoins(0);
         setFullData(0);
         setHasUnreadChat(false);
-        storage.delete("userClan");
+        storage.set("userClan", "");
     };
 
-    // ⚡️ FIXED: Removed 'hasSynced' ref. Now it reacts natively to login/logout flows.
     useEffect(() => {
         if (user?.deviceId) {
             refreshClanStatus(user.deviceId);
         } else {
-            // If user logs out, wipe the clan memory immediately
             clearClanData();
             setIsLoading(false);
         }
@@ -144,7 +144,6 @@ export const ClanProvider = ({ children }) => {
                 storage.set("userClan", JSON.stringify(data.userClan));
                 checkWarNotifications(data.userClan.tag);
             } else {
-                // ⚡️ Explicitly clear if the new user is NOT in a clan
                 clearClanData();
             }
 
