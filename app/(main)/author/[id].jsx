@@ -502,7 +502,7 @@ export default function AuthorPage() {
                 ListHeaderComponent={ListHeader}
                 recycleItems={true}
                 estimatedItemSize={630}
-                drawDistance={1500}
+                drawDistance={800}
                 // ⚡️ FIXED: Removed rcycleItems. Re-using old elements was confusing SWR keys
 
                 onScroll={handleScroll}

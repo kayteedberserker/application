@@ -1,5 +1,5 @@
 import apiFetch from "@/utils/apiFetch";
-import { createContext, useContext, useEffect, useRef, useState } from "react";
+import { createContext, useContext, useEffect, useState } from "react";
 import { DeviceEventEmitter } from "react-native";
 import { useMMKV } from 'react-native-mmkv';
 import { useUser } from "./UserContext";
@@ -7,7 +7,6 @@ import { useUser } from "./UserContext";
 const ClanContext = createContext();
 
 export const ClanProvider = ({ children }) => {
-    // 🔹 Strictly use the useMMKV hook for the storage instance
     const storage = useMMKV();
 
     const { user } = useUser();
@@ -15,12 +14,9 @@ export const ClanProvider = ({ children }) => {
     const [allClans, setAllClans] = useState([]);
     const [isLoading, setIsLoading] = useState(true);
     const [warActionsCount, setWarActionsCount] = useState(0);
-    const hasSynced = useRef(false);
     const [fullData, setFullData] = useState();
     const [cCoins, setClanCoins] = useState(0);
     const [clanRank, setClanRank] = useState(0);
-
-    // 🔹 NEW: Track if there is an unread chat message
     const [hasUnreadChat, setHasUnreadChat] = useState(false);
 
     // 1. Initial Load from MMKV (Synchronous)
@@ -39,17 +35,28 @@ export const ClanProvider = ({ children }) => {
         }
     }, [storage]);
 
-    // 2. Sync with Backend ONLY ONCE when deviceId is found
+    // ⚡️ FIXED: Clean React state memory when logging out
+    const clearClanData = () => {
+        setUserClan(null);
+        setWarActionsCount(0);
+        setClanRank(0);
+        setClanCoins(0);
+        setFullData(0);
+        setHasUnreadChat(false);
+        storage.delete("userClan");
+    };
+
+    // ⚡️ FIXED: Removed 'hasSynced' ref. Now it reacts natively to login/logout flows.
     useEffect(() => {
-        if (user?.deviceId && !hasSynced.current) {
-            hasSynced.current = true;
+        if (user?.deviceId) {
             refreshClanStatus(user.deviceId);
-        } else if (user?.deviceId) {
+        } else {
+            // If user logs out, wipe the clan memory immediately
+            clearClanData();
             setIsLoading(false);
         }
     }, [user?.deviceId]);
 
-    // 3. 🛡️ Check for War Notifications periodically or on refresh
     const checkWarNotifications = async (clanTag) => {
         if (!clanTag) return;
         try {
@@ -70,7 +77,6 @@ export const ClanProvider = ({ children }) => {
 
             setWarActionsCount(totalActions);
 
-            // 📡 Emit signal for any listeners (like Tab Bars or Sidebars)
             DeviceEventEmitter.emit("CLAN_WAR_SIGNAL", {
                 count: totalActions,
                 hasActions: totalActions > 0
@@ -94,9 +100,6 @@ export const ClanProvider = ({ children }) => {
             setClanCoins(data?.spendablePoints || 0);
             setClanRank(data?.rank);
 
-            // 🔹 NEW: Check for unread messages
-            // Note: Adjust the path to the timestamp based on how your backend returns the chat!
-            // E.g., data?.latestMessage?.createdAt OR data?.chat?.[data.chat.length - 1]?.createdAt
             const latestMessageAt = data?.latestMessage?.createdAt || data?.messages?.[data?.messages?.length - 1]?.date;
             if (latestMessageAt) {
                 const lastReadStr = storage.getString(`lastReadChat_${userClan.tag}`);
@@ -114,7 +117,6 @@ export const ClanProvider = ({ children }) => {
         }
     };
 
-    // 🔹 NEW: Call this function when the user mounts/opens the clan chat page
     const markChatAsRead = () => {
         if (!userClan) return;
         const now = new Date().toISOString();
@@ -131,7 +133,6 @@ export const ClanProvider = ({ children }) => {
     const refreshClanStatus = async (deviceId) => {
         if (!deviceId) return;
 
-        // 🔹 Triggering loading animation for the sync process
         setIsLoading(true);
         try {
             const response = await apiFetch(`/clans?fingerprint=${deviceId}`);
@@ -140,17 +141,11 @@ export const ClanProvider = ({ children }) => {
             if (data.userInClan) {
                 setUserClan(data.userClan);
                 setClanRank(data.rank);
-
-                // 🔹 MMKV storage update
                 storage.set("userClan", JSON.stringify(data.userClan));
-
                 checkWarNotifications(data.userClan.tag);
             } else {
-                setUserClan(null);
-                setWarActionsCount(0);
-
-                // 🔹 MMKV storage removal
-                storage.set("userClan", "");
+                // ⚡️ Explicitly clear if the new user is NOT in a clan
+                clearClanData();
             }
 
             if (data.clans) {
@@ -163,13 +158,6 @@ export const ClanProvider = ({ children }) => {
         }
     };
 
-    const clearClanData = () => {
-        setUserClan(null);
-        setWarActionsCount(0);
-        storage.set("userClan", "");
-    };
-
-    // Helper values
     const userRole = userClan?.role || null;
     const isLeader = userRole === "leader";
     const isViceLeader = userRole === "viceleader";
@@ -185,8 +173,8 @@ export const ClanProvider = ({ children }) => {
                 fullData,
                 cCoins,
                 warActionsCount,
-                hasUnreadChat, // Exported here for your UI indicators
-                markChatAsRead, // Exported here to trigger when opening chat
+                hasUnreadChat,
+                markChatAsRead,
                 checkWarNotifications: () => checkWarNotifications(userClan?.tag),
                 refreshClanStatus: () => refreshClanStatus(user?.deviceId),
                 clearClanData,

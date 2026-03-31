@@ -573,7 +573,7 @@ export default function ClanPage() {
 
         estimatedItemSize={630}
         recycleItems={true}
-        drawDistance={1500}
+        drawDistance={800}
         // ⚡️ FIXED: Removed recycleItems=true to stop weird SWR caching bugs and scroll jumping
 
         onViewableItemsChanged={onViewableItemsChanged}

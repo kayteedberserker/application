@@ -1,5 +1,5 @@
-import { useMMKV } from 'react-native-mmkv';
 import { createContext, useCallback, useContext, useEffect, useState } from 'react';
+import { useMMKV } from 'react-native-mmkv';
 import apiFetch from '../utils/apiFetch';
 import { useClan } from './ClanContext';
 import { useUser } from './UserContext';
@@ -13,7 +13,6 @@ const STORAGE_KEYS = {
     PEAK_LEVEL: 'cached_peak_level'
 };
 
-// ⚡️ Define the thresholds for Peak Levels based on total purchased coins
 const calculatePeakLevel = (totalPurchased) => {
     if (totalPurchased < 1000) return 1;
     if (totalPurchased < 5000) return 2;
@@ -24,31 +23,29 @@ const calculatePeakLevel = (totalPurchased) => {
     if (totalPurchased < 250000) return 7;
     if (totalPurchased < 500000) return 8;
     if (totalPurchased < 1000000) return 9;
-    return 10; // Max level
+    return 10;
 };
 
 export const CoinProvider = ({ children }) => {
-    // 🔹 useMMKV hook for synchronous storage instance
     const storage = useMMKV();
 
     const { user } = useUser();
     const { userClan, cCoins } = useClan();
-    
+
     const [clanCoins, setClanCoins] = useState(0);
     const [coins, setCoins] = useState(0);
     const [totalPurchasedCoins, setTotalPurchasedCoins] = useState(0);
     const [peakLevel, setPeakLevel] = useState(0);
-    
+
     const [isProcessingTransaction, setIsProcessingTransaction] = useState(false);
 
-    // 🔹 Hydration: Synchronous load from MMKV immediately on mount
     useEffect(() => {
         try {
             const cachedCoins = storage.getString(STORAGE_KEYS.COINS);
             const cachedClanCoins = storage.getString(STORAGE_KEYS.CLAN_COINS);
             const cachedTotalPurchased = storage.getString(STORAGE_KEYS.TOTAL_PURCHASED);
             const cachedPeakLevel = storage.getString(STORAGE_KEYS.PEAK_LEVEL);
-            
+
             if (cachedCoins !== undefined && cachedCoins !== null) {
                 setCoins(Number(cachedCoins));
             }
@@ -80,7 +77,6 @@ export const CoinProvider = ({ children }) => {
         setTotalPurchasedCoins(newTotal);
         storage.set(STORAGE_KEYS.TOTAL_PURCHASED, String(newTotal));
 
-        // ⚡️ Automatically calculate and cache the new Peak Level
         const newPeakLevel = calculatePeakLevel(newTotal);
         setPeakLevel(newPeakLevel);
         storage.set(STORAGE_KEYS.PEAK_LEVEL, String(newPeakLevel));
@@ -96,15 +92,13 @@ export const CoinProvider = ({ children }) => {
     }, [user?.coins, user?.totalPurchasedCoins]);
 
     const fetchCoins = useCallback(async () => {
-        // Use the hook instance to get user data
         const stored = storage.getString("mobileUser");
         if (!stored) return;
-        
+
         let parsedUser = JSON.parse(stored);
         if (!parsedUser?.deviceId) return;
 
         try {
-            // Loading animation should be active while this fetch is pending
             const response = await apiFetch(`/mobile/coins/transaction?deviceId=${parsedUser.deviceId}`);
             const data = await response.json();
             if (data.success) {
@@ -118,14 +112,26 @@ export const CoinProvider = ({ children }) => {
         }
     }, [storage]);
 
-    const fetchClanCoins = async () => {
-        if (!userClan) return;
-        updateClanCoins(cCoins);
-    };
-
+    // ⚡️ FIXED: If user drops clan status (logout or kicked), zero out the clan coins.
     useEffect(() => {
-        fetchClanCoins();
+        if (!userClan) {
+            setClanCoins(0);
+            storage.delete(STORAGE_KEYS.CLAN_COINS);
+        } else {
+            updateClanCoins(cCoins || 0);
+        }
     }, [userClan, cCoins]);
+
+    // ⚡️ FIXED: Clear personal coins from React memory immediately upon logout
+    useEffect(() => {
+        if (user?.deviceId) {
+            fetchCoins();
+        } else {
+            setCoins(0);
+            setTotalPurchasedCoins(0);
+            setPeakLevel(0);
+        }
+    }, [user?.deviceId, fetchCoins]);
 
     const processTransaction = async (action, type, extraData = null, clanTag = null) => {
         if (!user?.deviceId) return { success: false, error: 'No device ID' };
@@ -143,8 +149,7 @@ export const CoinProvider = ({ children }) => {
             };
 
             if (typeof extraData === 'object' && extraData !== null) {
-                // 🔹 FIX: We add a 'payload' key so the backend can find recipientId/amount
-                requestBody.payload = extraData; 
+                requestBody.payload = extraData;
 
                 Object.assign(requestBody, {
                     itemId: extraData.itemId,
@@ -155,7 +160,7 @@ export const CoinProvider = ({ children }) => {
                     visualConfig: extraData.visualData || extraData.visualConfig,
                     coinType: extraData.currency,
                     rewards: extraData.rewards,
-                    expiresInDays: extraData.expiresInDays // ⚡️ ADDED THIS LINE
+                    expiresInDays: extraData.expiresInDays
                 });
             }
 
@@ -177,7 +182,6 @@ export const CoinProvider = ({ children }) => {
                     updateCoins(data.newBalance || 0);
                 }
 
-                // Update Total Purchased if returned
                 if (data.totalPurchasedCoins !== undefined) {
                     updateTotalPurchased(data.totalPurchasedCoins);
                 }
@@ -194,16 +198,12 @@ export const CoinProvider = ({ children }) => {
         }
     };
 
-    useEffect(() => {
-        if (user?.deviceId) fetchCoins();
-    }, [user?.deviceId, fetchCoins]);
-
     return (
         <CoinContext.Provider value={{
             coins,
             clanCoins,
-            totalPurchasedCoins, // Exported for use
-            peakLevel,           // Exported for use
+            totalPurchasedCoins,
+            peakLevel,
             processTransaction,
             isProcessingTransaction,
             fetchCoins

@@ -259,7 +259,7 @@ export default function PostsViewer() {
                 }}
                 renderItem={renderItem}
                 estimatedItemSize={630}
-                drawDistance={600}
+                drawDistance={800}
                 // ⚡️ FIXED: Removed recycleItems=true to stop weird SWR caching bugs and scroll jumping
                 onViewableItemsChanged={onViewableItemsChanged}
                 viewabilityConfig={viewabilityConfig}
