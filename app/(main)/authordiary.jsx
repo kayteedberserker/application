@@ -218,9 +218,24 @@ export default function AuthorDiaryDashboard() {
     const todayPosts = useMemo(() => {
         return todayPostsData?.posts || cachedTodayPosts?.posts || [];
     }, [todayPostsData, cachedTodayPosts]);
+    const last6HoursPosts = useMemo(() => {
+        // 1. Safety check for data
+        if (!todayPostsData?.posts || !Array.isArray(todayPostsData.posts)) return [];
 
+        const SIX_HOURS_IN_MS = 6 * 60 * 60 * 1000;
+        const now = Date.now();
+
+        return todayPostsData.posts.filter(post => {
+            // 2. Convert post date to timestamp
+            const postDate = new Date(post.createdAt).getTime();
+
+            // 3. Keep posts where the age is less than 6 hours
+            return (now - postDate) < SIX_HOURS_IN_MS;
+        });
+    }, [todayPostsData]);
+    const recentPostsCount = last6HoursPosts.length;
     const todayPost = todayPosts[0] || null;
-    const postsLast24h = todayPosts.length;
+    // const postsLast24h = todayPosts.length;
 
     // ⚡️ UPDATED MAX POSTS LOGIC: Reads directly from AURA_TIERS
     const maxPostsToday = isInClan ? userRank.postLimit + 2 + additionalSlot : userRank.postLimit + additionalSlot;
@@ -332,7 +347,7 @@ export default function AuthorDiaryDashboard() {
 
         const targetTime = getNextUnlockTime();
 
-        if ((postsLast24h >= 1) && targetTime) {
+        if ((recentPostsCount >= 1) && targetTime) {
             const scheduleDoneNotification = async () => {
                 const now = Date.now();
                 const triggerInSeconds = Math.floor((targetTime - now) / 1000);
@@ -407,7 +422,7 @@ export default function AuthorDiaryDashboard() {
         }
 
         return () => { if (interval) clearInterval(interval); };
-    }, [todayPosts, postsLast24h]);
+    }, [todayPosts, recentPostsCount]);
 
     // =================================================================
     // 5. HELPER FUNCTIONS (Formatting, Uploading, etc)
@@ -1037,7 +1052,7 @@ export default function AuthorDiaryDashboard() {
                 </View>
 
                 {/* --- POST LIMIT / STATUS VIEW --- */}
-                {additionalSlot <= 0 && postsLast24h >= maxPostsToday && !canPostAgain ? (
+                {additionalSlot <= 0 && recentPostsCount >= maxPostsToday && !canPostAgain ? (
                     <View>
                         <View style={{ backgroundColor: THEME.card, borderColor: THEME.border }} className="p-8 rounded-[40px] border items-center">
                             <View className={`w-20 h-20 rounded-full items-center justify-center mb-6 ${todayPost?.status === 'rejected' ? 'bg-red-500/10' : 'bg-blue-500/10'}`}>
@@ -1101,8 +1116,8 @@ export default function AuthorDiaryDashboard() {
                                 <Text className="text-white font-black italic">{userRank.rankIcon} {userRank.rankTitle.toUpperCase()}</Text>
                             </View>
                             <View className="items-end">
-                                <Text className="text-[9px] font-black text-gray-500 uppercase tracking-widest">Daily Quota</Text>
-                                <Text className="text-blue-500 font-black">{postsLast24h} / {maxPostsToday} {additionalSlot == 1 && <Text className="text-yellow-500 text-[8px]">(+1 SLOT)</Text>} {isInClan && <Text className="text-yellow-500 text-[8px]">(+2 CLAN BONUS)</Text>} </Text>
+                                <Text className="text-[9px] font-black text-gray-500 uppercase tracking-widest">Free Slots</Text>
+                                <Text className="text-blue-500 font-black">{recentPostsCount} / {maxPostsToday} {additionalSlot == 1 && <Text className="text-yellow-500 text-[8px]">(+1 SLOT)</Text>} {isInClan && <Text className="text-yellow-500 text-[8px]">(+2 CLAN BONUS)</Text>} </Text>
                             </View>
                         </View>
 
@@ -1113,7 +1128,7 @@ export default function AuthorDiaryDashboard() {
                         >
                             <View className="flex-row items-center">
                                 <Ionicons name="receipt-outline" size={20} color={THEME.accent} />
-                                <Text className="font-black uppercase italic ml-3 text-xs text-white">Recent Mission History</Text>
+                                <Text className="font-black uppercase italic ml-3 text-xs text-white">Recent Posts</Text>
                             </View>
                             <Ionicons name={showMissionLog ? "chevron-up" : "chevron-down"} size={20} color={THEME.accent} />
                         </TouchableOpacity>
