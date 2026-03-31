@@ -1,7 +1,8 @@
 import { MaterialCommunityIcons } from '@expo/vector-icons';
 import { LinearGradient } from 'expo-linear-gradient';
+import { useRouter } from 'expo-router'; // ⚡️ ADDED: useRouter
 import { useEffect, useMemo, useState } from 'react';
-import { Dimensions, ScrollView, View } from 'react-native';
+import { Dimensions, Pressable, ScrollView, View } from 'react-native'; // ⚡️ ADDED: Pressable
 import { useMMKV } from 'react-native-mmkv';
 import Animated, {
     Easing,
@@ -44,6 +45,7 @@ export default function GlobalMarquee({ isDark }) {
     const { user } = useUser();
     const { userClan } = useClan();
     const storage = useMMKV();
+    const router = useRouter(); // ⚡️ ADDED: Router instance
 
     const userId = user?._id || '';
     const clanId = userClan?.tag || '';
@@ -161,47 +163,57 @@ export default function GlobalMarquee({ isDark }) {
                 exiting={FlipOutXUp.duration(500)}
                 style={{ position: 'absolute', width: '100%', height: '100%', flexDirection: 'row', alignItems: 'center' }}
             >
-                <View
-                    className={`px-3 h-full justify-center border-r ${borderColor}`}
-                    style={{ backgroundColor: themeBg, zIndex: 10 }}
+                {/* ⚡️ ADDED: Pressable wrapper to handle link navigation */}
+                <Pressable
+                    style={{ flex: 1, flexDirection: 'row', alignItems: 'center', height: '100%' }}
+                    onPress={() => {
+                        if (currentPill.link) {
+                            router.push(currentPill.link);
+                        }
+                    }}
                 >
-                    <MaterialCommunityIcons
-                        name={theme.icon}
-                        size={16}
-                        color={theme.color}
-                    />
-                </View>
-
-                <View style={{ flex: 1, overflow: 'hidden', position: 'relative', height: '100%', justifyContent: 'center' }}>
-                    <ScrollView
-                        horizontal
-                        scrollEnabled={false}
-                        showsHorizontalScrollIndicator={false}
-                        style={{ flex: 1 }}
-                        contentContainerStyle={{ alignItems: 'center' }}
+                    <View
+                        className={`px-3 h-full justify-center border-r ${borderColor}`}
+                        style={{ backgroundColor: themeBg, zIndex: 10 }}
                     >
-                        <Animated.View style={[{ flexDirection: 'row', paddingLeft: 10 }, panStyle]}>
-                            <Text
-                                onLayout={(e) => {
-                                    if (textWidth === 0) setTextWidth(e.nativeEvent.layout.width);
-                                }}
-                                numberOfLines={1}
-                                ellipsizeMode="clip"
-                                className={`font-black uppercase tracking-[0.2em] text-[10px]`}
-                                style={{ color: theme.color, paddingRight: 20 }}
-                            >
-                                {currentPill.text}
-                            </Text>
-                        </Animated.View>
-                    </ScrollView>
+                        <MaterialCommunityIcons
+                            name={theme.icon}
+                            size={16}
+                            color={theme.color}
+                        />
+                    </View>
 
-                    <LinearGradient
-                        colors={[`${themeBg}00`, themeBg]}
-                        start={{ x: 0, y: 0 }}
-                        end={{ x: 1, y: 0 }}
-                        style={{ position: 'absolute', right: 0, top: 0, bottom: 0, width: 25 }}
-                    />
-                </View>
+                    <View style={{ flex: 1, overflow: 'hidden', position: 'relative', height: '100%', justifyContent: 'center' }}>
+                        <ScrollView
+                            horizontal
+                            scrollEnabled={false}
+                            showsHorizontalScrollIndicator={false}
+                            style={{ flex: 1 }}
+                            contentContainerStyle={{ alignItems: 'center' }}
+                        >
+                            <Animated.View style={[{ flexDirection: 'row', paddingLeft: 10 }, panStyle]}>
+                                <Text
+                                    onLayout={(e) => {
+                                        if (textWidth === 0) setTextWidth(e.nativeEvent.layout.width);
+                                    }}
+                                    numberOfLines={1}
+                                    ellipsizeMode="clip"
+                                    className={`font-black uppercase tracking-[0.2em] text-[10px]`}
+                                    style={{ color: theme.color, paddingRight: 20 }}
+                                >
+                                    {currentPill.text}
+                                </Text>
+                            </Animated.View>
+                        </ScrollView>
+
+                        <LinearGradient
+                            colors={[`${themeBg}00`, themeBg]}
+                            start={{ x: 0, y: 0 }}
+                            end={{ x: 1, y: 0 }}
+                            style={{ position: 'absolute', right: 0, top: 0, bottom: 0, width: 25 }}
+                        />
+                    </View>
+                </Pressable>
             </Animated.View>
         </View>
     );
