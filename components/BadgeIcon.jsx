@@ -1,8 +1,7 @@
 // BadgeIcon.jsx
-import React from 'react';
-import { View } from 'react-native';
-import LottieView from 'lottie-react-native';
 import { MaterialCommunityIcons } from '@expo/vector-icons';
+import LottieView from 'lottie-react-native';
+import { View } from 'react-native';
 import { SvgXml } from "react-native-svg";
 
 const RemoteSvgIcon = ({ xml, size = 50, color }) => {
@@ -32,7 +31,7 @@ export default function BadgeIcon({ badge, size = 25, containerStyle, isDark }) 
 
     // Support both the old format (visualData) and the new format (visualConfig)
     const visual = badge.visualConfig || badge.visualData || {};
-    
+
     // Check if it's a Lottie file
     const lottieData = visual.lottieJson;
     const lottieSource = visual.lottieUrl;
@@ -40,9 +39,9 @@ export default function BadgeIcon({ badge, size = 25, containerStyle, isDark }) 
 
     // Get the dynamic color classes
     const rarityColors = getRarityColors(badge.rarity);
-    
+
     return (
-        <View 
+        <View
             className={`${rarityColors} p-1 rounded-full border items-center justify-center ${containerStyle || ''}`}
             style={{ width: size + 8, height: size + 8 }} // Container slightly larger than icon
         >
@@ -50,6 +49,7 @@ export default function BadgeIcon({ badge, size = 25, containerStyle, isDark }) 
                 <LottieView
                     autoPlay
                     loop
+                    renderMode="hardware"
                     style={{ width: size * 1.5, height: size * 1.5 }} // Scale Lottie slightly up to fill the badge circle
                     source={lottieData ? lottieData : { uri: lottieSource }}
                     resizeMode="contain"

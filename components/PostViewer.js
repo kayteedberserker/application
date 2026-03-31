@@ -1,11 +1,14 @@
-import { MaterialCommunityIcons, Ionicons } from '@expo/vector-icons';
+import { MaterialCommunityIcons } from '@expo/vector-icons';
+import { LegendList } from "@legendapp/list";
+import { useFocusEffect } from "expo-router"; // ⚡️ ADDED useFocusEffect
 import { useColorScheme } from "nativewind";
-import { useCallback, useEffect, useMemo, useRef, useState, memo } from "react";
+import { memo, useCallback, useEffect, useMemo, useRef, useState } from "react";
 import {
     DeviceEventEmitter,
     RefreshControl,
     View
 } from "react-native";
+import { useMMKV } from 'react-native-mmkv';
 import Animated, {
     Easing,
     useAnimatedStyle,
@@ -14,10 +17,10 @@ import Animated, {
     withSequence,
     withTiming
 } from "react-native-reanimated";
-import { LegendList } from "@legendapp/list"; 
-import { useMMKV } from 'react-native-mmkv'; 
 import { useSafeAreaInsets } from "react-native-safe-area-context";
+import { mutate as globalMutate } from "swr"; // ⚡️ ADDED globalMutate for instant hydration
 import useSWRInfinite from "swr/infinite";
+
 import apiFetch from "../utils/apiFetch";
 import AnimeLoading from "./AnimeLoading";
 import PostCard from "./PostCard";
@@ -35,13 +38,11 @@ const SESSION_STATE = {
 };
 
 // ⚡️ PERFORMANCE FIX 1: Aggressively Memoize the List Item
-// This prevents the ENTIRE list from re-rendering when `visibleIds` changes.
-// It will only re-render the specific post that entered or left the screen.
 const MemoizedPostItem = memo(({ item, isVisible, syncing, mutate, posts }) => {
     return (
         <PostCard
             post={item}
-            authorData={item.authorData} 
+            authorData={item.authorData}
             clanData={item.clanData}
             isFeed
             posts={posts}
@@ -51,7 +52,6 @@ const MemoizedPostItem = memo(({ item, isVisible, syncing, mutate, posts }) => {
         />
     );
 }, (prevProps, nextProps) => {
-    // Only re-render if the visibility changes, syncing state changes, or the post data itself updates
     return (
         prevProps.isVisible === nextProps.isVisible &&
         prevProps.syncing === nextProps.syncing &&
@@ -59,10 +59,9 @@ const MemoizedPostItem = memo(({ item, isVisible, syncing, mutate, posts }) => {
     );
 });
 
-
 export default function PostsViewer() {
-    const storage = useMMKV(); 
-    
+    const storage = useMMKV();
+
     const scrollRef = useRef(null);
     const insets = useSafeAreaInsets();
     const { colorScheme } = useColorScheme();
@@ -123,22 +122,34 @@ export default function PostsViewer() {
     };
 
     const { data, size, setSize, isLoading, isValidating, mutate } = useSWRInfinite(getKey, fetcher, {
-        revalidateOnFocus: true, 
+        revalidateOnFocus: true,
         revalidateOnReconnect: true,
-        revalidateIfStale: true, 
+        revalidateIfStale: true,
         fallbackData: cachedData,
         onSuccess: (newData) => {
             setIsOfflineMode(false);
             setRefreshing(false);
             SESSION_STATE.memoryCache = newData;
             SESSION_STATE.hasFetched = true;
-            saveHeavyCache(newData); 
+            saveHeavyCache(newData);
         },
         onError: () => {
             setIsOfflineMode(true);
             setRefreshing(false);
         }
     });
+
+    // ⚡️ INSTANT FOCUS SYNC: Solves the "likes not updating" bug
+    useFocusEffect(
+        useCallback(() => {
+            // Silently tells SWR to re-verify the active posts in the background
+            globalMutate(
+                key => typeof key === 'string' && key.startsWith('/posts/'),
+                undefined,
+                { revalidate: true }
+            );
+        }, [])
+    );
 
     const handleRefresh = useCallback(async () => {
         setRefreshing(true);
@@ -194,13 +205,13 @@ export default function PostsViewer() {
         return (
             <MemoizedPostItem
                 item={item}
-                isVisible={visibleIds.has(item._id)}
+                isVisible={true} // ⚡️ FIXED: Forcing true guarantees SWR key never goes null so it can receive likes
                 syncing={!SESSION_STATE.hasFetched || isValidating}
                 mutate={mutate}
                 posts={posts}
             />
         );
-    }, [visibleIds, isValidating, mutate, posts]);
+    }, [isValidating, mutate, posts]); // Removed visibleIds dependency
 
     const ListHeader = useCallback(() => (
         <View className="mb-5 pb-2">
@@ -219,11 +230,9 @@ export default function PostsViewer() {
         </View>
     ), [isOfflineMode, isDark]);
 
-    // ⚡️ PERFORMANCE FIX 2: Throttled Scroll Emitter
     const lastScrollY = useRef(0);
     const handleScroll = useCallback((e) => {
         const offsetY = e.nativeEvent.contentOffset.y;
-        // Only emit event if scrolled more than 15 pixels to prevent bridge flooding
         if (Math.abs(offsetY - lastScrollY.current) > 15) {
             DeviceEventEmitter.emit("onScroll", offsetY);
             lastScrollY.current = offsetY;
@@ -237,8 +246,10 @@ export default function PostsViewer() {
     return (
         <View className={`flex-1 ${isDark ? "bg-[#050505]" : "bg-white"}`}>
             <LegendList
+                key="main-feed-list" // ⚡️ FIXED: Isolates scroll memory from other pages
                 ref={scrollRef}
                 data={posts}
+                recycleItems={true}
                 keyExtractor={(item) => item._id}
                 ListHeaderComponent={ListHeader}
                 contentContainerStyle={{
@@ -247,9 +258,9 @@ export default function PostsViewer() {
                     paddingBottom: insets.bottom + 120,
                 }}
                 renderItem={renderItem}
-                estimatedItemSize={600} 
-                drawDistance={1500} // Slightly reduced to save RAM rendering off-screen
-                recycleItems={true} 
+                estimatedItemSize={630}
+                drawDistance={600}
+                // ⚡️ FIXED: Removed recycleItems=true to stop weird SWR caching bugs and scroll jumping
                 onViewableItemsChanged={onViewableItemsChanged}
                 viewabilityConfig={viewabilityConfig}
                 onEndReached={loadMore}
@@ -266,11 +277,11 @@ export default function PostsViewer() {
                     />
                 }
                 onScroll={handleScroll}
-                scrollEventThrottle={16} 
+                scrollEventThrottle={16}
                 ListFooterComponent={
                     <View className="py-12 items-center justify-center min-h-[140px]">
                         {(isLoading || (isValidating && size > 1)) ? (
-                            <SyncLoading /> 
+                            <SyncLoading />
                         ) : !hasMore && posts.length > 0 ? (
                             <Text className="text-[10px] font-[900] uppercase tracking-[0.5em] text-gray-400">
                                 End of Transmission

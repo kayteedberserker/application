@@ -41,6 +41,7 @@ import AnimeLoading from "../../components/AnimeLoading";
 import { Text } from "../../components/Text";
 import THEME from "../../components/useAppTheme";
 import { useAlert } from "../../context/AlertContext";
+import { useClan } from "../../context/ClanContext";
 import { useStreak } from "../../context/StreakContext";
 import { useUser } from "../../context/UserContext";
 import apiFetch from "../../utils/apiFetch";
@@ -216,6 +217,7 @@ export default function FirstLaunchScreen() {
 	const isMounted = useRef(true);
 	const { setUser } = useUser();
 	const { refreshStreak } = useStreak();
+	const { refreshClanStatus } = useClan();
 	const isDark = useColorScheme() === "dark";
 
 	const [accessGate, setAccessGate] = useState(true);
@@ -350,6 +352,7 @@ export default function FirstLaunchScreen() {
 			}
 
 			const fingerprint = await getFingerprint();
+			// ⚡️ ALWAYS get a fresh token on re-entry since we nullified it on logout
 			const pushToken = await registerForPushNotificationsAsync();
 
 			const res = await apiFetch("/mobile/recover", {
@@ -358,7 +361,7 @@ export default function FirstLaunchScreen() {
 					deviceId: session.deviceId,
 					hardwareId: fingerprint.hardwareId,
 					recoverId: session.uid,
-					pushToken
+					pushToken // ⚡️ Sends the fresh token to the backend
 				})
 			});
 
@@ -369,7 +372,7 @@ export default function FirstLaunchScreen() {
 				deviceId: data.user?.deviceId,
 				uid: data.user?.uid,
 				username: data.user?.username,
-				pushToken: pushToken || data.user?.pushToken,
+				pushToken: pushToken || data.user?.pushToken, // ⚡️ Secures it in local MMKV
 				country: data.user?.country || "Unknown",
 				referredBy: data.user?.referredBy,
 				preferences: data.user?.preferences || {}
@@ -379,7 +382,7 @@ export default function FirstLaunchScreen() {
 			setUser(userData);
 
 			if (refreshStreak) refreshStreak();
-
+			if (refreshClanStatus) refreshClanStatus();
 			setRecoveredUid(data.user?.uid);
 			setShowAwakeningModal(true);
 
@@ -390,9 +393,16 @@ export default function FirstLaunchScreen() {
 		} catch (err) {
 			Haptics.notificationAsync(Haptics.NotificationFeedbackType.Error);
 
-			storage.clearAll();
+			// ⚡️ 1. Backup the history BEFORE the wipe
 			const rawHistory = storage.getString("session_history");
-			if (rawHistory) storage.set("session_history", rawHistory);
+
+			// ⚡️ 2. Wipe everything (Clears old/corrupt session data)
+			storage.clearAll();
+
+			// ⚡️ 3. Restore only the history so the login buttons don't disappear
+			if (rawHistory) {
+				storage.set("session_history", rawHistory);
+			}
 
 			notify("Access Denied", err.message);
 			setIsProcessing(false);

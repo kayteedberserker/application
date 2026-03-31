@@ -537,7 +537,7 @@ const ClanProfile = () => {
                     storage.set(CACHE_KEY, "");
                     storage.set(ONBOARDING_KEY, false); // Clean up onboarding flag on leave
                     CustomAlert("Deserted", "You have left the village.");
-                    router.replace('/clans');
+                    router.replace('/screens/discover');
                 }
                 fetchFullDetails();
                 if (action === "DELETE_POST") {
@@ -1543,6 +1543,7 @@ const ClanStoreModal = ({ visible, fetchFullDetails, onClose, isDark, clan }) =>
                             <LottieView
                                 source={visual.lottieJson ? visual.lottieJson : { uri: visual.lottieUrl }}
                                 autoPlay
+                                renderMode="hardware"
                                 loop
                                 style={{ width: '120%', height: '120%', position: 'absolute' }}
                                 resizeMode="contain"
@@ -1826,7 +1827,7 @@ const ClanInventoryModal = ({ visible, onClose, fetchFullDetails, clan, isDark, 
                                                         </View>
                                                     </ClanBorder>
                                                 ) : isLottie ? (
-                                                    <LottieView source={visual.lottieJson ? visual.lottieJson : { uri: visual.lottieUrl }} autoPlay loop style={{ width: '140%', height: '140%', position: 'absolute' }} resizeMode="contain" />
+                                                    <LottieView renderMode="hardware" source={visual.lottieJson ? visual.lottieJson : { uri: visual.lottieUrl }} autoPlay loop style={{ width: '140%', height: '140%', position: 'absolute' }} resizeMode="contain" />
                                                 ) : visual.svgCode ? (
                                                     <RemoteSvgIcon xml={visual.svgCode} size={40} color={visual.primaryColor || visual.color} />
                                                 ) : (

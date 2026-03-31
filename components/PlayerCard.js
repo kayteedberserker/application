@@ -66,7 +66,7 @@ const resolveUserRank = (level, currentAura) => {
     progress: Math.min(Math.max(progress, 0), 100),
     req: currentTier.req,
     nextReq: nextTier.req
-  };
+  }
 };
 
 export default function PlayerCard({ author, totalPosts, isDark }) {
@@ -131,16 +131,18 @@ export default function PlayerCard({ author, totalPosts, isDark }) {
         </View>
 
         <View className="items-center w-full">
-          <PlayerNameplate
-            author={author}
-            themeColor={themeColor}
-            equippedGlow={equippedGlow}
-            auraRank={weeklyGloryRank}
-            isDark={isDark}
-            showFlame={true}
-            showPeakBadge={true}
-            fontSize={28}
-          />
+          <View className="flex-row w-full items-center justify-center">
+            <PlayerNameplate
+              author={author}
+              themeColor={themeColor}
+              equippedGlow={equippedGlow}
+              auraRank={weeklyGloryRank}
+              isDark={isDark}
+              showFlame={true}
+              showPeakBadge={true}
+              fontSize={28}
+            />
+          </View>
 
           {equippedBadges.length > 0 && (
             <View className="flex-row flex-wrap justify-center gap-2 mt-3 mb-3">

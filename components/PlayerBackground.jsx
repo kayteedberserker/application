@@ -1,26 +1,25 @@
-import React, { useEffect } from 'react';
-import { View, StyleSheet } from 'react-native';
-import Svg, { Defs, LinearGradient, Rect, Stop } from "react-native-svg";
-import { SvgXml } from "react-native-svg"; 
 import LottieView from 'lottie-react-native';
-import Animated, { 
-    Easing, 
-    useAnimatedStyle, 
-    useSharedValue, 
-    withRepeat, 
-    withTiming, 
-    withSequence 
+import { useEffect } from 'react';
+import { StyleSheet, View } from 'react-native';
+import Animated, {
+    Easing,
+    useAnimatedStyle,
+    useSharedValue,
+    withRepeat,
+    withSequence,
+    withTiming
 } from 'react-native-reanimated';
+import Svg, { Defs, LinearGradient, Rect, Stop, SvgXml } from "react-native-svg";
 
 export default function PlayerBackground({ equippedBg, themeColor, borderRadius = 48 }) {
     const bgVisual = equippedBg?.visualConfig || equippedBg?.visualData || {};
-    
+
     const primary = bgVisual.primaryColor || themeColor || '#22c55e';
     const secondary = bgVisual.secondaryColor || primary;
-    
+
     // ⚡️ 1. Dynamic Opacity (Defaults to 0.6 if server doesn't send one)
     const bgOpacity = bgVisual.opacity !== undefined ? bgVisual.opacity : 0.6;
-    
+
     // ⚡️ 2. Dynamic Native Animation Type
     const animationType = bgVisual.animationType || 'none';
 
@@ -57,7 +56,7 @@ export default function PlayerBackground({ equippedBg, themeColor, borderRadius 
     const sweepStyle = useAnimatedStyle(() => {
         // Moves from -100% (left) to 200% (right)
         return {
-            left: `${(sweepAnim.value * 300) - 100}%` 
+            left: `${(sweepAnim.value * 300) - 100}%`
         };
     });
 
@@ -79,23 +78,23 @@ export default function PlayerBackground({ equippedBg, themeColor, borderRadius 
                         loop
                         style={[StyleSheet.absoluteFillObject]}
                         resizeMode="cover"
-                        renderMode="software" 
+                        renderMode="hardware"
                         colorFilters={[{ keypath: "**", color: primary }]}
                     />
-                
-                /* 2. CUSTOM SVG DESIGNS */
+
+                    /* 2. CUSTOM SVG DESIGNS */
                 ) : bgVisual.svgCode ? (
                     // ⚡️ Applies your backend opacity here!
                     <View style={[StyleSheet.absoluteFillObject, { opacity: bgOpacity }]}>
-                        <SvgXml 
-                            xml={bgVisual.svgCode.replace(/currentColor/g, primary)} 
-                            width="100%" 
-                            height="100%" 
-                            preserveAspectRatio="xMidYMid slice" 
+                        <SvgXml
+                            xml={bgVisual.svgCode.replace(/currentColor/g, primary)}
+                            width="100%"
+                            height="100%"
+                            preserveAspectRatio="xMidYMid slice"
                         />
                     </View>
 
-                /* 3. FALLBACK GRADIENT */
+                    /* 3. FALLBACK GRADIENT */
                 ) : (
                     // ⚡️ Applies your backend opacity here too!
                     <Animated.View style={[StyleSheet.absoluteFillObject, { opacity: bgOpacity }]}>
@@ -114,9 +113,9 @@ export default function PlayerBackground({ equippedBg, themeColor, borderRadius 
 
             {/* ⚡️ THE SWEEP OVERLAY (Only renders if animationType is 'sweep') */}
             {animationType === 'sweep' && (
-                <Animated.View 
+                <Animated.View
                     style={[
-                        sweepStyle, 
+                        sweepStyle,
                         { position: 'absolute', top: 0, bottom: 0, width: '50%', opacity: 0.3 }
                     ]}
                 >

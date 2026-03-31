@@ -1,7 +1,7 @@
 import { MaterialCommunityIcons } from '@expo/vector-icons';
 import { useLocalSearchParams, useRouter } from 'expo-router';
 import { useColorScheme } from 'nativewind';
-import { useEffect, useRef, useState, useCallback } from 'react';
+import { useCallback, useEffect, useRef, useState } from 'react';
 import { DeviceEventEmitter, Dimensions, ScrollView, TouchableOpacity, View } from 'react-native';
 import Animated, {
   Easing,
@@ -75,6 +75,7 @@ export default function PostDetailScreen() {
       if (!res.ok) throw new Error("Network response was not ok");
 
       const data = await res.json();
+      console.log(data.authorData);
 
       // Step C: Update State & MMKV Cache
       setPost(data);

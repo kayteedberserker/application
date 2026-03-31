@@ -42,6 +42,7 @@ export default function PlayerWatermark({ equippedWatermark, isDark }) {
                         autoPlay
                         loop
                         ref={animation}
+                        renderMode="hardware"
                         style={{
                             width: iconSize * 1.2,
                             height: iconSize * 1.2,

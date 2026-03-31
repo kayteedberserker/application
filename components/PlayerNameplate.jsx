@@ -1,18 +1,18 @@
-import React, { useEffect, useState } from 'react';
-import { View, StyleSheet } from 'react-native';
-import { Text } from "./Text";
-import PeakBadge from "./PeakBadge";
 import { Ionicons } from "@expo/vector-icons";
 import MaskedView from '@react-native-masked-view/masked-view';
 import { LinearGradient } from 'expo-linear-gradient';
+import { useEffect, useState } from 'react';
+import { StyleSheet, View } from 'react-native';
 import Animated, {
+    interpolate,
+    useAnimatedStyle,
     useSharedValue,
     withRepeat,
-    withTiming,
-    useAnimatedStyle,
     withSequence,
-    interpolate
+    withTiming
 } from 'react-native-reanimated';
+import PeakBadge from "./PeakBadge";
+import { Text } from "./Text";
 
 export default function PlayerNameplate({
     author,
@@ -44,7 +44,7 @@ export default function PlayerNameplate({
     if (animationType !== 'glitch' && animationType !== 'pulse') {
         animationType = 'sweep';
     }
-    
+
     const badgeSize = Math.max(16, fontSize * 0.77);
     const flameIconSize = Math.max(12, fontSize * 0.5);
 
@@ -232,17 +232,17 @@ export default function PlayerNameplate({
             {/* ⚡️ FIXED ANIMATION: GLITCH (Stacking & Layout) */}
             {animationType === 'glitch' && (
                 <View style={{ position: 'relative', height: textDimensions.height, width: textDimensions.width }}>
-                    
+
                     {/* Ghost Cyan */}
                     <Animated.View style={[{ position: 'absolute', top: 0, bottom: 0, left: 0, zIndex: 1, justifyContent: 'center' }, glitchStyleCyan]}>
                         <BaseText styleOverride={{ color: '#0ff', opacity: 0.6, textShadowRadius: 0 }} />
                     </Animated.View>
-                    
+
                     {/* Ghost Red */}
                     <Animated.View style={[{ position: 'absolute', top: 0, bottom: 0, left: 0, zIndex: 2, justifyContent: 'center' }, glitchStyleRed]}>
                         <BaseText styleOverride={{ color: '#f00', opacity: 0.6, textShadowRadius: 0 }} />
                     </Animated.View>
-                    
+
                     {/* Solid Base */}
                     <View style={{ position: 'absolute', top: 0, bottom: 0, left: 0, zIndex: 3, justifyContent: 'center' }}>
                         <BaseText />

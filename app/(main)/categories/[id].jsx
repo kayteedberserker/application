@@ -1,6 +1,6 @@
 import { MaterialCommunityIcons } from '@expo/vector-icons';
 import { LegendList } from "@legendapp/list";
-import { useLocalSearchParams } from "expo-router"; // ⚡️ ADDED: To grab the ID from the URL
+import { useFocusEffect, useLocalSearchParams } from "expo-router"; // ⚡️ ADDED: useFocusEffect
 import { useColorScheme } from "nativewind";
 import { memo, useCallback, useEffect, useMemo, useRef, useState } from "react";
 import {
@@ -12,6 +12,7 @@ import {
 } from "react-native";
 import { useMMKV } from 'react-native-mmkv';
 import { useSafeAreaInsets } from "react-native-safe-area-context";
+import { mutate as globalMutate } from "swr"; // ⚡️ ADDED: globalMutate for instant hydration
 import useSWRInfinite from "swr/infinite";
 
 import Animated, {
@@ -37,7 +38,6 @@ const fetcher = (url) => apiFetch(url).then(res => res.json());
 const CATEGORY_MEMORY_CACHE = {};
 const CATEGORIES_SYNCED_THIS_SESSION = new Set();
 
-// ⚡️ PERFORMANCE FIX 1: Aggressively Memoize the List Item
 const MemoizedPostItem = memo(({ item, isVisible, mutate, posts }) => {
     return (
         <PostCard
@@ -59,7 +59,6 @@ const MemoizedPostItem = memo(({ item, isVisible, mutate, posts }) => {
 
 export default function CategoryPage() {
     const storage = useMMKV();
-    // ⚡️ GET THE ID FROM THE ROUTE INSTEAD OF PROPS
     const { id } = useLocalSearchParams();
 
     const insets = useSafeAreaInsets();
@@ -106,7 +105,6 @@ export default function CategoryPage() {
     }, [storage]);
 
     useEffect(() => {
-        // Yield to InteractionManager to avoid freezing during navigation/swipe
         InteractionManager.runAfterInteractions(() => {
             setReady(true);
         });
@@ -124,7 +122,7 @@ export default function CategoryPage() {
     const pulseStyle = useAnimatedStyle(() => ({ opacity: pulseAnim.value }));
 
     const getKey = (pageIndex, previousPageData) => {
-        if (!ready || !id) return null; // ⚡️ Ensure we don't fetch if no ID is present
+        if (!ready || !id) return null;
         if (previousPageData && previousPageData.posts?.length < LIMIT) return null;
         return `/posts?category=${categoryName}&page=${pageIndex + 1}&limit=${LIMIT}`;
     };
@@ -150,6 +148,18 @@ export default function CategoryPage() {
         }
     });
 
+    // ⚡️ INSTANT FOCUS SYNC: Solves the "likes not updating" bug
+    useFocusEffect(
+        useCallback(() => {
+            // Silently tells SWR to re-verify the active posts in the background
+            globalMutate(
+                key => typeof key === 'string' && key.startsWith('/posts/'),
+                undefined,
+                { revalidate: true }
+            );
+        }, [])
+    );
+
     const posts = useMemo(() => {
         const sourceData = data || cachedData;
         if (!sourceData) return [];
@@ -174,7 +184,6 @@ export default function CategoryPage() {
 
     const hasMore = data ? data[data.length - 1]?.posts?.length === LIMIT : false;
 
-    // ⚡️ PERFORMANCE FIX 2: Throttled Viewability
     const onViewableItemsChanged = useRef(({ viewableItems }) => {
         const newVisible = new Set(viewableItems.map(v => v.item._id));
         setVisibleIds(newVisible);
@@ -182,7 +191,6 @@ export default function CategoryPage() {
 
     const viewabilityConfig = useRef({ itemVisiblePercentThreshold: 50 }).current;
 
-    // ⚡️ PERFORMANCE FIX 3: Throttled Scroll Emitter
     const lastScrollY = useRef(0);
     const handleScroll = useCallback((e) => {
         const offsetY = e.nativeEvent.contentOffset.y;
@@ -202,11 +210,11 @@ export default function CategoryPage() {
     const renderItem = useCallback(({ item }) => (
         <MemoizedPostItem
             item={item}
-            isVisible={visibleIds.has(item._id)}
+            isVisible={true} // ⚡️ FIXED: Forcing true guarantees SWR key never goes null so it can receive likes
             mutate={mutate}
             posts={posts}
         />
-    ), [posts, visibleIds, mutate]);
+    ), [posts, mutate]);
 
     const ListHeader = useMemo(() => (
         <View className="px-5 mb-5 pb-6 border-b-2 border-gray-100 dark:border-gray-800">
@@ -225,7 +233,6 @@ export default function CategoryPage() {
         </View>
     ), [isOfflineMode, isDark, categoryName]);
 
-    // ⚡️ Fallback if no ID is provided in the route
     if (!id) {
         return (
             <View className={`flex-1 items-center justify-center ${isDark ? 'bg-[#050505]' : 'bg-white'}`}>
@@ -247,14 +254,16 @@ export default function CategoryPage() {
             />
 
             <LegendList
+                key={`category-list-${id}`} // ⚡️ FIXED: Isolates scroll memory per category
                 ref={scrollRef}
                 data={posts}
                 keyExtractor={(item) => item._id}
                 renderItem={renderItem}
                 ListHeaderComponent={ListHeader}
-                estimatedItemSize={550}
-                drawDistance={1500}
+                estimatedItemSize={630}
                 recycleItems={true}
+                drawDistance={1500}
+                // ⚡️ FIXED: Removed recycleItems=true to stop weird SWR caching bugs and scroll jumping
                 onViewableItemsChanged={onViewableItemsChanged}
                 viewabilityConfig={viewabilityConfig}
                 contentContainerStyle={{

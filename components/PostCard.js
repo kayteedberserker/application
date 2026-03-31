@@ -40,6 +40,7 @@ import Poll from "./Poll";
 import { SyncLoading } from "./SyncLoading";
 import { Text } from "./Text";
 import THEME from "./useAppTheme";
+
 const { width: SCREEN_WIDTH, height: SCREEN_HEIGHT } = Dimensions.get('window');
 const fetcher = (url) => apiFetch(url).then((res) => res.json());
 
@@ -201,7 +202,6 @@ const MediaModal = ({ isOpen, onClose, mediaItems, currentIndex, setCurrentIndex
         }
 
         return (
-            // ⚡️ FIXED: Replaced fixed height/width with flex: 1 to prevent zoom boundary clipping
             <View style={{ flex: 1, backgroundColor: 'black' }}>
                 <ImageZoom
                     cropWidth={SCREEN_WIDTH}
@@ -439,17 +439,16 @@ const PostCardComponent = ({ post, authorData, clanData, setPosts, isFeed, hideM
 
     // ⚡️ PERFORMANCE UPGRADE: Conditional SWR Fetching + Instant Hydration
     const { data: postData, mutate } = useSWR(
-        // Only fetch network data if it's NOT syncing, has an ID, AND is currently visible on screen!
         (!syncing && post?._id && isVisible) ? `/posts/${post._id}` : null,
         fetcher,
         {
             refreshInterval: 120000,
-            fallbackData: post, // ⚡️ Instantly populates cache with feed data (Stops the flashing 0s)
-            revalidateOnMount: false // Prevents useless double-fetching on initial load
+            fallbackData: post, // Instantly populates cache with feed data
+            revalidateOnMount: false
         }
     );
 
-    // ⚡️ BULLETPROOF COUNTS: Safely checks both arrays (from post page) and counts (from search/feed)
+    // ⚡️ BULLETPROOF COUNTS: Safely checks both arrays and counts
     const totalLikes = postData?.likesCount ?? postData?.likes?.length ?? post?.likesCount ?? post?.likes?.length ?? 0;
     const totalComments = postData?.commentsCount ?? postData?.comments?.length ?? post?.commentsCount ?? post?.comments?.length ?? 0;
     const totalViews = postData?.viewsCount ?? postData?.views ?? post?.viewsCount ?? post?.views ?? 0;
@@ -457,7 +456,7 @@ const PostCardComponent = ({ post, authorData, clanData, setPosts, isFeed, hideM
     const userRank = useMemo(() => resolveUserRank(author.rankLevel), [author.rankLevel]);
 
     useEffect(() => {
-        if (!post?._id || !user?.deviceId || syncing || !isVisible) return; // Only track view if visible
+        if (!post?._id || !user?.deviceId || syncing || !isVisible) return;
         const handleView = async () => {
             try {
                 const viewedKey = "viewedPosts";
@@ -490,17 +489,16 @@ const PostCardComponent = ({ post, authorData, clanData, setPosts, isFeed, hideM
         }
 
         const fingerprint = user?.deviceId;
-        const previousData = postData;
+        // ⚡️ SAFEKEEPER: Fallback if SWR hasn't fetched the object yet
+        const previousData = postData || post;
 
-        // ⚡️ 1. Get the absolute current number of likes before adding ours
         const currentLikes = postData?.likesCount ?? postData?.likes?.length ?? post?.likesCount ?? post?.likes?.length ?? 0;
 
-        // ⚡️ 2. INSTANT UI UPDATE
         setLiked(true);
         mutate({
-            ...postData,
-            likesCount: currentLikes + 1, // FORCE the count up for the UI calculation
-            likes: [...(postData?.likes || []), { fingerprint }]
+            ...(postData || post),
+            likesCount: currentLikes + 1,
+            likes: [...((postData || post)?.likes || []), { fingerprint }]
         }, false);
 
         try {
@@ -509,8 +507,6 @@ const PostCardComponent = ({ post, authorData, clanData, setPosts, isFeed, hideM
                 body: JSON.stringify({ action: "like", fingerprint }),
             });
 
-            // If the server says "You already liked this" (400), we treat it as a success!
-            // DO NOT mutate(previousData) here, or you will revert the UI to unliked.
             if (res.status === 400 || res.ok) {
                 const savedLikesStr = storage.getString('user_likes');
                 const likedList = savedLikesStr ? JSON.parse(savedLikesStr) : [];
@@ -525,7 +521,6 @@ const PostCardComponent = ({ post, authorData, clanData, setPosts, isFeed, hideM
 
         } catch (err) {
             console.error("Network Like Logic Failed", err);
-            // ⚡️ 3. ROLLBACK ONLY ON ACTUAL FAILURE
             setLiked(false);
             mutate(previousData, false);
             CustomAlert("Sync Error", "Could not register your like. Please check your connection.");

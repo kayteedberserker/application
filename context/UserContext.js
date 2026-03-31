@@ -107,7 +107,12 @@ export const UserProvider = ({ children }) => {
   }, [user?.deviceId, user?.uid, user?.hardwareId]);
 
   return (
-    <UserContext.Provider value={{ user, setUser: updateUserData, loading }}>
+    <UserContext.Provider
+      value={{
+        user,
+        setUser: updateUserData,
+        loading
+      }}>
       {children}
     </UserContext.Provider>
   );

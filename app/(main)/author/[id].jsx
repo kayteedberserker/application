@@ -1,6 +1,6 @@
 import { Ionicons, MaterialCommunityIcons } from "@expo/vector-icons";
 import { LegendList } from "@legendapp/list";
-import { useLocalSearchParams, useRouter } from "expo-router";
+import { useFocusEffect, useLocalSearchParams, useRouter } from "expo-router";
 import * as Sharing from 'expo-sharing';
 import { useColorScheme } from "nativewind";
 import { memo, useCallback, useEffect, useRef, useState } from "react";
@@ -26,6 +26,8 @@ import Animated, {
 } from "react-native-reanimated";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import ViewShot from "react-native-view-shot";
+import { mutate } from "swr";
+
 import AuraAvatar from "../../../components/AuraAvatar";
 import ClanBorder from "../../../components/ClanBorder";
 import PlayerCard from "../../../components/PlayerCard";
@@ -34,7 +36,6 @@ import { SyncLoading } from "../../../components/SyncLoading";
 import { Text } from "../../../components/Text";
 import apiFetch from "../../../utils/apiFetch";
 
-// ⚡️ IMPORTED EXTRACTED COMPONENTS
 import BadgeIcon from "../../../components/BadgeIcon";
 import PlayerBackground from "../../../components/PlayerBackground";
 import PlayerNameplate from "../../../components/PlayerNameplate";
@@ -43,11 +44,9 @@ import PlayerWatermark from "../../../components/PlayerWatermark";
 const API_BASE = "https://oreblogda.com/api";
 const { width } = Dimensions.get('window');
 
-// 🧠 Tier 1: Memory Cache
 const AUTHOR_MEMORY_CACHE = {};
 const AUTHOR_POSTS_MEMORY_CACHE = {};
 
-// ⚡️ Helper function to format large numbers cleanly
 const formatCoins = (num) => {
     if (!num) return "0";
     if (num >= 1000000) return Math.floor(num / 1000000) + 'M+';
@@ -81,7 +80,6 @@ const getAuraTier = (rank) => {
     }
 };
 
-// ⚡️ NEW: The Master Aura Tiers with injected Colors for the UI
 export const AURA_TIERS = [
     { level: 1, req: 0, title: "E-Rank Novice", icon: "🌱", color: "#94a3b8" },
     { level: 2, req: 100, title: "D-Rank Operative", icon: "⚔️", color: "#34d399" },
@@ -113,9 +111,7 @@ const resolveUserRank = (level, currentAura) => {
     };
 };
 
-// ⚡️ PERFORMANCE FIX 1: Memoized Post Item
 const MemoizedPostItem = memo(({ item, isVisible, authorData }) => {
-
     return (
         <View className="px-3">
             <PostCard
@@ -128,7 +124,9 @@ const MemoizedPostItem = memo(({ item, isVisible, authorData }) => {
         </View>
     );
 }, (prevProps, nextProps) => {
-    return prevProps.isVisible === nextProps.isVisible && prevProps.item === nextProps.item;
+    return prevProps.isVisible === nextProps.isVisible &&
+        prevProps.item === nextProps.item &&
+        prevProps.authorData === nextProps.authorData;
 });
 
 export default function AuthorPage() {
@@ -149,13 +147,9 @@ export default function AuthorPage() {
     const [page, setPage] = useState(1);
     const [hasMore, setHasMore] = useState(true);
     const [loading, setLoading] = useState(false);
-    const [refreshing, setRefreshing] = useState(false);
     const [isOffline, setIsOffline] = useState(false);
     const [isInitialMount, setIsInitialMount] = useState(true);
     const [cardPreviewVisible, setCardPreviewVisible] = useState(false);
-
-    // ⚡️ PERFORMANCE FIX 2: Visibility Tracking State
-    const [visibleIds, setVisibleIds] = useState(new Set());
 
     const scrollRef = useRef(null);
     const playerCardRef = useRef(null);
@@ -233,7 +227,6 @@ export default function AuthorPage() {
             setIsOffline(true);
         } finally {
             setLoading(false);
-            // Allow UI to paint before lifting initial mount shield
             InteractionManager.runAfterInteractions(() => {
                 setTimeout(() => setIsInitialMount(false), 500);
             });
@@ -245,7 +238,7 @@ export default function AuthorPage() {
         const nextPage = page + 1;
         setLoading(true);
         try {
-            const res = await apiFetch(`${API_BASE}/posts?author=${id}&page=${nextPage}&limit=10`);
+            const res = await apiFetch(`/posts?author=${id}&page=${nextPage}&limit=10`);
             const data = await res.json();
             if (res.ok && data.posts.length > 0) {
                 setPosts((prev) => {
@@ -291,6 +284,19 @@ export default function AuthorPage() {
         init();
     }, [id, CACHE_KEY_AUTHOR, CACHE_KEY_POSTS, fetchInitialData, storage]);
 
+    // ⚡️ PERFORMANCE FIX: Instant SWR Sync on Focus
+    useFocusEffect(
+        useCallback(() => {
+            // Tells SWR to silently refresh every post currently mounted
+            // Without overriding the entire posts array with stale server data
+            mutate(
+                key => typeof key === 'string' && key.startsWith('/posts/'),
+                undefined,
+                { revalidate: true }
+            );
+        }, [])
+    );
+
     const captureAndShare = async () => {
         try {
             if (playerCardRef.current) {
@@ -302,15 +308,6 @@ export default function AuthorPage() {
         } catch (error) { console.error("Capture Error:", error); }
     };
 
-    // ⚡️ PERFORMANCE FIX 3: Viewability Config & Callback
-    const onViewableItemsChanged = useRef(({ viewableItems }) => {
-        const newVisible = new Set(viewableItems.map(v => v.item._id));
-        setVisibleIds(newVisible);
-    }).current;
-
-    const viewabilityConfig = useRef({ itemVisiblePercentThreshold: 50 }).current;
-
-    // ⚡️ PERFORMANCE FIX 4: Throttled Scroll Emitter
     const lastScrollY = useRef(0);
     const handleScroll = useCallback((e) => {
         const offsetY = e.nativeEvent.contentOffset.y;
@@ -323,10 +320,10 @@ export default function AuthorPage() {
     const renderItem = useCallback(({ item }) => (
         <MemoizedPostItem
             item={item}
-            isVisible={visibleIds.has(item._id)}
+            isVisible={true} // ⚡️ FIXED: Forcing true guarantees SWR key never goes null when clicked
             authorData={author}
         />
-    ), [visibleIds, author]);
+    ), [author]);
 
     const AuthorSkeleton = useCallback(() => (
         <View className="px-4 pt-20 pb-6 opacity-40">
@@ -341,7 +338,6 @@ export default function AuthorPage() {
         if (!author && isOffline) return <AuthorSkeleton />;
         if (!author) return null;
 
-        // ⚡️ Update to Use RPG Ranks
         const totalAura = author.aura || 0;
         const rankLevel = author.currentRankLevel || 1;
         const writerRank = resolveUserRank(rankLevel, totalAura);
@@ -498,20 +494,17 @@ export default function AuthorPage() {
 
     return (
         <View className="flex-1 bg-white dark:bg-[#0a0a0a]">
-            {/* ⚡️ PERFORMANCE FIX 5: Full LegendList Config */}
             <LegendList
                 ref={scrollRef}
                 data={posts}
                 keyExtractor={(item) => item._id}
                 renderItem={renderItem}
                 ListHeaderComponent={ListHeader}
-
-                estimatedItemSize={500}
-                drawDistance={1000}
                 recycleItems={true}
+                estimatedItemSize={630}
+                drawDistance={1500}
+                // ⚡️ FIXED: Removed rcycleItems. Re-using old elements was confusing SWR keys
 
-                onViewableItemsChanged={onViewableItemsChanged}
-                viewabilityConfig={viewabilityConfig}
                 onScroll={handleScroll}
                 scrollEventThrottle={16}
 

@@ -50,6 +50,7 @@ import Animated, {
     withTiming
 } from "react-native-reanimated";
 import AuraAvatar from "../../components/AuraAvatar"; // ⚡️ Needed for the preview
+import { useClan } from "../../context/ClanContext";
 
 const { width, height } = Dimensions.get("window");
 const API_BASE = "https://oreblogda.com/api";
@@ -488,6 +489,7 @@ const AuthorStoreModal = ({ visible, onClose, user, isDark, setInventory }) => {
                             <LottieView
                                 source={visual.lottieJson ? visual.lottieJson : { uri: visual.lottieUrl }}
                                 autoPlay
+                                renderMode="hardware"
                                 loop
                                 style={{
                                     width: isVfx ? '150%' : '100%',
@@ -785,6 +787,7 @@ const AuthorInventoryModal = ({ visible, onClose, user, setUser, isDark, theinve
                                                 source={visual.lottieJson ? visual.lottieJson : { uri: visual.lottieUrl }}
                                                 autoPlay
                                                 loop
+                                                renderMode="hardware"
                                                 style={{
                                                     width: (isVfx || isLottie) ? '140%' : '100%',
                                                     height: (isVfx || isLottie) ? '140%' : '100%',
@@ -981,6 +984,7 @@ export default function MobileProfilePage() {
     const CustomAlert = useAlert();
     const [theinventory, setInventory] = useState([])
     const { user, setUser, contextLoading } = useUser();
+    const { clearClanData } = useClan();
 
     const { colorScheme } = useNativeWind();
     const isDark = colorScheme === "dark";
@@ -1213,6 +1217,19 @@ export default function MobileProfilePage() {
                 style: "destructive",
                 onPress: async () => {
                     try {
+                        // ⚡️ 0. NOTIFY BACKEND TO HALT TRANSMISSIONS (Push Notifications)
+                        // Wrapped in its own try/catch so network failures don't trap the user
+                        try {
+                            if (user?.deviceId) {
+                                await apiFetch('/mobile/logout', {
+                                    method: 'POST',
+                                    body: JSON.stringify({ deviceId: user.deviceId })
+                                });
+                            }
+                        } catch (apiErr) {
+                            console.log("Server unreachable. Proceeding with local hibernation.");
+                        }
+
                         // ⚡️ 1. EXTRACT ALL DATA INTO A LOCAL OBJECT FIRST
                         const allKeys = storage.getAllKeys();
                         const userDataArchive = {};
@@ -1245,14 +1262,15 @@ export default function MobileProfilePage() {
                         // Since useMMKV storage doesn't have .delete, we use .clearAll() 
                         // to wipe the slate entirely clean for the next user.
                         const cleared = storage.clearAll();
-                        // ⚡️ 4. RE-INJECT THE HISTORY
 
+                        // ⚡️ 4. RE-INJECT THE HISTORY
                         // Now that the storage is empty, we put the history back in.
                         storage.set("session_history", JSON.stringify(updatedHistory));
 
                         // ⚡️ 5. CLEANUP & REDIRECT
                         await AsyncStorage.clear(); // Clear any AsyncStorage data as well
                         setUser(null);
+                        clearClanData();
                         router.replace("/screens/FirstLaunchScreen");
 
                     } catch (error) {

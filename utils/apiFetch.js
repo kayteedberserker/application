@@ -11,11 +11,11 @@ export const syncApiUser = (userData) => {
 };
 
 export const apiFetch = async (endpoint, options = {}) => {
-  const baseUrl = "https://oreblogda.com/api";
+  const baseUrl = "http://10.81.236.121:3000/api";
   const cleanEndpoint = endpoint.startsWith('/') ? endpoint : `/${endpoint}`;
   const url = endpoint.startsWith('http') ? endpoint : `${baseUrl}${cleanEndpoint}`;
 
-  let userCountry = "Unknown";
+  let userCountry = "Unknown"
   let userAnimes = "";
   let userGenres = "";
   let userCharacter = "";

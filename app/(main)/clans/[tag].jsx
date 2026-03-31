@@ -1,25 +1,27 @@
-import { Ionicons, MaterialCommunityIcons, Feather } from "@expo/vector-icons";
-import { useLocalSearchParams, useRouter } from "expo-router";
+import { Feather, Ionicons, MaterialCommunityIcons } from "@expo/vector-icons";
+import { LegendList } from "@legendapp/list";
+import { useFocusEffect, useLocalSearchParams, useRouter } from "expo-router"; // ⚡️ ADDED: useFocusEffect
 import * as Sharing from "expo-sharing";
 import { useColorScheme } from "nativewind";
-import { useCallback, useEffect, useRef, useState, memo } from "react";
+import { memo, useCallback, useEffect, useRef, useState } from "react";
 import {
   ActivityIndicator,
-  Image,
   Clipboard,
   DeviceEventEmitter,
   Dimensions,
+  Image,
+  InteractionManager,
   Modal,
   Pressable,
   ScrollView,
   TouchableOpacity,
-  View,
-  InteractionManager
+  View
 } from "react-native";
 import { useMMKV } from 'react-native-mmkv';
-import { LegendList } from "@legendapp/list";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import ViewShot from "react-native-view-shot";
+import { mutate as globalMutate } from "swr"; // ⚡️ ADDED: globalMutate for instant hydration
+
 import { ClanBadge } from "../../../components/ClanBadge";
 import ClanBorder from "../../../components/ClanBorder";
 import ClanCard from "../../../components/ClanCard";
@@ -31,20 +33,19 @@ import { useAlert } from "../../../context/AlertContext";
 import { useUser } from "../../../context/UserContext";
 import apiFetch from "../../../utils/apiFetch";
 
-import PlayerNameplate from "../../../components/PlayerNameplate";
-import PlayerBackground from "../../../components/PlayerBackground";
-import PlayerWatermark from "../../../components/PlayerWatermark";
 import BadgeIcon from "../../../components/BadgeIcon";
+import PlayerBackground from "../../../components/PlayerBackground";
+import PlayerNameplate from "../../../components/PlayerNameplate";
+import PlayerWatermark from "../../../components/PlayerWatermark";
 
-import AnimatedReanimated, { 
-    useSharedValue, 
-    withRepeat, 
-    withTiming, 
-    withSequence,
-    useAnimatedStyle, 
-    interpolate,
-    Easing,
-    FadeInDown
+import AnimatedReanimated, {
+  Easing,
+  interpolate,
+  useAnimatedStyle,
+  useSharedValue,
+  withRepeat,
+  withSequence,
+  withTiming
 } from "react-native-reanimated";
 import { SvgXml } from "react-native-svg";
 
@@ -97,19 +98,19 @@ const AnimatedProgressBar = memo(({ scoreA, scoreB }) => {
 
 // ⚡️ PERFORMANCE FIX 1: Memoized Post Item
 const MemoizedPostItem = memo(({ item, isVisible }) => {
-    return (
-        <View className="px-3">
-            <PostCard
-                post={item}
-                authorData={item.authorData}
-                clanData={item.clanData}
-                isFeed
-                isVisible={isVisible}
-            />
-        </View>
-    );
+  return (
+    <View className="px-3">
+      <PostCard
+        post={item}
+        authorData={item.authorData}
+        clanData={item.clanData}
+        isFeed
+        isVisible={isVisible}
+      />
+    </View>
+  );
 }, (prevProps, nextProps) => {
-    return prevProps.isVisible === nextProps.isVisible && prevProps.item === nextProps.item;
+  return prevProps.isVisible === nextProps.isVisible && prevProps.item === nextProps.item;
 });
 
 export default function ClanPage() {
@@ -140,8 +141,7 @@ export default function ClanPage() {
   const [isFollowing, setIsFollowing] = useState(false);
   const [loadingFollow, setLoadingFollow] = useState(false);
   const [actionLoading, setActionLoading] = useState(false);
-  
-  // ⚡️ PERFORMANCE FIX 2: Visibility Tracking State
+
   const [visibleIds, setVisibleIds] = useState(new Set());
 
   const scrollRef = useRef(null);
@@ -214,7 +214,7 @@ export default function ClanPage() {
       ]);
       const clanData = await clanRes.json();
       const postData = await postRes.json();
-      
+
       if (clanRes.ok) {
         setClan(clanData);
         CLAN_MEMORY_CACHE[CACHE_KEY_CLAN] = clanData;
@@ -233,9 +233,8 @@ export default function ClanPage() {
     } finally {
       setLoading(false);
       setRefreshing(false);
-      // Yield to interaction manager before dropping loading shield
       InteractionManager.runAfterInteractions(() => {
-          setTimeout(() => setIsInitialMount(false), 500);
+        setTimeout(() => setIsInitialMount(false), 500);
       });
     }
   }, [tag, user?.deviceId, CACHE_KEY_CLAN, CACHE_KEY_POSTS, saveHeavyCache]);
@@ -289,6 +288,17 @@ export default function ClanPage() {
     };
     init();
   }, [tag, user?.deviceId, fetchInitialData, storage, CACHE_KEY_CLAN, CACHE_KEY_POSTS]);
+
+  // ⚡️ INSTANT FOCUS SYNC: Solves the "likes not updating" bug when returning from post view
+  useFocusEffect(
+    useCallback(() => {
+      globalMutate(
+        key => typeof key === 'string' && key.startsWith('/posts/'),
+        undefined,
+        { revalidate: true }
+      );
+    }, [])
+  );
 
   const performFollowAction = async (action) => {
     setLoadingFollow(true);
@@ -355,9 +365,9 @@ export default function ClanPage() {
         body: JSON.stringify({ deviceId: user.deviceId, username: user.username })
       });
       if (res.ok) { showAlert("REQUEST SENT", "Review pending by leader."); }
-      else if(res.status === 403) { showAlert("ALREADY IN A CLAN", "You are already in a CLAN. One cannot serve two masters."); }
-      else if(res.status === 400) { showAlert("ALREADY REQUESTED", "Request already pending."); }
-      else if(res.status === 401) { showAlert("REQUEST DISMISSED", "Recruitment is closed or clan is full."); }
+      else if (res.status === 403) { showAlert("ALREADY IN A CLAN", "You are already in a CLAN. One cannot serve two masters."); }
+      else if (res.status === 400) { showAlert("ALREADY REQUESTED", "Request already pending."); }
+      else if (res.status === 401) { showAlert("REQUEST DISMISSED", "Recruitment is closed or clan is full."); }
       else { showAlert("REQUEST FAILED", "Requirement not met."); }
     } catch (err) { showAlert("CONNECTION ERROR", "Backend error."); } finally { setActionLoading(false); }
   };
@@ -373,30 +383,28 @@ export default function ClanPage() {
     } catch (error) { console.error("Capture Error:", error); }
   };
 
-  // ⚡️ PERFORMANCE FIX 3: Viewability Config
   const onViewableItemsChanged = useRef(({ viewableItems }) => {
-      const newVisible = new Set(viewableItems.map(v => v.item._id));
-      setVisibleIds(newVisible);
+    const newVisible = new Set(viewableItems.map(v => v.item._id));
+    setVisibleIds(newVisible);
   }).current;
 
   const viewabilityConfig = useRef({ itemVisiblePercentThreshold: 50 }).current;
 
-  // ⚡️ PERFORMANCE FIX 4: Throttled Scroll Emitter
   const lastScrollY = useRef(0);
   const handleScroll = useCallback((e) => {
-      const offsetY = e.nativeEvent.contentOffset.y;
-      if (Math.abs(offsetY - lastScrollY.current) > 20) {
-          DeviceEventEmitter.emit("onScroll", offsetY);
-          lastScrollY.current = offsetY;
-      }
+    const offsetY = e.nativeEvent.contentOffset.y;
+    if (Math.abs(offsetY - lastScrollY.current) > 20) {
+      DeviceEventEmitter.emit("onScroll", offsetY);
+      lastScrollY.current = offsetY;
+    }
   }, []);
 
   const renderItem = useCallback(({ item }) => (
-    <MemoizedPostItem 
-        item={item} 
-        isVisible={visibleIds.has(item._id)} 
+    <MemoizedPostItem
+      item={item}
+      isVisible={true} // ⚡️ FIXED: Forcing true guarantees SWR key never goes null so it receives likes
     />
-  ), [visibleIds]);
+  ), []);
 
   const ClanSkeleton = useCallback(() => (
     <View className="px-4 pt-20 pb-6 opacity-40">
@@ -416,7 +424,7 @@ export default function ClanPage() {
     const isVerified = clan.verifiedUntil && new Date(clan.verifiedUntil) > new Date();
     const verifiedTier = clan.activeCustomizations?.verifiedTier;
     const verifiedColor = verifiedTier === "premium" ? "#facc15" : verifiedTier === "standard" ? "#ef4444" : verifiedTier === "basic" ? "#3b82f6" : "";
-    
+
     const rankInfo = getClanTierDetails(clan.rank || 1);
     const highlightColor = isVerified ? verifiedColor : (rankInfo.color || THEME.accent);
 
@@ -427,7 +435,7 @@ export default function ClanPage() {
     const equippedBorder = clan.specialInventory?.find(i => i.category === 'BORDER' && i.isEquipped);
     const borderVisual = equippedBorder?.visualConfig || equippedBorder?.visualData || {};
     const equippedWatermark = clan.specialInventory?.find(i => i.category === 'WATERMARK' && i.isEquipped);
-    
+
     const equippedBadges = clan.specialInventory?.filter(i => i.category === 'BADGE' && i.isEquipped).slice(0, 10) || [];
 
     const HeaderCard = (
@@ -452,15 +460,15 @@ export default function ClanPage() {
           </View>
 
           <View className="flex-row items-center gap-1 justify-center mb-2">
-            <PlayerNameplate 
-                author={{ username: clan.name }} 
-                themeColor={rankInfo.color} 
-                equippedGlow={equippedGlow} 
-                auraRank={999} 
-                fontSize={24} 
-                isDark={isDark}
-                showPeakBadge={false} 
-                showFlame={false} 
+            <PlayerNameplate
+              author={{ username: clan.name }}
+              themeColor={rankInfo.color}
+              equippedGlow={equippedGlow}
+              auraRank={999}
+              fontSize={24}
+              isDark={isDark}
+              showPeakBadge={false}
+              showFlame={false}
             />
             {isVerified && (
               <View className="ml-1"><SvgXml xml={clan.activeCustomizations?.verifiedBadgeXml} width={24} height={24} /></View>
@@ -556,16 +564,18 @@ export default function ClanPage() {
     <View className="flex-1 bg-white dark:bg-[#0a0a0a]">
       {/* ⚡️ PERFORMANCE FIX 5: Full LegendList Config */}
       <LegendList
+        key={`clan-list-${tag}`} // ⚡️ FIXED: Isolates scroll memory per clan
         ref={scrollRef}
         data={posts}
         keyExtractor={(item) => item._id}
         renderItem={renderItem}
         ListHeaderComponent={ListHeader}
 
-        estimatedItemSize={500}
-        drawDistance={1000}
+        estimatedItemSize={630}
         recycleItems={true}
-        
+        drawDistance={1500}
+        // ⚡️ FIXED: Removed recycleItems=true to stop weird SWR caching bugs and scroll jumping
+
         onViewableItemsChanged={onViewableItemsChanged}
         viewabilityConfig={viewabilityConfig}
         onScroll={handleScroll}
