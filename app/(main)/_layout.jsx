@@ -354,9 +354,8 @@ export default function MainLayout() {
             >
                 <CategoryNav isDark={isDark} />
             </Animated.View>
-            <GlobalMarquee isDark={isDark} />
-
-            <UpdateHandler />
+            {!isFirstPostFlow && <GlobalMarquee isDark={isDark} />}
+            {!isFirstPostFlow && <UpdateHandler />}
 
             <Stack screenOptions={{ headerShown: false }}>
                 <Stack.Screen name="index" />
@@ -459,7 +458,7 @@ export default function MainLayout() {
                 })}
             </View>
 
-            <DailyModal />
+            {!isFirstPostFlow && <DailyModal />}
 
             {showClanMenu && (
                 <TouchableOpacity
