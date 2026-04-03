@@ -650,7 +650,7 @@ const AuthorInventoryModal = ({ visible, onClose, user, setUser, isDark, theinve
     const CustomAlert = useAlert();
 
     const inventory = theinventory || user?.inventory || [];
-    const categories = ['ALL', 'GLOW', 'BORDER', 'BADGE', 'WATERMARK', "AVATER", 'AVATAR_VFX'];
+    const categories = ['ALL', 'GLOW', 'BORDER', 'BADGE', 'WATERMARK', "AVATAR", 'AVATAR_VFX'];
 
     const handleEquipToggle = async (selectedItem) => {
         if (isUpdating) return;
@@ -1217,8 +1217,7 @@ export default function MobileProfilePage() {
                 style: "destructive",
                 onPress: async () => {
                     try {
-                        // ⚡️ 0. NOTIFY BACKEND TO HALT TRANSMISSIONS (Push Notifications)
-                        // Wrapped in its own try/catch so network failures don't trap the user
+                        // ⚡️ 0. NOTIFY BACKEND TO HALT TRANSMISSIONS
                         try {
                             if (user?.deviceId) {
                                 await apiFetch('/mobile/logout', {
@@ -1235,10 +1234,21 @@ export default function MobileProfilePage() {
                         const userDataArchive = {};
 
                         allKeys.forEach(key => {
-                            // We capture everything EXCEPT the history itself
                             if (key !== "session_history") {
-                                const val = storage.getString(key);
-                                if (val) userDataArchive[key] = val;
+                                // ⚡️ FIXED: Safely extract the value while preserving its exact Type
+                                let val = storage.getString(key);
+
+                                if (val === undefined) {
+                                    val = storage.getNumber(key);
+                                }
+
+                                if (val === undefined) {
+                                    val = storage.getBoolean(key);
+                                }
+
+                                if (val !== undefined) {
+                                    userDataArchive[key] = val;
+                                }
                             }
                         });
 
@@ -1250,7 +1260,7 @@ export default function MobileProfilePage() {
                             uid: user.uid || user.deviceId,
                             username: user.username,
                             pfp: user.profilePic?.url || user.image,
-                            hibernateBox: userDataArchive // 📦 The snapshotted environment
+                            hibernateBox: userDataArchive // 📦 The snapshotted environment with perfect types!
                         };
 
                         const updatedHistory = [
@@ -1259,16 +1269,13 @@ export default function MobileProfilePage() {
                         ].slice(0, 3);
 
                         // ⚡️ 3. THE SWAP
-                        // Since useMMKV storage doesn't have .delete, we use .clearAll() 
-                        // to wipe the slate entirely clean for the next user.
                         const cleared = storage.clearAll();
 
                         // ⚡️ 4. RE-INJECT THE HISTORY
-                        // Now that the storage is empty, we put the history back in.
                         storage.set("session_history", JSON.stringify(updatedHistory));
 
                         // ⚡️ 5. CLEANUP & REDIRECT
-                        await AsyncStorage.clear(); // Clear any AsyncStorage data as well
+                        await AsyncStorage.clear();
                         setUser(null);
                         clearClanData();
                         router.replace("/screens/FirstLaunchScreen");

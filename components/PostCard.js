@@ -395,7 +395,6 @@ const PostCardComponent = ({ post, authorData, clanData, setPosts, isFeed, hideM
         inventory: [],
         peakLevel: 0
     };
-    console.log(author.rankLevel);
 
     const clanInfo = clanData || null;
 
@@ -452,6 +451,37 @@ const PostCardComponent = ({ post, authorData, clanData, setPosts, isFeed, hideM
     const totalLikes = postData?.likesCount ?? postData?.likes?.length ?? post?.likesCount ?? post?.likes?.length ?? 0;
     const totalComments = postData?.commentsCount ?? postData?.comments?.length ?? post?.commentsCount ?? post?.comments?.length ?? 0;
     const totalViews = postData?.viewsCount ?? postData?.views ?? post?.viewsCount ?? post?.views ?? 0;
+
+    // ⚡️ NEW: Calculate Discussions
+    const totalDiscussions = useMemo(() => {
+        const commentsArray = postData?.comments || post?.comments || [];
+        if (!Array.isArray(commentsArray)) return 0;
+
+        let count = 0;
+        commentsArray.forEach(c => {
+            const replies = c.replies || [];
+
+            // Condition 1: 3 or more replies
+            if (replies.length >= 5) {
+                count++;
+                return;
+            }
+
+            // Condition 2: 2 or more DIFFERENT people active in the thread
+            const authors = new Set();
+            // Fallback strategy to find a unique identifier for the user
+            const getId = (item) => item.authorUserId || item.authorFingerprint || item.name;
+
+            authors.add(getId(c));
+            replies.forEach(r => authors.add(getId(r)));
+
+            if (authors.size >= 3) {
+                count++;
+            }
+        });
+
+        return count;
+    }, [postData?.comments, post?.comments]);
 
     const userRank = useMemo(() => resolveUserRank(author.rankLevel), [author.rankLevel]);
 
@@ -590,7 +620,7 @@ const PostCardComponent = ({ post, authorData, clanData, setPosts, isFeed, hideM
             else if (match[5] || match[6]) parts.push({ type: 'listItem', content: match[5] || match[6] });
             else if (match[7] && match[8]) parts.push({ type: 'link', url: match[7], content: match[8] });
             else if (match[9] && match[10]) parts.push({ type: 'link', url: match[9], content: match[10] });
-            else if (match[0] === 'br()' || match[0] === '[br]') parts.push({ type: 'br' });
+            else if (match[0] === 'br()' || match[0] === 'br') parts.push({ type: 'br' });
             lastIndex = regex.lastIndex;
         }
         if (lastIndex < text.length) parts.push({ type: 'text', content: text.slice(lastIndex) });
@@ -717,6 +747,7 @@ const PostCardComponent = ({ post, authorData, clanData, setPosts, isFeed, hideM
     const aura = getAuraVisuals(author.rank);
     const isTop10 = author.rank > 0 && author.rank <= 10;
     const isClanPost = !!(post.clanId || post.clanTag);
+
     return (
         <View className={`mb-8 overflow-hidden rounded-[32px] border ${isDark ? "bg-[#0d1117] border-gray-800" : "bg-white border-gray-100 shadow-sm"} relative`}>
 
@@ -818,6 +849,11 @@ const PostCardComponent = ({ post, authorData, clanData, setPosts, isFeed, hideM
                         <Pressable onPress={() => DeviceEventEmitter.emit("navigateSafely", `/post/${post.slug || post?._id}?comment=open`)} className="flex-row items-center gap-2">
                             <MaterialCommunityIcons name="comment-text-outline" size={18} color={isDark ? "#9ca3af" : "#4b5563"} />
                             <Text className="text-xs font-black text-gray-500">{formatViews(totalComments)}</Text>
+                        </Pressable>
+                        {/* ⚡️ NEW: Discussion Icon and Count */}
+                        <Pressable onPress={() => DeviceEventEmitter.emit("navigateSafely", `/post/${post.slug || post?._id}?comment=open`)} className="flex-row items-center gap-2">
+                            <MaterialCommunityIcons name="forum-outline" size={18} color={isDark ? "#9ca3af" : "#4b5563"} />
+                            <Text className="text-xs font-black text-gray-500">{formatViews(totalDiscussions)}</Text>
                         </Pressable>
                     </View>
                     <Pressable onPress={handleNativeShare} className="w-10 h-10 items-center justify-center bg-gray-50 dark:bg-gray-800/80 rounded-full border border-gray-200 dark:border-gray-700">

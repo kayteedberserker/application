@@ -347,6 +347,8 @@ export default function FirstLaunchScreen() {
 			const box = session.hibernateBox;
 			if (box) {
 				Object.keys(box).forEach(key => {
+					// ⚡️ MMKV's storage.set() will automatically check if box[key] 
+					// is a String, Number, or Boolean and save it correctly!
 					storage.set(key, box[key]);
 				});
 			}

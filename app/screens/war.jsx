@@ -1,6 +1,6 @@
 import { Ionicons, MaterialCommunityIcons } from '@expo/vector-icons';
 import { useColorScheme as useNativeWind } from "nativewind";
-import { useCallback, useEffect, useState, useMemo } from 'react';
+import { useCallback, useEffect, useState } from 'react';
 import {
     DeviceEventEmitter,
     Dimensions,
@@ -84,6 +84,7 @@ const ClanWarPage = () => {
     const [totalPages, setTotalPages] = useState({ ACTIVE: 1, PENDING: 1, NEGOTIATING: 1 });
 
     const [clanPoints, setClanPoints] = useState(cacheKeyProfile && PROFILE_MEMORY_CACHE[cacheKeyProfile] ? PROFILE_MEMORY_CACHE[cacheKeyProfile] : 0);
+    const [clanRank, setClanRank] = useState(0);
 
     const [refreshing, setRefreshing] = useState(false);
     const [isOffline, setIsOffline] = useState(false);
@@ -109,29 +110,29 @@ const ClanWarPage = () => {
         try {
             const tagQuery = (tabToFetch !== 'ACTIVE' && userClan?.tag) ? `&tag=${userClan.tag}` : '';
             const url = `/clans/wars?status=${tabToFetch}${tagQuery}&page=${pageNum}&limit=10`;
-            
+
             const res = await apiFetch(url);
 
             if (res.ok) {
                 const data = await res.json();
-                
+
                 // Update State Bucket
                 setWarData(prev => {
                     const updatedArray = pageNum === 1 ? data.wars : [...prev[tabToFetch], ...data.wars];
-                    
+
                     // Update Disk Cache (Page 1 only)
                     if (pageNum === 1) {
                         const key = tabToFetch === 'ACTIVE' ? activeKey : tabToFetch === 'PENDING' ? pendingKey : negotiatingKey;
                         if (key) storage.set(key, JSON.stringify(updatedArray));
                     }
-                    
+
                     return { ...prev, [tabToFetch]: updatedArray };
                 });
 
                 // Update Pagination Trackers
                 setTotalPages(prev => ({ ...prev, [tabToFetch]: data.totalPages }));
                 setPages(prev => ({ ...prev, [tabToFetch]: pageNum }));
-                
+
                 setIsOffline(false);
             } else {
                 setIsOffline(true);
@@ -158,7 +159,7 @@ const ClanWarPage = () => {
                 const data = await res.json();
                 const points = data.totalPoints || 0;
                 setClanPoints(points);
-
+                setClanRank(data.rank || 0);
                 if (cacheKeyProfile) {
                     PROFILE_MEMORY_CACHE[cacheKeyProfile] = points;
                     storage.set(cacheKeyProfile, JSON.stringify(points));
@@ -241,7 +242,7 @@ const ClanWarPage = () => {
                 const err = await response.json();
                 CustomAlert("Failed", err.message || "Could not accept war");
             }
-        } catch (error) { console.error(error); } 
+        } catch (error) { console.error(error); }
         finally { setRefreshing(false); }
     };
 
@@ -270,7 +271,7 @@ const ClanWarPage = () => {
                                 const err = await response.json();
                                 CustomAlert("Error", err.message || "Could not decline war");
                             }
-                        } catch (error) { console.error(error); } 
+                        } catch (error) { console.error(error); }
                         finally { setRefreshing(false); }
                     }
                 }
@@ -323,10 +324,10 @@ const ClanWarPage = () => {
                 updateIndicators();
             } else {
                 const err = await response.json();
-                processTransaction('refund', 'clan_war'); 
+                processTransaction('refund', 'clan_war');
                 CustomAlert("Error", err.message || "Action failed, OC refunded");
             }
-        } catch (error) { console.error(error); } 
+        } catch (error) { console.error(error); }
         finally { setRefreshing(false); }
     };
 
@@ -474,8 +475,8 @@ const ClanWarPage = () => {
 
     // ⚡️ Memoized render function for LegendList
     const renderItem = useCallback(({ item }) => {
-        return activeTab === 'ACTIVE' 
-            ? <WarCard item={item} /> 
+        return activeTab === 'ACTIVE'
+            ? <WarCard item={item} />
             : <PendingRequestCard item={item} />;
     }, [activeTab, canManageClan, userClan]);
 
@@ -538,21 +539,21 @@ const ClanWarPage = () => {
             </View>
 
             {warData[activeTab].length === 0 && refreshing ? (
-                 <View className="flex-1 justify-center items-center">
-                     <SyncLoading message="Scouting Battlefield..." />
-                 </View>
+                <View className="flex-1 justify-center items-center">
+                    <SyncLoading message="Scouting Battlefield..." />
+                </View>
             ) : (
                 // ⚡️ Swapped to LegendList
                 <LegendList
                     data={warData[activeTab]}
                     keyExtractor={item => item.warId || item._id}
                     renderItem={renderItem}
-                    
+
                     // ⚡️ LegendList Performance Props
                     estimatedItemSize={250}
                     drawDistance={1000} // Pre-renders further ahead
                     recycleItems={true} // Essential for dynamic layout lists
-                    
+
                     onRefresh={handleRefresh}
                     refreshing={refreshing}
                     onEndReached={handleLoadMore}
@@ -562,9 +563,9 @@ const ClanWarPage = () => {
                         <View className="items-center mt-32 opacity-40 px-10">
                             <MaterialCommunityIcons name={activeTab === 'ACTIVE' ? "sword-cross" : "sleep"} size={80} color={isDark ? "#64748b" : "#94a3b8"} />
                             <Text className="text-slate-500 dark:text-slate-400 mt-4 font-black italic uppercase text-center text-xs">
-                                {isOffline ? 'No cached records found' : 
-                                 !userClan?.tag && activeTab !== 'ACTIVE' ? 'You must be aligned with a clan to access this sector.' :
-                                 'The battlefield is currently silent.'}
+                                {isOffline ? 'No cached records found' :
+                                    !userClan?.tag && activeTab !== 'ACTIVE' ? 'You must be aligned with a clan to access this sector.' :
+                                        'The battlefield is currently silent.'}
                             </Text>
                         </View>
                     }
