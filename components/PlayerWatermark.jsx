@@ -4,21 +4,33 @@ import { useRef } from 'react';
 import { StyleSheet, View } from 'react-native'; // ⚡️ Added StyleSheet
 import { SvgXml } from "react-native-svg";
 
-export default function PlayerWatermark({ equippedWatermark, isDark }) {
+export default function PlayerWatermark({ equippedWatermark, isDark, isFeed = false }) {
     const animation = useRef(null);
 
     if (!equippedWatermark) return null;
 
     const watermarkVisual = equippedWatermark.visualConfig || {};
+
+    // Determine if we have Lottie data
+    const lottieData = watermarkVisual.lottieJson;
+    const lottieSource = watermarkVisual.lottieUrl;
+    const hasLottie = !!(lottieData || lottieSource);
+
+    // ⚡️ Logic Update: 
+    // If we are in a feed and there is no SVG, we check if we should even be here.
+    // If it's a Lottie-only watermark and we're in a feed, return null so nothing is shown.
+    if (isFeed && !watermarkVisual.svgCode && hasLottie) {
+        return null;
+    }
+
+    // If there's no Lottie, no SVG, and no icon name provided, return null to avoid the fountain-pen fallback
+    if (!hasLottie && !watermarkVisual.svgCode && !watermarkVisual.icon) {
+        return null;
+    }
+
     const iconSize = watermarkVisual.size || 220;
-
-    // Default color logic
     const iconColor = watermarkVisual.color || (isDark ? 'white' : 'black');
-
-    // Determine if we are rendering Lottie, SVG, or an Icon
-    const lottieData = watermarkVisual.lottieJson; // The JSON object itself
-    const lottieSource = watermarkVisual.lottieUrl; // Or a link to the JSON file
-    const isLottie = !!(lottieData || lottieSource);
+    const shouldRenderLottie = hasLottie && !isFeed;
 
     return (
         // ⚡️ FIX 1: The outer wrapper strictly fills the card background and hides any overflow
@@ -37,7 +49,7 @@ export default function PlayerWatermark({ equippedWatermark, isDark }) {
                     ]
                 }}
             >
-                {isLottie ? (
+                {shouldRenderLottie ? (
                     <LottieView
                         autoPlay
                         loop
@@ -60,13 +72,14 @@ export default function PlayerWatermark({ equippedWatermark, isDark }) {
                         width={iconSize}
                         height={iconSize}
                     />
-                ) : (
+                ) : watermarkVisual.icon ? (
+                    // Only render the icon if a specific name is provided in visualConfig
                     <MaterialCommunityIcons
-                        name={watermarkVisual.icon || 'fountain-pen-tip'}
+                        name={watermarkVisual.icon}
                         size={iconSize}
                         color={iconColor}
                     />
-                )}
+                ) : null}
             </View>
         </View>
     );

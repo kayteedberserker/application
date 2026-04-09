@@ -751,7 +751,7 @@ const PostCardComponent = ({ post, authorData, clanData, setPosts, isFeed, hideM
     return (
         <View className={`mb-8 overflow-hidden rounded-[32px] border ${isDark ? "bg-[#0d1117] border-gray-800" : "bg-white border-gray-100 shadow-sm"} relative`}>
 
-            <PlayerWatermark equippedWatermark={equippedWatermark} isDark={isDark} />
+            <PlayerWatermark isFeed={true} equippedWatermark={equippedWatermark} isDark={isDark} />
 
             {isTop10 && (
                 <View className="absolute inset-0 opacity-[0.04]" style={{ backgroundColor: activeGlowColor || aura.color }} pointerEvents="none" />
