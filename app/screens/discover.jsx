@@ -1,11 +1,10 @@
 import { Ionicons } from '@expo/vector-icons';
-import { useMMKV } from 'react-native-mmkv';
+import { LegendList } from "@legendapp/list";
 import { useRouter } from 'expo-router';
 import { useColorScheme } from "nativewind";
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { ActivityIndicator, Clipboard, DeviceEventEmitter, Modal, ScrollView, Text, TextInput, TouchableOpacity, View } from 'react-native';
-import { LegendList } from "@legendapp/list"; 
-import Animated, { FadeInDown, Layout } from "react-native-reanimated";
+import { useMMKV } from 'react-native-mmkv';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import ClanCrest from '../../components/ClanCrest';
 import CoinIcon from '../../components/ClanIcon';
@@ -14,7 +13,6 @@ import { useCoins } from '../../context/CoinContext';
 import { useStreak } from "../../context/StreakContext";
 import { useUser } from "../../context/UserContext";
 import apiFetch from '../../utils/apiFetch';
-import PeakBadge from "../../components/PeakBadge";
 
 let CLANS_MEMORY_CACHE = [];
 let USER_STATS_MEMORY_CACHE = null;
@@ -23,28 +21,28 @@ const CLANS_CACHE_KEY = 'cached_clans_list';
 const USER_STATS_CACHE_KEY = 'clan_user_stats_cache';
 
 // ⚡️ UPDATED REQUIREMENTS: Level 4 corresponds to the old 25 post requirement (700+ Aura)
-const MIN_RANK_REQUIRED = 4; 
+const MIN_RANK_REQUIRED = 4;
 const MIN_STREAK_REQUIRED = 5;
 
 // ⚡️ IMPORTED AURA TIERS
 // ⚡️ IMPORTED AURA TIERS
 export const AURA_TIERS = [
-  { level: 1, req: 0, title: "E-Rank Novice", icon: "🌱", color: "#94a3b8" },
-  { level: 2, req: 100, title: "D-Rank Operative", icon: "⚔️", color: "#34d399" }, 
-  { level: 3, req: 300, title: "C-Rank Awakened", icon: "🔥", color: "#f87171" }, 
-  { level: 4, req: 700, title: "B-Rank Elite", icon: "⚡", color: "#a78bfa" }, 
-  { level: 5, req: 1500, title: "A-Rank Champion", icon: "🛡️", color: "#60a5fa" }, 
-  { level: 6, req: 3000, title: "S-Rank Legend", icon: "🌟", color: "#fcd34d" }, 
-  { level: 7, req: 6000, title: "SS-Rank Mythic", icon: "🌀", color: "#f472b6" }, 
-  { level: 8, req: 12000, title: "Monarch", icon: "👑", color: "#fbbf24" }, 
+    { level: 1, req: 0, title: "E-Rank Novice", icon: "🌱", color: "#94a3b8" },
+    { level: 2, req: 100, title: "D-Rank Operative", icon: "⚔️", color: "#34d399" },
+    { level: 3, req: 300, title: "C-Rank Awakened", icon: "🔥", color: "#f87171" },
+    { level: 4, req: 700, title: "B-Rank Elite", icon: "⚡", color: "#a78bfa" },
+    { level: 5, req: 1500, title: "A-Rank Champion", icon: "🛡️", color: "#60a5fa" },
+    { level: 6, req: 3000, title: "S-Rank Legend", icon: "🌟", color: "#fcd34d" },
+    { level: 7, req: 6000, title: "SS-Rank Mythic", icon: "🌀", color: "#f472b6" },
+    { level: 8, req: 12000, title: "Monarch", icon: "👑", color: "#fbbf24" },
 ];
 
 const resolveUserRank = (level) => {
     const safeLevel = Math.max(1, Math.min(8, level || 1));
     const currentTier = AURA_TIERS[safeLevel - 1];
-    return { 
-        title: currentTier.title.toUpperCase().replace(/ /g, "_"), 
-        icon: currentTier.icon, 
+    return {
+        title: currentTier.title.toUpperCase().replace(/ /g, "_"),
+        icon: currentTier.icon,
         color: currentTier.color,
         level: currentTier.level
     };
@@ -56,7 +54,7 @@ export default function ClanDiscover() {
     const storage = useMMKV();
     const { colorScheme } = useColorScheme();
     const isDark = colorScheme === "dark";
-    
+
     const router = useRouter();
     const insets = useSafeAreaInsets();
 
@@ -66,7 +64,7 @@ export default function ClanDiscover() {
     const [clans, setClans] = useState(CLANS_MEMORY_CACHE);
     // ⚡️ Optimized: Read Rank Level directly from the User Context
     const userRankLevel = user?.currentRankLevel || 1;
-    
+
     const [search, setSearch] = useState('');
     const [page, setPage] = useState(1);
     const [hasMore, setHasMore] = useState(true);
@@ -78,7 +76,7 @@ export default function ClanDiscover() {
     const [alertConfig, setAlertConfig] = useState({ visible: false, title: '', message: '', type: 'error' });
 
     const searchTimeout = useRef(null);
-    const scrollRef = useRef(null); 
+    const scrollRef = useRef(null);
 
     useEffect(() => {
         if (CLANS_MEMORY_CACHE.length === 0) {
@@ -122,10 +120,10 @@ export default function ClanDiscover() {
         try {
             const res = await apiFetch(`/clans?page=${pageNum}&limit=10&search=${searchQuery}&fingerprint=${user?.deviceId || ''}`);
             const data = await res.json();
-            
+
             if (res.ok) {
                 const newClans = data.clans || [];
-                
+
                 setClans(prev => {
                     const updatedList = isRefreshing || pageNum === 1 ? newClans : [...prev, ...newClans];
                     if (!searchQuery && pageNum === 1) {
@@ -134,7 +132,7 @@ export default function ClanDiscover() {
                     }
                     return updatedList;
                 });
-                
+
                 setHasMore(data.hasMore);
                 setPage(pageNum);
             }
@@ -146,7 +144,7 @@ export default function ClanDiscover() {
         }
     }, [clans.length, saveToDisk, user?.deviceId]);
 
-    
+
 
     const handleLoadMore = () => {
         if (!loadingMore && hasMore && !loading) {
@@ -189,8 +187,8 @@ export default function ClanDiscover() {
                         <Text className="text-blue-600 text-[10px] font-black tracking-[2px] uppercase">Global Archives</Text>
                     </View>
                 </View>
-                <TouchableOpacity 
-                    onPress={onRefresh} 
+                <TouchableOpacity
+                    onPress={onRefresh}
                     className={`w-12 h-12 items-center justify-center rounded-2xl border ${isDark ? "bg-zinc-900 border-zinc-800" : "bg-white border-zinc-200 shadow-sm"}`}
                 >
                     <Ionicons name="refresh" size={20} color={isDark ? "#fff" : "#000"} />
@@ -228,11 +226,11 @@ export default function ClanDiscover() {
                         data={clans}
                         keyExtractor={(item) => item.tag}
                         renderItem={renderItem}
-                        
-                        estimatedItemSize={450} 
-                        drawDistance={1000} 
-                        recycleItems={true} 
-                        
+
+                        estimatedItemSize={450}
+                        drawDistance={1000}
+                        recycleItems={true}
+
                         contentContainerStyle={{ paddingHorizontal: 24, paddingBottom: 120, paddingTop: 10 }}
                         showsVerticalScrollIndicator={false}
                         onRefresh={onRefresh}
@@ -256,6 +254,17 @@ export default function ClanDiscover() {
                 isDark={isDark}
             />
 
+            <CreateClanModal
+                visible={isCreateModalVisible}
+                isDark={isDark}
+                onClose={() => setCreateModalVisible(false)}
+                showAlert={showAlert}
+                onSuccess={(newClan) => {
+                    setClans(prev => [newClan, ...prev]);
+                    setCreateModalVisible(false);
+                }}
+            />
+
             <CustomAlert
                 config={alertConfig}
                 onClose={() => setAlertConfig({ ...alertConfig, visible: false })}
@@ -267,7 +276,7 @@ export default function ClanDiscover() {
 
 // ⚡️ UPDATED: Requirement Modal explicitly stating the Target Level and Rank Name
 const RequirementModal = ({ visible, onClose, stats, isDark }) => {
-    
+
     // ⚡️ Added flex-1 and text wrapping so long rank titles don't break the layout
     const RequirementRow = ({ label, currentStr, targetStr, progress, icon, activeColor }) => (
         <View className={`mb-6 p-5 rounded-[30px] border ${isDark ? "bg-black border-zinc-800" : "bg-zinc-50 border-zinc-200 shadow-sm"}`}>
@@ -296,12 +305,12 @@ const RequirementModal = ({ visible, onClose, stats, isDark }) => {
     // ⚡️ Resolve the target rank dynamically so it automatically reads "B-Rank Elite"
     const targetRank = resolveUserRank(MIN_RANK_REQUIRED);
     const currRank = resolveUserRank(stats.rankLevel || 1);
-    
+
     const targetAura = AURA_TIERS[MIN_RANK_REQUIRED - 1].req;
     const currentAura = stats.aura || 0;
-    
+
     // ⚡️ Dynamic Colors: Green if completed, otherwise use the color of their current Tier
-    const auraColor = currentAura >= targetAura ? "#10b981" : currRank.color; 
+    const auraColor = currentAura >= targetAura ? "#10b981" : currRank.color;
     const streakColor = stats.streak >= MIN_STREAK_REQUIRED ? "#10b981" : "#f97316";
 
     return (
@@ -315,27 +324,27 @@ const RequirementModal = ({ visible, onClose, stats, isDark }) => {
                         <Text className={`text-2xl font-black text-center tracking-tighter ${isDark ? "text-white" : "text-zinc-900"}`}>INSUFFICIENT LEGACY</Text>
                         <Text className="text-blue-600 font-bold text-[10px] uppercase tracking-[2px] text-center mt-1">Foundational requirements not met</Text>
                     </View>
-                    
+
                     {/* ⚡️ Now it explicitly tells them to reach Level 4 and shows the exact Rank Title */}
-                    <RequirementRow 
-                        label={`Reach Lv.${MIN_RANK_REQUIRED} ${targetRank.title.replace(/_/g, ' ')}`} 
-                        currentStr={currentAura.toLocaleString()} 
-                        targetStr={targetAura.toLocaleString()} 
+                    <RequirementRow
+                        label={`Reach Lv.${MIN_RANK_REQUIRED} ${targetRank.title.replace(/_/g, ' ')}`}
+                        currentStr={currentAura.toLocaleString()}
+                        targetStr={targetAura.toLocaleString()}
                         progress={(currentAura / targetAura) * 100}
-                        icon="flash" 
+                        icon="flash"
                         activeColor={auraColor}
                     />
 
                     {/* ⚡️ Updated the label here too for clarity */}
-                    <RequirementRow 
-                        label={`Maintain a ${MIN_STREAK_REQUIRED}-Day Streak`} 
-                        currentStr={stats.streak} 
-                        targetStr={MIN_STREAK_REQUIRED} 
+                    <RequirementRow
+                        label={`Maintain a ${MIN_STREAK_REQUIRED}-Day Streak`}
+                        currentStr={stats.streak}
+                        targetStr={MIN_STREAK_REQUIRED}
                         progress={(stats.streak / MIN_STREAK_REQUIRED) * 100}
-                        icon="flame" 
+                        icon="flame"
                         activeColor={streakColor}
                     />
-                    
+
                     <TouchableOpacity onPress={onClose} className="bg-blue-600 p-6 rounded-[28px] items-center shadow-xl shadow-blue-600/40 mt-2">
                         <Text className="text-white font-black uppercase tracking-widest text-xs">I Understand</Text>
                     </TouchableOpacity>
@@ -373,14 +382,14 @@ const CustomAlert = ({ config, onClose, isDark }) => {
 const ClanCard = ({ clan, lbRank, isDark, refreshClans, showAlert }) => {
     const storage = useMMKV();
     const { user } = useUser();
-    
+
     const [actionLoading, setActionLoading] = useState(false);
     const [copied, setCopied] = useState(false);
     const [isFollowing, setIsFollowing] = useState(false);
 
     const getRankInfo = (rank) => {
         const ranks = {
-            6: { title: "The Akatsuki", color: "#2563eb" }, 
+            6: { title: "The Akatsuki", color: "#2563eb" },
             5: { title: "The Espada", color: "#6366f1" },
             4: { title: "Phantom Troupe", color: "#a855f7" },
             3: { title: "Upper Moon", color: "#f59e0b" },
@@ -389,7 +398,7 @@ const ClanCard = ({ clan, lbRank, isDark, refreshClans, showAlert }) => {
         };
         return ranks[rank] || ranks[1];
     };
-    
+
     const equippedGlow = clan.specialInventory?.find(i => i.category === 'GLOW' && i.isEquipped);
     const activeGlowColor = equippedGlow?.visualConfig?.primaryColor || equippedGlow?.visualData?.glowColor || null;
     const rankInfo = getRankInfo(clan.rank);
@@ -415,7 +424,7 @@ const ClanCard = ({ clan, lbRank, isDark, refreshClans, showAlert }) => {
     const performFollowAction = async (action) => {
         if (!user) return;
         setActionLoading(true);
-        
+
         try {
             const res = await apiFetch(`/clans/follow`, {
                 method: "POST",
@@ -441,11 +450,11 @@ const ClanCard = ({ clan, lbRank, isDark, refreshClans, showAlert }) => {
                 }
                 storage.set('followed_clans', JSON.stringify(clanList));
                 storage.set('checked_clans', JSON.stringify(checkedList));
-                
+
                 // Refresh the global list to update follower counts instantly
                 if (refreshClans) refreshClans();
             }
-            
+
             // 🛡️ THE 419 SYNC: If the server says we are already following, force sync the UI and Cache
             if (res.status === 419) {
                 setIsFollowing(true);
@@ -454,7 +463,7 @@ const ClanCard = ({ clan, lbRank, isDark, refreshClans, showAlert }) => {
 
                 storage.set('followed_clans', JSON.stringify(clanList));
                 storage.set('checked_clans', JSON.stringify(checkedList));
-                
+
                 showAlert("CLAN JOINED", `You are already following ${clan?.name}.`, "success");
             }
 
@@ -464,10 +473,10 @@ const ClanCard = ({ clan, lbRank, isDark, refreshClans, showAlert }) => {
                 showAlert("ACTION FAILED", data.message || "Action could not be completed.");
             }
 
-        } catch (err) { 
-            showAlert("CONNECTION ERROR", "Check your internet connection."); 
-        } finally { 
-            setActionLoading(false); 
+        } catch (err) {
+            showAlert("CONNECTION ERROR", "Check your internet connection.");
+        } finally {
+            setActionLoading(false);
         }
     };
 
@@ -513,9 +522,9 @@ const ClanCard = ({ clan, lbRank, isDark, refreshClans, showAlert }) => {
 
             {/* Avatar & Info Section */}
             <View className="items-center px-6">
-                <ClanCrest glowColor={activeGlowColor} rank={clan?.rank} size={120}/>
+                <ClanCrest glowColor={activeGlowColor} rank={clan?.rank} size={120} />
                 <Text numberOfLines={1} className={`text-2xl mt-3 font-black text-center tracking-tight ${isDark ? "text-white" : "text-zinc-900"}`}>{clan.name}</Text>
-                
+
                 <TouchableOpacity onPress={copyToClipboard} className="flex-row items-center mt-1 bg-zinc-500/5 px-3 py-1 rounded-full active:opacity-50">
                     <Text className="text-zinc-500 text-[10px] font-bold tracking-widest uppercase">#{clan.tag}</Text>
                     <Ionicons name={copied ? "checkmark" : "copy-outline"} size={10} color={copied ? "#10b981" : "#71717a"} style={{ marginLeft: 6 }} />
@@ -534,9 +543,9 @@ const ClanCard = ({ clan, lbRank, isDark, refreshClans, showAlert }) => {
 
             {/* Actions Section */}
             <View className="mt-auto flex-row p-5 gap-3 border-t border-zinc-500/10 bg-zinc-500/5">
-                <TouchableOpacity 
-                    onPress={() => performFollowAction(isFollowing ? "unfollow" : "follow")} 
-                    disabled={actionLoading} 
+                <TouchableOpacity
+                    onPress={() => performFollowAction(isFollowing ? "unfollow" : "follow")}
+                    disabled={actionLoading}
                     className={`flex-1 h-12 rounded-2xl flex-row items-center justify-center shadow-md ${isFollowing ? 'bg-zinc-800' : 'bg-blue-600 shadow-blue-600/20'}`}
                 >
                     {actionLoading ? <ActivityIndicator size="small" color="white" /> : (
@@ -546,10 +555,10 @@ const ClanCard = ({ clan, lbRank, isDark, refreshClans, showAlert }) => {
                         </>
                     )}
                 </TouchableOpacity>
-                
-                <TouchableOpacity 
-                    onPress={handleAuthorRequest} 
-                    disabled={actionLoading} 
+
+                <TouchableOpacity
+                    onPress={handleAuthorRequest}
+                    disabled={actionLoading}
                     className={`flex-1 h-12 rounded-2xl flex-row items-center justify-center border ${isDark ? "bg-zinc-800 border-zinc-700" : "bg-white border-zinc-200"}`}
                 >
                     {actionLoading ? <ActivityIndicator size="small" color={isDark ? "white" : "black"} /> : (
@@ -566,19 +575,19 @@ const CreateClanModal = ({ visible, onClose, onSuccess, isDark, showAlert }) => 
     const [name, setName] = useState('');
     const [desc, setDesc] = useState('');
     const [isCreating, setIsCreating] = useState(false);
-    const { coins, processTransaction } = useCoins(); 
+    const { coins, processTransaction } = useCoins();
 
     const handleCreate = async () => {
         if (!name || !user) return;
         setIsCreating(true);
-        if (coins < 500) {
-            showAlert("Insufficient OC", "You need 500 OC 🪙 to create a clan. Visit Store to purchase OC!");
+        if (coins < 250) {
+            showAlert("Insufficient OC", "You need 250 OC 🪙 to create a clan. Visit Store to purchase OC!");
             setIsCreating(false);
             return;
         }
         try {
-            const result = await processTransaction('spend', 'create_clan'); 
-            
+            const result = await processTransaction('spend', 'create_clan');
+
             if (!result.success) {
                 showAlert("System Notification", result.error || "Unable to create clan.");
                 return;
@@ -609,7 +618,7 @@ const CreateClanModal = ({ visible, onClose, onSuccess, isDark, showAlert }) => 
             <View className={`flex-1 justify-end ${isDark ? "bg-black/95" : "bg-zinc-900/70"}`}>
                 <View className={`rounded-t-[60px] h-[85%] border-t ${isDark ? "bg-zinc-900 border-zinc-800" : "bg-white border-zinc-200"}`}>
                     <View className="w-16 h-1.5 bg-zinc-500/20 rounded-full self-center mt-4" />
-                    
+
                     <View className="flex-row justify-between items-center px-10 pt-8 pb-6">
                         <View>
                             <Text className={`text-4xl font-black tracking-tighter ${isDark ? "text-white" : "text-zinc-900"}`}>FOUND CLAN</Text>
@@ -654,7 +663,7 @@ const CreateClanModal = ({ visible, onClose, onSuccess, isDark, showAlert }) => 
                                 <ActivityIndicator color="#fff" />
                             ) : (
                                 <View className="flex-row items-center">
-                                    <Text className="text-white font-black text-[18px] uppercase tracking-tighter mr-2">Confirm Foundation 500</Text>
+                                    <Text className="text-white font-black text-[18px] uppercase tracking-tighter mr-2">Confirm Foundation 250</Text>
                                     <CoinIcon size={22} type='OC' />
                                     <Ionicons name="chevron-forward" size={20} color="white" />
                                 </View>

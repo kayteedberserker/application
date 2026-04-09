@@ -943,6 +943,7 @@ const ClanProfile = () => {
                                         isLeader={userRole === 'leader'}
                                         onKick={() => triggerAction("KICK_MEMBER", { userId: m._id })}
                                         onAppoint={() => triggerAction("APPOINT_VICE", { userId: m._id })}
+                                        isProcessingAction={isProcessingAction}
                                         accent={APP_BLUE}
                                     />
                                 ))}
@@ -975,6 +976,7 @@ const ClanProfile = () => {
                                         fullData.joinRequests.map(req => (
                                             <RequestItem
                                                 key={req.userId?._id || Math.random()}
+                                                isProcessingAction={isProcessingAction}
                                                 user={req.userId}
                                                 onApprove={() => triggerAction("APPROVE_MEMBER", { userId: req.userId?._id })}
                                                 onDecline={() => triggerAction("DECLINE_MEMBER", { userId: req.userId?._id })}
@@ -1996,7 +1998,7 @@ const StatRow = ({ label, value, highlight, color }) => (
     </View>
 );
 
-const MemberItem = ({ member, roleLabel, canManage, isLeader, onKick, onAppoint, accent }) => (
+const MemberItem = ({ member, roleLabel, canManage, isLeader, onKick, onAppoint, accent, isProcessingAction }) => (
     <View className="flex-row items-center mb-3 bg-white dark:bg-zinc-900/40 p-4 rounded-[24px] border border-gray-100 dark:border-zinc-800">
         {/* ⚡️ Explicit width, height, and contentFit fix invisible expo-image bug */}
         <Image
@@ -2011,13 +2013,13 @@ const MemberItem = ({ member, roleLabel, canManage, isLeader, onKick, onAppoint,
         </View>
         <View className="flex-row gap-x-2">
             {isLeader && roleLabel !== "Kage" && roleLabel !== "Jonin" && (
-                <TouchableOpacity onPress={onAppoint} className="bg-blue-500/10 px-4 py-2 rounded-xl border border-blue-500/20">
-                    <Text className="text-blue-600 dark:text-blue-400 font-black text-[9px] uppercase">Appoint Jonin</Text>
+                <TouchableOpacity onPress={onAppoint} disabled={isProcessingAction} className="bg-blue-500/10 px-4 py-2 rounded-xl border border-blue-500/20">
+                    <Text className="text-blue-600 dark:text-blue-400 font-black text-[9px] uppercase">{isProcessingAction ? "Appointing..." : "Appoint Jonin"}</Text>
                 </TouchableOpacity>
             )}
             {canManage && (
-                <TouchableOpacity onPress={onKick} className="bg-red-500/10 px-4 py-2 rounded-xl">
-                    <Text className="text-red-600 dark:text-red-500 font-black text-[9px] uppercase">Banish</Text>
+                <TouchableOpacity onPress={onKick} disabled={isProcessingAction} className="bg-red-500/10 px-4 py-2 rounded-xl">
+                    <Text className="text-red-600 dark:text-red-500 font-black text-[9px] uppercase">{isProcessingAction ? "Banishing..." : "Banish"}</Text>
                 </TouchableOpacity>
             )}
         </View>
@@ -2039,7 +2041,7 @@ const AdminToggle = ({ label, status, onPress, accent }) => (
     </TouchableOpacity>
 );
 
-const RequestItem = ({ user, onApprove, onDecline, accent }) => (
+const RequestItem = ({ user, onApprove, onDecline, accent, isProcessingAction }) => (
     <View className="flex-row items-center mb-3 bg-white dark:bg-zinc-900 p-4 rounded-[24px] border border-gray-100 dark:border-zinc-800">
         {/* ⚡️ Explicit width, height, and contentFit fix invisible expo-image bug */}
         <Image
@@ -2056,15 +2058,17 @@ const RequestItem = ({ user, onApprove, onDecline, accent }) => (
             onPress={onApprove}
             style={{ backgroundColor: accent }}
             className="px-5 py-2.5 rounded-2xl"
+            disabled={isProcessingAction}
         >
-            <Text className="text-white font-black text-[10px] uppercase italic">Accept</Text>
+            <Text className="text-white font-black text-[10px] uppercase italic">{isProcessingAction ? 'Accepting...' : 'Accept'}</Text>
         </TouchableOpacity>
         <TouchableOpacity
             onPress={onDecline}
             style={{ backgroundColor: "red" }}
             className="px-5 py-2.5 rounded-2xl ml-2"
+            disabled={isProcessingAction}
         >
-            <Text className="text-white font-black text-[10px] uppercase italic">Decline</Text>
+            <Text className="text-white font-black text-[10px] uppercase italic">{isProcessingAction ? 'Declining...' : 'Decline'}</Text>
         </TouchableOpacity>
     </View>
 );
