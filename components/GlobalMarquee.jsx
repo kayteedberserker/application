@@ -24,7 +24,7 @@ const { width: SCREEN_WIDTH, height: SCREEN_HEIGHT } = Dimensions.get('window');
 const fetcher = url => apiFetch(url).then(res => res.json());
 
 // ⚡️ Max times a specific pill loops in marquee
-const MAX_VIEWS_MARQUEE = 3;
+const MAX_VIEWS_MARQUEE = 7;
 
 const getPillTheme = (type) => {
     switch (type) {
@@ -54,10 +54,11 @@ export default function GlobalMarquee({ isDark }) {
     const clanId = userClan?.tag || '';
     const endpoint = `/message-pills?userId=${userId}&clanId=${clanId}`;
 
-    const { data } = useSWR(endpoint, fetcher, { refreshInterval: 30000 });
+    const { data, error } = useSWR(endpoint, fetcher, { refreshInterval: 30000 });
 
     const [viewCounts, setViewCounts] = useState({});
     const [showModal, setShowModal] = useState(false);
+    const [marqueeVisible, setMarqueeVisible] = useState(true);
 
     // Load view counts
     useEffect(() => {
@@ -84,6 +85,15 @@ export default function GlobalMarquee({ isDark }) {
 
     // 🔔 Bell badge: active only count
     const activeCount = activePills.length;
+
+    // Update marquee visibility
+    useEffect(() => {
+        if (activePills.length === 0) {
+            setMarqueeVisible(false);
+        } else {
+            setMarqueeVisible(true);
+        }
+    }, [activePills.length]);
 
     const [currentIndex, setCurrentIndex] = useState(0);
     const [textWidth, setTextWidth] = useState(0);
@@ -163,7 +173,7 @@ export default function GlobalMarquee({ isDark }) {
         transform: [{ translateX: translateX.value }],
     }));
 
-    if (activePills.length === 0) return null;
+    if (!marqueeVisible && !showModal) return null;
 
     const themeBg = isDark ? '#050505' : '#ffffff';
     const borderColor = isDark ? 'border-zinc-800' : 'border-zinc-200';
@@ -210,98 +220,106 @@ export default function GlobalMarquee({ isDark }) {
 
     return (
         <View>
-            {/* 🔔 Existing Marquee (unchanged behavior) */}
-            <View
-                className={`w-full border-b z-[100] ${borderColor}`}
-                style={{ height: 36, backgroundColor: themeBg, position: 'relative', overflow: 'hidden' }}
-            >
-                <Animated.View
-                    key={`${currentPill?._id}-${currentIndex}`}
-                    entering={FlipInXDown.duration(600).springify()}
-                    exiting={FlipOutXUp.duration(500)}
-                    style={{ position: 'absolute', width: '100%', height: '100%', flexDirection: 'row', alignItems: 'center' }}
+            {/* 🔔 Marquee (conditional render) */}
+            {marqueeVisible && activePills.length > 0 && (
+                <View
+                    className={`w-full border-b z-[100] ${borderColor}`}
+                    style={{ height: 36, backgroundColor: themeBg, position: 'relative', overflow: 'hidden' }}
                 >
-                    <Pressable
-                        style={{ flex: 1, flexDirection: 'row', alignItems: 'center', height: '100%' }}
-                        onPress={() => {
-                            if (currentPill?.link) {
-                                router.push(currentPill.link);
-                                markSeen(currentPill._id); // Mark seen on marquee click too
-                            }
-                        }}
+                    <Animated.View
+                        key={`${currentPill?._id}-${currentIndex}`}
+                        entering={FlipInXDown.duration(600).springify()}
+                        exiting={FlipOutXUp.duration(500)}
+                        style={{ position: 'absolute', width: '100%', height: '100%', flexDirection: 'row', alignItems: 'center' }}
                     >
-                        <View
-                            className={`px-3 h-full justify-center border-r ${borderColor}`}
-                            style={{ backgroundColor: themeBg, zIndex: 10 }}
+                        <Pressable
+                            style={{ flex: 1, flexDirection: 'row', alignItems: 'center', height: '100%' }}
+                            onPress={() => {
+                                if (currentPill?.link) {
+                                    router.push(currentPill.link);
+                                    markSeen(currentPill._id);
+                                }
+                            }}
+                        >
+                            <View
+                                className={`px-3 h-full justify-center border-r ${borderColor}`}
+                                style={{ backgroundColor: themeBg, zIndex: 10 }}
+                            >
+                                <MaterialCommunityIcons
+                                    name={theme?.icon}
+                                    size={16}
+                                    color={theme?.color}
+                                />
+                            </View>
+
+                            <View style={{ flex: 1, overflow: 'hidden', position: 'relative', height: '100%', justifyContent: 'center' }}>
+                                <ScrollView
+                                    horizontal
+                                    scrollEnabled={false}
+                                    showsHorizontalScrollIndicator={false}
+                                    style={{ flex: 1 }}
+                                    contentContainerStyle={{ alignItems: 'center' }}
+                                >
+                                    <Animated.View style={[{ flexDirection: 'row', paddingLeft: 10 }, panStyle]}>
+                                        <Text
+                                            onLayout={(e) => {
+                                                if (textWidth === 0) setTextWidth(e.nativeEvent.layout.width);
+                                            }}
+                                            numberOfLines={1}
+                                            ellipsizeMode="clip"
+                                            className={`font-black uppercase tracking-[0.2em] text-[10px]`}
+                                            style={{ color: theme?.color, paddingRight: 20 }}
+                                        >
+                                            {currentPill?.text}
+                                        </Text>
+                                    </Animated.View>
+                                </ScrollView>
+
+                                <LinearGradient
+                                    colors={[`${themeBg}00`, themeBg]}
+                                    start={{ x: 0, y: 0 }}
+                                    end={{ x: 1, y: 0 }}
+                                    style={{ position: 'absolute', right: 0, top: 0, bottom: 0, width: 25 }}
+                                />
+                            </View>
+                        </Pressable>
+
+                        {/* 🔔 Bell icon */}
+                        <Pressable
+                            className="absolute right-3 top-1/2 -translate-y-1/2 z-20"
+                            onPress={() => setShowModal(true)}
+                            style={{ padding: 8 }}
                         >
                             <MaterialCommunityIcons
-                                name={theme?.icon}
-                                size={16}
-                                color={theme?.color}
+                                name="bell-outline"
+                                size={20}
+                                color="#6b7280"
                             />
-                        </View>
+                            {activeCount > 0 && (
+                                <View className="absolute -top-1 -right-1 w-5 h-5 bg-red-500 rounded-full items-center justify-center">
+                                    <Text className="text-white text-xs font-bold">{activeCount}</Text>
+                                </View>
+                            )}
+                        </Pressable>
+                    </Animated.View>
+                </View>
+            )}
 
-                        <View style={{ flex: 1, overflow: 'hidden', position: 'relative', height: '100%', justifyContent: 'center' }}>
-                            <ScrollView
-                                horizontal
-                                scrollEnabled={false}
-                                showsHorizontalScrollIndicator={false}
-                                style={{ flex: 1 }}
-                                contentContainerStyle={{ alignItems: 'center' }}
-                            >
-                                <Animated.View style={[{ flexDirection: 'row', paddingLeft: 10 }, panStyle]}>
-                                    <Text
-                                        onLayout={(e) => {
-                                            if (textWidth === 0) setTextWidth(e.nativeEvent.layout.width);
-                                        }}
-                                        numberOfLines={1}
-                                        ellipsizeMode="clip"
-                                        className={`font-black uppercase tracking-[0.2em] text-[10px]`}
-                                        style={{ color: theme?.color, paddingRight: 20 }}
-                                    >
-                                        {currentPill?.text}
-                                    </Text>
-                                </Animated.View>
-                            </ScrollView>
-
-                            <LinearGradient
-                                colors={[`${themeBg}00`, themeBg]}
-                                start={{ x: 0, y: 0 }}
-                                end={{ x: 1, y: 0 }}
-                                style={{ position: 'absolute', right: 0, top: 0, bottom: 0, width: 25 }}
-                            />
-                        </View>
-                    </Pressable>
-
-                    {/* 🔔 NEW: Bell icon right side */}
-                    <Pressable
-                        className="absolute right-3 top-1/2 -translate-y-1/2 z-20"
-                        onPress={() => setShowModal(true)}
-                        style={{ padding: 8 }}
-                    >
-                        <MaterialCommunityIcons
-                            name="bell-outline"
-                            size={20}
-                            color="#6b7280"
-                        />
-                        {activeCount > 0 && (
-                            <View className="absolute -top-1 -right-1 w-5 h-5 bg-red-500 rounded-full items-center justify-center">
-                                <Text className="text-white text-xs font-bold">{activeCount}</Text>
-                            </View>
-                        )}
-                    </Pressable>
-                </Animated.View>
-            </View>
-
-            {/* 🔔 NEW: Notification Modal */}
+            {/* 🔔 Notification Modal (independent) */}
             <Modal
                 visible={showModal}
                 transparent
                 animationType="slide"
                 onRequestClose={() => setShowModal(false)}
+                statusBarTranslucent={true}
             >
-                <View className="flex-1 bg-black/50 justify-end">
-                    <View className="bg-white dark:bg-zinc-900 rounded-t-3xl p-5 max-h-[80%]">
+                <Pressable
+                    className="flex-1"
+                    style={{ zIndex: 1 }}
+                    onPress={() => setShowModal(false)}
+                />
+                <View style={{ zIndex: 2, position: 'absolute', bottom: 0, left: 0, right: 0, justifyContent: 'flex-end', minHeight: "100%" }}>
+                    <View className="bg-white dark:bg-zinc-900 rounded-t-3xl p-5 max-h-[80%] min-h-[40%] shadow-2xl">
                         <View className="flex-row justify-between items-center mb-4">
                             <Text className="text-xl font-bold text-zinc-900 dark:text-white">Notifications</Text>
                             <Pressable onPress={() => setShowModal(false)}>
