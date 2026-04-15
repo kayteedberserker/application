@@ -24,7 +24,7 @@ const { width: SCREEN_WIDTH, height: SCREEN_HEIGHT } = Dimensions.get('window');
 const fetcher = url => apiFetch(url).then(res => res.json());
 
 // ⚡️ Max times a specific pill loops in marquee
-const MAX_VIEWS_MARQUEE = 7;
+const MAX_VIEWS_MARQUEE = 3;
 
 const getPillTheme = (type) => {
     switch (type) {
