@@ -18,13 +18,11 @@ import {
 } from "react-native";
 import ImageZoom from 'react-native-image-pan-zoom';
 import { useMMKV } from 'react-native-mmkv';
-import { WebView } from "react-native-webview";
-import YoutubePlayer from "react-native-youtube-iframe";
-import useSWR from "swr";
 
 import * as Clipboard from 'expo-clipboard';
 import * as Haptics from 'expo-haptics';
 import { SvgXml } from "react-native-svg";
+import useSWR from "swr";
 import { useAlert } from "../context/AlertContext";
 import { useUser } from "../context/UserContext";
 import apiFetch from "../utils/apiFetch";
@@ -44,83 +42,22 @@ import THEME from "./useAppTheme";
 const { width: SCREEN_WIDTH, height: SCREEN_HEIGHT } = Dimensions.get('window');
 const fetcher = (url) => apiFetch(url).then((res) => res.json());
 
-const getClanRankTitle = (rank) => {
-    switch (rank) {
-        case 1: return "Wandering Ronin";
-        case 2: return "Squad 13";
-        case 3: return "Upper Moon";
-        case 4: return "Phantom Troupe";
-        case 5: return "The Espada";
-        case 6: return "The Akatsuki";
-        default: return "Wandering Ronin";
-    }
-};
-
-const getAuraVisuals = (rank) => {
-    if (!rank || rank > 10 || rank <= 0) return null;
-    switch (rank) {
-        case 1: return { color: '#fbbf24', label: 'MONARCH', icon: 'crown' };
-        case 2: return { color: '#ef4444', label: 'YONKO', icon: 'flare' };
-        case 3: return { color: '#a855f7', label: 'KAGE', icon: 'moon-waxing-crescent' };
-        case 4: return { color: '#3b82f6', label: 'SHOGUN', icon: 'shield-star' };
-        case 5: return { color: '#e0f2fe', label: 'ESPADA 0', icon: 'skull' };
-        case 6: return { color: '#cbd5e1', label: 'ESPADA 1', icon: 'sword-cross' };
-        case 7: return { color: '#94a3b8', label: 'ESPADA 2', icon: 'sword-cross' };
-        case 8: return { color: '#64748b', label: 'ESPADA 3', icon: 'sword-cross' };
-        case 9: return { color: '#475569', label: 'ESPADA 4', icon: 'sword-cross' };
-        case 10: return { color: '#334155', label: 'ESPADA 5', icon: 'sword-cross' };
-        default: return { color: '#1e293b', label: 'OPERATIVE', icon: 'target' };
-    }
-};
-
-const AURA_TIERS = [
-    { level: 1, req: 0, title: "E-Rank Novice", icon: "🌱", postLimit: 2 },
-    { level: 2, req: 100, title: "D-Rank Operative", icon: "⚔️", postLimit: 2 },
-    { level: 3, req: 300, title: "C-Rank Awakened", icon: "🔥", postLimit: 3 },
-    { level: 4, req: 700, title: "B-Rank Elite", icon: "⚡", postLimit: 3 },
-    { level: 5, req: 1500, title: "A-Rank Champion", icon: "🛡️", postLimit: 4 },
-    { level: 6, req: 3000, title: "S-Rank Legend", icon: "🌟", postLimit: 4 },
-    { level: 7, req: 6000, title: "SS-Rank Mythic", icon: "🌀", postLimit: 5 },
-    { level: 8, req: 12000, title: "Monarch", icon: "👑", postLimit: 5 }, // Max
-];
-
-const resolveUserRank = (level) => {
-    // Fallback to level 1 if something goes wrong, cap at 8
-    const safeLevel = Math.max(1, Math.min(8, level || 1));
-    // Arrays are 0-indexed, so level 1 is index 0
-    const currentTier = AURA_TIERS[safeLevel - 1];
-
-    return {
-        level: currentTier.level,
-        rankTitle: currentTier.title,
-        rankIcon: currentTier.icon,
-        postLimit: currentTier.postLimit,
-
-        // Formatted exactly how you had it before for backward compatibility
-        rankName: `${currentTier.icon} ${currentTier.title}`
-    };
-};
-
-const formatViews = (views) => {
-    if (!views || views < 0) return "0";
-    if (views < 100) return views.toString();
-    if (views < 1000) return `${Math.floor(views / 100) * 100}+`;
-    if (views < 1000000) {
-        const kValue = views / 1000;
-        return `${kValue % 1 === 0 ? kValue.toFixed(0) : kValue.toFixed(1)}k+`;
-    }
-    const mValue = views / 1000000;
-    return `${mValue % 1 === 0 ? mValue.toFixed(0) : mValue.toFixed(1)}m+`;
+// ⚡️ OPTIMIZATION: Memoize static styles outside the component
+const MEDIA_GLASS_STYLE = {
+    borderWidth: 1,
+    borderColor: 'rgba(96, 165, 250, 0.2)',
+    shadowColor: "#60a5fa",
+    shadowOffset: { width: 0, height: 0 },
+    shadowOpacity: 0.3,
+    shadowRadius: 10
 };
 
 const getVideoThumbnail = (url) => {
     if (!url) return null;
-    if (url.includes("youtube.com") || url.includes("youtu.be")) {
-        const id = url.match(/(?:youtube\.com\/(?:[^\/]+\/.+\/|(?:v|e(?:mbed)?|shorts)\/|.*[?&]v=)|youtu\.be\/)([^"&?\/\s]{11})/)?.[1];
-        return id ? `https://img.youtube.com/vi/${id}/hqdefault.jpg` : null;
-    }
     return url.replace("/q_auto,vc_auto/", "/f_jpg,q_auto,so_auto,c_pad,b_black/").replace(/\.[^/.]+$/, ".jpg");
 };
+
+// --- SUB-COMPONENTS ---
 
 const MediaPlaceholder = ({ height = 250, onPress, type, thumbUrl, showPlayIcon = true }) => (
     <Pressable
@@ -168,34 +105,7 @@ const MediaModal = ({ isOpen, onClose, mediaItems, currentIndex, setCurrentIndex
 
     const renderLightboxContent = (item) => {
         const lowerUrl = item.url?.toLowerCase() || "";
-        const isYouTube = lowerUrl.includes("youtube.com") || lowerUrl.includes("youtu.be");
-        const isTikTok = lowerUrl.includes("tiktok.com");
         const isDirectVideo = item.type?.startsWith("video") || lowerUrl.match(/\.(mp4|mov|m4v|webm)$/i);
-
-        if (isYouTube) {
-            const getYouTubeID = (url) => {
-                const regex = /(?:youtube\.com\/(?:[^\/]+\/.+\/|(?:v|e(?:mbed)?|shorts)\/|.*[?&]v=)|youtu\.be\/)([^"&?\/\s]{11})/;
-                const match = url.match(regex);
-                return match ? match[1] : null;
-            };
-            return (
-                <View style={{ width: SCREEN_WIDTH, height: 250, backgroundColor: 'black' }}>
-                    <YoutubePlayer height={250} play={true} videoId={getYouTubeID(item.url)} />
-                </View>
-            );
-        }
-
-        if (isTikTok) {
-            const getTikTokEmbedUrl = (url) => {
-                const match = url.match(/\/video\/(\d+)/);
-                return match?.[1] ? `https://www.tiktok.com/embed/${match[1]}` : url;
-            }
-            return (
-                <View style={{ width: SCREEN_WIDTH, height: SCREEN_HEIGHT * 0.7 }}>
-                    <WebView source={{ uri: getTikTokEmbedUrl(item.url) }} userAgent="Mozilla/5.0 (iPhone; CPU iPhone OS 15_0 like Mac OS X)" scrollEnabled={false} allowsFullscreenVideo javaScriptEnabled domStorageEnabled allowsInlineMediaPlayback={true} style={{ flex: 1, backgroundColor: 'black' }} />
-                </View>
-            );
-        }
 
         if (isDirectVideo) {
             return <LightboxVideoPlayer key={item.url} uri={item.url} />;
@@ -247,7 +157,7 @@ const MediaModal = ({ isOpen, onClose, mediaItems, currentIndex, setCurrentIndex
 
                 <Pressable onPress={onClose} className="absolute top-14 right-6 p-3 bg-black/40 rounded-full z-50"><Feather name="x" size={24} color="white" /></Pressable>
 
-                {mediaItems[currentIndex]?.type !== "youtube" && (
+                {mediaItems[currentIndex]?.type !== "youtube" && mediaItems[currentIndex]?.type !== "tiktok" && (
                     <Pressable onPress={handleDownload} disabled={isDownloading || isMediaSaved} className="absolute top-14 left-6 p-3 bg-black/40 rounded-full z-50 flex-row items-center gap-2">
                         {isDownloading ? <ActivityIndicator size="small" color="#60a5fa" /> : <Feather name={isMediaSaved ? "check" : "download"} size={24} color="white" />}
                     </Pressable>
@@ -265,7 +175,7 @@ const MediaModal = ({ isOpen, onClose, mediaItems, currentIndex, setCurrentIndex
     );
 };
 
-const MemoizedClanHeader = memo(({ clanInfo, postId, isDark }) => {
+const MemoizedClanHeader = memo(({ clanInfo, postId, isDark, isFeed }) => {
     if (!clanInfo) return null;
 
     const isVerified = clanInfo.verifiedUntil && new Date(clanInfo.verifiedUntil) > new Date();
@@ -297,6 +207,7 @@ const MemoizedClanHeader = memo(({ clanInfo, postId, isDark }) => {
             <PlayerBackground
                 equippedBg={equippedBg}
                 themeColor={activeGlowColor || '#22c55e'}
+                isFeed={isFeed}
                 borderRadius={28}
             />
 
@@ -313,12 +224,13 @@ const MemoizedClanHeader = memo(({ clanInfo, postId, isDark }) => {
                 <View>
                     <View className="flex-row gap-1 items-center">
                         <PlayerNameplate
-                            author={{ username: clanInfo.name }} // We pass the clan name as the username
+                            author={{ username: clanInfo.name }}
                             themeColor={THEME.text}
-                            equippedGlow={equippedGlow} // Use the clan's glow config
+                            equippedGlow={equippedGlow}
                             fontSize={16}
                             showPeakBadge={false}
                             showFlame={false}
+                            isFeed={true}
                             isDark={isDark}
                         />
                         {isVerified && <RemoteSvgIcon size={24} xml={clanInfo.activeCustomizations?.verifiedBadgeXml} />}
@@ -326,7 +238,7 @@ const MemoizedClanHeader = memo(({ clanInfo, postId, isDark }) => {
                     <View className="flex-row items-center mt-1">
                         <View style={{ backgroundColor: highlightColor }} className="w-1 h-3 mr-2 rounded-full" />
                         <Text style={{ color: THEME.textSecondary }} className="text-[10px] font-bold uppercase tracking-[0.15em] opacity-70">
-                            {getClanRankTitle(clanInfo.rank)}
+                            {clanInfo.displayRank || "Wandering Ronin"}
                         </Text>
                     </View>
                 </View>
@@ -383,34 +295,31 @@ const PostCardComponent = ({ post, authorData, clanData, setPosts, isFeed, hideM
     const [liked, setLiked] = useState(false);
     const [isMediaSaved, setIsMediaSaved] = useState(false);
 
-    const author = authorData || {
+    // ⚡️ SERVER-DRIVEN AUTHOR DATA
+    // We now prioritize server-precomputed visuals (auraVisuals, displayRank)
+    const author = authorData || post?.authorData || {
         name: post?.authorName || "Unknown",
         image: null,
-        streak: null,
-        rank: null,
+        streak: 0,
+        rank: 0,
         rankLevel: 1,
         aura: 0,
         equippedGlow: null,
         equippedBadges: [],
         inventory: [],
-        peakLevel: 0
+        peakLevel: 0,
+        displayRank: "Verified Author",
+        auraVisuals: { color: '#1e293b', label: 'OPERATIVE', icon: 'target' }
     };
 
-    const clanInfo = clanData || null;
+    const clanInfo = clanData || post?.clanData || null;
 
     useEffect(() => {
-        setLightbox({ open: false, index: 0 });
-        setCurrentAssetIndex(0);
-        setIsDownloading(false);
-        setIsMediaSaved(false);
-
         try {
             const savedLikesStr = storage.getString('user_likes');
             const likedList = savedLikesStr ? JSON.parse(savedLikesStr) : [];
             setLiked(likedList.includes(post?._id));
-        } catch (e) {
-            console.error("MMKV Init Error", e);
-        }
+        } catch (e) { console.error("MMKV Init Error", e); }
     }, [post?._id, storage]);
 
     const mediaItems = useMemo(() => {
@@ -436,54 +345,23 @@ const PostCardComponent = ({ post, authorData, clanData, setPosts, isFeed, hideM
         return () => backHandler.remove();
     }, [lightbox.open]);
 
-    // ⚡️ PERFORMANCE UPGRADE: Conditional SWR Fetching + Instant Hydration
     const { data: postData, mutate } = useSWR(
         (!syncing && post?._id && isVisible) ? `/posts/${post._id}` : null,
         fetcher,
         {
             refreshInterval: 120000,
-            fallbackData: post, // Instantly populates cache with feed data
+            fallbackData: post,
             revalidateOnMount: false
         }
     );
 
-    // ⚡️ BULLETPROOF COUNTS: Safely checks both arrays and counts
+    // ⚡️ CONSUME SERVER-BAKED COUNTS
     const totalLikes = postData?.likesCount ?? postData?.likes?.length ?? post?.likesCount ?? post?.likes?.length ?? 0;
     const totalComments = postData?.commentsCount ?? postData?.comments?.length ?? post?.commentsCount ?? post?.comments?.length ?? 0;
     const totalViews = postData?.viewsCount ?? postData?.views ?? post?.viewsCount ?? post?.views ?? 0;
 
-    // ⚡️ NEW: Calculate Discussions
-    const totalDiscussions = useMemo(() => {
-        const commentsArray = postData?.comments || post?.comments || [];
-        if (!Array.isArray(commentsArray)) return 0;
-
-        let count = 0;
-        commentsArray.forEach(c => {
-            const replies = c.replies || [];
-
-            // Condition 1: 3 or more replies
-            if (replies.length >= 5) {
-                count++;
-                return;
-            }
-
-            // Condition 2: 2 or more DIFFERENT people active in the thread
-            const authors = new Set();
-            // Fallback strategy to find a unique identifier for the user
-            const getId = (item) => item.authorUserId || item.authorFingerprint || item.name;
-
-            authors.add(getId(c));
-            replies.forEach(r => authors.add(getId(r)));
-
-            if (authors.size >= 3) {
-                count++;
-            }
-        });
-
-        return count;
-    }, [postData?.comments, post?.comments]);
-
-    const userRank = useMemo(() => resolveUserRank(author.rankLevel), [author.rankLevel]);
+    // ⚡️ Use Server Discussion Count or fall back to client logic if data is old
+    const totalDiscussions = postData?.discussionCount ?? post?.discussionCount ?? 0;
 
     useEffect(() => {
         if (!post?._id || !user?.deviceId || syncing || !isVisible) return;
@@ -511,19 +389,18 @@ const PostCardComponent = ({ post, authorData, clanData, setPosts, isFeed, hideM
 
     const handleLike = async () => {
         if (liked || !user) {
+            Haptics.notificationAsync(Haptics.NotificationFeedbackType.Warning);
             if (!user) {
                 CustomAlert("Hold on", "Please register to interact with posts.");
                 DeviceEventEmitter.emit("navigateSafely", "screens/FirstLaunchScreen");
             }
             return;
         }
-
         const fingerprint = user?.deviceId;
-        // ⚡️ SAFEKEEPER: Fallback if SWR hasn't fetched the object yet
         const previousData = postData || post;
+        const currentLikes = totalLikes;
 
-        const currentLikes = postData?.likesCount ?? postData?.likes?.length ?? post?.likesCount ?? post?.likes?.length ?? 0;
-
+        Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
         setLiked(true);
         mutate({
             ...(postData || post),
@@ -536,58 +413,41 @@ const PostCardComponent = ({ post, authorData, clanData, setPosts, isFeed, hideM
                 method: "PATCH",
                 body: JSON.stringify({ action: "like", fingerprint }),
             });
-
             if (res.status === 400 || res.ok) {
                 const savedLikesStr = storage.getString('user_likes');
                 const likedList = savedLikesStr ? JSON.parse(savedLikesStr) : [];
-
                 if (!likedList.includes(post?._id)) {
                     likedList.push(post?._id);
                     storage.set('user_likes', JSON.stringify(likedList));
                 }
-            } else {
-                throw new Error("Server rejected like request");
-            }
-
+            } else { throw new Error("Server rejected like request"); }
         } catch (err) {
-            console.error("Network Like Logic Failed", err);
             setLiked(false);
             mutate(previousData, false);
-            CustomAlert("Sync Error", "Could not register your like. Please check your connection.");
+            CustomAlert("Sync Error", "Could not register your like.");
         }
     };
 
     const handleNativeShare = async () => {
         try {
             const url = `https://oreblogda.com/post/${post?.slug || post?._id}`;
+            Haptics.selectionAsync();
             const shareResult = await Share.share({ message: `Check out this post on Oreblogda: ${post?.title}\n${url}` });
-
             if (shareResult.action === Share.sharedAction) {
-                const sharedStr = storage.getString('user_shares');
-                const sharedList = sharedStr ? JSON.parse(sharedStr) : [];
-
-                if (!sharedList.includes(post?._id)) {
-                    const res = await apiFetch(`/posts/${post?._id}`, {
-                        method: "PATCH",
-                        body: JSON.stringify({ action: "share", fingerprint: user?.deviceId })
-                    });
-
-                    if (res.ok) {
-                        sharedList.push(post?._id);
-                        storage.set('user_shares', JSON.stringify(sharedList));
-                        mutate();
-                    }
-                }
+                const res = await apiFetch(`/posts/${post?._id}`, {
+                    method: "PATCH",
+                    body: JSON.stringify({ action: "share", fingerprint: user?.deviceId })
+                });
+                if (res.ok) mutate();
             }
-        } catch (error) {
-            console.error("Share error", error);
-        }
+        } catch (error) { console.error("Share error", error); }
     };
 
     const handleDownloadMedia = async () => {
         const item = mediaItems[currentAssetIndex];
         if (!item || !item.url) return;
         try {
+            Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
             setIsDownloading(true);
             const { status } = await MediaLibrary.requestPermissionsAsync();
             if (status !== 'granted') {
@@ -603,7 +463,7 @@ const PostCardComponent = ({ post, authorData, clanData, setPosts, isFeed, hideM
             setTimeout(() => setIsMediaSaved(false), 3000);
             await FileSystem.deleteAsync(fileUri, { idempotent: true });
         } catch (error) {
-            CustomAlert("System Failure", "Unable to download media at this time.");
+            CustomAlert("System Failure", "Unable to download media.");
         } finally { setIsDownloading(false); }
     };
 
@@ -627,35 +487,24 @@ const PostCardComponent = ({ post, authorData, clanData, setPosts, isFeed, hideM
         return parts;
     };
 
-    const activeGlowColor = author.equippedGlow?.visualConfig?.primaryColor || author.equippedGlow?.visualConfig?.glowColor || null;
-    const customBadges = author.equippedBadges?.slice(0, 2) || [];
-    const equippedWatermark = author.inventory?.find(i => i.category === 'WATERMARK' && i.isEquipped);
-
     const handleCopyFullText = async () => {
         let cleanText = post.message.replace(/br\(\)|\[br\]/g, '\n');
         cleanText = cleanText.replace(
             /s\((.*?)\)|\[section\](.*?)\[\/section\]|h\((.*?)\)|\[h\](.*?)\[\/h\]|l\((.*?)\)|\[li\](.*?)\[\/li\]|link\((.*?)\)-text\((.*?)\)|\[source="(.*?)" text:(.*?)\]/gs,
             (match, p1, p2, p3, p4, p5, p6, p8, p10) => p1 || p2 || p3 || p4 || p5 || p6 || p8 || p10 || ''
         ).trim();
-
         await Clipboard.setStringAsync(cleanText);
         Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
-        CustomAlert("Scroll Copied", "The full text has been copied to your clipboard.");
+        CustomAlert("Scroll Copied", "Text copied to clipboard.");
     };
 
     const renderContent = useMemo(() => {
-        const maxLength = 150;
-
-        if (isFeed) {
-            const plainText = post.message
-                .replace(/s\((.*?)\)|\[section\](.*?)\[\/section\]|h\((.*?)\)|\[h\](.*?)\[\/h\]|l\((.*?)\)|\[li\](.*?)\[\/li\]|link\((.*?)\)-text\((.*?)\)|\[source="(.*?)" text:(.*?)\]|br\(\)|\[br\]/gs, (match, p1, p2, p3, p4, p5, p6, p8, p10) => p1 || p2 || p3 || p4 || p5 || p6 || p8 || p10 || '')
-                .trim();
-            const truncated = plainText.length > maxLength ? plainText.slice(0, maxLength) + "..." : plainText;
-            return <Text style={{ color: isDark ? "#9ca3af" : "#4b5563" }} className="text-base leading-6">{truncated}</Text>;
+        // ⚡️ IF FEED: Use pre-cleaned server excerpt (Zero Regex Lag)
+        if (isFeed && post.feedExcerpt) {
+            return <Text style={{ color: isDark ? "#9ca3af" : "#4b5563" }} className="text-base leading-6">{post.feedExcerpt || "Decrypting content..."}</Text>;
         }
 
         const parts = parseCustomSyntax(post.message);
-
         const contentNodes = parts.map((part, i) => {
             switch (part.type) {
                 case "text": return <Text key={i} className="text-base leading-7 text-gray-800 dark:text-gray-200">{part.content}</Text>;
@@ -673,15 +522,20 @@ const PostCardComponent = ({ post, authorData, clanData, setPosts, isFeed, hideM
                 {contentNodes}
             </Pressable>
         );
-
-    }, [post.message, isFeed, isDark]);
+    }, [post.message, post.feedExcerpt, isFeed, isDark]);
 
     const renderMediaContent = () => {
         if (mediaItems.length === 0) return null;
 
-        const glassStyle = { borderWidth: 1, borderColor: 'rgba(96, 165, 250, 0.2)', shadowColor: "#60a5fa", shadowOffset: { width: 0, height: 0 }, shadowOpacity: 0.3, shadowRadius: 10 };
+        const glassStyle = {
+            borderWidth: 1,
+            borderColor: 'rgba(96, 165, 250, 0.2)',
+            shadowColor: "#60a5fa",
+            shadowOffset: { width: 0, height: 0 },
+            shadowOpacity: 0.3,
+            shadowRadius: 10
+        };
         const count = mediaItems.length;
-
         const openItem = (index) => {
             setCurrentAssetIndex(index);
             setLightbox({ open: true, index });
@@ -692,12 +546,7 @@ const PostCardComponent = ({ post, authorData, clanData, setPosts, isFeed, hideM
                 {count === 1 ? (
                     <View className="w-full h-full relative">
                         {mediaItems[0].type?.startsWith("video") || mediaItems[0].url.toLowerCase().includes("youtube") || mediaItems[0].url.toLowerCase().includes("tiktok") ? (
-                            <MediaPlaceholder
-                                height="100%"
-                                type="video"
-                                thumbUrl={getVideoThumbnail(mediaItems[0].url)}
-                                onPress={() => openItem(0)}
-                            />
+                            <MediaPlaceholder height="100%" type="video" thumbUrl={getVideoThumbnail(mediaItems[0].url)} onPress={() => openItem(0)} />
                         ) : (
                             <Pressable onPress={() => openItem(0)} className="w-full h-full relative">
                                 <Image source={{ uri: mediaItems[0].url }} style={{ width: '100%', height: '100%', flex: 1 }} contentFit="cover" />
@@ -709,11 +558,7 @@ const PostCardComponent = ({ post, authorData, clanData, setPosts, isFeed, hideM
                         {mediaItems.slice(0, 2).map((item, idx) => (
                             <Pressable key={idx} onPress={() => openItem(idx)} className="flex-1 relative">
                                 <Image source={{ uri: item.type === "video" ? getVideoThumbnail(item.url) : item.url }} style={{ width: '100%', height: '100%', flex: 1 }} contentFit="cover" />
-                                {item.type === "video" && (
-                                    <View className="absolute inset-0 items-center justify-center bg-black/20">
-                                        <Feather name="play" size={24} color="white" />
-                                    </View>
-                                )}
+                                {item.type === "video" && <View className="absolute inset-0 items-center justify-center bg-black/20"><Feather name="play" size={24} color="white" /></View>}
                             </Pressable>
                         ))}
                     </View>
@@ -730,11 +575,7 @@ const PostCardComponent = ({ post, authorData, clanData, setPosts, isFeed, hideM
                             </Pressable>
                             <Pressable onPress={() => openItem(2)} className="flex-1 relative">
                                 <Image source={{ uri: mediaItems[2].type === "video" ? getVideoThumbnail(mediaItems[2].url) : mediaItems[2].url }} style={{ width: '100%', height: '100%', flex: 1 }} contentFit="cover" />
-                                {count > 3 && (
-                                    <View className="absolute inset-0 bg-black/60 items-center justify-center z-10">
-                                        <Text className="text-white text-2xl font-black">+{count - 3}</Text>
-                                    </View>
-                                )}
+                                {count > 3 && <View className="absolute inset-0 bg-black/60 items-center justify-center z-10"><Text className="text-white text-2xl font-black">+{count - 3}</Text></View>}
                                 {mediaItems[2].type === "video" && count <= 3 && <View className="absolute inset-0 items-center justify-center bg-black/20 z-10"><Feather name="play" size={20} color="white" /></View>}
                             </Pressable>
                         </View>
@@ -744,14 +585,17 @@ const PostCardComponent = ({ post, authorData, clanData, setPosts, isFeed, hideM
         );
     };
 
-    const aura = getAuraVisuals(author.rank);
+    const aura = author.auraVisuals || { color: '#1e293b', label: 'OPERATIVE', icon: 'target' };
     const isTop10 = author.rank > 0 && author.rank <= 10;
+    const activeGlowColor = author.equippedGlow?.visualConfig?.primaryColor || author.equippedGlow?.visualConfig?.glowColor || null;
     const isClanPost = !!(post.clanId || post.clanTag);
+    const customBadges = author.equippedBadges?.slice(0, 2) || [];
+    const equippedWatermark = author.inventory?.find(i => i.category === 'WATERMARK' && i.isEquipped);
 
     return (
         <View className={`mb-8 overflow-hidden rounded-[32px] border ${isDark ? "bg-[#0d1117] border-gray-800" : "bg-white border-gray-100 shadow-sm"} relative`}>
 
-            <PlayerWatermark isFeed={true} equippedWatermark={equippedWatermark} isDark={isDark} />
+            <PlayerWatermark isFeed={isFeed} equippedWatermark={equippedWatermark} isDark={isDark} />
 
             {isTop10 && (
                 <View className="absolute inset-0 opacity-[0.04]" style={{ backgroundColor: activeGlowColor || aura.color }} pointerEvents="none" />
@@ -762,12 +606,12 @@ const PostCardComponent = ({ post, authorData, clanData, setPosts, isFeed, hideM
             <View className="p-4 px-2">
                 <View className="mb-5">
                     {isClanPost && clanInfo && (
-                        <MemoizedClanHeader clanInfo={clanInfo} isDark={isDark} postId={post._id} />
+                        <MemoizedClanHeader clanInfo={clanInfo} isDark={isDark} postId={post._id} isFeed={isFeed} />
                     )}
 
                     <View className="flex-row justify-between items-start">
                         <View className="flex-row items-center gap-4 flex-1 pr-2">
-                            <AuraAvatar author={author} glowColor={activeGlowColor} aura={aura} isTop10={isTop10} isDark={isDark} size={44} onPress={() => DeviceEventEmitter.emit("navigateSafely", `/author/${post.authorUserId}`)} />
+                            <AuraAvatar author={author} glowColor={activeGlowColor} aura={aura} isTop10={isTop10} isDark={isDark} size={44} isFeed={isFeed} onPress={() => DeviceEventEmitter.emit("navigateSafely", `/author/${post.authorUserId}`)} />
                             <View className="flex-1">
                                 <Pressable onPress={() => DeviceEventEmitter.emit("navigateSafely", `/author/${post.authorUserId}`)}>
                                     <View className="flex-row items-center gap-[2px]">
@@ -781,6 +625,7 @@ const PostCardComponent = ({ post, authorData, clanData, setPosts, isFeed, hideM
                                                 isDark={isDark}
                                                 showPeakBadge={false}
                                                 showFlame={false}
+                                                isFeed={isFeed}
                                             />
                                         </View>
                                         <Text className="text-gray-500 font-normal flex-shrink-0"> • </Text>
@@ -793,7 +638,7 @@ const PostCardComponent = ({ post, authorData, clanData, setPosts, isFeed, hideM
                                             <Text style={{ color: activeGlowColor || aura.color, fontSize: 8, fontWeight: '900' }}>{aura.label}</Text>
                                         </View>
                                     )}
-                                    <Text className="text-[10px] mt-2 text-gray-500 dark:text-gray-400 font-bold uppercase tracking-tighter">{userRank.rankName || "Verified Author"}</Text>
+                                    <Text className="text-[10px] mt-2 text-gray-500 dark:text-gray-400 font-bold uppercase tracking-tighter">{author.displayRank}</Text>
                                 </Pressable>
                             </View>
                         </View>
@@ -801,23 +646,19 @@ const PostCardComponent = ({ post, authorData, clanData, setPosts, isFeed, hideM
                         <View className="items-end">
                             <View className="shrink-0 flex-row items-center gap-2 bg-gray-50 dark:bg-gray-800/50 px-3 py-1.5 rounded-full border border-gray-100 dark:border-gray-700">
                                 <View className="w-1.5 h-1.5 bg-green-500 rounded-full" />
-                                <Text className="text-[10px] font-black text-gray-900 dark:text-white uppercase tracking-widest">{formatViews(totalViews)}</Text>
+                                <Text className="text-[10px] font-black text-gray-900 dark:text-white uppercase tracking-widest">{post.formattedViews || "0"}</Text>
                             </View>
-
                             <View className="flex-row items-center gap-2 mt-2">
                                 {customBadges.length > 0 && (
                                     <View className="flex-row items-center gap-1">
-                                        {customBadges.map((badge, idx) => (
-                                            <BadgeIcon key={idx} badge={badge} size={25} />
-                                        ))}
+                                        {customBadges.map((badge, idx) => <BadgeIcon key={idx} badge={badge} size={25} />)}
                                     </View>
                                 )}
-
-                                {author.peakLevel > 0 ? (
+                                {author.peakLevel > 0 && (
                                     <View className="flex-row items-center gap-1 bg-purple-500/10 px-2 py-1 rounded-full border border-purple-500/30">
-                                        <PeakBadge level={author.peakLevel} size={25} />
+                                        <PeakBadge level={author.peakLevel} size={25} isFeed={isFeed} />
                                     </View>
-                                ) : null}
+                                )}
                             </View>
                         </View>
                     </View>
@@ -844,16 +685,15 @@ const PostCardComponent = ({ post, authorData, clanData, setPosts, isFeed, hideM
                     <View className="flex-row items-center gap-6">
                         <Pressable onPress={handleLike} disabled={liked} className="flex-row items-center gap-2">
                             <Ionicons name={liked ? "heart" : "heart-outline"} size={20} color={liked ? "#ef4444" : isDark ? "#9ca3af" : "#4b5563"} />
-                            <Text className={`text-xs font-black ${liked ? "text-red-500" : "text-gray-500"}`}>{formatViews(totalLikes)}</Text>
+                            <Text className={`text-xs font-black ${liked ? "text-red-500" : "text-gray-500"}`}>{totalLikes > 0 ? (post.formattedLikes || totalLikes) : "Like"}</Text>
                         </Pressable>
                         <Pressable onPress={() => DeviceEventEmitter.emit("navigateSafely", `/post/${post.slug || post?._id}?comment=open`)} className="flex-row items-center gap-2">
                             <MaterialCommunityIcons name="comment-text-outline" size={18} color={isDark ? "#9ca3af" : "#4b5563"} />
-                            <Text className="text-xs font-black text-gray-500">{formatViews(totalComments)}</Text>
+                            <Text className="text-xs font-black text-gray-500">{totalComments}</Text>
                         </Pressable>
-                        {/* ⚡️ NEW: Discussion Icon and Count */}
-                        <Pressable onPress={() => DeviceEventEmitter.emit("navigateSafely", `/post/${post.slug || post?._id}?comment=open`)} className="flex-row items-center gap-2">
+                        <Pressable onPress={() => DeviceEventEmitter.emit("navigateSafely", `/post/${post.slug || post?._id}?comment=open`)} className="flex-row items-center gap-2 opacity-80">
                             <MaterialCommunityIcons name="forum-outline" size={18} color={isDark ? "#9ca3af" : "#4b5563"} />
-                            <Text className="text-xs font-black text-gray-500">{formatViews(totalDiscussions)}</Text>
+                            <Text className="text-xs font-black text-gray-500">{post.discussionCount || 0}</Text>
                         </Pressable>
                     </View>
                     <Pressable onPress={handleNativeShare} className="w-10 h-10 items-center justify-center bg-gray-50 dark:bg-gray-800/80 rounded-full border border-gray-200 dark:border-gray-700">
@@ -879,7 +719,6 @@ const PostCardComponent = ({ post, authorData, clanData, setPosts, isFeed, hideM
 };
 
 export default memo(PostCardComponent, (prevProps, nextProps) => {
-    // ⚡️ PERFORMANCE OPTIMIZATION: Only re-render if it becomes visible or syncing state changes
     return prevProps.post._id === nextProps.post._id &&
         prevProps.isVisible === nextProps.isVisible &&
         prevProps.syncing === nextProps.syncing;

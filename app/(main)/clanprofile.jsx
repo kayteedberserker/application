@@ -1,5 +1,6 @@
 import { Feather, Ionicons, MaterialCommunityIcons } from "@expo/vector-icons";
 import * as Clipboard from 'expo-clipboard';
+import * as MediaLibrary from 'expo-media-library';
 import { useRouter } from 'expo-router';
 import * as Sharing from 'expo-sharing';
 import { useEffect, useMemo, useRef, useState } from 'react';
@@ -66,8 +67,10 @@ const AnimatedWord = ({ word, index, style }) => {
     useEffect(() => {
         // ⚡️ Haptic feedback syncs perfectly with each word appearing
         setTimeout(() => { Haptics.selectionAsync(); }, index * 60);
+        const timer = setTimeout(() => { Haptics.selectionAsync(); }, index * 60);
         opacity.value = withDelay(index * 60, withTiming(1, { duration: 400, easing: Easing.out(Easing.ease) }));
         translateY.value = withDelay(index * 60, withTiming(0, { duration: 400, easing: Easing.out(Easing.back(1.5)) }));
+        return () => clearTimeout(timer);
     }, [word]);
 
     const animStyle = useAnimatedStyle(() => ({
@@ -310,6 +313,7 @@ const ClanProfile = () => {
     const [storeModalVisible, setStoreModalVisible] = useState(false);
     const [inventoryModalVisible, setInventoryModalVisible] = useState(false);
     const [isProcessingAction, setIsProcessingAction] = useState(false);
+    const [isSaving, setIsSaving] = useState(false);
 
     // ⚡️ ONBOARDING STATE
     const [showOnboarding, setShowOnboarding] = useState(false);
@@ -335,6 +339,29 @@ const ClanProfile = () => {
             }
         } catch (error) {
             console.error("Capture Error:", error);
+        }
+    };
+
+    const captureAndSave = async () => {
+        try {
+            if (clanCardRef.current) {
+                setIsSaving(true);
+                Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
+                const uri = await clanCardRef.current.capture();
+                const { status } = await MediaLibrary.requestPermissionsAsync();
+                if (status === 'granted') {
+                    await MediaLibrary.saveToLibraryAsync(uri);
+                    Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
+                    CustomAlert("Archived", "The Clan Scroll has been saved to your device.");
+                } else {
+                    CustomAlert("Permission Denied", "Access to gallery is required to save scrolls.");
+                }
+            }
+        } catch (error) {
+            console.error("Save Error:", error);
+            CustomAlert("Error", "Failed to save the clan scroll.");
+        } finally {
+            setIsSaving(false);
         }
     };
 
@@ -772,7 +799,7 @@ const ClanProfile = () => {
                     >
                         {fullData?.badges?.length > 0 ? (
                             fullData.badges.map((badge, idx) => (
-                                <ClanBadge key={`${badge}-${idx}`} badgeName={badge} size="md" />
+                                <ClanBadge key={`${badge}-${idx}`} badgeName={badge} size={40} />
                             ))
                         ) : (
                             <View className="items-center opacity-40 py-2">
@@ -828,6 +855,7 @@ const ClanProfile = () => {
 
             <Modal visible={cardPreviewVisible} transparent animationType="slide">
                 <View className="flex-1 bg-black/95">
+                    <Pressable style={StyleSheet.absoluteFill} onPress={() => setCardPreviewVisible(false)} />
                     <ScrollView contentContainerStyle={{ flexGrow: 1, justifyContent: 'center', alignItems: 'center', padding: 20 }}>
                         <View className="w-full items-center">
                             <View className="w-full flex-row justify-between items-center pt-10">
@@ -843,14 +871,29 @@ const ClanProfile = () => {
                                 <ClanCard clan={fullData} isDark={isDark} forSnapshot={true} />
                             </View>
                             <View className="w-full">
-                                <TouchableOpacity
-                                    onPress={captureAndShare}
-                                    style={{ backgroundColor: APP_BLUE }}
-                                    className="flex-row items-center justify-center gap-3 w-full h-16 rounded-[30px] shadow-lg"
-                                >
-                                    <MaterialCommunityIcons name="share-variant" size={24} color="white" />
-                                    <Text className="text-white font-black uppercase tracking-[0.2em] text-sm italic">Dispatch Scroll</Text>
-                                </TouchableOpacity>
+                                <View className="flex-row gap-3 w-full">
+                                    <TouchableOpacity
+                                        onPress={captureAndSave}
+                                        disabled={isSaving}
+                                        className="flex-1 h-16 bg-gray-800 rounded-[30px] items-center justify-center border border-gray-700 active:scale-95"
+                                    >
+                                        {isSaving ? <ActivityIndicator size="small" color="white" /> : (
+                                            <View className="flex-row items-center gap-2">
+                                                <Feather name="download" size={20} color="white" />
+                                                <Text className="text-white font-black uppercase text-[10px] tracking-widest italic">Save</Text>
+                                            </View>
+                                        )}
+                                    </TouchableOpacity>
+
+                                    <TouchableOpacity
+                                        onPress={captureAndShare}
+                                        style={{ backgroundColor: APP_BLUE }}
+                                        className="flex-[2] h-16 rounded-[30px] flex-row items-center justify-center gap-3 shadow-lg active:scale-95"
+                                    >
+                                        <MaterialCommunityIcons name="share-variant" size={24} color="white" />
+                                        <Text className="text-white font-black uppercase tracking-[0.2em] text-sm italic">Dispatch Scroll</Text>
+                                    </TouchableOpacity>
+                                </View>
                             </View>
                         </View>
                     </ScrollView>
@@ -870,6 +913,7 @@ const ClanProfile = () => {
                 ref={flatListRef}
                 onScroll={handleScroll}
                 scrollEventThrottle={16}
+                drawDistance={1000}
                 style={{ flex: 1, backgroundColor: isDark ? "#0a0a0a" : "#fff" }}
                 data={
                     activeTab === 'Scrolls' ? posts :
@@ -879,6 +923,7 @@ const ClanProfile = () => {
                 keyExtractor={(item) => item._id}
                 estimatedItemSize={120}
                 recycleItems={true}
+                removeClippedSubviews={true}
                 contentContainerStyle={{
                     paddingBottom: insets.bottom + 100
                 }}

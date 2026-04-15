@@ -226,9 +226,10 @@ export default function ClanDiscover() {
                         data={clans}
                         keyExtractor={(item) => item.tag}
                         renderItem={renderItem}
+                        removeClippedSubviews={true}
 
                         estimatedItemSize={450}
-                        drawDistance={1000}
+                        drawDistance={1500}
                         recycleItems={true}
 
                         contentContainerStyle={{ paddingHorizontal: 24, paddingBottom: 120, paddingTop: 10 }}

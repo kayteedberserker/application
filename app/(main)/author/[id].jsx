@@ -1,16 +1,20 @@
-import { Ionicons, MaterialCommunityIcons } from "@expo/vector-icons";
+import { Feather, Ionicons, MaterialCommunityIcons } from "@expo/vector-icons";
 import { LegendList } from "@legendapp/list";
+import * as Haptics from 'expo-haptics';
+import * as MediaLibrary from 'expo-media-library';
 import { useFocusEffect, useLocalSearchParams, useRouter } from "expo-router";
 import * as Sharing from 'expo-sharing';
 import { useColorScheme } from "nativewind";
-import { memo, useCallback, useEffect, useRef, useState } from "react";
+import { memo, useCallback, useEffect, useMemo, useRef, useState } from "react";
 import {
+    ActivityIndicator,
     DeviceEventEmitter,
     Dimensions,
     InteractionManager,
     Modal,
     Pressable,
     ScrollView,
+    StyleSheet,
     TouchableOpacity,
     View
 } from "react-native";
@@ -34,6 +38,7 @@ import PlayerCard from "../../../components/PlayerCard";
 import PostCard from "../../../components/PostCard";
 import { SyncLoading } from "../../../components/SyncLoading";
 import { Text } from "../../../components/Text";
+import { useAlert } from "../../../context/AlertContext";
 import apiFetch from "../../../utils/apiFetch";
 
 import BadgeIcon from "../../../components/BadgeIcon";
@@ -43,6 +48,31 @@ import PlayerWatermark from "../../../components/PlayerWatermark";
 
 const API_BASE = "https://oreblogda.com/api";
 const { width } = Dimensions.get('window');
+
+const PostSkeleton = memo(() => {
+    const isDark = useColorScheme() === "dark";
+    return (
+        <View className={`mb-8 p-4 rounded-[32px] border ${isDark ? "bg-[#0d1117] border-gray-800" : "bg-white border-gray-100"} opacity-40`}>
+            <View className="flex-row items-center gap-4 mb-6">
+                <View className="w-12 h-12 rounded-full bg-gray-200 dark:bg-gray-800" />
+                <View className="flex-1 gap-2">
+                    <View className="w-32 h-3 bg-gray-200 dark:bg-gray-800 rounded-md" />
+                    <View className="w-20 h-2 bg-gray-100 dark:bg-gray-900 rounded-md" />
+                </View>
+            </View>
+            <View className="w-full h-6 bg-gray-200 dark:bg-gray-800 rounded-md mb-3" />
+            <View className="w-3/4 h-6 bg-gray-200 dark:bg-gray-800 rounded-md mb-6" />
+            <View className="w-full h-[380px] bg-gray-100 dark:bg-gray-900 rounded-2xl mb-6" />
+            <View className="flex-row justify-between items-center border-t border-gray-100 dark:border-gray-800 pt-4">
+                <View className="flex-row gap-6">
+                    <View className="w-12 h-4 bg-gray-100 dark:bg-gray-800 rounded-full" />
+                    <View className="w-12 h-4 bg-gray-100 dark:bg-gray-800 rounded-full" />
+                </View>
+                <View className="w-8 h-8 bg-gray-100 dark:bg-gray-800 rounded-full" />
+            </View>
+        </View>
+    );
+});
 
 const AUTHOR_MEMORY_CACHE = {};
 const AUTHOR_POSTS_MEMORY_CACHE = {};
@@ -112,6 +142,18 @@ const resolveUserRank = (level, currentAura) => {
 };
 
 const MemoizedPostItem = memo(({ item, isVisible, authorData }) => {
+    const [isReady, setIsReady] = useState(false);
+
+    useEffect(() => {
+        setIsReady(false);
+        const task = InteractionManager.runAfterInteractions(() => {
+            setIsReady(true);
+        });
+        return () => task.cancel();
+    }, [item._id]);
+
+    if (!isReady) return <View className="px-3"><PostSkeleton /></View>;
+
     return (
         <View className="px-3">
             <PostCard
@@ -150,6 +192,7 @@ export default function AuthorPage() {
     const [isOffline, setIsOffline] = useState(false);
     const [isInitialMount, setIsInitialMount] = useState(true);
     const [cardPreviewVisible, setCardPreviewVisible] = useState(false);
+    const [isSaving, setIsSaving] = useState(false);
 
     const scrollRef = useRef(null);
     const playerCardRef = useRef(null);
@@ -157,6 +200,8 @@ export default function AuthorPage() {
     const pulseAnim = useSharedValue(1);
     const rotationAnim = useSharedValue(0);
     const skeletonFade = useSharedValue(0.3);
+
+    const showAlert = useAlert();
 
     const auraRank = author?.previousRank || null;
     const aura = getAuraTier(auraRank);
@@ -308,6 +353,29 @@ export default function AuthorPage() {
         } catch (error) { console.error("Capture Error:", error); }
     };
 
+    const captureAndSave = async () => {
+        try {
+            if (playerCardRef.current) {
+                setIsSaving(true);
+                Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
+                const uri = await playerCardRef.current.capture();
+                const { status } = await MediaLibrary.requestPermissionsAsync();
+                if (status === 'granted') {
+                    await MediaLibrary.saveToLibraryAsync(uri);
+                    Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
+                    showAlert("Archived", "Identity saved to device gallery.");
+                } else {
+                    showAlert("Permission Denied", "Gallery access required.");
+                }
+            }
+        } catch (error) {
+            console.error("Save Error:", error);
+            showAlert("Error", "Failed to save card.");
+        } finally {
+            setIsSaving(false);
+        }
+    };
+
     const lastScrollY = useRef(0);
     const handleScroll = useCallback((e) => {
         const offsetY = e.nativeEvent.contentOffset.y;
@@ -317,12 +385,21 @@ export default function AuthorPage() {
         }
     }, []);
 
+    const listData = useMemo(() => {
+        if (loading && page === 1) {
+            return Array.from({ length: 5 }).map((_, i) => ({ _id: `skeleton-${i}`, isGhost: true }));
+        }
+        const list = [...posts];
+        if (loading && posts.length > 0) {
+            list.push({ _id: 'skeleton-more-1', isGhost: true }, { _id: 'skeleton-more-2', isGhost: true });
+        }
+        return list;
+    }, [posts, loading, page]);
+
     const renderItem = useCallback(({ item }) => (
-        <MemoizedPostItem
-            item={item}
-            isVisible={true} // ⚡️ FIXED: Forcing true guarantees SWR key never goes null when clicked
-            authorData={author}
-        />
+        item.isGhost ? <View className="px-3"><PostSkeleton /></View> : (
+            <MemoizedPostItem item={item} isVisible={true} authorData={author} />
+        )
     ), [author]);
 
     const AuthorSkeleton = useCallback(() => (
@@ -496,13 +573,14 @@ export default function AuthorPage() {
         <View className="flex-1 bg-white dark:bg-[#0a0a0a]">
             <LegendList
                 ref={scrollRef}
-                data={posts}
+                data={listData}
                 keyExtractor={(item) => item._id}
                 renderItem={renderItem}
+                removeClippedSubviews={true}
                 ListHeaderComponent={ListHeader}
                 recycleItems={true}
                 estimatedItemSize={630}
-                drawDistance={800}
+                drawDistance={1000}
                 // ⚡️ FIXED: Removed rcycleItems. Re-using old elements was confusing SWR keys
 
                 onScroll={handleScroll}
@@ -540,6 +618,7 @@ export default function AuthorPage() {
 
             <Modal visible={cardPreviewVisible} transparent animationType="slide">
                 <View className="flex-1 bg-black/95">
+                    <Pressable style={StyleSheet.absoluteFill} onPress={() => setCardPreviewVisible(false)} />
                     <ScrollView contentContainerStyle={{ flexGrow: 1, justifyContent: 'center', alignItems: 'center', padding: 20 }} showsVerticalScrollIndicator={false}>
                         <View className="w-full pt-10 items-center">
                             <View className="w-full flex-row justify-between items-center">
@@ -559,10 +638,25 @@ export default function AuthorPage() {
                             )}
 
                             <View className="w-full mt-6">
-                                <TouchableOpacity onPress={captureAndShare} style={{ backgroundColor: themeColor }} className="flex-row items-center justify-center gap-3 w-full h-16 rounded-[30px] shadow-lg">
-                                    <MaterialCommunityIcons name="share-variant" size={24} color="white" />
-                                    <Text className="text-white font-black uppercase tracking-[0.2em] text-sm italic">Share Identity</Text>
-                                </TouchableOpacity>
+                                <View className="flex-row gap-3 w-full">
+                                    <TouchableOpacity
+                                        onPress={captureAndSave}
+                                        disabled={isSaving}
+                                        className="flex-1 h-16 bg-gray-800 rounded-3xl items-center justify-center border border-gray-700 active:scale-95"
+                                    >
+                                        {isSaving ? <ActivityIndicator size="small" color="white" /> : (
+                                            <View className="flex-row items-center gap-2">
+                                                <Feather name="download" size={20} color="white" />
+                                                <Text className="text-white font-black uppercase text-[10px] tracking-widest italic">Save</Text>
+                                            </View>
+                                        )}
+                                    </TouchableOpacity>
+
+                                    <TouchableOpacity onPress={captureAndShare} style={{ backgroundColor: themeColor }} className="flex-[2] h-16 rounded-3xl flex-row items-center justify-center gap-3 shadow-lg active:scale-95">
+                                        <MaterialCommunityIcons name="share-variant" size={24} color="white" />
+                                        <Text className="text-white font-black uppercase tracking-[0.2em] text-sm italic">Share Identity</Text>
+                                    </TouchableOpacity>
+                                </View>
                             </View>
                         </View>
                     </ScrollView>

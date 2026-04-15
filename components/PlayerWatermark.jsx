@@ -16,13 +16,6 @@ export default function PlayerWatermark({ equippedWatermark, isDark, isFeed = fa
     const lottieSource = watermarkVisual.lottieUrl;
     const hasLottie = !!(lottieData || lottieSource);
 
-    // ⚡️ Logic Update: 
-    // If we are in a feed and there is no SVG, we check if we should even be here.
-    // If it's a Lottie-only watermark and we're in a feed, return null so nothing is shown.
-    if (isFeed && !watermarkVisual.svgCode && hasLottie) {
-        return null;
-    }
-
     // If there's no Lottie, no SVG, and no icon name provided, return null to avoid the fountain-pen fallback
     if (!hasLottie && !watermarkVisual.svgCode && !watermarkVisual.icon) {
         return null;
@@ -30,7 +23,6 @@ export default function PlayerWatermark({ equippedWatermark, isDark, isFeed = fa
 
     const iconSize = watermarkVisual.size || 220;
     const iconColor = watermarkVisual.color || (isDark ? 'white' : 'black');
-    const shouldRenderLottie = hasLottie && !isFeed;
 
     return (
         // ⚡️ FIX 1: The outer wrapper strictly fills the card background and hides any overflow
@@ -49,10 +41,10 @@ export default function PlayerWatermark({ equippedWatermark, isDark, isFeed = fa
                     ]
                 }}
             >
-                {shouldRenderLottie ? (
+                {hasLottie ? (
                     <LottieView
-                        autoPlay
-                        loop
+                        autoPlay={!isFeed}
+                        loop={!isFeed}
                         ref={animation}
                         renderMode="hardware"
                         style={{

@@ -8,13 +8,6 @@ import PlayerNameplate from "./PlayerNameplate";
 import PlayerWatermark from "./PlayerWatermark";
 import { Text } from "./Text";
 
-const formatCoins = (num) => {
-  if (!num) return "0";
-  if (num >= 1000000) return Math.floor(num / 1000000) + 'M+';
-  if (num >= 1000) return Math.floor(num / 1000) + 'k+';
-  return num.toString();
-};
-
 const getAuraTier = (rank) => {
   const MONARCH_GOLD = '#fbbf24';
   const CRIMSON_RED = '#ef4444';
@@ -167,15 +160,15 @@ export default function PlayerCard({ author, totalPosts, isDark }) {
           <View className="flex-row justify-between w-full mt-4 border-y border-gray-100 dark:border-gray-800 py-5 px-2">
             <View className="items-center flex-1">
               <Text className="text-[11px] font-black text-gray-400 uppercase tracking-widest mb-1">Aura</Text>
-              <Text className="text-xl font-black" style={{ color: writerRank.color }}>{formatCoins(totalAura)}</Text>
+              <Text className="text-xl font-black" style={{ color: writerRank.color }}>{totalAura}</Text>
             </View>
             <View className="items-center flex-1 border-l border-gray-100 dark:border-gray-800">
               <Text className="text-[11px] font-black text-gray-400 uppercase tracking-widest mb-1">Glory</Text>
-              <Text className="text-xl font-black" style={{ color: '#ec4899' }}>+{formatCoins(author.weeklyAura || 0)}</Text>
+              <Text className="text-xl font-black" style={{ color: '#ec4899' }}>+{author.weeklyAura || 0}</Text>
             </View>
             <View className="items-center flex-1 border-l border-gray-100 dark:border-gray-800">
               <Text className="text-[11px] font-black text-gray-400 uppercase tracking-widest mb-1">Docs</Text>
-              <Text className="text-xl font-black dark:text-white">{formatCoins(totalPosts)}</Text>
+              <Text className="text-xl font-black dark:text-white">{totalPosts}</Text>
             </View>
           </View>
 
@@ -184,14 +177,14 @@ export default function PlayerCard({ author, totalPosts, isDark }) {
               <View className="flex-row items-center gap-3">
                 <Text className="text-3xl">{writerRank.icon}</Text>
                 <View>
-                  <Text style={{ color: writerRank.color }} className="text-[9px] font-mono uppercase tracking-[0.2em] leading-none mb-1">RPG_CLASS</Text>
+                  <Text style={{ color: writerRank.color }} className="text-[9px] font-mono uppercase tracking-[0.2em] leading-none mb-1">PLAYER_CLASS</Text>
                   <Text className="text-xs font-black uppercase tracking-widest dark:text-white">
                     {writerRank.title}
                   </Text>
                 </View>
               </View>
               <Text className="text-[10px] font-mono font-bold text-gray-500 uppercase mb-1">
-                EXP: {formatCoins(totalAura)} / {formatCoins(writerRank.nextReq)}
+                EXP: {totalAura} / {writerRank.nextReq}
               </Text>
             </View>
 

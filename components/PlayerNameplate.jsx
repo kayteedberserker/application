@@ -21,6 +21,7 @@ export default function PlayerNameplate({
     auraRank = null,
     isDark,
     fontSize = 36,
+    isFeed = false,
     showPeakBadge = true,
     showFlame = true
 }) {
@@ -59,6 +60,14 @@ export default function PlayerNameplate({
 
     useEffect(() => {
         if (!isAnimated) return;
+
+        if (isFeed) {
+            progress.value = 0.5;
+            glitchX.value = 0;
+            glitchY.value = 0;
+            pulseAnim.value = 1;
+            return;
+        }
 
         const timer = setTimeout(() => {
             setIsReadyToAnimate(true);
@@ -113,7 +122,7 @@ export default function PlayerNameplate({
         }, 100);
 
         return () => clearTimeout(timer);
-    }, [isAnimated, animationType, progress, glitchX, glitchY, glitchOpacity, pulseAnim]);
+    }, [isAnimated, animationType, progress, glitchX, glitchY, glitchOpacity, pulseAnim, isFeed]);
 
     const sweepStyle = useAnimatedStyle(() => {
         const translationRange = textDimensions.width > 0 ? textDimensions.width * 1.5 : 300;

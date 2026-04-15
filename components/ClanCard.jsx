@@ -1,25 +1,25 @@
-import { MaterialCommunityIcons, Feather } from "@expo/vector-icons";
+import { MaterialCommunityIcons } from "@expo/vector-icons";
 import { useEffect } from "react";
-import { Image, ScrollView, View } from "react-native";
-import Svg, { SvgXml } from 'react-native-svg';
+import { Image, View } from "react-native";
 import Animated, {
-  useSharedValue,
+  Easing,
   useAnimatedStyle,
+  useSharedValue,
   withRepeat,
-  withTiming,
   withSequence,
-  Easing
+  withTiming
 } from 'react-native-reanimated';
+import { SvgXml } from 'react-native-svg';
 
 // ⚡️ IMPORTED UNIFIED COMPONENTS
+import BadgeIcon from "./BadgeIcon";
 import { ClanBadge } from "./ClanBadge";
 import ClanBorder from "./ClanBorder";
 import ClanCrest from "./ClanCrest";
-import { Text } from "./Text";
-import PlayerNameplate from "./PlayerNameplate";
 import PlayerBackground from "./PlayerBackground";
+import PlayerNameplate from "./PlayerNameplate";
 import PlayerWatermark from "./PlayerWatermark";
-import BadgeIcon from "./BadgeIcon";
+import { Text } from "./Text";
 
 const getClanTierDetails = (title) => {
   switch (title) {
@@ -33,8 +33,8 @@ const getClanTierDetails = (title) => {
 };
 
 const RemoteSvgIcon = ({ xml, size = 50, color }) => {
-    if (!xml) return <MaterialCommunityIcons name="help-circle-outline" size={size} color="gray" />;
-    return <SvgXml xml={xml} width={size} height={size} />;
+  if (!xml) return <MaterialCommunityIcons name="help-circle-outline" size={size} color="gray" />;
+  return <SvgXml xml={xml} width={size} height={size} />;
 };
 
 export default function ClanCard({ clan, isDark, THEME = { card: '#0a0a0a', text: '#ffffff', border: '#262626', accent: '#3b82f6' } }) {
@@ -46,7 +46,7 @@ export default function ClanCard({ clan, isDark, THEME = { card: '#0a0a0a', text
   const verifiedColor = verifiedTier === "premium" ? "#facc15" : verifiedTier === "standard" ? "#ef4444" : verifiedTier === "basic" ? "#3b82f6" : "";
   const rankInfo = getClanTierDetails(clan.rankTitle || "Wandering Ronin");
   const highlightColor = rankInfo.color || THEME.accent
-  
+
   const equippedGlow = clan.specialInventory?.find(i => i.category === 'GLOW' && i.isEquipped);
   const activeGlowColor = equippedGlow?.visualConfig?.primaryColor || equippedGlow?.visualData?.glowColor || null;
 
@@ -74,8 +74,8 @@ export default function ClanCard({ clan, isDark, THEME = { card: '#0a0a0a', text
         withTiming(1.1, { duration: 2000 }),
         withTiming(1, { duration: 2000 })
       ),
-      -1, 
-      false 
+      -1,
+      false
     );
 
     rotationDegrees.value = withRepeat(
@@ -83,8 +83,8 @@ export default function ClanCard({ clan, isDark, THEME = { card: '#0a0a0a', text
         duration: 20000,
         easing: Easing.linear,
       }),
-      -1, 
-      false 
+      -1,
+      false
     );
   }, []);
 
@@ -118,7 +118,7 @@ export default function ClanCard({ clan, isDark, THEME = { card: '#0a0a0a', text
             style={[
               {
                 position: 'absolute', width: 140, height: 140, borderRadius: 100,
-                backgroundColor: activeGlowColor || highlightColor, 
+                backgroundColor: activeGlowColor || highlightColor,
                 opacity: 0.1
               },
               pulseStyle
@@ -135,35 +135,35 @@ export default function ClanCard({ clan, isDark, THEME = { card: '#0a0a0a', text
         </View>
 
         <View className="flex-row items-center justify-center gap-1 mb-2">
-            {/* ⚡️ REPLACED HARDCODED TEXT WITH PLAYERNAMEPLATE */}
-            <PlayerNameplate 
-                author={{ username: clan.name }} 
-                themeColor={rankInfo.color} 
-                equippedGlow={equippedGlow} 
-                auraRank={999} // High number disables standard aura requirement checks
-                fontSize={30} 
-                isDark={isDark}
-                showPeakBadge={false} 
-                showFlame={false} 
-            />
-            {isVerified && (
-                <View className="ml-1">
-                    <RemoteSvgIcon size={24} xml={clan.activeCustomizations?.verifiedBadgeXml} />
-                </View>
-            )}
+          {/* ⚡️ REPLACED HARDCODED TEXT WITH PLAYERNAMEPLATE */}
+          <PlayerNameplate
+            author={{ username: clan.name }}
+            themeColor={rankInfo.color}
+            equippedGlow={equippedGlow}
+            auraRank={999} // High number disables standard aura requirement checks
+            fontSize={30}
+            isDark={isDark}
+            showPeakBadge={false}
+            showFlame={false}
+          />
+          {isVerified && (
+            <View className="ml-1">
+              <RemoteSvgIcon size={24} xml={clan.activeCustomizations?.verifiedBadgeXml} />
+            </View>
+          )}
         </View>
 
         {/* ⚡️ EQUIPPED BADGES ROW (MAX 10) */}
         {specialBadges.length > 0 && (
-            <View className="flex-row flex-wrap justify-center gap-2 mb-4">
-                {specialBadges.map((badge, bIdx) => (
-                    <BadgeIcon key={`spec-${bIdx}`} badge={badge} size={22} isDark={isDark} />
-                ))}
-            </View>
+          <View className="flex-row flex-wrap justify-center gap-2 mb-4">
+            {specialBadges.map((badge, bIdx) => (
+              <BadgeIcon key={`spec-${bIdx}`} badge={badge} size={22} isDark={isDark} />
+            ))}
+          </View>
         )}
 
         <View style={{ backgroundColor: `${highlightColor}10`, borderColor: `${highlightColor}20` }} className="px-4 py-1.5 rounded-full border mb-4">
-          <Text style={{ color: activeGlowColor|| verifiedColor || highlightColor }} className="text-xs font-bold tracking-widest uppercase">#{clan.tag}</Text>
+          <Text style={{ color: activeGlowColor || verifiedColor || highlightColor }} className="text-xs font-bold tracking-widest uppercase">#{clan.tag}</Text>
         </View>
 
         <Text className="text-sm text-gray-500 dark:text-gray-400 text-center italic px-4 mb-6">
@@ -187,15 +187,17 @@ export default function ClanCard({ clan, isDark, THEME = { card: '#0a0a0a', text
         </View>
 
         {/* Earned Medals Container */}
-        <View className="w-full flex-row justify-center items-center gap-2 mb-6">
+        <View className="w-full mb-6">
           {clan.badges?.length > 0 ? (
-            <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={{ gap: 3 }}>
+            <View className="flex-row flex-wrap justify-center gap-2 w-full px-4">
               {clan.badges.map((badgeName, idx) => (
-                <ClanBadge key={`${badgeName}-${idx}`} isClanPage={true} badgeName={badgeName} size="sm" />
+                <ClanBadge key={`${badgeName}-${idx}`} isClanPage={true} badgeName={badgeName} size={50} />
               ))}
-            </ScrollView>
+            </View>
           ) : (
-            <Text className="text-[10px] font-bold text-gray-400 uppercase tracking-widest">No Medals Earned</Text>
+            <View className="items-center">
+              <Text className="text-[10px] font-bold text-gray-400 uppercase tracking-widest">No Medals Earned</Text>
+            </View>
           )}
         </View>
 
@@ -203,9 +205,9 @@ export default function ClanCard({ clan, isDark, THEME = { card: '#0a0a0a', text
         <View className="w-full flex-row justify-center mb-8">
           {clan.leader && (
             <View className="flex-row items-center gap-3 bg-gray-50 dark:bg-gray-900 p-2 pr-4 rounded-full border border-gray-100 dark:border-gray-800">
-              <Image 
-                  source={{ uri: clan.leader.profilePic?.url || "https://oreblogda.com/default-avatar.png" }} 
-                  style={{ width: 32, height: 32, borderRadius: 16 }} 
+              <Image
+                source={{ uri: clan.leader.profilePic?.url || "https://oreblogda.com/default-avatar.png" }}
+                style={{ width: 32, height: 32, borderRadius: 16 }}
               />
               <View>
                 <Text className="text-[8px] font-black text-gray-400 uppercase tracking-tighter">Clan Leader</Text>

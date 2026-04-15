@@ -1,6 +1,7 @@
+import { Image } from "expo-image";
+import LottieView from 'lottie-react-native';
 import { useEffect, useMemo, useState } from "react";
 import { ActivityIndicator, Pressable, View } from "react-native";
-import { Image } from "expo-image"; 
 import Animated, {
     Easing,
     interpolate,
@@ -9,21 +10,21 @@ import Animated, {
     withRepeat,
     withTiming
 } from "react-native-reanimated";
-import LottieView from 'lottie-react-native'; 
 import { SvgXml } from "react-native-svg";
 import { Text } from "./Text";
 
-export default function AuraAvatar({ 
-    author, 
-    aura, 
-    isTop10, 
-    isDark, 
-    onPress, 
+export default function AuraAvatar({
+    author,
+    aura,
+    isTop10,
+    isDark,
+    onPress,
     size = 44,
-    glowColor = null 
+    isFeed = false,
+    glowColor = null
 }) {
     const [imageLoading, setImageLoading] = useState(true);
-    
+
     const displayColor = glowColor || aura?.color || '#3b82f6';
     const rank = author?.rank || 100;
     const hasPremiumAura = isTop10 || glowColor;
@@ -32,17 +33,17 @@ export default function AuraAvatar({
     const equippedVfx = useMemo(() => {
         return author?.inventory?.find(i => i.category === 'AVATAR_VFX' && i.isEquipped);
     }, [author?.inventory]);
-    
+
     const vfxUrl = equippedVfx?.visualConfig?.lottieUrl || null;
 
     // --- CHECK FOR PREMIUM AVATAR (Lottie or SVG) ---
     const equippedAnimatedAvatar = useMemo(() => {
         return author?.inventory?.find(i => i.category === 'AVATAR' && i.isEquipped);
     }, [author?.inventory]);
-    
+
     const animatedAvatarUrl = equippedAnimatedAvatar?.visualConfig?.lottieUrl || null;
     const rawSvgAvatarCode = equippedAnimatedAvatar?.visualConfig?.svgCode || null;
-    
+
     // --- REANIMATED SHARED VALUES ---
     const pulseAnim = useSharedValue(1);
     const floatAnim = useSharedValue(0);
@@ -62,10 +63,18 @@ export default function AuraAvatar({
     useEffect(() => {
         if (!hasPremiumAura) return;
 
+        if (isFeed) {
+            pulseAnim.value = 1;
+            floatAnim.value = 0;
+            rotateCW.value = 0;
+            rotateCCW.value = 360;
+            return;
+        }
+
         const pulseSpeed = rank === 1 ? 800 : rank <= 3 ? 1200 : rank <= 5 || glowColor ? 1500 : 2000;
         pulseAnim.value = withRepeat(
             withTiming(1.15, { duration: pulseSpeed, easing: Easing.inOut(Easing.ease) }),
-            -1, true 
+            -1, true
         );
 
         floatAnim.value = withRepeat(
@@ -75,13 +84,13 @@ export default function AuraAvatar({
 
         rotateCW.value = withRepeat(
             withTiming(360, { duration: rank === 1 ? 3000 : 5000, easing: Easing.linear }),
-            -1, false 
+            -1, false
         );
         rotateCCW.value = withRepeat(
             withTiming(0, { duration: rank === 1 ? 4000 : 6000, easing: Easing.linear }),
-            -1, false 
+            -1, false
         );
-    }, [hasPremiumAura, rank, glowColor]);
+    }, [hasPremiumAura, rank, glowColor, isFeed]);
 
     // --- STYLES: THE BREATHING FIRE AURA ---
     const fireGlowStyle = useAnimatedStyle(() => {
@@ -117,19 +126,19 @@ export default function AuraAvatar({
     // ⚡️ FIXED: PROPORTIONAL SCALING MATH FOR VFX
     // ========================================================
     // 1. Calculate ratio based on standard size (44)
-    const sizeRatio = size / 44; 
-    
+    const sizeRatio = size / 44;
+
     // 2. Container buffer scales proportionally (so rings don't clip on big sizes)
-    const containerSize = size + (24 * sizeRatio); 
-    
+    const containerSize = size + (24 * sizeRatio);
+
     // 3. Scale VFX safely (Give it a larger base bounding box so Lotties don't clip)
-    const vfxScale = equippedVfx?.visualConfig?.zoom || 1.3; 
-    const vfxBaseDim = size * 1.5; 
-    const vfxWidth = vfxBaseDim * vfxScale; 
-    const vfxHeight = vfxBaseDim * vfxScale; 
+    const vfxScale = equippedVfx?.visualConfig?.zoom || 1.3;
+    const vfxBaseDim = size * 1.5;
+    const vfxWidth = vfxBaseDim * vfxScale;
+    const vfxHeight = vfxBaseDim * vfxScale;
 
     // 4. Any Y-offsets from the database must also scale relative to the size
-    const offsetY = (equippedVfx?.visualConfig?.offsetY || 0) * sizeRatio; 
+    const offsetY = (equippedVfx?.visualConfig?.offsetY || 0) * sizeRatio;
 
     return (
         <Pressable
@@ -179,47 +188,47 @@ export default function AuraAvatar({
 
             {/* ⚡️ FIXED: PERFECTLY ANCHORED & SCALED LOTTIE VFX LAYER */}
             {vfxUrl && (
-                <View 
-                    style={{ 
-                        position: 'absolute', 
-                        width: vfxWidth,     
-                        height: vfxHeight,  
+                <View
+                    style={{
+                        position: 'absolute',
+                        width: vfxWidth,
+                        height: vfxHeight,
                         // Mathematically anchors to the exact center of the container, then applies the scaled offset
-                        top: (containerSize - vfxHeight) / 2 + offsetY, 
-                        left: (containerSize - vfxWidth) / 2, 
-                        zIndex: 1, 
-                        pointerEvents: 'none', 
+                        top: (containerSize - vfxHeight) / 2 + offsetY,
+                        left: (containerSize - vfxWidth) / 2,
+                        zIndex: 1,
+                        pointerEvents: 'none',
                         overflow: 'visible' // Prevents the animation from clipping off edges
                     }}
                 >
                     <LottieView
                         source={{ uri: vfxUrl }}
-                        autoPlay
-                        loop
-                        style={{ 
-                            width: '100%', 
+                        autoPlay={!isFeed}
+                        loop={!isFeed}
+                        style={{
+                            width: '100%',
                             height: '100%',
                             transform: [{ scale: equippedVfx?.visualConfig?.zoom || 1 }]
                         }}
-                        resizeMode="contain" 
-                        renderMode="hardware" 
+                        resizeMode="contain"
+                        renderMode="hardware"
                         colorFilters={equippedVfx?.visualConfig?.applyThemeColor ? [{ keypath: "**", color: displayColor }] : []}
                     />
                 </View>
             )}
 
             {/* 👤 THE AVATAR IMAGE, LOTTIE, OR SVG */}
-            <Animated.View 
+            <Animated.View
                 style={[
-                    frameStyle, 
-                    hasPremiumAura ? floatingAvatarStyle : {}, 
-                    { 
-                        width: size, 
-                        height: size, 
-                        borderColor: hasPremiumAura ? displayColor : 'rgba(156, 163, 175, 0.3)', 
-                        overflow: 'hidden', 
+                    frameStyle,
+                    hasPremiumAura ? floatingAvatarStyle : {},
+                    {
+                        width: size,
+                        height: size,
+                        borderColor: hasPremiumAura ? displayColor : 'rgba(156, 163, 175, 0.3)',
+                        overflow: 'hidden',
                         backgroundColor: isDark ? '#111' : '#f3f4f6',
-                        zIndex: 2, 
+                        zIndex: 2,
                     }
                 ]}
             >
@@ -227,18 +236,18 @@ export default function AuraAvatar({
                 {animatedAvatarUrl ? (
                     <LottieView
                         source={{ uri: animatedAvatarUrl }}
-                        autoPlay
-                        loop
+                        autoPlay={!isFeed}
+                        loop={!isFeed}
                         style={[
                             { width: '100%', height: '100%' },
                             rank === 1 ? { transform: [{ rotate: '-45deg' }], scale: 1.4 } : {}
                         ]}
-                        resizeMode="cover" 
-                        renderMode="hardware" 
+                        resizeMode="cover"
+                        renderMode="hardware"
                     />
-                
+
                 ) : rawSvgAvatarCode ? (
-                    <View 
+                    <View
                         style={[
                             { flex: 1, alignItems: 'center', justifyContent: 'center' },
                             rank === 1 ? { transform: [{ rotate: '-45deg' }], scale: 1.4 } : {}
@@ -261,8 +270,8 @@ export default function AuraAvatar({
                             ]}
                             contentFit="cover"
                             onLoadEnd={() => setImageLoading(false)}
-                            cachePolicy="memory-disk" 
-                            transition={200} 
+                            cachePolicy="memory-disk"
+                            transition={200}
                         />
                         {imageLoading && (
                             <View className="absolute inset-0 items-center justify-center bg-gray-100 dark:bg-gray-900">
@@ -270,10 +279,10 @@ export default function AuraAvatar({
                             </View>
                         )}
                     </>
-                
+
                 ) : (
                     <View className="flex-1 items-center justify-center" style={{ backgroundColor: hasPremiumAura ? displayColor : '#64748b' }}>
-                        <Text 
+                        <Text
                             style={rank === 1 ? { transform: [{ rotate: '-45deg' }] } : {}}
                             className="text-white font-black text-lg"
                         >

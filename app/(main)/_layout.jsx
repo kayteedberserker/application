@@ -105,7 +105,7 @@ export default function MainLayout() {
     // ⚡️ CLAN HINT LOGIC (2s Delay, 10x Max)
     useEffect(() => {
         const hintCount = storage.getNumber('clan_hint_count') || 0;
-        if (hintCount < 10) {
+        if (hintCount < 5) {
             // 1. Wait 2 seconds before showing the hint
             const showTimer = setTimeout(() => {
                 setShowClanHint(true);
@@ -369,7 +369,7 @@ export default function MainLayout() {
             {/* ⚡️ THE GOLD ROULETTE EVENT BUTTON + TOOLTIP */}
             <View style={styles.eventButtonContainer} pointerEvents="box-none">
                 {!isFirstPostFlow && (
-                    <Animated.View style={[styles.tooltipContainer, tooltipStyle]}>
+                    <Animated.View pointerEvents="none" style={[styles.tooltipContainer, tooltipStyle]}>
                         <Text style={styles.tooltipText}>NEW EVENT!</Text>
                         <View style={styles.tooltipArrow} />
                     </Animated.View>

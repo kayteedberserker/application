@@ -1,5 +1,5 @@
-import { Ionicons, MaterialCommunityIcons, Feather } from '@expo/vector-icons';
-import { useMMKV } from 'react-native-mmkv'; 
+import { Ionicons, MaterialCommunityIcons } from '@expo/vector-icons';
+import { LegendList } from "@legendapp/list";
 import { useRouter } from "expo-router";
 import { useEffect, useMemo, useState } from "react";
 import {
@@ -9,7 +9,7 @@ import {
     View,
     useColorScheme
 } from "react-native";
-import { LegendList } from "@legendapp/list"; 
+import { useMMKV } from 'react-native-mmkv';
 import Animated, {
     FadeInRight,
     useAnimatedStyle,
@@ -17,11 +17,11 @@ import Animated, {
     withSpring
 } from "react-native-reanimated";
 import useSWR from 'swr';
+import PeakBadge from '../../components/PeakBadge';
+import PlayerNameplate from '../../components/PlayerNameplate';
 import { SyncLoading } from '../../components/SyncLoading';
 import { Text } from "../../components/Text";
 import apiFetch from "../../utils/apiFetch";
-import PeakBadge from '../../components/PeakBadge';
-import PlayerNameplate from '../../components/PlayerNameplate';
 
 const { width } = Dimensions.get('window');
 const API_URL = "https://oreblogda.com";
@@ -29,12 +29,12 @@ const API_URL = "https://oreblogda.com";
 const fetcher = (url) => apiFetch(url).then((res) => res.json());
 
 const CLAN_TIERS = {
-    6: { label: 'VI', color: '#ef4444', title: "The Akatsuki" },        
-    5: { label: 'V', color: '#e0f2fe', title: "The Espada" },          
-    4: { label: 'IV', color: '#a855f7', title: "Phantom Troupe" },        
-    3: { label: 'III', color: '#60a5fa', title: "Upper Moon" },          
-    2: { label: 'II', color: '#10b981', title: "Squad 13" },   
-    1: { label: 'I', color: '#94a3b8', title: "Wandering Ronin" },          
+    6: { label: 'VI', color: '#ef4444', title: "The Akatsuki" },
+    5: { label: 'V', color: '#e0f2fe', title: "The Espada" },
+    4: { label: 'IV', color: '#a855f7', title: "Phantom Troupe" },
+    3: { label: 'III', color: '#60a5fa', title: "Upper Moon" },
+    2: { label: 'II', color: '#10b981', title: "Squad 13" },
+    1: { label: 'I', color: '#94a3b8', title: "Wandering Ronin" },
 };
 
 const getAuraTier = (rank) => {
@@ -44,7 +44,7 @@ const getAuraTier = (rank) => {
         case 2: return { color: '#ef4444', label: 'YONKO' };
         case 3: return { color: '#a855f7', label: 'KAGE' };
         case 4: return { color: '#3b82f6', label: 'SHOGUN' };
-        case 5: return { color: '#e0f2fe', label: 'ESPADA 0' }; 
+        case 5: return { color: '#e0f2fe', label: 'ESPADA 0' };
         case 6: return { color: '#cbd5e1', label: 'ESPADA 1' };
         case 7: return { color: '#94a3b8', label: 'ESPADA 2' };
         case 8: return { color: '#64748b', label: 'ESPADA 3' };
@@ -71,31 +71,31 @@ const formatCoins = (num) => {
 };
 
 export const AURA_TIERS = [
-  { level: 1, req: 0, title: "E-Rank Novice", icon: "🌱", color: "#94a3b8" },
-  { level: 2, req: 100, title: "D-Rank Operative", icon: "⚔️", color: "#34d399" }, 
-  { level: 3, req: 300, title: "C-Rank Awakened", icon: "🔥", color: "#f87171" }, 
-  { level: 4, req: 700, title: "B-Rank Elite", icon: "⚡", color: "#a78bfa" }, 
-  { level: 5, req: 1500, title: "A-Rank Champion", icon: "🛡️", color: "#60a5fa" }, 
-  { level: 6, req: 3000, title: "S-Rank Legend", icon: "🌟", color: "#fcd34d" }, 
-  { level: 7, req: 6000, title: "SS-Rank Mythic", icon: "🌀", color: "#f472b6" }, 
-  { level: 8, req: 12000, title: "Monarch", icon: "👑", color: "#fbbf24" }, 
+    { level: 1, req: 0, title: "E-Rank Novice", icon: "🌱", color: "#94a3b8" },
+    { level: 2, req: 100, title: "D-Rank Operative", icon: "⚔️", color: "#34d399" },
+    { level: 3, req: 300, title: "C-Rank Awakened", icon: "🔥", color: "#f87171" },
+    { level: 4, req: 700, title: "B-Rank Elite", icon: "⚡", color: "#a78bfa" },
+    { level: 5, req: 1500, title: "A-Rank Champion", icon: "🛡️", color: "#60a5fa" },
+    { level: 6, req: 3000, title: "S-Rank Legend", icon: "🌟", color: "#fcd34d" },
+    { level: 7, req: 6000, title: "SS-Rank Mythic", icon: "🌀", color: "#f472b6" },
+    { level: 8, req: 12000, title: "Monarch", icon: "👑", color: "#fbbf24" },
 ];
 
 const resolveUserRank = (level, currentAura) => {
     const safeLevel = Math.max(1, Math.min(8, level || 1));
     const currentTier = AURA_TIERS[safeLevel - 1];
-    const nextTier = AURA_TIERS[safeLevel] || currentTier; 
+    const nextTier = AURA_TIERS[safeLevel] || currentTier;
 
     let progress = 100;
     if (safeLevel < 8) {
         progress = ((currentAura - currentTier.req) / (nextTier.req - currentTier.req)) * 100;
     }
 
-    return { 
-        title: currentTier.title.toUpperCase().replace(/ /g, "_"), 
-        icon: currentTier.icon, 
-        color: currentTier.color, 
-        progress: Math.min(Math.max(progress, 0), 100) 
+    return {
+        title: currentTier.title.toUpperCase().replace(/ /g, "_"),
+        icon: currentTier.icon,
+        color: currentTier.color,
+        progress: Math.min(Math.max(progress, 0), 100)
     };
 };
 
@@ -104,8 +104,8 @@ export default function Leaderboard() {
     const router = useRouter();
     const colorScheme = useColorScheme();
     const isDark = colorScheme === 'dark';
-    
-    const [category, setCategory] = useState("authors"); 
+
+    const [category, setCategory] = useState("authors");
     const [type, setType] = useState("level");
     const [cachedData, setCachedData] = useState(null);
     const [isOfflineMode, setIsOfflineMode] = useState(false);
@@ -116,7 +116,7 @@ export default function Leaderboard() {
         if (category === "clans") {
             setType("points");
         } else {
-            setType("level"); 
+            setType("level");
         }
     }, [category]);
 
@@ -149,7 +149,7 @@ export default function Leaderboard() {
 
     const tabOffset = useSharedValue(0);
     const TOGGLE_WIDTH = width - 32;
-    
+
     const authorTabs = ["level", "aura", "posts", "streak", "peak"];
     const clanTabs = ["points", "followers", "weekly", "badges"];
     const currentTabs = category === "authors" ? authorTabs : clanTabs;
@@ -163,19 +163,19 @@ export default function Leaderboard() {
 
     const animatedSliderStyle = useAnimatedStyle(() => ({
         transform: [{ translateX: tabOffset.value }],
-        backgroundColor: category === "authors" 
-            ? (type === "level" ? (isDark ? '#1e293b' : '#3b82f6') 
-             : type === "aura" ? '#ec4899'  // Pink for Weekly Glory
-             : type === "posts" ? '#8b5cf6' // Purple for Posts
-             : type === "streak" ? '#f59e0b' // Orange for Streak
-             : '#10b981') // Emerald for Peak
+        backgroundColor: category === "authors"
+            ? (type === "level" ? (isDark ? '#1e293b' : '#3b82f6')
+                : type === "aura" ? '#ec4899'  // Pink for Weekly Glory
+                    : type === "posts" ? '#8b5cf6' // Purple for Posts
+                        : type === "streak" ? '#f59e0b' // Orange for Streak
+                            : '#10b981') // Emerald for Peak
             : (isDark ? '#1e293b' : '#3b82f6'),
         borderColor: category === "authors"
-            ? (type === "level" ? '#60a5fa' 
-             : type === "aura" ? '#f472b6' 
-             : type === "posts" ? '#a78bfa' 
-             : type === "streak" ? '#fbbf24'
-             : '#34d399') 
+            ? (type === "level" ? '#60a5fa'
+                : type === "aura" ? '#f472b6'
+                    : type === "posts" ? '#a78bfa'
+                        : type === "streak" ? '#fbbf24'
+                            : '#34d399')
             : '#60a5fa',
         width: TAB_WIDTH
     }));
@@ -183,25 +183,25 @@ export default function Leaderboard() {
     const statusColor = isOfflineMode ? "#f59e0b" : "#60a5fa";
 
     const renderItem = ({ item, index }) => {
-        if (!item) return null; 
+        if (!item) return null;
         const isTop3 = index < 3;
         const highlightColor =
             index === 0 ? "#fbbf24" :
-            index === 1 ? "#94a3b8" :
-            index === 2 ? "#cd7f32" :
-            "transparent";
-        
+                index === 1 ? "#94a3b8" :
+                    index === 2 ? "#cd7f32" :
+                        "transparent";
+
         if (category === "authors") {
             const postCount = item.postCount || 0;
             const streakCount = item.streak || 0;
             const peakLvl = item.peakLevel || 0;
             const purchasedCoins = item.totalPurchasedCoins || 0;
-            
-            const totalAura = item.aura || 0; 
+
+            const totalAura = item.aura || 0;
             const rankLevel = item.currentRankLevel || 1;
 
             const writerRank = resolveUserRank(rankLevel, totalAura);
-            const weeklyAuraRank = getAuraTier(item.previousRank); 
+            const weeklyAuraRank = getAuraTier(item.previousRank);
 
             return (
                 <View
@@ -233,16 +233,16 @@ export default function Leaderboard() {
                         </View>
 
                         <TouchableOpacity style={{ flex: 1 }} onPress={() => DeviceEventEmitter.emit("navigateSafely", { pathname: "/author/[userId]", params: { userId: item.userId } })}>
-                            
-                            <PlayerNameplate 
-                                author={item} 
-                                themeColor={weeklyAuraRank ? weeklyAuraRank.color : (isDark ? '#fff' : '#000')} 
-                                equippedGlow={item.equippedGlow} 
-                                auraRank={item.previousRank || 999} 
-                                isDark={isDark} 
-                                fontSize={13} 
-                                showFlame={false} 
-                                showPeakBadge={false} 
+
+                            <PlayerNameplate
+                                author={item}
+                                themeColor={weeklyAuraRank ? weeklyAuraRank.color : (isDark ? '#fff' : '#000')}
+                                equippedGlow={item.equippedGlow}
+                                auraRank={item.previousRank || 999}
+                                isDark={isDark}
+                                fontSize={13}
+                                showFlame={false}
+                                showPeakBadge={false}
                             />
 
                             {weeklyAuraRank && (
@@ -309,15 +309,15 @@ export default function Leaderboard() {
                             </Text>
                         </View>
                         <TouchableOpacity style={{ flex: 1, paddingLeft: 10 }} onPress={() => DeviceEventEmitter.emit("navigateSafely", { pathname: "/clans/[tag]", params: { tag: item.tag } })}>
-                            <PlayerNameplate 
-                                author={item} 
-                                themeColor={clanTier.color} 
-                                equippedGlow={item.equippedGlow} 
-                                auraRank={999} 
-                                isDark={isDark} 
-                                fontSize={15} 
-                                showFlame={false} 
-                                showPeakBadge={false} 
+                            <PlayerNameplate
+                                author={item}
+                                themeColor={clanTier.color}
+                                equippedGlow={item.equippedGlow}
+                                auraRank={999}
+                                isDark={isDark}
+                                fontSize={15}
+                                showFlame={false}
+                                showPeakBadge={false}
                             />
                             <View style={{ backgroundColor: '#111', paddingHorizontal: 4, borderRadius: 4, alignSelf: 'flex-start', marginTop: 2, borderWidth: 1, borderColor: clanTier.color }}>
                                 <Text style={{ fontSize: 7, fontWeight: 'bold', color: clanTier.color }}>{item.tag}</Text>
@@ -368,7 +368,7 @@ export default function Leaderboard() {
                         <View style={{ flexDirection: 'row', alignItems: 'center' }}>
                             <View style={{ width: 6, height: 6, borderRadius: 4, backgroundColor: statusColor, marginRight: 6 }} />
                             <Text style={{ fontSize: 8, color: statusColor, fontWeight: 'bold', letterSpacing: 1.5 }}>
-                                {category === "authors" ? "PLAYER_INTEL" : "CLAN_HIERARCHY"} 
+                                {category === "authors" ? "PLAYER_INTEL" : "CLAN_HIERARCHY"}
                             </Text>
                         </View>
                     </View>
@@ -377,10 +377,10 @@ export default function Leaderboard() {
 
             <View style={{ flexDirection: 'row', gap: 8, marginBottom: 15 }}>
                 {["authors", "clans"].map((cat) => (
-                    <TouchableOpacity 
+                    <TouchableOpacity
                         key={cat}
                         onPress={() => setCategory(cat)}
-                        style={{ 
+                        style={{
                             flex: 1, height: 40, borderRadius: 12, alignItems: 'center', justifyContent: 'center',
                             backgroundColor: category === cat ? (isDark ? '#1e293b' : '#3b82f6') : (isDark ? '#0a0a0a' : '#f1f5f9'),
                             borderWidth: 1, borderColor: category === cat ? '#60a5fa' : (isDark ? '#1e293b' : '#e2e8f0')
@@ -393,20 +393,20 @@ export default function Leaderboard() {
                 ))}
             </View>
 
-            <View style={{ 
-                backgroundColor: isDark ? '#0a0a0a' : '#f1f5f9', 
+            <View style={{
+                backgroundColor: isDark ? '#0a0a0a' : '#f1f5f9',
                 borderRadius: 18, padding: 4, marginBottom: 15,
                 borderWidth: 1, borderColor: isDark ? '#1e293b' : '#e2e8f0',
                 height: 56, justifyContent: 'center'
             }}>
-                <Animated.View style={[ animatedSliderStyle, { position: 'absolute', height: 46, borderRadius: 14, left: 4, borderWidth: 1 } ]} />
+                <Animated.View style={[animatedSliderStyle, { position: 'absolute', height: 46, borderRadius: 14, left: 4, borderWidth: 1 }]} />
 
                 <View style={{ flexDirection: 'row', height: '100%', zIndex: 20 }}>
                     {currentTabs.map((tab) => (
-                        <TouchableOpacity 
+                        <TouchableOpacity
                             key={tab}
                             activeOpacity={1}
-                            onPress={() => setType(tab)} 
+                            onPress={() => setType(tab)}
                             style={{ flex: 1, alignItems: 'center', justifyContent: 'center' }}
                         >
                             {/* ⚡️ RENDER LOGIC: If type="aura", display "GLORY" */}
@@ -439,8 +439,10 @@ export default function Leaderboard() {
                         data={leaderboardData}
                         keyExtractor={(item, idx) => (item.userId || item.clanId || idx).toString()}
                         renderItem={renderItem}
+                        removeClippedSubviews={true}
                         estimatedItemSize={80}
-                        recycleItems={true} 
+                        drawDistance={3000}
+                        recycleItems={true}
                         showsVerticalScrollIndicator={false}
                         contentContainerStyle={{ paddingBottom: 40 }}
                     />

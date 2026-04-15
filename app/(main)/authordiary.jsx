@@ -1,4 +1,4 @@
-import { Ionicons, MaterialCommunityIcons } from "@expo/vector-icons";
+import { Feather, Ionicons, MaterialCommunityIcons } from "@expo/vector-icons";
 import { Image } from "expo-image";
 import * as ImagePicker from 'expo-image-picker';
 import * as Notifications from 'expo-notifications';
@@ -47,6 +47,7 @@ import Animated, {
     withTiming,
     ZoomIn
 } from "react-native-reanimated";
+import ImageEditorModal from "../../components/ImageEditorModal";
 
 // 🔹 Notification Handler Configuration
 Notifications.setNotificationHandler({
@@ -116,6 +117,9 @@ export default function AuthorDiaryDashboard() {
     const [submitting, setSubmitting] = useState(false);
     const [timeLeft, setTimeLeft] = useState("");
     const [additionalSlot, setAdditionalSlot] = useState(0);
+
+    const [isEditorVisible, setIsEditorVisible] = useState(false);
+    const [editingIndex, setEditingIndex] = useState(null);
 
     // Rank & Post Limit State
     const [userRank, setUserRank] = useState(() => resolveUserRank(user?.currentRankLevel || 1));
@@ -477,62 +481,24 @@ export default function AuthorDiaryDashboard() {
         });
 
         if (!result.canceled) {
-            setUploading(true);
-            try {
-                const signRes = await apiFetch(`${API_BASE}/upload/sign`, { method: "POST" });
-                const signData = await signRes.json();
-                if (!signRes.ok) throw new Error("Signature fetch failed");
+            const newMedia = result.assets.map(asset => ({
+                localUri: asset.uri,
+                type: asset.type === "video" ? "video" : "image",
+                fileSize: asset.fileSize
+            }));
 
-                const uploadedAssets = [];
-
-                for (const selected of result.assets) {
-                    const isVideo = selected.type === "video";
-                    const currentLimit = isVideo ? 25 * 1024 * 1024 : 5 * 1024 * 1024;
-
-                    if (selected.fileSize > currentLimit) {
-                        CustomAlert("File Too Large", `Skipping ${selected.type}. Max: ${isVideo ? '25MB' : '5MB'}.`);
-                        continue;
-                    }
-
-                    const formData = new FormData();
-                    formData.append("file", {
-                        uri: selected.uri,
-                        type: isVideo ? "video/mp4" : "image/jpeg",
-                        name: isVideo ? "video.mp4" : "photo.jpg",
-                    });
-                    formData.append("api_key", signData.apiKey);
-                    formData.append("timestamp", signData.timestamp);
-                    formData.append("signature", signData.signature);
-                    formData.append("folder", "posts");
-
-                    const cloudRes = await fetch(`https://api.cloudinary.com/v1_1/${signData.cloudName}/${isVideo ? "video" : "image"}/upload`, {
-                        method: "POST",
-                        body: formData
-                    });
-
-                    const cloudData = await cloudRes.json();
-                    if (cloudRes.ok) {
-                        let finalUrl = cloudData.secure_url;
-                        const videoTransform = "c_limit,w_720,br_1.5m,q_auto,vc_auto";
-                        const imageTransform = "c_limit,w_1080,f_auto,q_auto";
-
-                        const transform = isVideo ? videoTransform : imageTransform;
-
-                        finalUrl = finalUrl.replace("/upload/", `/upload/${transform}/`);
-                        uploadedAssets.push({ url: finalUrl, type: isVideo ? "video" : "image" });
-                    }
-                }
-
-                setMediaList(prev => [...prev, ...uploadedAssets]);
-                setPickedImage(true);
-                Toast.show({ type: 'success', text1: `${uploadedAssets.length} asset(s) linked!` });
-            } catch (err) {
-                console.error(err);
-                CustomAlert("Error", "Upload failed: " + err.message);
-            } finally {
-                setUploading(false);
-            }
+            setMediaList(prev => [...prev, ...newMedia]);
+            setPickedImage(true);
         }
+    };
+
+    const handleSaveEdit = (editedUri) => {
+        const newList = [...mediaList];
+        newList[editingIndex] = { ...newList[editingIndex], localUri: editedUri };
+        setMediaList(newList);
+        setIsEditorVisible(false);
+        setEditingIndex(null);
+        Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
     };
 
     const removeMedia = (index) => {
@@ -562,44 +528,108 @@ export default function AuthorDiaryDashboard() {
             return
         }
         setSubmitting(true);
+
+        // ⚡️ NEURAL UPLINK TIMEOUT: Resolves after 10s so the user doesn't have to wait for server confirmation
+        const timeoutPromise = new Promise((resolve) =>
+            setTimeout(() => resolve({ isTimeout: true }), 10000)
+        );
+
         try {
-            let finalCategory = category;
-            let finalClanId = null;
+            const uploadAndSubmit = async () => {
+                const finalMediaAssets = [];
 
-            if (category === "Clan") {
-                finalCategory = `Clan-${clanSubCategory}`;
-                finalClanId = userClan?.tag;
+                // 1. Process and upload media payloads to the cloud grid
+                for (const item of mediaList) {
+                    if (item.url) { // Already uploaded
+                        finalMediaAssets.push(item);
+                        continue;
+                    }
+
+                    const signRes = await apiFetch(`${API_BASE}/upload/sign`, { method: "POST" });
+                    const signData = await signRes.json();
+                    if (!signRes.ok) throw new Error("Sync failure: Cloud Satellite unreachable.");
+
+                    const formData = new FormData();
+                    formData.append("file", {
+                        uri: item.localUri,
+                        type: item.type === "video" ? "video/mp4" : "image/jpeg",
+                        name: item.type === "video" ? "video.mp4" : "photo.jpg",
+                    });
+                    formData.append("api_key", signData.apiKey);
+                    formData.append("timestamp", signData.timestamp);
+                    formData.append("signature", signData.signature);
+                    formData.append("folder", "posts");
+
+                    const cloudRes = await fetch(`https://api.cloudinary.com/v1_1/${signData.cloudName}/${item.type}/upload`, {
+                        method: "POST",
+                        body: formData
+                    });
+
+                    const cloudData = await cloudRes.json();
+                    if (!cloudRes.ok) throw new Error("Media Extraction Failed: Cloud grid rejection.");
+
+                    let finalUrl = cloudData.secure_url;
+                    const transform = item.type === "video" ? "c_limit,w_720,br_1.5m,q_auto,vc_auto" : "c_limit,w_1080,f_auto,q_auto";
+                    finalUrl = finalUrl.replace("/upload/", `/upload/${transform}/`);
+
+                    finalMediaAssets.push({ url: finalUrl, type: item.type });
+                }
+
+                // 2. Transmit final payload to the Great Library
+                let finalCategory = category;
+                let finalClanId = null;
+
+                if (category === "Clan") {
+                    finalCategory = `Clan-${clanSubCategory}`;
+                    finalClanId = userClan?.tag;
+                }
+
+                const response = await apiFetch(`/posts`, {
+                    method: "POST",
+                    body: JSON.stringify({
+                        title,
+                        message,
+                        category: finalCategory,
+                        clanId: finalClanId,
+                        media: finalMediaAssets,
+                        mediaUrl: finalMediaAssets.length > 0 ? finalMediaAssets[0].url : mediaUrlLink || null,
+                        mediaType: finalMediaAssets.length > 0 ? finalMediaAssets[0].type : (mediaUrlLink?.includes("video") ? "video" : "image"),
+                        hasPoll,
+                        pollMultiple,
+                        pollOptions: hasPoll ? pollOptions.filter(opt => opt.trim() !== "").map(opt => ({ text: opt })) : [],
+                        fingerprint
+                    }),
+                });
+
+                const data = await response.json();
+                if (!response.ok) throw new Error(data.message || "Failed to create post");
+                return { ...data, isTimeout: false };
+            };
+
+            const result = await Promise.race([uploadAndSubmit(), timeoutPromise]);
+
+            // ⚡️ OPTIMISTIC UPDATE: If server is slow, manually insert a "pending" post into the UI list
+            if (result.isTimeout) {
+                const optimisticPost = {
+                    _id: `temp-${Date.now()}`,
+                    title: title,
+                    status: 'pending',
+                    createdAt: new Date().toISOString()
+                };
+                mutateTodayPosts({ posts: [optimisticPost, ...todayPosts] }, false);
+                CustomAlert("Success", "Neural transmission initiated. Your post is pending decryption in the archives.");
+            } else {
+                // Handle Actual Success
+                if (result.isFirstPost && result.auraStats) {
+                    Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
+                    setFirstPostModal({ visible: true, stats: result.auraStats, postData: result.post });
+                } else {
+                    CustomAlert("Success", "Your entry has been submitted for approval!");
+                }
             }
-
-            const response = await apiFetch(`/posts`, {
-                method: "POST",
-                body: JSON.stringify({
-                    title,
-                    message,
-                    category: finalCategory,
-                    clanId: finalClanId,
-                    media: mediaList,
-                    mediaUrl: mediaList.length > 0 ? mediaList[0].url : mediaUrlLink || null,
-                    mediaType: mediaList.length > 0 ? mediaList[0].type : (mediaUrlLink?.includes("video") ? "video" : "image"),
-                    hasPoll,
-                    pollMultiple,
-                    pollOptions: hasPoll ? pollOptions.filter(opt => opt.trim() !== "").map(opt => ({ text: opt })) : [],
-                    fingerprint
-                }),
-            });
-
-            const data = await response.json();
-            if (!response.ok) throw new Error(data.message || "Failed to create post");
 
             await AsyncStorage.removeItem(DRAFT_KEY);
             DeviceEventEmitter.emit("POST_CREATED_SUCCESS");
-            // ⚡️ INTERCEPT FIRST POST LOGIC
-            if (data.isFirstPost && data.auraStats) {
-                Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
-                setFirstPostModal({ visible: true, stats: data.auraStats, postData: data.post });
-            } else {
-                CustomAlert("Success", "Your entry has been submitted for approval!");
-            }
             updateStreak(fingerprint);
             refreshStreak();
 
@@ -609,7 +639,10 @@ export default function AuthorDiaryDashboard() {
             setMessage("");
             setMediaUrlLink("");
             setPickedImage(false);
-            mutateTodayPosts();
+
+            if (!result.isTimeout) {
+                mutateTodayPosts();
+            }
 
             const baseLimit = isInClan ? userRank.postLimit + 2 : userRank.postLimit;
 
@@ -1244,7 +1277,7 @@ export default function AuthorDiaryDashboard() {
                                                             {item.type === "video" ? (
                                                                 <Ionicons name="videocam" size={30} color={THEME.accent} />
                                                             ) : (
-                                                                <Image style={{ width: "100%", height: "100%" }} source={{ uri: item.url }} contentFit="cover" />
+                                                                <Image style={{ width: "100%", height: "100%" }} source={{ uri: item.localUri || item.url }} contentFit="cover" />
                                                             )}
                                                         </View>
                                                         {/* ⚡️ ADDED REMOVE BUTTON */}
@@ -1254,6 +1287,19 @@ export default function AuthorDiaryDashboard() {
                                                         >
                                                             <Ionicons name="close" size={14} color="white" />
                                                         </TouchableOpacity>
+
+                                                        {/* ⚡️ ADDED EDIT BUTTON FOR IMAGES */}
+                                                        {item.type === "image" && (
+                                                            <TouchableOpacity
+                                                                onPress={() => {
+                                                                    setEditingIndex(index);
+                                                                    setIsEditorVisible(true);
+                                                                }}
+                                                                className="absolute bottom-2 right-2 bg-blue-600/80 w-8 h-8 rounded-xl items-center justify-center border border-white/20 z-50"
+                                                            >
+                                                                <Feather name="edit-2" size={16} color="white" />
+                                                            </TouchableOpacity>
+                                                        )}
                                                     </View>
                                                 ))}
                                                 {/* ⚡️ ADDED ADD BUTTON */}
@@ -1390,6 +1436,14 @@ export default function AuthorDiaryDashboard() {
                     </Animated.View>
                 </View>
             </Modal>
+
+            {/* ⚡️ IMAGE EDITOR INTERFACE */}
+            <ImageEditorModal
+                isVisible={isEditorVisible}
+                imageUri={editingIndex !== null ? mediaList[editingIndex]?.localUri : null}
+                onClose={() => { setIsEditorVisible(false); setEditingIndex(null); }}
+                onSave={handleSaveEdit}
+            />
         </View>
     );
 }
@@ -1402,9 +1456,10 @@ const AnimatedWord = ({ word, index, style }) => {
     const translateY = useSharedValue(10)
 
     useEffect(() => {
-        setTimeout(() => { Haptics.selectionAsync(); }, index * 150);
+        const timer = setTimeout(() => { Haptics.selectionAsync(); }, index * 150);
         opacity.value = withDelay(index * 150, withTiming(1, { duration: 600, easing: Easing.out(Easing.ease) }));
         translateY.value = withDelay(index * 150, withTiming(0, { duration: 600, easing: Easing.out(Easing.back(1.5)) }));
+        return () => clearTimeout(timer);
     }, [word]);
 
     const animStyle = useAnimatedStyle(() => ({
@@ -1433,4 +1488,3 @@ const PremiumTextReveal = ({ text, style }) => {
         </View>
     );
 };
-

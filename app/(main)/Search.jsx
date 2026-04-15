@@ -1,11 +1,11 @@
 import { Ionicons, MaterialCommunityIcons } from "@expo/vector-icons";
-import { useMMKV } from "react-native-mmkv";
+import { LegendList } from "@legendapp/list";
 import { useRouter } from "expo-router";
 import { useCallback, useEffect, useMemo, useState } from "react";
 import {
     ActivityIndicator,
-    Image,
     DeviceEventEmitter,
+    Image,
     ScrollView,
     StatusBar,
     TextInput,
@@ -13,15 +13,15 @@ import {
     useColorScheme,
     View
 } from "react-native";
-import { LegendList } from "@legendapp/list"; 
+import { useMMKV } from "react-native-mmkv";
 import Animated, { FadeIn, FadeInDown, Layout } from "react-native-reanimated";
 import { SafeAreaView } from 'react-native-safe-area-context';
 import ClanCrest from '../../components/ClanCrest';
 import { Text } from "../../components/Text";
 import apiFetch from "../../utils/apiFetch";
 
-import { SyncLoading } from "../../components/SyncLoading";
 import PeakBadge from "../../components/PeakBadge";
+import { SyncLoading } from "../../components/SyncLoading";
 
 // ⚡️ HELPER: RESOLVE AURA TIER (Weekly Glory)
 const getAuraTier = (rank) => {
@@ -49,24 +49,24 @@ const getAuraTier = (rank) => {
 
 // ⚡️ HELPER: RESOLVE RPG CLASS (Lifetime Aura)
 export const AURA_TIERS = [
-  { level: 1, req: 0, title: "E-Rank Novice", icon: "🌱", color: "#94a3b8" },
-  { level: 2, req: 100, title: "D-Rank Operative", icon: "⚔️", color: "#34d399" }, 
-  { level: 3, req: 300, title: "C-Rank Awakened", icon: "🔥", color: "#f87171" }, 
-  { level: 4, req: 700, title: "B-Rank Elite", icon: "⚡", color: "#a78bfa" }, 
-  { level: 5, req: 1500, title: "A-Rank Champion", icon: "🛡️", color: "#60a5fa" }, 
-  { level: 6, req: 3000, title: "S-Rank Legend", icon: "🌟", color: "#fcd34d" }, 
-  { level: 7, req: 6000, title: "SS-Rank Mythic", icon: "🌀", color: "#f472b6" }, 
-  { level: 8, req: 12000, title: "Monarch", icon: "👑", color: "#fbbf24" }, 
+    { level: 1, req: 0, title: "E-Rank Novice", icon: "🌱", color: "#94a3b8" },
+    { level: 2, req: 100, title: "D-Rank Operative", icon: "⚔️", color: "#34d399" },
+    { level: 3, req: 300, title: "C-Rank Awakened", icon: "🔥", color: "#f87171" },
+    { level: 4, req: 700, title: "B-Rank Elite", icon: "⚡", color: "#a78bfa" },
+    { level: 5, req: 1500, title: "A-Rank Champion", icon: "🛡️", color: "#60a5fa" },
+    { level: 6, req: 3000, title: "S-Rank Legend", icon: "🌟", color: "#fcd34d" },
+    { level: 7, req: 6000, title: "SS-Rank Mythic", icon: "🌀", color: "#f472b6" },
+    { level: 8, req: 12000, title: "Monarch", icon: "👑", color: "#fbbf24" },
 ];
 
 const resolveUserRank = (level, currentAura) => {
     const safeLevel = Math.max(1, Math.min(8, level || 1));
     const currentTier = AURA_TIERS[safeLevel - 1];
-    
-    return { 
-        title: currentTier.title.toUpperCase().replace(/ /g, "_"), 
-        icon: currentTier.icon, 
-        color: currentTier.color 
+
+    return {
+        title: currentTier.title.toUpperCase().replace(/ /g, "_"),
+        icon: currentTier.icon,
+        color: currentTier.color
     };
 };
 
@@ -88,9 +88,8 @@ const AuthorCard = ({ author, isDark }) => {
         <Animated.View entering={FadeInDown.duration(400)} layout={Layout.springify()}>
             <TouchableOpacity
                 onPress={() => DeviceEventEmitter.emit("navigateSafely", `/author/${author._id}`)}
-                className={`mb-3 p-4 rounded-3xl border ${
-                    isDark ? "bg-[#0f0f0f] border-zinc-800" : "bg-white border-zinc-100 shadow-sm"
-                }`}
+                className={`mb-3 p-4 rounded-3xl border ${isDark ? "bg-[#0f0f0f] border-zinc-800" : "bg-white border-zinc-100 shadow-sm"
+                    }`}
             >
                 <View className="flex-row items-center">
                     <View style={{ borderColor: tier.color }} className="w-16 h-16 rounded-full border-2 p-0.5">
@@ -157,12 +156,12 @@ const AuthorCard = ({ author, isDark }) => {
 
 const resolveClanTier = (rank) => {
     const CLAN_TIERS = {
-        6: { label: 'VI', color: '#ef4444', title: "The Akatsuki" },        
-        5: { label: 'V', color: '#e0f2fe', title: "The Espada" },          
-        4: { label: 'IV', color: '#a855f7', title: "Phantom Troupe" },        
-        3: { label: 'III', color: '#60a5fa', title: "Upper Moon" },          
-        2: { label: 'II', color: '#10b981', title: "Squad 13" },   
-        1: { label: 'I', color: '#94a3b8', title: "Wandering Ronin" },          
+        6: { label: 'VI', color: '#ef4444', title: "The Akatsuki" },
+        5: { label: 'V', color: '#e0f2fe', title: "The Espada" },
+        4: { label: 'IV', color: '#a855f7', title: "Phantom Troupe" },
+        3: { label: 'III', color: '#60a5fa', title: "Upper Moon" },
+        2: { label: 'II', color: '#10b981', title: "Squad 13" },
+        1: { label: 'I', color: '#94a3b8', title: "Wandering Ronin" },
     };
     if (rank === 1) return CLAN_TIERS[1];
     if (rank <= 3) return CLAN_TIERS[2];
@@ -180,9 +179,8 @@ const ClanCard = ({ clan, isDark }) => {
         <Animated.View entering={FadeInDown.duration(400)} layout={Layout.springify()}>
             <TouchableOpacity
                 onPress={() => DeviceEventEmitter.emit("navigateSafely", `/clans/${clan.tag}`)}
-                className={`mb-3 mx-1 rounded-3xl border overflow-hidden relative ${
-                    isDark ? "bg-[#0f0f0f] border-zinc-800" : "bg-white border-zinc-100 shadow-sm"
-                }`}
+                className={`mb-3 mx-1 rounded-3xl border overflow-hidden relative ${isDark ? "bg-[#0f0f0f] border-zinc-800" : "bg-white border-zinc-100 shadow-sm"
+                    }`}
                 style={{
                     shadowColor: isWar ? "#ef4444" : "#000",
                     shadowOpacity: isWar ? 0.3 : 0.1,
@@ -205,9 +203,9 @@ const ClanCard = ({ clan, isDark }) => {
                     <View className="mr-4 items-center justify-center">
                         <ClanCrest rank={clan.rank || 1} isFeed={true} size={70} />
                         <View className="mt-2 bg-zinc-900/80 px-2 py-0.5 rounded-full border border-zinc-800">
-                             <Text className="text-zinc-400 text-[8px] font-bold uppercase">
+                            <Text className="text-zinc-400 text-[8px] font-bold uppercase">
                                 LVL {clan.rank || 1}
-                             </Text>
+                            </Text>
                         </View>
                     </View>
 
@@ -270,14 +268,14 @@ const ClanCard = ({ clan, isDark }) => {
 const PostSearchCard = ({ item, isDark }) => {
     return (
         <Animated.View entering={FadeIn.duration(500)} layout={Layout.springify()}>
-            <TouchableOpacity 
+            <TouchableOpacity
                 onPress={() => DeviceEventEmitter.emit("navigateSafely", `/post/${item._id}`)}
                 className={`mb-5 rounded-[2.5rem] border overflow-hidden ${isDark ? "bg-zinc-900/40 border-zinc-800" : "bg-white border-zinc-100 shadow-sm"}`}
             >
                 {item.mediaUrl ? (
                     <Image source={{ uri: item.mediaUrl }} className="w-full h-48 bg-zinc-800" resizeMode="cover" />
                 ) : (
-                    <View className="w-full h-2 bg-blue-600" /> 
+                    <View className="w-full h-2 bg-blue-600" />
                 )}
 
                 <View className="p-5">
@@ -314,7 +312,7 @@ const PostSearchCard = ({ item, isDark }) => {
 const SearchScreen = () => {
     const storage = useMMKV();
     const router = useRouter();
-    const systemTheme = useColorScheme(); 
+    const systemTheme = useColorScheme();
     const isDark = systemTheme === 'dark';
 
     const [query, setQuery] = useState("");
@@ -324,7 +322,7 @@ const SearchScreen = () => {
     const [activeTab, setActiveTab] = useState("all");
     const [recentSearches, setRecentSearches] = useState([]);
     const [trending] = useState(["Solo Leveling", "Genshin Build", "Aura Guide", "Top Clans", "Winter 2026 Anime"]);
-    const [isOffline, setIsOffline] = useState(false); 
+    const [isOffline, setIsOffline] = useState(false);
 
     const [page, setPage] = useState(1);
     const [hasMore, setHasMore] = useState(true);
@@ -426,7 +424,7 @@ const SearchScreen = () => {
 
     return (
         <SafeAreaView className={`flex-1 ${isDark ? "bg-[#050505]" : "bg-white"}`}>
-            
+
             <StatusBar barStyle={isDark ? "light-content" : "dark-content"} />
             {/* Header / Search Bar */}
             <View className={`px-4 pb-3 flex-row items-center`}>
@@ -456,9 +454,9 @@ const SearchScreen = () => {
 
             {/* Main Content Area */}
             {query.length < 2 ? (
-                <ScrollView 
+                <ScrollView
                     className="flex-1 px-6"
-                    keyboardShouldPersistTaps="handled" 
+                    keyboardShouldPersistTaps="handled"
                 >
                     <View className="mt-8">
                         <Text className="text-blue-500 font-black text-[10px] uppercase tracking-[0.4em] mb-6">Recent_Inquiries</Text>
@@ -477,8 +475,8 @@ const SearchScreen = () => {
                         <Text className="text-purple-500 font-black text-[10px] uppercase tracking-[0.4em] mb-6 mt-4">Trending_Sectors</Text>
                         <View className="flex-row flex-wrap gap-2">
                             {trending.map((item, i) => (
-                                <TouchableOpacity 
-                                    key={i} 
+                                <TouchableOpacity
+                                    key={i}
                                     onPress={() => setQuery(item)}
                                     className={`${isDark ? 'bg-zinc-900/50 border-zinc-800' : 'bg-gray-100 border-gray-200'} border px-4 py-2 rounded-full`}
                                 >
@@ -516,7 +514,7 @@ const SearchScreen = () => {
                                 <Text className="text-zinc-500 text-center mt-2 mb-8 font-medium italic">
                                     The data stream is currently offline. Please check your neural connection.
                                 </Text>
-                                <TouchableOpacity 
+                                <TouchableOpacity
                                     onPress={() => performSearch(query, 1, false)}
                                     className="bg-red-500/10 border border-red-500/20 px-8 py-3 rounded-full flex-row items-center gap-2"
                                 >
@@ -525,16 +523,17 @@ const SearchScreen = () => {
                                 </TouchableOpacity>
                             </Animated.View>
                         ) : (
-                            <View style={{ flex: 1 }}> 
+                            <View style={{ flex: 1 }}>
                                 {/* ⚡️ Swapped to LegendList */}
                                 <LegendList
                                     data={listData}
                                     keyExtractor={(item, index) => item._id || index.toString()}
                                     renderItem={renderItem}
-                                    estimatedItemSize={180} 
+                                    estimatedItemSize={180}
+                                    removeClippedSubviews={true}
                                     drawDistance={1000}
                                     recycleItems={true}
-                                    keyboardShouldPersistTaps="handled" 
+                                    keyboardShouldPersistTaps="handled"
                                     onEndReached={handleLoadMore}
                                     onEndReachedThreshold={0.5}
                                     ListFooterComponent={() => loadingMore ? (

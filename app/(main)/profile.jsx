@@ -1,6 +1,8 @@
 import { Feather, Ionicons, MaterialCommunityIcons } from "@expo/vector-icons";
 import * as Clipboard from 'expo-clipboard';
+import * as Haptics from 'expo-haptics';
 import * as ImagePicker from "expo-image-picker";
+import * as MediaLibrary from 'expo-media-library';
 import { useRouter } from "expo-router";
 import * as Sharing from "expo-sharing";
 import { useColorScheme as useNativeWind } from "nativewind";
@@ -50,6 +52,7 @@ import Animated, {
     withTiming
 } from "react-native-reanimated";
 import AuraAvatar from "../../components/AuraAvatar"; // ⚡️ Needed for the preview
+import ImageEditorModal from "../../components/ImageEditorModal"; // Import the ImageEditorModal
 import { useClan } from "../../context/ClanContext";
 
 const { width, height } = Dimensions.get("window");
@@ -1000,12 +1003,15 @@ export default function MobileProfilePage() {
     const [preview, setPreview] = useState(null);
     const [imageFile, setImageFile] = useState(null);
     const [isUpdating, setIsUpdating] = useState(false);
+    const [isSaving, setIsSaving] = useState(false);
 
     const [inventoryVisible, setInventoryVisible] = useState(false);
     const [prefsVisible, setPrefsVisible] = useState(false);
     const [storeVisible, setStoreVisible] = useState(false);
     const [rankModalVisible, setRankModalVisible] = useState(false);
     const [auraModalVisible, setAuraModalVisible] = useState(false);
+    const [isEditorVisible, setIsEditorVisible] = useState(false); // State for ImageEditorModal
+    const [imageToEditUri, setImageToEditUri] = useState(null); // URI of the image to edit
     const [cardPreviewVisible, setCardPreviewVisible] = useState(false);
 
     const [favAnimes, setFavAnimes] = useState("");
@@ -1139,6 +1145,29 @@ export default function MobileProfilePage() {
         } catch (error) {
             console.error("Capture Error:", error);
             Toast.show({ type: 'error', text1: 'Error', text2: 'Failed to capture the card.' });
+        }
+    };
+
+    const captureAndSave = async () => {
+        try {
+            if (playerCardRef.current) {
+                setIsSaving(true);
+                Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
+                const uri = await playerCardRef.current.capture();
+                const { status } = await MediaLibrary.requestPermissionsAsync();
+                if (status === 'granted') {
+                    await MediaLibrary.saveToLibraryAsync(uri);
+                    Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
+                    Toast.show({ type: 'success', text1: 'Saved to Gallery', text2: 'Your Operator identity has been archived.' });
+                } else {
+                    CustomAlert("Permission Denied", "We need gallery permissions to save your card.");
+                }
+            }
+        } catch (error) {
+            console.error("Save Error:", error);
+            Toast.show({ type: 'error', text1: 'Error', text2: 'Failed to archive card.' });
+        } finally {
+            setIsSaving(false);
         }
     };
 
@@ -1348,19 +1377,29 @@ export default function MobileProfilePage() {
     const isReachingEnd = data && data[data.length - 1]?.posts?.length < LIMIT;
     const isFetchingNextPage = isValidating && data && typeof data[size - 1] === "undefined";
 
+    // ⚡️ NEW: Function to handle image picking and opening the editor
     const pickImage = async () => {
         const result = await ImagePicker.launchImageLibraryAsync({
             mediaTypes: ImagePicker.MediaTypeOptions.Images,
-            allowsEditing: true,
-            aspect: [1, 1],
-            quality: 0.5,
+            allowsEditing: false,
+            quality: 1,
         });
 
         if (!result.canceled) {
             const selected = result.assets[0];
             setPreview(selected.uri);
             setImageFile({ uri: selected.uri, name: "profile.jpg", type: "image/jpeg" });
+            setImageToEditUri(selected.uri); // Store URI for editor
+            setIsEditorVisible(true); // Open the editor modal
         }
+    };
+
+    const handleSaveEditedImage = async (editedUri) => {
+        setPreview(editedUri);
+        setImageFile({ uri: editedUri, name: "profile.jpg", type: "image/jpeg" });
+        setIsEditorVisible(false);
+        setImageToEditUri(null);
+        CustomAlert("Success", "Profile image updated locally. Save changes to sync.");
     };
 
     const handleUpdate = async () => {
@@ -1877,6 +1916,7 @@ export default function MobileProfilePage() {
 
             <Modal visible={cardPreviewVisible} transparent animationType="slide">
                 <View className="flex-1 bg-black/95">
+                    <Pressable style={StyleSheet.absoluteFill} onPress={() => setCardPreviewVisible(false)} />
                     <ScrollView
                         contentContainerStyle={{ flexGrow: 1, justifyContent: 'center', alignItems: 'center', padding: 20 }}
                         showsVerticalScrollIndicator={false}
@@ -1908,14 +1948,29 @@ export default function MobileProfilePage() {
                             </View>
 
                             <View className="w-full mt-6">
-                                <TouchableOpacity
-                                    onPress={captureAndShare}
-                                    style={{ backgroundColor: dynamicAuraColor }}
-                                    className="flex-row items-center justify-center gap-3 w-full h-16 rounded-3xl shadow-lg active:opacity-80"
-                                >
-                                    <MaterialCommunityIcons name="share-variant-outline" size={22} color="white" />
-                                    <Text className="text-white font-black uppercase tracking-[0.2em] text-sm italic">Broadcast Card</Text>
-                                </TouchableOpacity>
+                                <View className="flex-row gap-3 w-full">
+                                    <TouchableOpacity
+                                        onPress={captureAndSave}
+                                        disabled={isSaving}
+                                        className="flex-1 h-16 bg-gray-800 rounded-3xl items-center justify-center border border-gray-700 active:scale-95"
+                                    >
+                                        {isSaving ? <ActivityIndicator size="small" color="white" /> : (
+                                            <View className="flex-row items-center gap-2">
+                                                <Feather name="download" size={20} color="white" />
+                                                <Text className="text-white font-black uppercase text-[10px] tracking-widest italic">Save</Text>
+                                            </View>
+                                        )}
+                                    </TouchableOpacity>
+
+                                    <TouchableOpacity
+                                        onPress={captureAndShare}
+                                        style={{ backgroundColor: dynamicAuraColor }}
+                                        className="flex-[2] h-16 rounded-3xl flex-row items-center justify-center gap-3 shadow-lg active:scale-95"
+                                    >
+                                        <MaterialCommunityIcons name="share-variant-outline" size={22} color="white" />
+                                        <Text className="text-white font-black uppercase tracking-[0.2em] text-xs italic">Broadcast Card</Text>
+                                    </TouchableOpacity>
+                                </View>
 
                                 <Pressable
                                     onPress={() => setCardPreviewVisible(false)}
@@ -1928,6 +1983,14 @@ export default function MobileProfilePage() {
                     </ScrollView>
                 </View>
             </Modal>
+
+            {/* ⚡️ IMAGE EDITOR INTERFACE */}
+            <ImageEditorModal
+                isVisible={isEditorVisible}
+                imageUri={imageToEditUri}
+                onClose={() => { setIsEditorVisible(false); setImageToEditUri(null); }}
+                onSave={handleSaveEditedImage}
+            />
         </View>
     );
 }

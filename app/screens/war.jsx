@@ -445,7 +445,7 @@ const ClanWarPage = () => {
         <View className="bg-white dark:bg-slate-900/90 border border-slate-100 dark:border-slate-800 rounded-[32px] p-6 mb-6 mx-5 shadow-sm">
             <View className="flex-row justify-between items-center mb-2">
                 <TouchableOpacity onPress={() => navigateToClan(item.challengerTag)} className="items-center">
-                    <ClanCrest rank={item.challengerRank || 1} isFeed={true} size={80} />
+                    <ClanCrest rank={item.challengerClan?.rank || 1} isFeed={true} size={80} />
                     <Text className="text-blue-600 dark:text-blue-400 font-black text-[10px] uppercase mt-2">{item.challengerTag}</Text>
                 </TouchableOpacity>
                 <View className="items-center">
@@ -455,7 +455,7 @@ const ClanWarPage = () => {
                     </View>
                 </View>
                 <TouchableOpacity onPress={() => navigateToClan(item.defenderTag)} className="items-center">
-                    <ClanCrest rank={item.defenderRank || 1} isFeed={true} size={80} />
+                    <ClanCrest rank={item.defenderClan?.rank || 1} isFeed={true} size={80} />
                     <Text className="text-red-600 dark:text-red-500 font-black text-[10px] uppercase mt-2">{item.defenderTag}</Text>
                 </TouchableOpacity>
             </View>
@@ -548,10 +548,11 @@ const ClanWarPage = () => {
                     data={warData[activeTab]}
                     keyExtractor={item => item.warId || item._id}
                     renderItem={renderItem}
+                    removeClippedSubviews={true}
 
                     // ⚡️ LegendList Performance Props
                     estimatedItemSize={250}
-                    drawDistance={1000} // Pre-renders further ahead
+                    drawDistance={2000} // Pre-renders further ahead
                     recycleItems={true} // Essential for dynamic layout lists
 
                     onRefresh={handleRefresh}

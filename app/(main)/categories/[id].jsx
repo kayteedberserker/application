@@ -35,20 +35,59 @@ const LIMIT = 10;
 
 const fetcher = (url) => apiFetch(url).then(res => res.json());
 
+const PostSkeleton = memo(() => {
+    const isDark = useColorScheme() === "dark";
+    return (
+        <View className={`mb-8 p-4 rounded-[32px] border ${isDark ? "bg-[#0d1117] border-gray-800" : "bg-white border-gray-100"} opacity-40`}>
+            <View className="flex-row items-center gap-4 mb-6">
+                <View className="w-12 h-12 rounded-full bg-gray-200 dark:bg-gray-800" />
+                <View className="flex-1 gap-2">
+                    <View className="w-32 h-3 bg-gray-200 dark:bg-gray-800 rounded-md" />
+                    <View className="w-20 h-2 bg-gray-100 dark:bg-gray-900 rounded-md" />
+                </View>
+            </View>
+            <View className="w-full h-6 bg-gray-200 dark:bg-gray-800 rounded-md mb-3" />
+            <View className="w-3/4 h-6 bg-gray-200 dark:bg-gray-800 rounded-md mb-6" />
+            <View className="w-full h-[380px] bg-gray-100 dark:bg-gray-900 rounded-2xl mb-6" />
+            <View className="flex-row justify-between items-center border-t border-gray-100 dark:border-gray-800 pt-4">
+                <View className="flex-row gap-6">
+                    <View className="w-12 h-4 bg-gray-100 dark:bg-gray-800 rounded-full" />
+                    <View className="w-12 h-4 bg-gray-100 dark:bg-gray-800 rounded-full" />
+                </View>
+                <View className="w-8 h-8 bg-gray-100 dark:bg-gray-800 rounded-full" />
+            </View>
+        </View>
+    );
+});
+
 const CATEGORY_MEMORY_CACHE = {};
 const CATEGORIES_SYNCED_THIS_SESSION = new Set();
 
 const MemoizedPostItem = memo(({ item, isVisible, mutate, posts }) => {
+    const [isReady, setIsReady] = useState(false);
+
+    useEffect(() => {
+        setIsReady(false);
+        const task = InteractionManager.runAfterInteractions(() => {
+            setIsReady(true);
+        });
+        return () => task.cancel();
+    }, [item._id]);
+
+    if (!isReady) return <View className="px-3"><PostSkeleton /></View>;
+
     return (
-        <PostCard
-            post={item}
-            authorData={item.authorData}
-            clanData={item.clanData}
-            isFeed
-            posts={posts}
-            setPosts={mutate}
-            isVisible={isVisible}
-        />
+        <View className="px-3">
+            <PostCard
+                post={item}
+                authorData={item.authorData}
+                clanData={item.clanData}
+                isFeed
+                posts={posts}
+                setPosts={mutate}
+                isVisible={isVisible}
+            />
+        </View>
     );
 }, (prevProps, nextProps) => {
     return (
@@ -259,15 +298,15 @@ export default function CategoryPage() {
                 data={posts}
                 keyExtractor={(item) => item._id}
                 renderItem={renderItem}
+                removeClippedSubviews={true}
                 ListHeaderComponent={ListHeader}
                 estimatedItemSize={630}
                 recycleItems={true}
-                drawDistance={1500}
+                drawDistance={1000}
                 // ⚡️ FIXED: Removed recycleItems=true to stop weird SWR caching bugs and scroll jumping
                 onViewableItemsChanged={onViewableItemsChanged}
                 viewabilityConfig={viewabilityConfig}
                 contentContainerStyle={{
-                    paddingHorizontal: 16,
                     paddingTop: insets.top + 20,
                     paddingBottom: insets.bottom + 120
                 }}

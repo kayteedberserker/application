@@ -21,19 +21,24 @@ const CLAN_TIERS = {
 
 const ClanCrest = ({ rank = 1, size = 120, isFeed = false, glowColor = null }) => {
     const config = CLAN_TIERS[rank] || CLAN_TIERS[1];
-    
+
     // Use glowColor if provided, otherwise fallback to rank color
     const displayColor = glowColor || config.color;
 
     const pulseValue = useSharedValue(0);
 
     useEffect(() => {
+        if (isFeed) {
+            pulseValue.value = 0.5; // Set to a middle-point static state
+            return;
+        }
+
         pulseValue.value = withRepeat(
             withTiming(1, { duration: 3000 }),
             -1,
             false
         );
-    }, []);
+    }, [isFeed]);
 
     const pulseStyle = useAnimatedStyle(() => {
         const scale = interpolate(pulseValue.value, [0, 1], [0.6, 1.4]);

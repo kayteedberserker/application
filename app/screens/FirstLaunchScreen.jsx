@@ -134,9 +134,10 @@ const AnimatedWord = ({ word, index, style }) => {
 	const translateY = useSharedValue(10);
 
 	useEffect(() => {
-		setTimeout(() => { Haptics.selectionAsync(); }, index * 150);
+		const timer = setTimeout(() => { Haptics.selectionAsync(); }, index * 150);
 		opacity.value = withDelay(index * 150, withTiming(1, { duration: 600, easing: Easing.out(Easing.ease) }));
 		translateY.value = withDelay(index * 150, withTiming(0, { duration: 600, easing: Easing.out(Easing.back(1.5)) }));
+		return () => clearTimeout(timer);
 	}, [word]);
 
 	const animStyle = useAnimatedStyle(() => ({

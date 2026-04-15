@@ -5,6 +5,7 @@ import { useColorScheme } from "nativewind";
 import { memo, useCallback, useEffect, useMemo, useRef, useState } from "react";
 import {
     DeviceEventEmitter,
+    InteractionManager,
     RefreshControl,
     View
 } from "react-native";
@@ -29,6 +30,31 @@ import { Text } from "./Text";
 
 const fetcher = (url) => apiFetch(url).then(res => res.json());
 
+const PostSkeleton = memo(() => {
+    const isDark = useColorScheme() === "dark";
+    return (
+        <View className={`mb-8 p-4 rounded-[32px] border ${isDark ? "bg-[#0d1117] border-gray-800" : "bg-white border-gray-100"} opacity-40`}>
+            <View className="flex-row items-center gap-4 mb-6">
+                <View className="w-12 h-12 rounded-full bg-gray-200 dark:bg-gray-800" />
+                <View className="flex-1 gap-2">
+                    <View className="w-32 h-3 bg-gray-200 dark:bg-gray-800 rounded-md" />
+                    <View className="w-20 h-2 bg-gray-100 dark:bg-gray-900 rounded-md" />
+                </View>
+            </View>
+            <View className="w-full h-6 bg-gray-200 dark:bg-gray-800 rounded-md mb-3" />
+            <View className="w-3/4 h-6 bg-gray-200 dark:bg-gray-800 rounded-md mb-6" />
+            <View className="w-full h-[380px] bg-gray-100 dark:bg-gray-900 rounded-2xl mb-6" />
+            <View className="flex-row justify-between items-center border-t border-gray-100 dark:border-gray-800 pt-4">
+                <View className="flex-row gap-6">
+                    <View className="w-12 h-4 bg-gray-100 dark:bg-gray-800 rounded-full" />
+                    <View className="w-12 h-4 bg-gray-100 dark:bg-gray-800 rounded-full" />
+                </View>
+                <View className="w-8 h-8 bg-gray-100 dark:bg-gray-800 rounded-full" />
+            </View>
+        </View>
+    );
+});
+
 const LIMIT = 15;
 const CACHE_KEY = "POSTS_CACHE_V1";
 
@@ -39,12 +65,26 @@ const SESSION_STATE = {
 
 // ⚡️ PERFORMANCE FIX 1: Aggressively Memoize the List Item
 const MemoizedPostItem = memo(({ item, isVisible, syncing, mutate, posts }) => {
+    // ⚡️ INSTANT HYDRATION: If we already have a session cache, render immediately
+    const [isReady, setIsReady] = useState(SESSION_STATE.hasFetched);
+
+    useEffect(() => {
+        if (isReady) return; // Skip if already ready (prevents flicker on return)
+
+        const task = InteractionManager.runAfterInteractions(() => {
+            setIsReady(true);
+        });
+        return () => task.cancel();
+    }, []); // Only run on mount
+
+    if (!isReady) return <PostSkeleton />;
+
     return (
         <PostCard
             post={item}
             authorData={item.authorData}
             clanData={item.clanData}
-            isFeed
+            isFeed={true}
             posts={posts}
             setPosts={mutate}
             syncing={syncing}
@@ -184,8 +224,17 @@ export default function PostsViewer() {
             }
         });
 
+        // ⚡️ THE TRICK: If we are fetching more, add 3 "Ghost" items
+        if (isValidating && hasMore) {
+            orderedList.push(
+                { _id: 'ghost-1', isGhost: true },
+                { _id: 'ghost-2', isGhost: true },
+                { _id: 'ghost-3', isGhost: true }
+            );
+        }
+
         return orderedList;
-    }, [data, cachedData]);
+    }, [data, cachedData, isValidating, hasMore]);
 
     const hasMore = data ? data[data.length - 1]?.posts?.length === LIMIT : false;
 
@@ -202,16 +251,21 @@ export default function PostsViewer() {
     }, [hasMore, isValidating, isLoading, isOfflineMode, size, setSize]);
 
     const renderItem = useCallback(({ item }) => {
+        // ⚡️ Check for Ghost
+        if (item.isGhost) {
+            return <PostSkeleton />;
+        }
+
         return (
             <MemoizedPostItem
                 item={item}
-                isVisible={true} // ⚡️ FIXED: Forcing true guarantees SWR key never goes null so it can receive likes
+                isVisible={true}
                 syncing={!SESSION_STATE.hasFetched || isValidating}
                 mutate={mutate}
                 posts={posts}
             />
         );
-    }, [isValidating, mutate, posts]); // Removed visibleIds dependency
+    }, [isValidating, mutate, posts]);
 
     const ListHeader = useCallback(() => (
         <View className="mb-5 pb-2">
@@ -249,9 +303,9 @@ export default function PostsViewer() {
                 key="main-feed-list" // ⚡️ FIXED: Isolates scroll memory from other pages
                 ref={scrollRef}
                 data={posts}
-                recycleItems={true}
                 keyExtractor={(item) => item._id}
                 ListHeaderComponent={ListHeader}
+                removeClippedSubviews
                 contentContainerStyle={{
                     paddingHorizontal: 16,
                     paddingTop: insets.top + 20,
@@ -259,7 +313,7 @@ export default function PostsViewer() {
                 }}
                 renderItem={renderItem}
                 estimatedItemSize={630}
-                drawDistance={800}
+                drawDistance={1500}
                 // ⚡️ FIXED: Removed recycleItems=true to stop weird SWR caching bugs and scroll jumping
                 onViewableItemsChanged={onViewableItemsChanged}
                 viewabilityConfig={viewabilityConfig}

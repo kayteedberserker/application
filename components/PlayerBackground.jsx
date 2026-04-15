@@ -11,7 +11,7 @@ import Animated, {
 } from 'react-native-reanimated';
 import Svg, { Defs, LinearGradient, Rect, Stop, SvgXml } from "react-native-svg";
 
-export default function PlayerBackground({ equippedBg, themeColor, borderRadius = 48 }) {
+export default function PlayerBackground({ equippedBg, themeColor, borderRadius = 48, isFeed = false }) {
     const bgVisual = equippedBg?.visualConfig || equippedBg?.visualData || {};
 
     const primary = bgVisual.primaryColor || themeColor || '#22c55e';
@@ -31,6 +31,12 @@ export default function PlayerBackground({ equippedBg, themeColor, borderRadius 
     const sweepAnim = useSharedValue(0);
 
     useEffect(() => {
+        if (isFeed) {
+            pulseAnim.value = 1;
+            sweepAnim.value = 0.5;
+            return;
+        }
+
         if (animationType === 'pulse') {
             pulseAnim.value = withRepeat(
                 withSequence(
@@ -45,7 +51,7 @@ export default function PlayerBackground({ equippedBg, themeColor, borderRadius 
                 -1, false // false = restart from beginning instead of reversing
             );
         }
-    }, [animationType]);
+    }, [animationType, isFeed]);
 
     // --- ANIMATED STYLES ---
     const animatedBgStyle = useAnimatedStyle(() => {
@@ -74,8 +80,8 @@ export default function PlayerBackground({ equippedBg, themeColor, borderRadius 
                 {hasLottie ? (
                     <LottieView
                         source={lottieSource}
-                        autoPlay
-                        loop
+                        autoPlay={!isFeed}
+                        loop={!isFeed}
                         style={[StyleSheet.absoluteFillObject]}
                         resizeMode="cover"
                         renderMode="hardware"
