@@ -318,7 +318,7 @@ const SearchScreen = () => {
     const [query, setQuery] = useState("");
     const [loading, setLoading] = useState(false);
     const [loadingMore, setLoadingMore] = useState(false);
-    const [results, setResults] = useState({ authors: [], clans: [], posts: [] });
+    const [results, setResults] = useState({ players: [], clans: [], posts: [] });
     const [activeTab, setActiveTab] = useState("all");
     const [recentSearches, setRecentSearches] = useState([]);
     const [trending] = useState(["Solo Leveling", "Genshin Build", "Aura Guide", "Top Clans", "Winter 2026 Anime"]);
@@ -354,7 +354,7 @@ const SearchScreen = () => {
 
     const performSearch = useCallback(async (text, pageNum = 1, shouldAppend = false) => {
         if (text.length < 2) {
-            setResults({ authors: [], clans: [], posts: [] });
+            setResults({ players: [], clans: [], posts: [] });
             return;
         }
 
@@ -368,7 +368,7 @@ const SearchScreen = () => {
 
             if (response.ok) {
                 setResults(prev => ({
-                    authors: shouldAppend ? prev.authors : (data.users || []),
+                    players: shouldAppend ? prev.players : (data.players || []),
                     clans: shouldAppend ? prev.clans : (data.clans || []),
                     posts: shouldAppend ? [...prev.posts, ...data.posts] : (data.posts || [])
                 }));
@@ -392,7 +392,7 @@ const SearchScreen = () => {
                 performSearch(query, 1, false);
                 saveSearch(query);
             } else {
-                setResults({ authors: [], clans: [], posts: [] });
+                setResults({ players: [], clans: [], posts: [] });
             }
         }, 400);
         return () => clearTimeout(delayDebounceFn);
@@ -408,7 +408,7 @@ const SearchScreen = () => {
 
     const listData = useMemo(() => {
         const rawResults = [
-            ...(activeTab === 'all' || activeTab === 'authors' ? results.authors : []),
+            ...(activeTab === 'all' || activeTab === 'players' ? results.players : []),
             ...(activeTab === 'all' || activeTab === 'clans' ? results.clans : []),
             ...(activeTab === 'all' || activeTab === 'posts' ? results.posts : [])
         ];
