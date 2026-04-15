@@ -982,18 +982,12 @@ const resolveUserRank = (level, currentAura) => {
     };
 };
 
-import AnimeLoading from "../../components/AnimeLoading";
-
 export default function MobileProfilePage() {
     const storage = useMMKV();
     const CustomAlert = useAlert();
     const [theinventory, setInventory] = useState([])
     const { user, setUser, contextLoading } = useUser();
     const { clearClanData } = useClan();
-
-    if (contextLoading || !user?.deviceId) {
-        return <AnimeLoading tipType={"general"} message="Awakening Profile..." subMessage="Loading operator data" />;
-    }
 
     const { colorScheme } = useNativeWind();
     const isDark = colorScheme === "dark";
@@ -1053,6 +1047,59 @@ export default function MobileProfilePage() {
     const equippedGlow = user?.inventory?.find(i => i.category === 'GLOW' && i.isEquipped);
     const activeGlowColor = equippedGlow?.visualConfig?.primaryColor || null;
     const dynamicAuraColor = activeGlowColor || weeklyAuraTier?.color || '#3b82f6';
+
+    // Safe guards for null user during logout
+    useEffect(() => {
+        if (!user?.deviceId) return;
+        const syncUserWithDB = async () => {
+            try {
+                const res = await apiFetch(`/users/me?fingerprint=${user.deviceId}`);
+                const dbUser = await res.json();
+
+                if (res.ok) {
+                    setUser(dbUser);
+                    setDescription(dbUser.description || "");
+                    setUsername(dbUser.username || "");
+
+                    const dbAnimes = Array.isArray(dbUser.preferences?.favAnimes) ? dbUser.preferences.favAnimes.join(', ') : "";
+                    const dbGenres = Array.isArray(dbUser.preferences?.favGenres) ? dbUser.preferences.favGenres.join(', ') : "";
+                    const dbChar = dbUser.preferences?.favCharacter || "";
+
+                    setFavAnimes(dbAnimes);
+                    setFavGenres(dbGenres);
+                    setFavCharacter(dbChar);
+
+                    const postRes = await apiFetch(`/posts?author=${dbUser._id}&limit=1`);
+                    const postData = await postRes.json();
+                    const newTotal = postData.total || 0;
+                    if (postRes.ok) setTotalPosts(newTotal);
+
+                    storage.set(CACHE_KEY_USER_EXTRAS, JSON.stringify({
+                        username: dbUser.username,
+                        description: dbUser.description,
+                        totalPosts: newTotal,
+                        favAnimes: dbAnimes,
+                        favGenres: dbGenres,
+                        favCharacter: dbChar
+                    }));
+                }
+            } catch (err) { console.error("Sync User Error:", err); }
+        };
+        syncUserWithDB();
+    }, [user?.deviceId]);
+
+    const getKey = (pageIndex, previousPageData) => {
+        if (!user?._id || !user?.deviceId) return null;
+        if (previousPageData && previousPageData.posts?.length < LIMIT) return null;
+        return `/posts?author=${user._id}&page=${pageIndex + 1}&limit=${LIMIT}`;
+    };
+
+    const { data, size, setSize, isLoading, isValidating, mutate } = useSWRInfinite(getKey, fetcher, {
+        refreshInterval: 240000,
+        revalidateOnFocus: true,
+        dedupingInterval: 5000,
+    });
+
 
     useEffect(() => {
         const hasSeenOnboarding = storage.getBoolean('has_seen_profile_onboarding');
@@ -1362,18 +1409,6 @@ export default function MobileProfilePage() {
         };
         syncUserWithDB();
     }, []);
-
-    const getKey = (pageIndex, previousPageData) => {
-        if (!user?._id || !user?.deviceId) return null;
-        if (previousPageData && previousPageData.posts?.length < LIMIT) return null;
-        return `/posts?author=${user._id}&page=${pageIndex + 1}&limit=${LIMIT}`;
-    };
-
-    const { data, size, setSize, isLoading, isValidating, mutate } = useSWRInfinite(getKey, fetcher, {
-        refreshInterval: 240000,
-        revalidateOnFocus: true,
-        dedupingInterval: 5000,
-    });
 
     const posts = useMemo(() => {
         return data ? data.flatMap((page) => page.posts || []) : [];
