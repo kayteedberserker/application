@@ -5,7 +5,7 @@ import { useEffect, useState } from 'react';
 import { useMMKV } from 'react-native-mmkv';
 import apiFetch from "../utils/apiFetch";
 
-import { ActivityIndicator, Linking, Modal, Pressable, Text as RNText, useColorScheme, View } from 'react-native';
+import { Linking, Modal, Pressable, Text as RNText, useColorScheme, View } from 'react-native';
 import Animated, {
   Easing,
   useAnimatedStyle,
@@ -15,16 +15,13 @@ import Animated, {
   withTiming
 } from 'react-native-reanimated';
 
-// Initialize MMKV instance
-const storage = new useMMKV();
-
 const VERSION_CHECK_URL = 'https://oreblogda.com/api/version';
 const INSTALLED_VERSION = Constants.expoConfig?.version || Constants.manifest?.version || '1.0.0';
 const INSTALLED_RUNTIME = Updates.runtimeVersion || 'v1';
 const SNOOZE_KEY = 'OREBLOGDA_UPDATE_SNOOZE';
 const SNOOZE_DURATION = 60 * 60 * 1000; // 1 Hour in milliseconds
 
-// Helper to check standard app version (e.g. 1.0.0 vs 1.1.0)
+// Helper to check standard app version
 const isAppUpdateRequired = (installed, latest) => {
   if (!latest) return false;
   const installedParts = installed.split('.').map(Number);
@@ -39,7 +36,7 @@ const isAppUpdateRequired = (installed, latest) => {
   return false;
 };
 
-// Helper to check runtime version (e.g. v5_global vs v6)
+// Helper to check runtime version
 const isRuntimeUpdateRequired = (installed, latest) => {
   if (!latest) return false;
   const getVersionNumber = (verStr) => {
@@ -53,9 +50,11 @@ export default function UpdateHandler() {
   const [visible, setVisible] = useState(false);
   const [latestVersion, setLatestVersion] = useState(null);
   const [isCritical, setIsCritical] = useState(false);
-  const [isLoading, setIsLoading] = useState(true);
   const [countdown, setCountdown] = useState(10);
   const [canIgnore, setCanIgnore] = useState(true);
+
+  // Correct MMKV Hook usage
+  const storage = useMMKV();
 
   const colorScheme = useColorScheme();
   const isDark = colorScheme === "dark";
@@ -111,16 +110,14 @@ export default function UpdateHandler() {
         const runtimeNeedsUpdate = isRuntimeUpdateRequired(INSTALLED_RUNTIME, data.runtimeVersion);
         const appNeedsUpdate = isAppUpdateRequired(INSTALLED_VERSION, data.appVersion);
 
-        // It's critical if the runtime changed OR the server explicitly flagged it
         const criticalStatus = runtimeNeedsUpdate || data.critical;
         setIsCritical(criticalStatus);
 
         if (runtimeNeedsUpdate || appNeedsUpdate) {
           if (criticalStatus) {
-            // Critical updates bypass snooze entirely
             setVisible(true);
           } else {
-            // Check snooze for normal updates (MMKV is sync, no await needed)
+            // Background check: only show if snooze expired
             const lastSnooze = storage.getNumber(SNOOZE_KEY);
             const now = Date.now();
 
@@ -132,8 +129,6 @@ export default function UpdateHandler() {
       }
     } catch (error) {
       console.error("Version check failed", error);
-    } finally {
-      setIsLoading(false);
     }
   };
 
@@ -145,21 +140,13 @@ export default function UpdateHandler() {
     if (!canIgnore) return;
 
     if (!isCritical) {
-      // MMKV sync set
       storage.set(SNOOZE_KEY, Date.now());
     }
 
     setVisible(false);
   };
 
-  if (isLoading && !visible) {
-    return (
-      <View style={{ flex: 1, justifyContent: 'center', alignItems: 'center', backgroundColor: isDark ? '#0d1117' : 'white' }}>
-        <ActivityIndicator size="large" color="#2563eb" />
-      </View>
-    );
-  }
-
+  // If not visible, return null so it occupies NO space in your layout
   if (!visible) return null;
 
   const themeColor = isCritical ? "#ef4444" : "#2563eb";
