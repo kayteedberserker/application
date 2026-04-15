@@ -44,7 +44,7 @@ import { useAlert } from "../../context/AlertContext";
 import { useClan } from "../../context/ClanContext";
 import { useStreak } from "../../context/StreakContext";
 import { useUser } from "../../context/UserContext";
-import apiFetch from "../../utils/apiFetch";
+import apiFetch, { syncApiUser } from "../../utils/apiFetch";
 import { getFingerprint } from "../../utils/device";
 
 const { width, height } = Dimensions.get('window');
@@ -383,6 +383,7 @@ export default function FirstLaunchScreen() {
 
 			storage.set("mobileUser", JSON.stringify(userData));
 			setUser(userData);
+			syncApiUser(userData); // Ensure API headers are set immediately
 
 			if (refreshStreak) refreshStreak();
 			if (refreshClanStatus) refreshClanStatus();
@@ -391,7 +392,7 @@ export default function FirstLaunchScreen() {
 
 			setTimeout(() => {
 				router.replace("/profile");
-			}, 1500);
+			}, 3000);
 
 		} catch (err) {
 			Haptics.notificationAsync(Haptics.NotificationFeedbackType.Error);
@@ -467,6 +468,7 @@ export default function FirstLaunchScreen() {
 
 			storage.set("mobileUser", JSON.stringify(userData));
 			setUser(userData);
+			syncApiUser(userData); // Ensure API headers are set immediately
 			if (refreshStreak) refreshStreak();
 
 			Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
@@ -476,7 +478,7 @@ export default function FirstLaunchScreen() {
 				setShowAwakeningModal(true);
 			} else {
 				storage.set("trigger_first_post", 1);
-				setTimeout(() => router.replace("/authordiary"), 150);
+				setTimeout(() => router.replace("/authordiary"), 1000);
 			}
 
 		} catch (err) {

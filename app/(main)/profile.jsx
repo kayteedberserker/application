@@ -982,12 +982,18 @@ const resolveUserRank = (level, currentAura) => {
     };
 };
 
+import AnimeLoading from "../../components/AnimeLoading";
+
 export default function MobileProfilePage() {
     const storage = useMMKV();
     const CustomAlert = useAlert();
     const [theinventory, setInventory] = useState([])
     const { user, setUser, contextLoading } = useUser();
     const { clearClanData } = useClan();
+
+    if (contextLoading || !user?.deviceId) {
+        return <AnimeLoading tipType={"general"} message="Awakening Profile..." subMessage="Loading operator data" />;
+    }
 
     const { colorScheme } = useNativeWind();
     const isDark = colorScheme === "dark";
@@ -1358,7 +1364,7 @@ export default function MobileProfilePage() {
     }, []);
 
     const getKey = (pageIndex, previousPageData) => {
-        if (!user?._id) return null;
+        if (!user?._id || !user?.deviceId) return null;
         if (previousPageData && previousPageData.posts?.length < LIMIT) return null;
         return `/posts?author=${user._id}&page=${pageIndex + 1}&limit=${LIMIT}`;
     };
@@ -1459,7 +1465,7 @@ export default function MobileProfilePage() {
                 CustomAlert("Error", result.message || "Failed to update.");
             }
         } catch (err) {
-            CustomAlert("Error", "Failed to sync changes.");
+            CustomAlert("Error", "Failed to sync changes.")
         } finally {
             setIsUpdating(false);
         }
