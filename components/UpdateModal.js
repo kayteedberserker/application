@@ -151,7 +151,9 @@ export default function UpdateHandler() {
 
   const themeColor = isCritical ? "#ef4444" : "#2563eb";
   const shadowColor = isCritical ? "#ff0000" : "#3b82f6";
-
+  if (__DEV__) {
+    return null
+  }
   return (
     <Modal visible={visible} transparent animationType="slide">
       <View className={`flex-1 justify-center items-center px-6 ${isCritical ? 'bg-red-950/90' : 'bg-black/80'}`}>

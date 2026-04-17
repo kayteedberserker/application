@@ -273,12 +273,20 @@ export default function TopBar({ isDark }) {
                 <View className="flex-row items-center gap-1">
                     {/* ⚡️ DEV TOOLS BUTTON (Only renders if condition is met) */}
                     {showDevTools && (
-                        <TouchableOpacity
-                            onPress={() => DeviceEventEmitter.emit("navigateSafely", "/DevTools/DevCosmeticSandbox")}
-                            className={`p-1.5 rounded-xl border ${isDark ? "bg-purple-500/20 border-purple-500/40" : "bg-purple-100 border-purple-300"}`}
-                        >
-                            <Ionicons name="flask-outline" size={16} color={isDark ? "#c084fc" : "#9333ea"} />
-                        </TouchableOpacity>
+                        <>
+                            <TouchableOpacity
+                                onPress={() => DeviceEventEmitter.emit("navigateSafely", "/DevTools/DevCosmeticSandbox")}
+                                className={`p-1.5 rounded-xl border ${isDark ? "bg-purple-500/20 border-purple-500/40" : "bg-purple-100 border-purple-300"}`}
+                            >
+                                <Ionicons name="flask-outline" size={16} color={isDark ? "#c084fc" : "#9333ea"} />
+                            </TouchableOpacity>
+                            <TouchableOpacity
+                                onPress={() => DeviceEventEmitter.emit("navigateSafely", "/DevTools/MarketingView")}
+                                className={`p-1.5 rounded-xl border ${isDark ? "bg-purple-500/20 border-purple-500/40" : "bg-purple-100 border-purple-300"}`}
+                            >
+                                <Ionicons name="flask-outline" size={16} color={isDark ? "#c084fc" : "#9333ea"} />
+                            </TouchableOpacity>
+                        </>
                     )}
 
                     <TouchableOpacity
