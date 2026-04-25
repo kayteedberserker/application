@@ -1,50 +1,49 @@
-import { Ionicons, MaterialCommunityIcons, Feather } from "@expo/vector-icons";
-import { useMMKV } from "react-native-mmkv";
+import { Ionicons, MaterialCommunityIcons } from "@expo/vector-icons";
+import * as Haptics from 'expo-haptics';
 import { useColorScheme as useNativeWind } from "nativewind";
-import { useCallback, useEffect, useState, useRef, useMemo } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import {
     ActivityIndicator,
     Clipboard,
+    Dimensions,
     Modal,
+    Pressable,
     RefreshControl,
     ScrollView,
     Share,
     TouchableOpacity,
-    View,
-    Dimensions,
-    StyleSheet,
-    Pressable
+    View
 } from "react-native";
+import { useMMKV } from "react-native-mmkv";
 import Animated, {
-    useSharedValue,
-    useAnimatedStyle,
-    withTiming,
-    withRepeat,
-    withSequence,
-    withSpring,
     Easing as ReanimatedEasing,
     runOnJS,
     useAnimatedReaction,
+    useAnimatedStyle,
+    useSharedValue,
+    withRepeat,
+    withSequence,
+    withSpring,
+    withTiming,
 } from 'react-native-reanimated';
 import { SafeAreaView } from "react-native-safe-area-context";
 import { SvgXml } from "react-native-svg";
-import * as Haptics from 'expo-haptics';
 
-import { Text } from "../../components/Text";
-import THEME from "../../components/useAppTheme";
-import { useUser } from "../../context/UserContext";
-import { useEvent } from "../../context/EventContext";
-import apiFetch from "../../utils/apiFetch";
-import ClanIcon from "../../components/ClanIcon";
-import TopBar from "../../components/Topbar";
-import { useCoins } from "../../context/CoinContext";
-import ClanBorder from "../../components/ClanBorder";
-import { useAlert } from "../../context/AlertContext";
 import { useLocalSearchParams } from "expo-router";
+import ClanBorder from "../../components/ClanBorder";
+import ClanIcon from "../../components/ClanIcon";
+import { Text } from "../../components/Text";
+import TopBar from "../../components/Topbar";
+import THEME from "../../components/useAppTheme";
+import { useAlert } from "../../context/AlertContext";
+import { useCoins } from "../../context/CoinContext";
+import { useEvent } from "../../context/EventContext";
+import { useUser } from "../../context/UserContext";
+import apiFetch from "../../utils/apiFetch";
 
 // ⚡️ Imports PlayerCard for the Preview Modal
-import PlayerCard from "../../components/PlayerCard";
 import LottieView from "lottie-react-native";
+import PlayerCard from "../../components/PlayerCard";
 
 const { width } = Dimensions.get('window');
 const CACHE_KEY = "referral_event_cache_v4";
@@ -198,11 +197,11 @@ const EventItemPreviewModal = ({
     return (
         <Modal visible={isVisible} transparent={true} animationType="fade" onRequestClose={onClose}>
             <Pressable className="flex-1 bg-black/90 items-center justify-center px-6 z-50" onPress={onClose}>
-                
+
                 {/* ⚡️ FIXED: Added max-h-[85%] to prevent screen overflow, and stopped propagation so tapping the card doesn't close it */}
-                <Pressable 
-                    onPress={(e) => e.stopPropagation()} 
-                    style={{ borderColor: rarityColor }} 
+                <Pressable
+                    onPress={(e) => e.stopPropagation()}
+                    style={{ borderColor: rarityColor }}
                     className="w-full max-h-[85%] bg-[#0f172a] rounded-3xl border-2 shadow-2xl overflow-hidden"
                 >
                     <TouchableOpacity onPress={onClose} className="absolute top-4 right-4 z-20 p-2 bg-white/10 rounded-full">
@@ -210,8 +209,8 @@ const EventItemPreviewModal = ({
                     </TouchableOpacity>
 
                     {/* ⚡️ FIXED: Inner content is now scrollable! */}
-                    <ScrollView 
-                        contentContainerStyle={{ padding: 24, paddingTop: 40, alignItems: 'center' }} 
+                    <ScrollView
+                        contentContainerStyle={{ padding: 24, paddingTop: 40, alignItems: 'center' }}
                         showsVerticalScrollIndicator={false}
                         bounces={false}
                     >
@@ -569,7 +568,7 @@ const GridGachaTab = ({ eventData, pullAmount, gachaPool, ownedIds, setOwnedIds,
             setIsSpinning(false);
             isSpinningRef.current = false;
             setShowSummaryModal(true);
-            
+
             if (pendingInventoryRef.current) {
                 setOwnedIds(pendingInventoryRef.current);
                 pendingInventoryRef.current = null;
@@ -644,7 +643,7 @@ const GridGachaTab = ({ eventData, pullAmount, gachaPool, ownedIds, setOwnedIds,
         setIsSpinning(false);
         setWonItem(null);
         setShowSummaryModal(true);
-        
+
         if (pendingInventoryRef.current) {
             setOwnedIds(pendingInventoryRef.current);
             pendingInventoryRef.current = null;
@@ -676,8 +675,8 @@ const GridGachaTab = ({ eventData, pullAmount, gachaPool, ownedIds, setOwnedIds,
                 eventPoints={eventPoints}
                 isProcessing={isExchanging}
                 onAction={handleExchange}
-                tokenVisual={tokenVisual} 
-                tokenName={tokenName}     
+                tokenVisual={tokenVisual}
+                tokenName={tokenName}
             />
 
             <View className="w-full bg-[#0f172a] rounded-2xl p-6 border border-slate-800 items-center shadow-xl mb-6 mt-4 overflow-hidden relative">
@@ -1456,7 +1455,7 @@ const ComingSoonView = ({ event, isDark }) => {
         const calculateTimeLeft = () => {
             const targetDate = new Date(startsAtString).getTime();
             const difference = targetDate - new Date().getTime();
-            
+
             if (difference > 0) {
                 setTimeLeft({
                     days: Math.floor(difference / (1000 * 60 * 60 * 24)),
@@ -1472,27 +1471,27 @@ const ComingSoonView = ({ event, isDark }) => {
         calculateTimeLeft(); // Run immediately
         const timer = setInterval(calculateTimeLeft, 1000);
         return () => clearInterval(timer);
-        
+
         // ⚡️ CRITICAL FIX: We are now using the string in the dependency array
-    }, [startsAtString]); 
+    }, [startsAtString]);
 
     // Formats numbers to always be 2 digits (e.g., "09" instead of "9")
     const formatTime = (time) => time < 10 ? `0${time}` : time;
 
     return (
         <View className="py-10 items-center justify-center px-4">
-            
+
             {/* The Locked Event Icon Matrix */}
             <View className="items-center justify-center mb-8 relative">
                 {/* Glowing background blob */}
                 <View style={{ backgroundColor: eventColor, opacity: 0.15 }} className="absolute w-40 h-40 rounded-full" />
-                
+
                 {/* Dashed outer ring */}
                 <View style={{ borderColor: eventColor, opacity: 0.5 }} className="w-32 h-32 rounded-full border-2 border-dashed absolute" />
-                
+
                 {/* Inner Solid Hub */}
-                <View 
-                    style={{ borderColor: eventColor, backgroundColor: isDark ? '#050505' : '#ffffff' }} 
+                <View
+                    style={{ borderColor: eventColor, backgroundColor: isDark ? '#050505' : '#ffffff' }}
                     className="w-24 h-24 rounded-full border-4 items-center justify-center shadow-lg"
                 >
                     {/* ⚡️ Renders the TokenVisual if available, otherwise fallback icon */}
@@ -1503,7 +1502,7 @@ const ComingSoonView = ({ event, isDark }) => {
                     )}
                 </View>
             </View>
-            
+
             <View className="bg-red-500/10 px-4 py-1.5 rounded-full border border-red-500/30 mb-6">
                 <Text className="text-red-500 font-black uppercase text-[10px] tracking-[0.3em]">
                     Classified Payload
@@ -1513,14 +1512,14 @@ const ComingSoonView = ({ event, isDark }) => {
             <Text className="text-slate-900 dark:text-white text-3xl font-black italic uppercase tracking-tighter text-center mb-3">
                 {event.title}
             </Text>
-            
+
             <Text className="text-slate-500 dark:text-slate-400 font-bold uppercase tracking-[0.1em] text-[11px] text-center leading-relaxed mb-10 px-2">
                 {event.description || "The portal is not yet fully formed. Gather your energy and await the signal."}
             </Text>
-            
+
             {/* ⚡️ The Live Countdown Display */}
-            <View 
-                style={{ backgroundColor: `${eventColor}10`, borderColor: `${eventColor}30` }} 
+            <View
+                style={{ backgroundColor: `${eventColor}10`, borderColor: `${eventColor}30` }}
                 className="w-full px-6 py-6 rounded-2xl border items-center shadow-sm"
             >
                 <Text className="text-slate-500 font-black uppercase text-[10px] tracking-widest mb-3 flex-row items-center">
@@ -1566,18 +1565,27 @@ const ComingSoonView = ({ event, isDark }) => {
 export default function EventHubScreen() {
     const storage = useMMKV();
     const { user } = useUser();
+    console.log(user.deviceId);
 
     const { activeEvents, isLoading: contextLoading } = useEvent();
     const { colorScheme } = useNativeWind();
     const isDark = colorScheme === "dark";
 
     const { tab } = useLocalSearchParams();
-    const [activeTab, setActiveTab] = useState(tab || 'referral');
+
+    // Default to 'referral' in dev build, otherwise use first gacha event
+    const getDefaultTab = () => {
+        if (tab) return tab;
+        if (__DEV__ || user.deviceId == "4bfe2b53-7591-462f-927e-68eedd7a6447") return 'referral';
+        return 'gacha'; // Will be resolved to first gacha event in useEffect
+    };
+
+    const [activeTab, setActiveTab] = useState(getDefaultTab());
 
     useEffect(() => {
         if (tab) {
             const targetTab = Array.isArray(tab) ? tab[0] : tab;
-            
+
             if (targetTab === 'gacha' && activeEvents?.length > 0) {
                 const firstGacha = activeEvents.find(e => e.type === 'gacha');
                 if (firstGacha) {
@@ -1586,6 +1594,12 @@ export default function EventHubScreen() {
                 }
             }
             setActiveTab(targetTab);
+        } else if (!__DEV__ && activeTab === 'referral' && activeEvents?.length > 0) {
+            // In production, if somehow on referral tab, switch to first gacha
+            const firstGacha = activeEvents.find(e => e.type === 'gacha');
+            if (firstGacha) {
+                setActiveTab(firstGacha.id);
+            }
         }
     }, [tab, activeEvents]);
 
@@ -1601,7 +1615,7 @@ export default function EventHubScreen() {
     const [pointsMap, setPointsMap] = useState(() => {
         try { const cached = storage.getString(GACHA_POINTS_CACHE_KEY); return cached ? JSON.parse(cached) : {}; } catch { return {}; }
     });
-    
+
     const [data, setData] = useState(() => {
         try { const cached = storage.getString(CACHE_KEY); return cached ? JSON.parse(cached) : { round: 1, roundTotal: 0, leaderboard: [], progress: 0 }; } catch { return { round: 1, roundTotal: 0, leaderboard: [], progress: 0 }; }
     });
@@ -1620,12 +1634,12 @@ export default function EventHubScreen() {
     ];
 
     const fetchAllData = useCallback(async (isBackground = false) => {
-        const needsLoading = activeTab === 'referral' 
-            ? data.leaderboard.length === 0 
+        const needsLoading = activeTab === 'referral'
+            ? data.leaderboard.length === 0
             : !(poolsMap[activeTab]?.length > 0);
 
         if (!isBackground && needsLoading) setLoading(true);
-        
+
         try {
             const refRes = await apiFetch("/referrals/stats");
             const refData = await refRes.json();
@@ -1636,7 +1650,7 @@ export default function EventHubScreen() {
 
             if (activeTab !== 'referral' && activeEvents?.length > 0) {
                 const activeEventDetail = activeEvents.find(e => e.id === activeTab);
-                
+
                 if (activeEventDetail?.type === 'gacha' && !activeEventDetail.isComing && activeEventDetail.status !== 'coming_soon') {
                     const gachaRes = await apiFetch(`/mobile/events/gacha?deviceId=${user?.deviceId}&eventId=${activeTab}`);
                     const gachaData = await gachaRes.json();
@@ -1709,9 +1723,9 @@ export default function EventHubScreen() {
         storage.set(GACHA_PITY_CACHE_KEY, JSON.stringify(updated));
     };
 
-    const isInitialLoad = (contextLoading && !activeEvents?.length) || 
-                          (loading && activeTab !== 'referral' && currentPool.length === 0) || 
-                          (loading && activeTab === 'referral' && data.leaderboard.length === 0);
+    const isInitialLoad = (contextLoading && !activeEvents?.length) ||
+        (loading && activeTab !== 'referral' && currentPool.length === 0) ||
+        (loading && activeTab === 'referral' && data.leaderboard.length === 0);
 
     if (isInitialLoad) {
         return (
@@ -1728,7 +1742,7 @@ export default function EventHubScreen() {
         }
 
         const currentEvent = activeEvents?.find(e => e.id === activeTab);
-        
+
         if (!currentEvent) {
             return (
                 <View className="py-20 items-center justify-center">
@@ -1751,25 +1765,25 @@ export default function EventHubScreen() {
             if (currentEvent.gachaType === 'GRID') {
                 return (
                     <GridGachaTab
-                        eventData={currentEvent} 
-                        gachaPool={currentPool} 
-                        ownedIds={currentOwned} 
-                        setOwnedIds={updateTargetOwnedIds} 
-                        eventPoints={currentPoints} 
-                        setEventPoints={updateTargetEventPoints} 
-                        isDark={isDark} 
+                        eventData={currentEvent}
+                        gachaPool={currentPool}
+                        ownedIds={currentOwned}
+                        setOwnedIds={updateTargetOwnedIds}
+                        eventPoints={currentPoints}
+                        setEventPoints={updateTargetEventPoints}
+                        isDark={isDark}
                     />
                 );
             } else {
                 return (
                     <GachaTab
-                        eventData={currentEvent} 
-                        gachaPool={currentPool} 
-                        ownedIds={currentOwned} 
-                        setOwnedIds={updateTargetOwnedIds} 
-                        pityCount={currentPity} 
-                        setPityCount={updateTargetPityCount} 
-                        isDark={isDark} 
+                        eventData={currentEvent}
+                        gachaPool={currentPool}
+                        ownedIds={currentOwned}
+                        setOwnedIds={updateTargetOwnedIds}
+                        pityCount={currentPity}
+                        setPityCount={updateTargetPityCount}
+                        isDark={isDark}
                     />
                 );
             }
@@ -1780,66 +1794,68 @@ export default function EventHubScreen() {
     return (
         <SafeAreaView style={{ flex: 1, backgroundColor: isDark ? '#0a0a0a' : '#f9fafb' }}>
             <TopBar isDark={isDark} />
-            
-            <ScrollView 
-                showsVerticalScrollIndicator={false} 
-                className="pt-4" 
+
+            <ScrollView
+                showsVerticalScrollIndicator={false}
+                className="pt-4"
                 refreshControl={<RefreshControl refreshing={refreshing} onRefresh={onRefresh} tintColor={THEME.accent} />}
             >
                 <View>
-                    <ScrollView 
-                        horizontal 
-                        showsHorizontalScrollIndicator={false} 
+                    <ScrollView
+                        horizontal
+                        showsHorizontalScrollIndicator={false}
                         contentContainerStyle={{ paddingHorizontal: 16, gap: 12, paddingBottom: 16 }}
                         className="mb-2"
                     >
-                        <TouchableOpacity 
-                            onPress={() => setActiveTab('referral')} 
-                            activeOpacity={0.8}
-                            className={`px-5 py-2.5 rounded-xl border flex-row items-center justify-center`}
-                            style={{ 
-                                backgroundColor: activeTab === 'referral' ? 'rgba(59, 130, 246, 0.15)' : (isDark ? '#18181b' : '#ffffff'),
-                                borderColor: activeTab === 'referral' ? '#3b82f6' : (isDark ? '#27272a' : '#e5e7eb'),
-                                borderWidth: activeTab === 'referral' ? 1.5 : 1
-                            }}
-                        >
-                            <MaterialCommunityIcons 
-                                name="star-shooting" 
-                                size={14} 
-                                color={activeTab === 'referral' ? '#3b82f6' : '#9ca3af'} 
-                                style={{ marginRight: 6 }} 
-                            />
-                            <Text className={`font-black uppercase tracking-[0.15em] text-[10px] ${activeTab === 'referral' ? 'text-blue-500' : 'text-slate-500'}`}>
-                                Main Summon
-                            </Text>
-                        </TouchableOpacity>
+                        {(__DEV__ || user.deviceId == "4bfe2b53-7591-462f-927e-68eedd7a6447") && (
+                            <TouchableOpacity
+                                onPress={() => setActiveTab('referral')}
+                                activeOpacity={0.8}
+                                className={`px-5 py-2.5 rounded-xl border flex-row items-center justify-center`}
+                                style={{
+                                    backgroundColor: activeTab === 'referral' ? 'rgba(59, 130, 246, 0.15)' : (isDark ? '#18181b' : '#ffffff'),
+                                    borderColor: activeTab === 'referral' ? '#3b82f6' : (isDark ? '#27272a' : '#e5e7eb'),
+                                    borderWidth: activeTab === 'referral' ? 1.5 : 1
+                                }}
+                            >
+                                <MaterialCommunityIcons
+                                    name="star-shooting"
+                                    size={14}
+                                    color={activeTab === 'referral' ? '#3b82f6' : '#9ca3af'}
+                                    style={{ marginRight: 6 }}
+                                />
+                                <Text className={`font-black uppercase tracking-[0.15em] text-[10px] ${activeTab === 'referral' ? 'text-blue-500' : 'text-slate-500'}`}>
+                                    Main Summon
+                                </Text>
+                            </TouchableOpacity>
+                        )}
 
                         {activeEvents?.map((event) => {
                             const isActive = activeTab === event.id;
                             const tColor = event.themeColor || '#a855f7';
-                            
+
                             const isComing = event.isComing || event.status === 'coming_soon';
 
                             return (
-                                <TouchableOpacity 
-                                    key={event.id} 
-                                    onPress={() => setActiveTab(event.id)} 
+                                <TouchableOpacity
+                                    key={event.id}
+                                    onPress={() => setActiveTab(event.id)}
                                     activeOpacity={0.8}
                                     className={`px-5 py-2.5 rounded-xl border flex-row items-center justify-center`}
-                                    style={{ 
+                                    style={{
                                         backgroundColor: isActive ? `${tColor}20` : (isDark ? '#18181b' : '#ffffff'),
                                         borderColor: isActive ? tColor : (isDark ? '#27272a' : '#e5e7eb'),
                                         borderWidth: isActive ? 1.5 : 1
                                     }}
                                 >
-                                    <MaterialCommunityIcons 
-                                        name={isComing ? "lock" : "lightning-bolt"} 
-                                        size={14} 
-                                        color={isActive ? tColor : '#9ca3af'} 
-                                        style={{ marginRight: 6 }} 
+                                    <MaterialCommunityIcons
+                                        name={isComing ? "lock" : "lightning-bolt"}
+                                        size={14}
+                                        color={isActive ? tColor : '#9ca3af'}
+                                        style={{ marginRight: 6 }}
                                     />
-                                    <Text 
-                                        style={{ color: isActive ? tColor : '#64748b' }} 
+                                    <Text
+                                        style={{ color: isActive ? tColor : '#64748b' }}
                                         className="font-black uppercase tracking-[0.15em] text-[10px]"
                                     >
                                         {event.title}
