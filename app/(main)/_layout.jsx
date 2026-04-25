@@ -51,7 +51,7 @@ export default function MainLayout() {
     const storage = useMMKV();
 
     useEffect(() => {
-        if (pathname === "/Search" || pathname === "/" || pathname === "/authordiary" || pathname === "/profile") {
+        if (pathname === "/Search" || pathname === "/" || pathname === "/authordiary" || pathname === "/profile" || pathname.includes("categories")) {
             setIsActive(true);
         } else {
             setIsActive(false);
