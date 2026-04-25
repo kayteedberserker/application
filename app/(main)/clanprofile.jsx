@@ -1691,7 +1691,7 @@ const ClanStoreModal = ({ visible, fetchFullDetails, onClose, isDark, clan }) =>
                                 </View>
                             ) : (
                                 <View>
-                                    {['BADGE', 'THEME', 'BACKGROUND', "WATERMARK", 'EFFECT', 'GLOW', 'BORDER'].map((cat) => {
+                                    {['BACKGROUND', "WATERMARK", 'VERIFIED', 'GLOW', 'STICKER', 'BORDER'].map((cat) => {
                                         const themeItems = selectedTheme.items?.filter(i => i.category?.toUpperCase() === cat) || [];
                                         if (themeItems.length === 0) return null;
                                         return (
@@ -1771,7 +1771,7 @@ const ClanInventoryModal = ({ visible, onClose, fetchFullDetails, clan, isDark, 
     const verifiedItem = getVerifiedItem();
     if (verifiedItem) inventory.unshift(verifiedItem);
 
-    const categories = ['ALL', 'VERIFIED', 'WATERMARK', 'BADGE', "BACKGROUND", 'GLOW', 'BORDER'];
+    const categories = ['ALL', 'VERIFIED', 'WATERMARK', 'STICKER', "BACKGROUND", 'GLOW', 'BORDER'];
 
     const handleEquipToggle = async (selectedItem) => {
         if (selectedItem.itemId === 'active_verification_status') return;

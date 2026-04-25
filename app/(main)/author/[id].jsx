@@ -41,7 +41,6 @@ import { Text } from "../../../components/Text";
 import { useAlert } from "../../../context/AlertContext";
 import apiFetch from "../../../utils/apiFetch";
 
-import BadgeIcon from "../../../components/BadgeIcon";
 import PlayerBackground from "../../../components/PlayerBackground";
 import PlayerNameplate from "../../../components/PlayerNameplate";
 import PlayerWatermark from "../../../components/PlayerWatermark";
@@ -478,13 +477,13 @@ export default function AuthorPage() {
                                 fontSize={24}
                             />
 
-                            {equippedBadges.length > 0 && (
+                            {/* {equippedBadges.length > 0 && (
                                 <View className="flex-row flex-wrap justify-center gap-2 mt-2 mb-3">
                                     {equippedBadges.map((badge, bIdx) => (
                                         <BadgeIcon key={`spec-${bIdx}`} badge={badge} size={22} isDark={isDark} />
                                     ))}
                                 </View>
-                            )}
+                            )} */}
                         </View>
 
                         <Text className="text-sm text-gray-500 dark:text-gray-400 text-center leading-relaxed font-medium px-8 italic mb-4">

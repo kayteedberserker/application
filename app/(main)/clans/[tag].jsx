@@ -36,7 +36,6 @@ import { useAlert } from "../../../context/AlertContext";
 import { useUser } from "../../../context/UserContext";
 import apiFetch from "../../../utils/apiFetch";
 
-import BadgeIcon from "../../../components/BadgeIcon";
 import PlayerBackground from "../../../components/PlayerBackground";
 import PlayerNameplate from "../../../components/PlayerNameplate";
 import PlayerWatermark from "../../../components/PlayerWatermark";
@@ -554,13 +553,13 @@ export default function ClanPage() {
             </TouchableOpacity>
           </View>
 
-          {equippedBadges.length > 0 && (
+          {/* {equippedBadges.length > 0 && (
             <View className="flex-row flex-wrap justify-center gap-2 mb-4 mt-1">
               {equippedBadges.map((badge, idx) => (
                 <BadgeIcon key={idx} badge={badge} size={20} isDark={isDark} />
               ))}
             </View>
-          )}
+          )} */}
 
           <TouchableOpacity onPress={() => { Clipboard.setString(clan.tag); showAlert("COPIED", "Clan tag copied"); }} style={{ backgroundColor: `${highlightColor}10`, borderColor: `${highlightColor}20` }} className="px-4 py-1.5 flex flex-row items-center gap-1 rounded-full border mb-4">
             <Text style={{ color: highlightColor }} className="text-xs font-bold tracking-widest uppercase">#{clan.tag}</Text>

@@ -12,7 +12,6 @@ import Animated, {
 import { SvgXml } from 'react-native-svg';
 
 // ⚡️ IMPORTED UNIFIED COMPONENTS
-import BadgeIcon from "./BadgeIcon";
 import { ClanBadge } from "./ClanBadge";
 import ClanBorder from "./ClanBorder";
 import ClanCrest from "./ClanCrest";
@@ -154,14 +153,13 @@ export default function ClanCard({ clan, isDark, THEME = { card: '#0a0a0a', text
         </View>
 
         {/* ⚡️ EQUIPPED BADGES ROW (MAX 10) */}
-        {specialBadges.length > 0 && (
+        {/* {specialBadges.length > 0 && (
           <View className="flex-row flex-wrap justify-center gap-2 mb-4">
             {specialBadges.map((badge, bIdx) => (
               <BadgeIcon key={`spec-${bIdx}`} badge={badge} size={22} isDark={isDark} />
             ))}
           </View>
-        )}
-
+        )} */}
         <View style={{ backgroundColor: `${highlightColor}10`, borderColor: `${highlightColor}20` }} className="px-4 py-1.5 rounded-full border mb-4">
           <Text style={{ color: activeGlowColor || verifiedColor || highlightColor }} className="text-xs font-bold tracking-widest uppercase">#{clan.tag}</Text>
         </View>

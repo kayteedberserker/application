@@ -5,6 +5,7 @@ import { useEffect, useMemo, useRef, useState } from "react";
 import {
     ActivityIndicator,
     Dimensions,
+    FlatList, // Added FlatList
     Keyboard,
     KeyboardAvoidingView,
     Modal,
@@ -21,28 +22,30 @@ import Animated, {
     Easing,
     FadeIn,
     FadeOut,
+    runOnJS,
     useAnimatedStyle,
     useSharedValue,
     withRepeat,
     withSequence,
-    withTiming,
     withSpring,
-    interpolate,
-    runOnJS
+    withTiming
 } from "react-native-reanimated";
 import useSWR from "swr";
 import { useAlert } from "../context/AlertContext";
 import { useUser } from "../context/UserContext";
 import apiFetch from "../utils/apiFetch";
+import BadgeIcon from "./BadgeIcon";
 import { Text } from "./Text";
 
+
 // Import your new components
+import { useMMKV } from "react-native-mmkv";
+import { useCoins } from '../context/CoinContext'; // New Import
+import CoinIcon from "./ClanIcon";
 import PlayerNameplate from "./PlayerNameplate";
-import BadgeIcon from "./BadgeIcon";
 
 const { width: SCREEN_WIDTH, height: SCREEN_HEIGHT } = Dimensions.get("window");
 const API_URL = "https://oreblogda.com";
-
 const flattenReplies = (nodes) => {
     let flatList = [];
     const traverse = (items) => {
@@ -84,7 +87,7 @@ const CommentSkeleton = () => {
     );
 };
 
-const SingleComment = ({ comment, isDark, onOpenDiscussion }) => {
+const SingleComment = ({ comment, isDark, onOpenDiscussion, stickerCache, storage }) => {
     const countReplies = (nodes) => {
         let count = 0;
         if (!nodes) return 0;
@@ -115,16 +118,27 @@ const SingleComment = ({ comment, isDark, onOpenDiscussion }) => {
                     />
                 </View>
 
-                {comment.author?.badges && comment.author.badges.length > 0 && (
+                {/* {comment.author?.badges && comment.author.badges.length > 0 && (
                     <View className="flex-row items-center gap-1 overflow-hidden flex-shrink-0">
                         {comment.author.badges.slice(0, 3).map((badge, idx) => (
                             <BadgeIcon key={idx} badge={badge} size={14} isDark={true} />
                         ))}
                     </View>
-                )}
+                )} */}
             </View>
 
-            <Text className="text-xs text-gray-600 dark:text-gray-300 font-bold leading-5 mt-1">{comment.text}</Text>
+            {comment.type === "sticker" ? (
+                <StickerPreview
+                    sticker={stickerCache[comment.stickerId] || getStickerFromPersistence(storage, comment.stickerId)}
+                    stickerId={comment.stickerId}
+                    isDark={isDark}
+                    size="large"
+                />
+            ) : (
+                <Text className="text-xs text-gray-600 dark:text-gray-300 font-bold leading-5 mt-1">
+                    {comment.text}
+                </Text>
+            )}
             <View className="flex-row items-center mt-1 gap-4">
                 <Text className="text-gray-400 text-[8px] font-bold">{new Date(comment.date).toLocaleDateString()}</Text>
                 <Pressable
@@ -143,16 +157,28 @@ const SingleComment = ({ comment, isDark, onOpenDiscussion }) => {
             {hasReplies && previewReply && (
                 <View className="mt-3 opacity-50 bg-gray-50 dark:bg-white/5 p-2 rounded-lg border-l border-gray-300 dark:border-gray-700">
                     <Text className="text-[9px] font-black text-gray-500 uppercase">{previewReply.name}</Text>
-                    <Text className="text-[10px] text-gray-500 font-bold" numberOfLines={1}>{previewReply.text}</Text>
+                    {previewReply.type === "sticker" ? (
+                        <StickerPreview
+                            sticker={stickerCache[previewReply.stickerId] || getStickerFromPersistence(storage, previewReply.stickerId)}
+                            stickerId={previewReply.stickerId}
+                            isDark={isDark}
+                            size="small"
+                        />
+                    ) : (
+                        <Text className="text-[10px] text-gray-500 font-bold" numberOfLines={1}>
+                            {previewReply.text}
+                        </Text>
+                    )}
                 </View>
             )}
         </View>
     );
 };
 
-const DiscussionDrawer = ({ visible, isDark, comment, onClose, onReply, isPosting, slug, highlightId }) => {
+const DiscussionDrawer = ({ visible, isDark, comment, onClose, onReply, isPosting, slug, highlightId, stickerCache, storage }) => {
     const [replyText, setReplyText] = useState("");
     const [showJumpToBottom, setShowJumpToBottom] = useState(false);
+    const [stickerModalVisible, setStickerModalVisible] = useState(false); // NEW STATE
 
     const panY = useSharedValue(SCREEN_HEIGHT);
 
@@ -163,7 +189,7 @@ const DiscussionDrawer = ({ visible, isDark, comment, onClose, onReply, isPostin
 
     const displayComments = useMemo(() => {
         if (!comment) return [];
-        return flattenReplies(comment.replies);
+        return flattenReplies(comment.replies); // Assuming flattenReplies is defined elsewhere
     }, [comment]);
 
     useEffect(() => {
@@ -231,8 +257,19 @@ const DiscussionDrawer = ({ visible, isDark, comment, onClose, onReply, isPostin
             transform: [{ translateY: panY.value }]
         };
     });
-    console.log(comment);
-    
+
+    // NEW: Function to handle sending a sticker
+    const handleSendSticker = (stickerId) => {
+        setStickerModalVisible(false);
+        if (!isPosting) {
+            Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Heavy);
+            // We pass empty text, and the stickerId as the payload. 
+            // Make sure your onReply function accepts a sticker parameter!
+            onReply(comment._id, "", stickerId);
+            setTimeout(() => scrollViewRef.current?.scrollToEnd({ animated: true }), 500);
+        }
+    };
+
     if (!comment) return null;
 
     return (
@@ -273,19 +310,30 @@ const DiscussionDrawer = ({ visible, isDark, comment, onClose, onReply, isPostin
                                             fontSize={16}
                                         />
                                     </View>
-                                    {comment.author?.badges && comment.author.badges.length > 0 && (
+                                    {/* {comment.author?.badges && comment.author.badges.length > 0 && (
                                         <View className="flex-row items-center gap-1 overflow-hidden flex-shrink-0">
                                             {comment.author.badges.slice(0, 3).map((badge, idx) => (
                                                 <BadgeIcon key={idx} badge={badge} size={20} isDark={true} />
                                             ))}
                                         </View>
-                                    )}
+                                    )} */}
                                 </View>
 
                                 <Text className="text-xs text-gray-600 dark:text-gray-400 font-bold leading-5" numberOfLines={3}>{comment.text}</Text>
                             </View>
 
                             <View className="p-5 flex-row gap-3 items-center">
+                                {/* NEW: STICKER BUTTON */}
+                                <Pressable
+                                    onPress={() => {
+                                        Keyboard.dismiss();
+                                        setStickerModalVisible(true);
+                                    }}
+                                    className="bg-gray-100 dark:bg-gray-800/80 border border-gray-200 dark:border-gray-700 w-12 h-12 rounded-2xl items-center justify-center"
+                                >
+                                    <Ionicons name="happy" size={22} color={isDark ? "white" : "#374151"} />
+                                </Pressable>
+
                                 <TextInput
                                     placeholder="WRITE RESPONSE..."
                                     placeholderTextColor="#6b7280"
@@ -344,7 +392,14 @@ const DiscussionDrawer = ({ visible, isDark, comment, onClose, onReply, isPostin
                                     {displayComments.map((reply, idx) => {
                                         const isHighlighted = highlightId === reply._id;
                                         return (
-                                            <HighlightableComment isDark={isDark} key={reply._id || idx} reply={reply} isHighlighted={isHighlighted} />
+                                            <HighlightableComment
+                                                isDark={isDark}
+                                                key={reply._id || idx}
+                                                reply={reply}
+                                                isHighlighted={isHighlighted}
+                                                stickerCache={stickerCache}
+                                                storage={storage}
+                                            />
                                         );
                                     })}
                                     <View className="h-20" />
@@ -354,11 +409,466 @@ const DiscussionDrawer = ({ visible, isDark, comment, onClose, onReply, isPostin
                     </Animated.View>
                 </KeyboardAvoidingView>
             </View>
+
+            {/* NEW: STICKER MODAL COMPONENT */}
+            <StickerModal
+                visible={stickerModalVisible}
+                isDark={isDark}
+                onClose={() => setStickerModalVisible(false)}
+                onSelectSticker={handleSendSticker}
+            />
         </Modal>
     );
 };
 
-const HighlightableComment = ({ reply, isHighlighted, isDark }) => {
+// Helper to determine rent price on frontend
+const getRentPrice = (rarity) => {
+    switch (rarity?.toLowerCase()) {
+        case 'mythic': return 50;
+        case 'legendary': return 30;
+        case 'epic': return 15;
+        case 'rare': return 10;
+        case 'common':
+        default: return 5;
+    }
+};
+
+// Helper for card background based on rarity to complement the BadgeIcon
+const getCardBackground = (rarity, isDark) => {
+    switch (rarity?.toLowerCase()) {
+        case 'mythic': return isDark ? 'bg-red-900/20 border-red-700/30' : 'bg-red-50 border-red-200';
+        case 'legendary': return isDark ? 'bg-amber-900/20 border-amber-700/30' : 'bg-amber-50 border-amber-200';
+        case 'epic': return isDark ? 'bg-purple-900/20 border-purple-700/30' : 'bg-purple-50 border-purple-200';
+        case 'rare': return isDark ? 'bg-blue-900/20 border-blue-700/30' : 'bg-blue-50 border-blue-200';
+        case 'common':
+        default: return isDark ? 'bg-gray-800 border-gray-700' : 'bg-gray-100 border-gray-300';
+    }
+};
+
+const getStickerCacheKey = (stickerId) => `sticker_${stickerId}`;
+
+const getStickerFromPersistence = (storage, stickerId) => {
+    if (!storage || !stickerId) return null;
+    const cached = storage.getString(getStickerCacheKey(stickerId));
+    if (!cached) return null;
+    try {
+        return JSON.parse(cached);
+    } catch (error) {
+        return null;
+    }
+};
+
+const cacheStickerToPersistence = (storage, sticker) => {
+    if (!storage || !sticker?.id) return;
+    try {
+        storage.set(getStickerCacheKey(sticker.id), JSON.stringify(sticker));
+    } catch (error) {
+        console.error('Sticker cache error', error);
+    }
+};
+
+const findStickerIds = (comments = []) => {
+    const ids = new Set();
+    const traverse = (items) => {
+        if (!items) return;
+        items.forEach(item => {
+            if (item?.type === 'sticker' && item?.stickerId) {
+                ids.add(item.stickerId);
+            }
+            if (item?.replies?.length) {
+                traverse(item.replies);
+            }
+        });
+    };
+    traverse(comments);
+    return Array.from(ids);
+};
+
+const getStickerBackgroundStyle = (rarity, isDark) => {
+    const baseClasses = "items-center justify-center rounded-2xl border";
+
+    switch (rarity?.toLowerCase()) {
+        case 'mythic':
+            return `${baseClasses} ${isDark ? 'bg-red-900/20 border-red-500/60' : 'bg-red-50 border-red-200'}`;
+        case 'legendary':
+            return `${baseClasses} ${isDark ? 'bg-amber-900/20 border-amber-500/60' : 'bg-amber-50 border-amber-200'}`;
+        case 'epic':
+            return `${baseClasses} ${isDark ? 'bg-purple-900/20 border-purple-500/60' : 'bg-purple-50 border-purple-200'}`;
+        case 'rare':
+            return `${baseClasses} ${isDark ? 'bg-blue-900/20 border-blue-500/60' : 'bg-blue-50 border-blue-200'}`;
+        case 'common':
+        default:
+            return `${baseClasses} ${isDark ? 'bg-gray-800 border-gray-700' : 'bg-gray-100 border-gray-300'}`;
+    }
+};
+
+
+const StickerPreview = ({ sticker, stickerId, isDark, size = 'medium' }) => {
+    // 1. Memoize or simplify constants to reduce re-render logic
+    const stickerSize = size === 'large' ? 80 : size === 'small' ? 50 : 60;
+    const containerPadding = size === 'large' ? 'px-6 py-6' : size === 'small' ? 'px-4 py-4' : 'px-5 py-5';
+
+    // 2. Get the background style separately
+    const backgroundStyle = sticker ? getStickerBackgroundStyle(sticker.rarity, isDark) : '';
+
+    if (sticker) {
+        return (
+            /* 3. Use an array for classes or separate the self-start. 
+               Sometimes 'self-start' combined with dynamic background classes 
+               triggers the interop loop. */
+            <View
+                className={`self-start ${containerPadding} ${backgroundStyle}`}
+                style={{ minHeight: stickerSize, minWidth: stickerSize }} // Physical guard
+            >
+                <BadgeIcon badge={sticker} size={stickerSize} isDark={isDark} />
+            </View>
+        );
+    }
+
+    return (
+        <View className="self-start rounded-2xl border border-gray-300 dark:border-gray-700 bg-gray-100 dark:bg-gray-900 px-4 py-4">
+            <Text className="text-[10px] text-gray-500 dark:text-gray-400">
+                Sticker: {stickerId}
+            </Text>
+        </View>
+    );
+};
+
+const StickerModal = ({ visible, onClose, onSelectSticker, isDark }) => {
+    const { user } = useUser();
+    const { coins, setCoins } = useCoins(); // We'll use setCoins to update global UI state
+    const storage = useMMKV();
+    const CustomAlert = useAlert();
+
+    const [activeTab, setActiveTab] = useState('owned');
+    const [ownedStickers, setOwnedStickers] = useState([]);
+    const [storeStickers, setStoreStickers] = useState([]);
+
+    // Loading states
+    const [isInitialLoading, setIsInitialLoading] = useState(false);
+    const [processingId, setProcessingId] = useState(null);
+
+    useEffect(() => {
+        if (visible) {
+            loadStickerData();
+        }
+    }, [visible]);
+
+    const loadStickerData = async () => {
+        // 1. Check if we have cached data
+        const cached = storage.getString('user_stickers');
+        const cachedStore = storage.getString('store_stickers');
+
+        if (cached) {
+            setOwnedStickers(JSON.parse(cached));
+        }
+        if (cachedStore) {
+            setStoreStickers(JSON.parse(cachedStore));
+        }
+
+        // 2. Only show loading animation if cache is totally empty
+        if (!cached) {
+            setIsInitialLoading(true);
+        }
+
+        try {
+            // 3. Background sync with Server
+            const response = await apiFetch('/store/sticker', {
+                method: 'GET',
+                headers: { 'deviceid': user?.deviceId }
+            });
+            const data = await response.json();
+
+            if (data.owned) {
+                setOwnedStickers(data.owned);
+                storage.set('user_stickers', JSON.stringify(data.owned));
+            }
+            if (data.store) {
+                setStoreStickers(data.store);
+                storage.set('store_stickers', JSON.stringify(data.store));
+            }
+
+        } catch (error) {
+            console.error("Error syncing stickers", error);
+        } finally {
+            setIsInitialLoading(false);
+        }
+    };
+
+    const handleTransaction = async (action, sticker) => {
+        if (processingId) return;
+
+        setProcessingId(sticker.id);
+        Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
+
+        try {
+            // Call the actual sticker route to update DB and User Inventory
+            const response = await apiFetch('/store/sticker', {
+                method: 'POST',
+                headers: { 'deviceid': user?.deviceId },
+                body: JSON.stringify({
+                    action: action,
+                    stickerId: sticker.id
+                })
+            });
+
+            const result = await response.json();
+
+            if (!response.ok || !result.success) {
+                CustomAlert(result.error || "Transaction failed", "error");
+                return;
+            }
+
+            // SUCCESS HANDLING
+            Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
+
+            // Sync the global coin balance across the app
+            if (result.balance !== undefined) {
+                setCoins(result.balance);
+            }
+
+            if (action === 'buy') {
+                CustomAlert(`Purchased ${sticker.name}!`, "success");
+
+                // Update local list instantly
+                const updatedOwned = [...ownedStickers, result.newSticker || sticker];
+                setOwnedStickers(updatedOwned);
+                storage.set('user_stickers', JSON.stringify(updatedOwned));
+                setActiveTab('owned');
+            } else if (action === 'rent') {
+                CustomAlert(`Rented ${sticker.name}!`, "success");
+                onSelectSticker(sticker.id);
+                onClose(); // Close modal after renting for immediate use
+            }
+
+        } catch (error) {
+            console.error("Transaction Error:", error);
+            CustomAlert("Network error. Try again.", "error");
+        } finally {
+            setProcessingId(null);
+        }
+    };
+
+    // UI Renders for Tabs
+    const renderTabButton = (tabId, label, icon) => {
+        const isActive = activeTab === tabId;
+        return (
+            <Pressable
+                onPress={() => {
+                    Haptics.selectionAsync();
+                    setActiveTab(tabId);
+                }}
+                className={`flex-1 py-3 items-center flex-row justify-center gap-2 border-b-2 ${isActive
+                    ? 'border-blue-500'
+                    : 'border-transparent'
+                    }`}
+            >
+                <Ionicons
+                    name={icon}
+                    size={16}
+                    color={isActive ? "#3b82f6" : (isDark ? "#6b7280" : "#9ca3af")}
+                />
+                <Text className={`text-xs font-black uppercase ${isActive
+                    ? 'text-blue-500'
+                    : 'text-gray-400 dark:text-gray-500'
+                    }`}>
+                    {label}
+                </Text>
+            </Pressable>
+        );
+    };
+
+    const renderOwnedTab = () => {
+        if (isInitialLoading && ownedStickers.length === 0) {
+            return <View className="flex-1 items-center justify-center"><ActivityIndicator size="large" color="#3b82f6" /></View>;
+        }
+
+        if (ownedStickers.length === 0) {
+            return (
+                <View className="flex-1 items-center justify-center p-8">
+                    <Ionicons name="sad-outline" size={48} color={isDark ? "#374151" : "#d1d5db"} className="mb-4" />
+                    <Text className="text-gray-500 dark:text-gray-400 font-bold text-center mb-6">
+                        You don't own any stamps yet.
+                    </Text>
+                    <Pressable
+                        onPress={() => setActiveTab('explore')}
+                        className="bg-blue-600 px-6 py-3 rounded-full flex-row items-center gap-2"
+                    >
+                        <Ionicons name="compass" size={18} color="white" />
+                        <Text className="text-white font-black uppercase text-xs">Explore Store</Text>
+                    </Pressable>
+                </View>
+            );
+        }
+
+        return (
+            <FlatList
+                data={ownedStickers}
+                numColumns={3}
+                keyExtractor={(item) => item.id}
+                contentContainerStyle={{ padding: 16, gap: 16 }}
+                columnWrapperStyle={{ gap: 16 }}
+                renderItem={({ item }) => (
+                    <Pressable
+                        onPress={() => onSelectSticker(item.id)}
+                        className={`flex-1 aspect-square rounded-2xl border items-center justify-center ${getCardBackground(item.rarity, isDark)}`}
+                    >
+                        <BadgeIcon badge={item} size={60} isDark={isDark} />
+                    </Pressable>
+                )}
+            />
+        );
+    };
+
+    const renderExploreTab = () => {
+        if (isInitialLoading && storeStickers.length === 0) {
+            return <View className="flex-1 items-center justify-center"><ActivityIndicator size="large" color="#3b82f6" /></View>;
+        }
+
+        const availableStickers = storeStickers.filter(
+            storeSticker => !ownedStickers.some(owned => owned.id === storeSticker.id)
+        );
+
+        if (availableStickers.length === 0 && !isInitialLoading) {
+            return (
+                <View className="flex-1 items-center justify-center">
+                    <Ionicons name="checkmark-circle" size={48} color="#10b981" className="mb-4" />
+                    <Text className="text-gray-500 font-bold uppercase text-xs">You own the entire catalog!</Text>
+                </View>
+            );
+        }
+
+        return (
+            <FlatList
+                data={availableStickers}
+                numColumns={3}
+                keyExtractor={(item) => item.id}
+                contentContainerStyle={{ padding: 16, gap: 16 }}
+                columnWrapperStyle={{ gap: 16 }}
+                renderItem={({ item }) => (
+                    <View className={`flex-1 rounded-2xl p-4 border items-center justify-center ${getCardBackground(item.rarity, isDark)}`}>
+                        <View className="mb-4">
+                            <BadgeIcon badge={item} size={50} isDark={isDark} />
+                        </View>
+
+                        <Pressable
+                            onPress={() => handleTransaction('buy', item)}
+                            disabled={processingId !== null}
+                            className={`w-full py-2 rounded-full gap-1 flex-row items-center justify-center ${processingId === item.id ? 'bg-blue-400' : 'bg-blue-600'}`}
+                        >
+                            {processingId === item.id ? (
+                                <ActivityIndicator color="white" size="small" />
+                            ) : (
+                                <>
+                                    <CoinIcon type="OC" size={14} />
+                                    <Text className="text-white font-black text-[10px] uppercase">{item.price} OC</Text>
+                                </>
+                            )}
+                        </Pressable>
+                    </View>
+                )}
+            />
+        );
+    };
+
+    const renderRentTab = () => {
+        if (isInitialLoading && storeStickers.length === 0) {
+            return <View className="flex-1 items-center justify-center"><ActivityIndicator size="large" color="#3b82f6" /></View>;
+        }
+
+        const rentableStickers = storeStickers.filter(s => s.rentable);
+
+        if (rentableStickers.length === 0 && !isInitialLoading) {
+            return (
+                <View className="flex-1 items-center justify-center p-8">
+                    <Ionicons name="timer-outline" size={48} color={isDark ? "#374151" : "#d1d5db"} className="mb-4" />
+                    <Text className="text-gray-500 dark:text-gray-400 font-bold text-center">
+                        No stamps available for rent right now.
+                    </Text>
+                </View>
+            );
+        }
+
+        return (
+            <View className="flex-1">
+                <View className="bg-blue-500/10 p-3 mx-4 mt-4 rounded-xl items-center">
+                    <Text className="text-blue-500 text-xs font-bold text-center">Use your OC to rent premium stickers for a single comment.</Text>
+                </View>
+
+                <FlatList
+                    data={rentableStickers}
+                    numColumns={3}
+                    keyExtractor={(item) => item.id}
+                    contentContainerStyle={{ padding: 16, gap: 16 }}
+                    columnWrapperStyle={{ gap: 16 }}
+                    renderItem={({ item }) => {
+                        const rentPrice = getRentPrice(item.rarity);
+                        return (
+                            <View className={`flex-1 rounded-2xl border p-3 items-center justify-center ${getCardBackground(item.rarity, isDark)}`}>
+                                <View className="mb-4 mt-2">
+                                    <BadgeIcon badge={item} size={50} isDark={isDark} />
+                                </View>
+
+                                <Pressable
+                                    onPress={() => handleTransaction('rent', item)}
+                                    disabled={processingId !== null}
+                                    className={`w-full py-2 rounded-full gap-1 flex-row items-center justify-center ${processingId === item.id ? 'bg-orange-400' : 'bg-orange-500'}`}
+                                >
+                                    {processingId === item.id ? (
+                                        <ActivityIndicator color="white" size="small" />
+                                    ) : (
+                                        <>
+                                            <CoinIcon type="OC" size={14} />
+                                            <Text className="text-white font-black text-[10px] uppercase">Rent {rentPrice}</Text>
+                                        </>
+                                    )}
+                                </Pressable>
+                            </View>
+                        );
+                    }}
+                />
+            </View>
+        );
+    };
+
+    return (
+        <Modal visible={visible} animationType="slide" transparent={true} onRequestClose={onClose}>
+            <View className="flex-1 justify-end">
+                <Pressable className="absolute inset-0" onPress={onClose} />
+
+                <View className="h-2/3 bg-white dark:bg-[#0f0f0f] rounded-t-3xl border-t border-gray-200 dark:border-gray-800 shadow-2xl">
+                    <View className="px-4 pt-4 border-b border-gray-100 dark:border-gray-800">
+                        <View className="flex-row justify-between items-center mb-4">
+                            <Text className="text-lg font-black dark:text-white uppercase">Stamps</Text>
+                            <View className="flex-row items-center gap-3">
+                                <View className="bg-yellow-500/20 px-3 py-1 rounded-full">
+                                    <Text className="text-yellow-600 font-black text-xs">{coins || 0} OC</Text>
+                                </View>
+                                <Pressable onPress={onClose} className="bg-gray-100 dark:bg-gray-800 p-2 rounded-full">
+                                    <Ionicons name="close" size={20} color={isDark ? "white" : "black"} />
+                                </Pressable>
+                            </View>
+                        </View>
+
+                        <View className="flex-row">
+                            {renderTabButton('owned', 'Owned', 'briefcase')}
+                            {renderTabButton('rent', 'Rent', 'timer')}
+                            {renderTabButton('explore', 'Explore', 'compass')}
+                        </View>
+                    </View>
+
+                    <View className="flex-1 bg-gray-50 dark:bg-[#0a0a0a]">
+                        {activeTab === 'owned' && renderOwnedTab()}
+                        {activeTab === 'rent' && renderRentTab()}
+                        {activeTab === 'explore' && renderExploreTab()}
+                    </View>
+                </View>
+            </View>
+        </Modal>
+    );
+};
+
+const HighlightableComment = ({ reply, isHighlighted, isDark, stickerCache, storage }) => {
     const scale = useSharedValue(1);
     const bgColorOpacity = useSharedValue(0);
 
@@ -400,16 +910,27 @@ const HighlightableComment = ({ reply, isHighlighted, isDark }) => {
                         fontSize={14}
                     />
                 </View>
-                {reply.author?.badges && reply.author.badges.length > 0 && (
+                {/* {reply.author?.badges && reply.author.badges.length > 0 && (
                     <View className="flex-row items-start gap-1 overflow-hidden flex-shrink-0">
                         {reply.author.badges.slice(0, 3).map((badge, idx) => (
                             <BadgeIcon key={idx} badge={badge} size={16} isDark={true} />
                         ))}
                     </View>
-                )}
+                )} */}
             </View>
 
-            <Text className="text-xs text-gray-600 dark:text-gray-300 font-bold leading-5">{reply.text}</Text>
+            {reply.type === "sticker" ? (
+                <StickerPreview
+                    sticker={stickerCache[reply.stickerId] || getStickerFromPersistence(storage, reply.stickerId)}
+                    stickerId={reply.stickerId}
+                    isDark={isDark}
+                    size="large"
+                />
+            ) : (
+                <Text className="text-xs text-gray-600 dark:text-gray-300 font-bold leading-5">
+                    {reply.text}
+                </Text>
+            )}
             <Text className="text-[9px] font-bold text-gray-400 uppercase mt-2">{new Date(reply.date).toLocaleTimeString()}</Text>
         </Animated.View>
     );
@@ -421,7 +942,6 @@ export default function CommentSection({ postId, slug, discussionIdfromPage }) {
     const { discussion, commentId, discussionId } = useLocalSearchParams();
     const targetId = discussion || commentId || discussionId || discussionIdfromPage
     const isDark = useColorScheme() === "dark";
-    console.log(isDark);
 
     const [text, setText] = useState("");
     const [isPosting, setIsPosting] = useState(false);
@@ -430,6 +950,10 @@ export default function CommentSection({ postId, slug, discussionIdfromPage }) {
     const [pagedComments, setPagedComments] = useState([]);
     const [page, setPage] = useState(1);
     const [isLoadingMore, setIsLoadingMore] = useState(false);
+    const [stickerCache, setStickerCache] = useState({});
+
+    const storage = useMMKV();
+    const fetchedStickerIds = useRef(new Set());
 
     const hasAutoOpened = useRef(false);
 
@@ -502,35 +1026,142 @@ export default function CommentSection({ postId, slug, discussionIdfromPage }) {
         }
     }, [pagedComments]);
 
-    const handlePostComment = async (parentId = null, replyContent = null) => {
-        const content = replyContent || text;
-        if (!content.trim() || !user?.deviceId) return;
+    useEffect(() => {
+        const stickerIds = findStickerIds(pagedComments);
+        if (!stickerIds.length) return;
+
+        const cachedStickers = {};
+        const missingIds = [];
+
+        stickerIds.forEach(id => {
+            const persisted = getStickerFromPersistence(storage, id);
+            if (persisted) {
+                cachedStickers[id] = persisted;
+            } else if (!fetchedStickerIds.current.has(id)) {
+                missingIds.push(id);
+            }
+        });
+
+        if (Object.keys(cachedStickers).length) {
+            setStickerCache(prev => ({ ...prev, ...cachedStickers }));
+        }
+
+        if (!missingIds.length) return;
+
+        const fetchMissing = async () => {
+            try {
+                const res = await apiFetch('/store/sticker');
+                if (!res.ok) return;
+                const payload = await res.json();
+                const allStickers = [...(payload.store || []), ...(payload.owned || [])];
+                const found = {};
+
+                missingIds.forEach(id => {
+                    const sticker = allStickers.find(item => item.id === id);
+                    if (sticker) {
+                        found[id] = sticker;
+                        cacheStickerToPersistence(storage, sticker);
+                        fetchedStickerIds.current.add(id);
+                    }
+                });
+
+                if (Object.keys(found).length) {
+                    setStickerCache(prev => ({ ...prev, ...found }));
+                }
+            } catch (error) {
+                console.error('Failed to load sticker metadata', error);
+            }
+        };
+
+        fetchMissing();
+    }, [pagedComments, storage]);
+
+    const handlePostComment = async (parentId = null, replyContent = null, stickerId = null) => {
+        const content = replyContent ?? text;
+        if ((!content || !content.trim()) && !stickerId) return;
+
+        const trimmedText = content?.trim() || "";
+        const isStickerComment = !!stickerId;
+        const tempId = `temp-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;
+        const optimisticComment = {
+            _id: tempId,
+            type: isStickerComment ? 'sticker' : 'text',
+            stickerId,
+            text: trimmedText,
+            name: user?.username || 'Anonymous',
+            author: {
+                username: user?.username || user?.name || 'Anonymous',
+                name: user?.username || user?.name || 'Anonymous',
+                auraRank: user?.auraRank,
+                equippedGlow: user?.equippedGlow
+            },
+            date: new Date().toISOString(),
+            replies: []
+        };
+
         setIsPosting(true);
+        setText("");
+        Keyboard.dismiss();
+
+        if (parentId) {
+            setPagedComments(prev => prev.map(comment => {
+                if (comment._id !== parentId) return comment;
+                return {
+                    ...comment,
+                    replies: [optimisticComment, ...(comment.replies || [])]
+                };
+            }));
+        } else {
+            setPagedComments(prev => [optimisticComment, ...prev]);
+        }
+
         try {
             const res = await apiFetch(`/posts/${postId}/comment`, {
-                method: "POST",
-                headers: { "Content-Type": "application/json" },
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
                 body: JSON.stringify({
-                    name: user?.username || "Anonymous",
-                    text: content,
+                    name: user?.username || 'Anonymous',
+                    text: trimmedText,
+                    stickerId,
                     parentCommentId: parentId,
                     fingerprint: user.deviceId,
                     userId: user._id || null
-                }),
+                })
             });
-            if (res.ok) {
-                const responseData = await res.json();
-                Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
-                if (parentId) {
-                    mutate();
-                } else {
-                    setPagedComments(prev => [responseData.comment, ...prev]);
-                    setText("");
-                    Keyboard.dismiss();
-                }
+
+            if (!res.ok) {
+                throw new Error('Failed to post comment');
             }
+
+            const responseData = await res.json();
+            const serverComment = responseData.comment;
+
+            if (parentId) {
+                setPagedComments(prev => prev.map(comment => {
+                    if (comment._id !== parentId) return comment;
+                    return {
+                        ...comment,
+                        replies: (comment.replies || []).map(reply => reply._id === tempId ? serverComment : reply)
+                    };
+                }));
+            } else {
+                setPagedComments(prev => prev.map(comment => comment._id === tempId ? serverComment : comment));
+            }
+
+            Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
         } catch (err) {
-            CustomAlert("Link Failure", "Connection lost.");
+            if (parentId) {
+                setPagedComments(prev => prev.map(comment => {
+                    if (comment._id !== parentId) return comment;
+                    return {
+                        ...comment,
+                        replies: (comment.replies || []).filter(reply => reply._id !== tempId)
+                    };
+                }));
+            } else {
+                setPagedComments(prev => prev.filter(comment => comment._id !== tempId));
+            }
+            CustomAlert('Link Failure', 'Connection lost. Your comment was not posted.');
         } finally {
             setIsPosting(false);
         }
@@ -584,10 +1215,17 @@ export default function CommentSection({ postId, slug, discussionIdfromPage }) {
                     ) : pagedComments.length > 0 ? (
                         <View>
                             {pagedComments.map((c, i) => (
-                                <SingleComment key={c._id || i} isDark={isDark} comment={c} onOpenDiscussion={(comm) => {
-                                    setActiveHighlightId(null);
-                                    setActiveDiscussion(comm);
-                                }} />
+                                <SingleComment
+                                    key={c._id || i}
+                                    isDark={isDark}
+                                    comment={c}
+                                    stickerCache={stickerCache}
+                                    storage={storage}
+                                    onOpenDiscussion={(comm) => {
+                                        setActiveHighlightId(null);
+                                        setActiveDiscussion(comm);
+                                    }}
+                                />
                             ))}
                             {data?.hasMore && (
                                 <Pressable onPress={handleLoadMore} disabled={isLoadingMore} className="py-6 items-center border-t border-gray-100 dark:border-gray-800">
@@ -616,6 +1254,8 @@ export default function CommentSection({ postId, slug, discussionIdfromPage }) {
                 isPosting={isPosting}
                 slug={slug}
                 highlightId={activeHighlightId}
+                stickerCache={stickerCache}
+                storage={storage}
             />
         </View>
     );

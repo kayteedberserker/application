@@ -27,7 +27,6 @@ import { useAlert } from "../context/AlertContext";
 import { useUser } from "../context/UserContext";
 import apiFetch from "../utils/apiFetch";
 import AuraAvatar from "./AuraAvatar";
-import BadgeIcon from "./BadgeIcon";
 import ClanBorder from "./ClanBorder";
 import ClanCrest from "./ClanCrest";
 import PeakBadge from "./PeakBadge";
@@ -211,11 +210,11 @@ const MemoizedClanHeader = memo(({ clanInfo, postId, isDark, isFeed }) => {
                 borderRadius={28}
             />
 
-            {displayBadge && (
+            {/* {displayBadge && (
                 <View className="absolute -right-2 -top-4 opacity-[0.4] pointer-events-none">
                     <BadgeIcon badge={displayBadge} size={80} containerStyle="bg-transparent border-0" />
                 </View>
-            )}
+            )} */}
 
             <Pressable onPress={() => DeviceEventEmitter.emit("navigateSafely", `/clans/${clanInfo.tag}`)} className="flex-row items-center flex-1 z-10">
                 <View className="mr-4">
@@ -245,11 +244,11 @@ const MemoizedClanHeader = memo(({ clanInfo, postId, isDark, isFeed }) => {
             </Pressable>
 
             <View className="flex-row items-center z-10 pl-4 border-l border-white/5">
-                {displayBadge && (
+                {/* {displayBadge && (
                     <View className="mr-[7px] items-center justify-center">
                         <BadgeIcon badge={displayBadge} size={22} />
                     </View>
-                )}
+                )} */}
 
                 {clanInfo.isInWar ? (
                     <View className="items-center">
@@ -649,11 +648,11 @@ const PostCardComponent = ({ post, authorData, clanData, setPosts, isFeed, hideM
                                 <Text className="text-[10px] font-black text-gray-900 dark:text-white uppercase tracking-widest">{post.formattedViews || "0"}</Text>
                             </View>
                             <View className="flex-row items-center gap-2 mt-2">
-                                {customBadges.length > 0 && (
+                                {/* {customBadges.length > 0 && (
                                     <View className="flex-row items-center gap-1">
                                         {customBadges.map((badge, idx) => <BadgeIcon key={idx} badge={badge} size={25} />)}
                                     </View>
-                                )}
+                                )} */}
                                 {author.peakLevel > 0 && (
                                     <View className="flex-row items-center gap-1 bg-purple-500/10 px-2 py-1 rounded-full border border-purple-500/30">
                                         <PeakBadge level={author.peakLevel} size={25} isFeed={isFeed} />

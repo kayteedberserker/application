@@ -63,6 +63,7 @@ export const CoinProvider = ({ children }) => {
         }
     }, [storage, user?.deviceId]);
 
+    // Renamed to setCoins so it can be exported and maintain cache sync
     const updateCoins = (newVal) => {
         setCoins(newVal);
         storage.set(STORAGE_KEYS.COINS, String(newVal));
@@ -200,6 +201,7 @@ export const CoinProvider = ({ children }) => {
     return (
         <CoinContext.Provider value={{
             coins,
+            setCoins: updateCoins, // Exporting updateCoins as setCoin
             clanCoins,
             totalPurchasedCoins,
             peakLevel,

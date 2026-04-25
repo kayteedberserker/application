@@ -42,8 +42,6 @@ export default function BadgeIcon({ badge, size = 25, containerStyle, isDark }) 
 
     return (
         <View
-            className={`${rarityColors} p-1 rounded-full border items-center justify-center ${containerStyle || ''}`}
-            style={{ width: size + 8, height: size + 8 }} // Container slightly larger than icon
         >
             {isLottie ? (
                 <LottieView

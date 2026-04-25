@@ -610,7 +610,7 @@ const AuthorStoreModal = ({ visible, onClose, user, isDark, setInventory }) => {
                                 </View>
                             ) : (
                                 <View>
-                                    {['BADGE', 'THEME', 'BACKGROUND', "WATERMARK", 'EFFECT', 'GLOW', 'BORDER', 'AVATAR_VFX', 'AVATAR'].map((cat) => {
+                                    {['BACKGROUND', "WATERMARK", 'GLOW', 'BORDER', 'AVATAR_VFX', 'AVATAR'].map((cat) => {
                                         const themeItems = selectedTheme.items?.filter(i => i.category?.toUpperCase() === cat) || [];
                                         if (themeItems.length === 0) return null;
                                         return (
@@ -653,11 +653,11 @@ const AuthorInventoryModal = ({ visible, onClose, user, setUser, isDark, theinve
     const CustomAlert = useAlert();
 
     const inventory = theinventory || user?.inventory || [];
-    const categories = ['ALL', 'GLOW', 'BORDER', 'BADGE', 'WATERMARK', "AVATAR", 'AVATAR_VFX'];
+    const categories = ['ALL', 'GLOW', 'BORDER', 'WATERMARK', "AVATAR", 'AVATAR_VFX'];
 
     const handleEquipToggle = async (selectedItem) => {
         if (isUpdating) return;
-        setIsUpdating(true);
+        setIsUpdating(true)
 
         try {
             const updatedInventory = inventory.map(item => {
@@ -666,7 +666,7 @@ const AuthorInventoryModal = ({ visible, onClose, user, setUser, isDark, theinve
                 }
                 if (
                     item.category === selectedItem.category &&
-                    selectedItem.category !== 'BADGE' &&
+                    selectedItem.category !== 'STICKER' &&
                     !selectedItem.isEquipped
                 ) {
                     return { ...item, isEquipped: false };
