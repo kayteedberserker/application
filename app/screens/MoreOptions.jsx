@@ -16,9 +16,9 @@ import {
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { Text } from '../../components/Text';
+import TopBar from '../../components/Topbar';
 import THEME from '../../components/useAppTheme';
 import { useAlert } from '../../context/AlertContext';
-import TopBar from '../../components/Topbar';
 const { width } = Dimensions.get('window');
 
 export default function MoreOptions() {
@@ -26,7 +26,7 @@ export default function MoreOptions() {
   const router = useRouter();
   const [isNotificationsEnabled, setIsNotificationsEnabled] = useState(false);
   const [loading, setLoading] = useState(true);
-      const isDark = useColorScheme() === "dark";
+  const isDark = useColorScheme() === "dark";
   // Check current permission status on mount
   useEffect(() => {
     checkPermission();
@@ -42,17 +42,18 @@ export default function MoreOptions() {
   const toggleNotifications = async () => {
     setLoading(true);
     const { status: existingStatus } = await Notifications.getPermissionsAsync();
-    
+
     if (existingStatus === 'denied' && !isNotificationsEnabled) {
       CustomAlert(
         "Permissions Required",
         "Notifications are disabled in your system settings. Would you like to enable them now?",
         [
           { text: "Cancel", style: "cancel", onPress: () => setLoading(false) },
-          { text: "Open Settings", onPress: () => {
+          {
+            text: "Open Settings", onPress: () => {
               setLoading(false);
               Platform.OS === 'ios' ? Linking.openURL('app-settings:') : Linking.openSettings();
-            } 
+            }
           }
         ]
       );
@@ -76,7 +77,7 @@ export default function MoreOptions() {
   };
 
   const MenuRow = ({ title, icon, route, color = "#2563eb" }) => (
-    <TouchableOpacity 
+    <TouchableOpacity
       onPress={() => DeviceEventEmitter.emit("navigateSafely", route)}
       activeOpacity={0.8}
       style={{ backgroundColor: THEME.card, borderColor: THEME.border }}
@@ -85,24 +86,24 @@ export default function MoreOptions() {
       <View className="w-10 h-10 rounded-xl items-center justify-center" style={{ backgroundColor: `${color}15` }}>
         <Ionicons name={icon} size={20} color={color} />
       </View>
-      <Text style={{color: THEME.text}} className='flex-1 ml-4 text-sm font-black uppercase italic tracking-tight'>{title}</Text>
+      <Text style={{ color: THEME.text }} className='flex-1 ml-4 text-sm font-black uppercase italic tracking-tight'>{title}</Text>
       <Ionicons name="chevron-forward" size={16} color={THEME.border} />
     </TouchableOpacity>
   );
 
   return (
     <SafeAreaView style={{ flex: 1, backgroundColor: THEME.bg }}>
-      <TopBar isDark={isDark}/>
+      <TopBar isDark={isDark} />
       {/* --- Ambient Background Glows --- */}
       <View style={{ position: 'absolute', top: -50, right: -50, width: 300, height: 300, borderRadius: 150, backgroundColor: THEME.glowBlue, opacity: 0.2 }} />
       <View style={{ position: 'absolute', bottom: 100, left: -100, width: 400, height: 400, borderRadius: 200, backgroundColor: THEME.glowPurple, opacity: 0.2 }} />
 
       <ScrollView className="flex-1 px-6" showsVerticalScrollIndicator={false}>
-        
+
         {/* --- Header --- */}
         <View className="flex-row items-center mt-8 mb-10">
-          <TouchableOpacity 
-            onPress={() => router.back()} 
+          <TouchableOpacity
+            onPress={() => router.back()}
             style={{ backgroundColor: THEME.card, borderColor: THEME.border }}
             className="w-12 h-12 items-center justify-center rounded-2xl border-2"
           >
@@ -118,17 +119,17 @@ export default function MoreOptions() {
         <Text className="text-gray-600 font-black uppercase text-[9px] tracking-[0.2em] mb-4 ml-1">
           Internal Configuration
         </Text>
-        <View 
-            style={{ backgroundColor: THEME.card, borderColor: THEME.border }}
-            className="flex-row items-center p-5 mb-8 rounded-2xl border-2"
+        <View
+          style={{ backgroundColor: THEME.card, borderColor: THEME.border }}
+          className="flex-row items-center p-5 mb-8 rounded-2xl border-2"
         >
           <View className="w-10 h-10 rounded-xl items-center justify-center bg-blue-500/10">
             <Ionicons name="notifications-outline" size={20} color={THEME.accent} />
           </View>
           <View className="flex-1 ml-4">
-            <Text style={{color: THEME.text}} className="text-sm font-black italic uppercase">Push Notifications</Text>
+            <Text style={{ color: THEME.text }} className="text-sm font-black italic uppercase">Push Notifications</Text>
             <Text className="text-[10px] font-bold text-gray-500 uppercase tracking-tighter">
-                Status: {isNotificationsEnabled ? "Active Uplink" : "Signal Blocked"}
+              Status: {isNotificationsEnabled ? "Active Uplink" : "Signal Blocked"}
             </Text>
           </View>
           {loading ? (
@@ -147,17 +148,17 @@ export default function MoreOptions() {
         <Text className="text-gray-600 font-black uppercase text-[9px] tracking-[0.2em] mb-4 ml-1">
           Social & Rewards
         </Text>
-        <MenuRow 
-            title="Affiliate Uplink (Referrals)" 
-            icon="gift-outline" 
-            route="/screens/Referral" 
-            color="#a855f7" 
+        <MenuRow
+          title="Affiliate Uplink (Referrals)"
+          icon="gift-outline"
+          route="/screens/Referral"
+          color="#a855f7"
         />
-        <MenuRow 
-            title="Clan Intelligence" 
-            icon="shield-outline" 
-            route="/screens/ClanInfoScreen" 
-            color="#ec4899" 
+        <MenuRow
+          title="Clan Intelligence"
+          icon="shield-outline"
+          route="/screens/ClanInfoScreen"
+          color="#ec4899"
         />
 
         <View className="h-6" />
@@ -166,11 +167,11 @@ export default function MoreOptions() {
         <Text className="text-gray-600 font-black uppercase text-[9px] tracking-[0.2em] mb-4 ml-1">
           Author Progression
         </Text>
-        <MenuRow 
-            title="Rank, Streak & AURA System" 
-            icon="flash-outline" 
-            route="/screens/RankSystemScreen" 
-            color="#f97316" 
+        <MenuRow
+          title="Rank, Streak & AURA System"
+          icon="flash-outline"
+          route="/screens/RankSystemScreen"
+          color="#f97316"
         />
 
         <View className="h-6" />
@@ -179,17 +180,17 @@ export default function MoreOptions() {
         <Text className="text-gray-600 font-black uppercase text-[9px] tracking-[0.2em] mb-4 ml-1">
           Knowledge Base
         </Text>
-        <MenuRow 
-            title="Formatting Protocols" 
-            icon="code-working" 
-            route="/screens/Instructions" 
-            color="#3b82f6" 
+        <MenuRow
+          title="Formatting Protocols"
+          icon="code-working"
+          route="/screens/Instructions"
+          color="#3b82f6"
         />
-        <MenuRow 
-            title="Validation Rules" 
-            icon="shield-checkmark-outline" 
-            route="/screens/Rules" 
-            color="#10b981" 
+        <MenuRow
+          title="Validation Rules"
+          icon="shield-checkmark-outline"
+          route="/screens/Rules"
+          color="#10b981"
         />
 
         <View className="h-6" />
@@ -198,17 +199,17 @@ export default function MoreOptions() {
         <Text className="text-gray-600 font-black uppercase text-[9px] tracking-[0.2em] mb-4 ml-1">
           Communication Links
         </Text>
-        <MenuRow 
-            title="Platform Intelligence" 
-            icon="bulb-outline" 
-            route="/screens/About" 
-            color="#8b5cf6" 
+        <MenuRow
+          title="Platform Intelligence"
+          icon="bulb-outline"
+          route="/screens/About"
+          color="#8b5cf6"
         />
-        <MenuRow 
-            title="Technical Support" 
-            icon="terminal-outline" 
-            route="/screens/Contact" 
-            color="#f59e0b" 
+        <MenuRow
+          title="Technical Support"
+          icon="terminal-outline"
+          route="/screens/Contact"
+          color="#f59e0b"
         />
 
         <View className="h-6" />
@@ -217,24 +218,24 @@ export default function MoreOptions() {
         <Text className="text-gray-600 font-black uppercase text-[9px] tracking-[0.2em] mb-4 ml-1">
           Encryption & Legal
         </Text>
-        <MenuRow 
-            title="Terms of Service" 
-            icon="document-attach-outline" 
-            route="/screens/Terms" 
-            color="#64748b" 
+        <MenuRow
+          title="Terms of Service"
+          icon="document-attach-outline"
+          route="/screens/Terms"
+          color="#64748b"
         />
-        <MenuRow 
-            title="Privacy Protocols" 
-            icon="finger-print-outline" 
-            route="/screens/Policy" 
-            color="#64748b" 
+        <MenuRow
+          title="Privacy Protocols"
+          icon="finger-print-outline"
+          route="/screens/Policy"
+          color="#64748b"
         />
 
         {/* --- Footer Info --- */}
         <View className="items-center mt-16 mb-12">
           <View className="bg-gray-900 px-4 py-2 rounded-full border border-gray-800 mb-2">
-            <Text style={{color: "white"}} className="text-gray-500 font-mono text-[9px] uppercase tracking-widest">
-                Firmware: v1.0.5-STABLE
+            <Text style={{ color: "white" }} className="text-gray-500 font-mono text-[9px] uppercase tracking-widest">
+              Firmware: v1.0.5-STABLE
             </Text>
           </View>
           <Text className="text-gray-700 text-[10px] font-black uppercase italic tracking-tighter">

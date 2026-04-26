@@ -3,7 +3,7 @@ import * as FileSystem from 'expo-file-system/legacy';
 import { Image } from "expo-image";
 import * as MediaLibrary from 'expo-media-library';
 import { useVideoPlayer, VideoView } from "expo-video";
-import { memo, useEffect, useMemo, useState } from "react";
+import { memo, useEffect, useMemo, useRef, useState } from "react";
 import {
     ActivityIndicator,
     BackHandler,
@@ -11,14 +11,18 @@ import {
     Dimensions,
     Linking,
     Modal,
+    PanResponder,
     Pressable,
     Share,
+    StyleSheet,
+    TouchableOpacity,
     useColorScheme,
     View
 } from "react-native";
 import ImageZoom from 'react-native-image-pan-zoom';
 import { useMMKV } from 'react-native-mmkv';
 
+import { useEvent } from "expo";
 import * as Clipboard from 'expo-clipboard';
 import * as Haptics from 'expo-haptics';
 import { SvgXml } from "react-native-svg";
@@ -85,17 +89,239 @@ const RemoteSvgIcon = ({ xml, size = 50, color }) => {
     return <SvgXml xml={xml} width={size} height={size} />;
 };
 
+// Helper to format seconds into MM:SS
+const formatTime = (timeInSeconds) => {
+    console.log(timeInSeconds);
+
+    if (!timeInSeconds || isNaN(timeInSeconds)) return "00:00";
+    const mins = Math.floor(timeInSeconds / 60);
+    const secs = Math.floor(timeInSeconds % 60);
+    return `${mins}:${secs < 10 ? '0' : ''}${secs}`;
+};
+
 const LightboxVideoPlayer = ({ uri }) => {
+    const hideTimerRef = useRef(null);
+    const scrubTimeRef = useRef(0);
+    const tapTimeout = useRef(null);
+    const lastTap = useRef(null);
+
+    const [isScrubbing, setIsScrubbing] = useState(false);
+    const [localTime, setLocalTime] = useState(0);
+    const [showControls, setShowControls] = useState(true);
+    const [seekIndicator, setSeekIndicator] = useState(null);
+    const [showSpeedMenu, setShowSpeedMenu] = useState(false);
+    const [playbackSpeed, setPlaybackSpeed] = useState(1.0);
+
     const player = useVideoPlayer(uri, (p) => {
         p.loop = true;
         p.play();
     });
 
+    // --- EVENTS & STATUS ---
+    const isPlayingEvent = useEvent(player, "playingChange");
+    const statusEvent = useEvent(player, "statusChange");
+    const durationEvent = useEvent(player, "durationChange");
+    const mutedEvent = useEvent(player, "mutedChange");
+
+    const isPlaying = isPlayingEvent?.isPlaying ?? player.playing;
+    const status = statusEvent?.status ?? player.status;
+    const duration = durationEvent?.duration ?? player.duration ?? 0;
+    const isMuted = mutedEvent?.muted ?? player.muted;
+
+    // --- HEARTBEAT FOR REALTIME UI ---
+    useEffect(() => {
+        const interval = setInterval(() => {
+            if (!isScrubbing && player && duration > 0) {
+                setLocalTime(player.currentTime ?? 0);
+            }
+        }, 250);
+        return () => clearInterval(interval);
+    }, [player, isScrubbing, duration]);
+
+    // --- AUTO HIDE LOGIC ---
+    const resetAutoHide = () => {
+        if (hideTimerRef.current) clearTimeout(hideTimerRef.current);
+        if (showControls && isPlaying && !isScrubbing && !showSpeedMenu) {
+            hideTimerRef.current = setTimeout(() => {
+                setShowControls(false);
+            }, 3000);
+        }
+    };
+
+    useEffect(() => {
+        resetAutoHide();
+        return () => { if (hideTimerRef.current) clearTimeout(hideTimerRef.current); };
+    }, [showControls, isPlaying, isScrubbing, showSpeedMenu]);
+
+    // --- INTERACTION HANDLERS ---
+    const handleSmartTap = (side) => {
+        const now = Date.now();
+        if (lastTap.current && (now - lastTap.current) < 300) {
+            clearTimeout(tapTimeout.current);
+            lastTap.current = null;
+            const seekAmount = side === 'left' ? -10 : 10;
+            player.seekBy(seekAmount);
+            setSeekIndicator(side);
+            setTimeout(() => setSeekIndicator(null), 600);
+            setShowControls(true);
+        } else {
+            lastTap.current = now;
+            tapTimeout.current = setTimeout(() => {
+                if (showSpeedMenu) setShowSpeedMenu(false);
+                else setShowControls((prev) => !prev);
+                lastTap.current = null;
+            }, 300);
+        }
+    };
+
+    const panResponder = useMemo(() => PanResponder.create({
+        onStartShouldSetPanResponder: () => true,
+        onPanResponderGrant: () => {
+            setIsScrubbing(true);
+            if (hideTimerRef.current) clearTimeout(hideTimerRef.current);
+        },
+        onPanResponderMove: (_, gestureState) => {
+            const progress = Math.max(0, Math.min(gestureState.moveX / SCREEN_WIDTH, 1));
+            const newTime = progress * duration;
+            scrubTimeRef.current = newTime;
+            setLocalTime(newTime);
+        },
+        onPanResponderRelease: () => {
+            player.currentTime = scrubTimeRef.current;
+            setIsScrubbing(false);
+            resetAutoHide();
+        },
+    }), [duration, player]);
+
+    const changeSpeed = (speed) => {
+        player.playbackRate = speed;
+        setPlaybackSpeed(speed);
+        setShowSpeedMenu(false);
+        resetAutoHide();
+    };
+
+    const progressPercent = duration > 0 ? (localTime / duration) * 100 : 0;
+
     return (
-        <VideoView player={player} style={{ width: SCREEN_WIDTH, height: SCREEN_HEIGHT * 0.8 }} contentFit="contain" fullscreenOptions allowsPictureInPicture />
+        <View style={styles.container}>
+            <VideoView
+                player={player}
+                style={{ flex: 1 }}
+                contentFit="contain"
+                nativeControls={false}
+            />
+
+            {/* TAP ZONES */}
+            <View style={StyleSheet.absoluteFillObject} pointerEvents="box-none" flexDirection="row">
+                <Pressable style={{ flex: 1 }} onPress={() => handleSmartTap('left')} />
+                <Pressable style={{ flex: 1 }} onPress={() => handleSmartTap('right')} />
+            </View>
+
+            {/* SEEK FEEDBACK */}
+            {seekIndicator && (
+                <View style={[styles.seekFeedback, seekIndicator === 'left' ? { left: '15%' } : { right: '15%' }]}>
+                    <Feather name={seekIndicator === 'left' ? "rotate-ccw" : "rotate-cw"} size={30} color="white" />
+                    <Text style={styles.seekText}>10s</Text>
+                </View>
+            )}
+
+            {status === 'loading' && (
+                <View style={styles.loaderContainer}>
+                    <ActivityIndicator size="large" color={THEME.accent} />
+                </View>
+            )}
+
+            {/* HUD OVERLAY */}
+            {showControls && (
+                <View style={StyleSheet.absoluteFillObject} pointerEvents="box-none">
+
+                    {/* TOP BAR (Settings) */}
+                    <View style={styles.topBar}>
+                        <TouchableOpacity
+                            onPress={() => setShowSpeedMenu(!showSpeedMenu)}
+                            style={styles.iconCircle}
+                        >
+                            <Feather name="settings" size={20} color="white" />
+                            <Text style={styles.speedLabel}>{playbackSpeed}x</Text>
+                        </TouchableOpacity>
+                    </View>
+
+                    {/* SPEED MENU */}
+                    {showSpeedMenu && (
+                        <View style={[styles.speedMenu, { backgroundColor: THEME.card }]}>
+                            {[0.5, 1.0, 1.5, 2.0].map((s) => (
+                                <TouchableOpacity key={s} onPress={() => changeSpeed(s)} style={styles.speedOption}>
+                                    <Text style={[styles.speedText, { color: playbackSpeed === s ? THEME.accent : 'white' }]}>
+                                        {s === 1.0 ? 'Normal' : `${s}x`}
+                                    </Text>
+                                </TouchableOpacity>
+                            ))}
+                        </View>
+                    )}
+
+                    {/* CENTER PLAY/PAUSE */}
+                    <View style={styles.centerControl} pointerEvents="box-none">
+                        <TouchableOpacity
+                            activeOpacity={0.8}
+                            onPress={() => {
+                                isPlaying ? player.pause() : player.play();
+                                resetAutoHide();
+                            }}
+                            style={[styles.playButton, { borderColor: THEME.glowBlue, shadowColor: THEME.accent }]}
+                        >
+                            <Feather name={isPlaying ? 'pause' : 'play'} size={36} color={THEME.text} />
+                        </TouchableOpacity>
+                    </View>
+
+                    {/* BOTTOM HUD */}
+                    <View style={styles.bottomHud} pointerEvents="box-none">
+                        <View style={styles.timerRow}>
+                            <View style={{ flexDirection: 'row', alignItems: 'center' }}>
+                                <Text style={[styles.timerText, { color: THEME.text }]}>{formatTime(localTime)}</Text>
+                                <Text style={[styles.timerText, { color: 'rgba(255,255,255,0.5)', marginHorizontal: 5 }]}>/</Text>
+                                <Text style={[styles.timerText, { color: THEME.text }]}>{formatTime(duration)}</Text>
+                            </View>
+
+                            <TouchableOpacity onPress={() => player.muted = !isMuted}>
+                                <Feather name={isMuted ? "volume-x" : "volume-2"} size={20} color="white" />
+                            </TouchableOpacity>
+                        </View>
+
+                        {/* PROGRESS BAR */}
+                        <View {...panResponder.panHandlers} style={styles.progressBarBg}>
+                            <View style={[styles.progressFill, { width: `${progressPercent}%`, backgroundColor: THEME.accent }]}>
+                                <View style={[styles.progressDot, { backgroundColor: THEME.text }]} />
+                            </View>
+                        </View>
+                    </View>
+                </View>
+            )}
+        </View>
     );
 };
 
+const styles = StyleSheet.create({
+    container: { width: SCREEN_WIDTH, height: SCREEN_HEIGHT * 0.8, justifyContent: 'center', backgroundColor: '#000' },
+    topBar: { position: 'absolute', top: 20, right: 20, flexDirection: 'row' },
+    iconCircle: { backgroundColor: 'rgba(0,0,0,0.5)', padding: 8, borderRadius: 20, flexDirection: 'row', alignItems: 'center' },
+    speedLabel: { color: 'white', fontSize: 10, fontWeight: 'bold', marginLeft: 5 },
+    speedMenu: { position: 'absolute', top: 60, right: 20, padding: 10, borderRadius: 12, width: 100, zIndex: 200 },
+    speedOption: { paddingVertical: 8, alignItems: 'center' },
+    speedText: { fontSize: 14, fontWeight: 'bold' },
+    seekFeedback: { position: 'absolute', top: '45%', alignItems: 'center', backgroundColor: 'rgba(0,0,0,0.6)', padding: 20, borderRadius: 60, zIndex: 100 },
+    seekText: { color: 'white', fontWeight: '900', marginTop: 5, fontSize: 12 },
+    loaderContainer: { ...StyleSheet.absoluteFillObject, justifyContent: 'center', alignItems: 'center', backgroundColor: 'rgba(0,0,0,0.4)' },
+    centerControl: { flex: 1, justifyContent: 'center', alignItems: 'center' },
+    playButton: { backgroundColor: 'rgba(0, 0, 0, 0.5)', padding: 22, borderRadius: 60, borderWidth: 2, elevation: 12 },
+    bottomHud: { position: 'absolute', bottom: 0, width: '100%', paddingBottom: 25 },
+    timerRow: { flexDirection: 'row', justifyContent: 'space-between', paddingHorizontal: 20, marginBottom: 12, alignItems: 'center' },
+    timerText: { fontSize: 12, fontWeight: '900' },
+    progressBarBg: { width: '100%', height: 30, justifyContent: 'center' },
+    progressFill: { height: 6, justifyContent: 'center' },
+    progressDot: { position: 'absolute', right: -10, width: 18, height: 18, borderRadius: 9, borderWidth: 3, borderColor: 'rgba(255,255,255,0.3)' }
+});
+
+// --- MAIN MODAL COMPONENT ---
 const MediaModal = ({ isOpen, onClose, mediaItems, currentIndex, setCurrentIndex, handleDownload, isDownloading, isMediaSaved }) => {
     const [assetLoading, setAssetLoading] = useState(false);
 
@@ -107,6 +333,7 @@ const MediaModal = ({ isOpen, onClose, mediaItems, currentIndex, setCurrentIndex
         const isDirectVideo = item.type?.startsWith("video") || lowerUrl.match(/\.(mp4|mov|m4v|webm)$/i);
 
         if (isDirectVideo) {
+            // Now calling our custom, themed player
             return <LightboxVideoPlayer key={item.url} uri={item.url} />;
         }
 
@@ -131,7 +358,12 @@ const MediaModal = ({ isOpen, onClose, mediaItems, currentIndex, setCurrentIndex
                         onLoadEnd={() => setAssetLoading(false)}
                     />
                 </ImageZoom>
-                {assetLoading && <View className="absolute inset-0 items-center justify-center bg-black/20"><SyncLoading message="Synchronizing Visuals" /></View>}
+                {/* LOADING ANIMATION FOR IMAGES */}
+                {assetLoading && (
+                    <View className="absolute inset-0 items-center justify-center bg-black/20">
+                        <SyncLoading message="Synchronizing Visuals" />
+                    </View>
+                )}
             </View>
         );
     };
@@ -146,25 +378,31 @@ const MediaModal = ({ isOpen, onClose, mediaItems, currentIndex, setCurrentIndex
                 {mediaItems.length > 1 && (
                     <>
                         {currentIndex > 0 && (
-                            <Pressable onPress={goToPrev} className="absolute left-4 top-1/2 -translate-y-1/2 p-4 bg-black/50 rounded-full z-50 border border-white/10"><Feather name="chevron-left" size={28} color="white" /></Pressable>
+                            <Pressable onPress={goToPrev} className="absolute left-4 top-1/2 -translate-y-1/2 p-4 bg-black/50 rounded-full z-50 border border-white/10">
+                                <Feather name="chevron-left" size={28} color="white" />
+                            </Pressable>
                         )}
                         {currentIndex < mediaItems.length - 1 && (
-                            <Pressable onPress={goToNext} className="absolute right-4 top-1/2 -translate-y-1/2 p-4 bg-black/50 rounded-full z-50 border border-white/10"><Feather name="chevron-right" size={28} color="white" /></Pressable>
+                            <Pressable onPress={goToNext} className="absolute right-4 top-1/2 -translate-y-1/2 p-4 bg-black/50 rounded-full z-50 border border-white/10">
+                                <Feather name="chevron-right" size={28} color="white" />
+                            </Pressable>
                         )}
                     </>
                 )}
 
-                <Pressable onPress={onClose} className="absolute top-14 right-6 p-3 bg-black/40 rounded-full z-50"><Feather name="x" size={24} color="white" /></Pressable>
+                <Pressable onPress={onClose} className="absolute top-14 right-6 p-3 bg-black/40 rounded-full z-50 border border-white/10">
+                    <Feather name="x" size={24} color="white" />
+                </Pressable>
 
                 {mediaItems[currentIndex]?.type !== "youtube" && mediaItems[currentIndex]?.type !== "tiktok" && (
-                    <Pressable onPress={handleDownload} disabled={isDownloading || isMediaSaved} className="absolute top-14 left-6 p-3 bg-black/40 rounded-full z-50 flex-row items-center gap-2">
+                    <Pressable onPress={handleDownload} disabled={isDownloading || isMediaSaved} className="absolute top-14 left-6 p-3 bg-black/40 rounded-full z-50 flex-row items-center gap-2 border border-white/10">
                         {isDownloading ? <ActivityIndicator size="small" color="#60a5fa" /> : <Feather name={isMediaSaved ? "check" : "download"} size={24} color="white" />}
                     </Pressable>
                 )}
 
                 {mediaItems.length > 1 && (
-                    <View className="absolute bottom-12 w-full items-center">
-                        <View className="bg-black/60 px-6 py-2 rounded-full border border-white/10">
+                    <View className="absolute bottom-12 w-full items-center z-50">
+                        <View className="bg-black/60 px-6 py-2 rounded-full border border-white/10 shadow-lg shadow-blue-500/20">
                             <Text className="text-white font-black tracking-widest uppercase text-xs">Asset {currentIndex + 1} / {mediaItems.length}</Text>
                         </View>
                     </View>
