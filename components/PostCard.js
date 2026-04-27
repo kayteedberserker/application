@@ -91,13 +91,13 @@ const RemoteSvgIcon = ({ xml, size = 50, color }) => {
 
 // Helper to format seconds into MM:SS
 const formatTime = (timeInSeconds) => {
-    console.log(timeInSeconds);
-
     if (!timeInSeconds || isNaN(timeInSeconds)) return "00:00";
     const mins = Math.floor(timeInSeconds / 60);
     const secs = Math.floor(timeInSeconds % 60);
     return `${mins}:${secs < 10 ? '0' : ''}${secs}`;
 };
+
+import * as Crypto from 'expo-crypto';
 
 const LightboxVideoPlayer = ({ uri }) => {
     const hideTimerRef = useRef(null);
@@ -112,9 +112,58 @@ const LightboxVideoPlayer = ({ uri }) => {
     const [showSpeedMenu, setShowSpeedMenu] = useState(false);
     const [playbackSpeed, setPlaybackSpeed] = useState(1.0);
 
-    const player = useVideoPlayer(uri, (p) => {
-        p.loop = true;
-        p.play();
+    // --- CACHE STATES ---
+    const [finalUri, setFinalUri] = useState(null);
+    const [isDownloading, setIsDownloading] = useState(true);
+
+    // --- CACHE LOGIC ---
+    useEffect(() => {
+        let isMounted = true;
+
+        const prepareVideo = async () => {
+            if (!uri) return;
+            setIsDownloading(true);
+
+            try {
+                // Create a unique filename hash from the URL
+                const hashed = await Crypto.digestStringAsync(
+                    Crypto.CryptoDigestAlgorithm.SHA256,
+                    uri
+                );
+                const localUri = `${FileSystem.cacheDirectory}${hashed}.mp4`;
+
+                // Check if we already downloaded it
+                const fileInfo = await FileSystem.getInfoAsync(localUri);
+
+                if (fileInfo.exists) {
+                    console.log("Playing from cache:", localUri);
+                    if (isMounted) setFinalUri(localUri);
+                } else {
+                    console.log("Downloading to cache...");
+                    const download = await FileSystem.downloadAsync(uri, localUri);
+                    if (isMounted) setFinalUri(download.uri);
+                }
+            } catch (e) {
+                console.error("Cache failed, falling back to remote", e);
+                // Fallback to remote if disk is full or network fails partway
+                if (isMounted) setFinalUri(uri);
+            } finally {
+                if (isMounted) setIsDownloading(false);
+            }
+        };
+
+        prepareVideo();
+
+        return () => { isMounted = false; };
+    }, [uri]);
+
+    // --- PLAYER INIT ---
+    // Expo video handles null URIs gracefully. It will load when finalUri populates.
+    const player = useVideoPlayer(finalUri, (p) => {
+        if (finalUri) {
+            p.loop = true;
+            p.play();
+        }
     });
 
     // --- EVENTS & STATUS ---
@@ -176,12 +225,22 @@ const LightboxVideoPlayer = ({ uri }) => {
 
     const panResponder = useMemo(() => PanResponder.create({
         onStartShouldSetPanResponder: () => true,
-        onPanResponderGrant: () => {
+        onMoveShouldSetPanResponder: () => true,
+        onPanResponderGrant: (evt) => {
             setIsScrubbing(true);
             if (hideTimerRef.current) clearTimeout(hideTimerRef.current);
+
+            // Fix for the tap bug: Calculate time immediately on touch down
+            const touchX = evt.nativeEvent.pageX;
+            const progress = Math.max(0, Math.min(touchX / SCREEN_WIDTH, 1));
+            const newTime = progress * duration;
+            scrubTimeRef.current = newTime;
+            setLocalTime(newTime);
         },
-        onPanResponderMove: (_, gestureState) => {
-            const progress = Math.max(0, Math.min(gestureState.moveX / SCREEN_WIDTH, 1));
+        onPanResponderMove: (evt, gestureState) => {
+            // Use moveX if dragging, fallback to pageX for quick taps
+            const touchX = gestureState.moveX || evt.nativeEvent.pageX;
+            const progress = Math.max(0, Math.min(touchX / SCREEN_WIDTH, 1));
             const newTime = progress * duration;
             scrubTimeRef.current = newTime;
             setLocalTime(newTime);
@@ -201,6 +260,15 @@ const LightboxVideoPlayer = ({ uri }) => {
     };
 
     const progressPercent = duration > 0 ? (localTime / duration) * 100 : 0;
+
+    // --- INITIAL DOWNLOAD LOADING STATE ---
+    if (isDownloading) {
+        return (
+            <View style={styles.container}>
+                <SyncLoading message="Preparing Video..." />
+            </View>
+        );
+    }
 
     return (
         <View style={styles.container}>
@@ -225,39 +293,16 @@ const LightboxVideoPlayer = ({ uri }) => {
                 </View>
             )}
 
+            {/* BUFFERING LOADER */}
             {status === 'loading' && (
                 <View style={styles.loaderContainer}>
-                    <ActivityIndicator size="large" color={THEME.accent} />
+                    <SyncLoading message="Buffering..." />
                 </View>
             )}
 
             {/* HUD OVERLAY */}
             {showControls && (
                 <View style={StyleSheet.absoluteFillObject} pointerEvents="box-none">
-
-                    {/* TOP BAR (Settings) */}
-                    <View style={styles.topBar}>
-                        <TouchableOpacity
-                            onPress={() => setShowSpeedMenu(!showSpeedMenu)}
-                            style={styles.iconCircle}
-                        >
-                            <Feather name="settings" size={20} color="white" />
-                            <Text style={styles.speedLabel}>{playbackSpeed}x</Text>
-                        </TouchableOpacity>
-                    </View>
-
-                    {/* SPEED MENU */}
-                    {showSpeedMenu && (
-                        <View style={[styles.speedMenu, { backgroundColor: THEME.card }]}>
-                            {[0.5, 1.0, 1.5, 2.0].map((s) => (
-                                <TouchableOpacity key={s} onPress={() => changeSpeed(s)} style={styles.speedOption}>
-                                    <Text style={[styles.speedText, { color: playbackSpeed === s ? THEME.accent : 'white' }]}>
-                                        {s === 1.0 ? 'Normal' : `${s}x`}
-                                    </Text>
-                                </TouchableOpacity>
-                            ))}
-                        </View>
-                    )}
 
                     {/* CENTER PLAY/PAUSE */}
                     <View style={styles.centerControl} pointerEvents="box-none">
@@ -267,30 +312,59 @@ const LightboxVideoPlayer = ({ uri }) => {
                                 isPlaying ? player.pause() : player.play();
                                 resetAutoHide();
                             }}
-                            style={[styles.playButton, { borderColor: THEME.glowBlue, shadowColor: THEME.accent }]}
+                            style={[styles.playButton, { borderColor: THEME?.glowBlue || 'transparent', shadowColor: THEME?.accent || '#000' }]}
                         >
-                            <Feather name={isPlaying ? 'pause' : 'play'} size={36} color={THEME.text} />
+                            <Feather name={isPlaying ? 'pause' : 'play'} size={36} color={THEME?.text || '#fff'} />
                         </TouchableOpacity>
                     </View>
+
+                    {/* SPEED MENU (Now pops up from the bottom) */}
+                    {showSpeedMenu && (
+                        <View style={[styles.speedMenu, { backgroundColor: THEME?.card || '#222' }]}>
+                            {[0.5, 1.0, 1.5, 2.0].map((s) => (
+                                <TouchableOpacity key={s} onPress={() => changeSpeed(s)} style={styles.speedOption}>
+                                    <Text style={[styles.speedText, { color: playbackSpeed === s ? (THEME?.accent || '#00a8ff') : 'white' }]}>
+                                        {s === 1.0 ? 'Normal' : `${s}x`}
+                                    </Text>
+                                </TouchableOpacity>
+                            ))}
+                        </View>
+                    )}
 
                     {/* BOTTOM HUD */}
                     <View style={styles.bottomHud} pointerEvents="box-none">
                         <View style={styles.timerRow}>
+                            {/* Left Side: Timers */}
                             <View style={{ flexDirection: 'row', alignItems: 'center' }}>
-                                <Text style={[styles.timerText, { color: THEME.text }]}>{formatTime(localTime)}</Text>
+                                <Text style={[styles.timerText, { color: THEME?.text || '#fff' }]}>{formatTime(localTime)}</Text>
                                 <Text style={[styles.timerText, { color: 'rgba(255,255,255,0.5)', marginHorizontal: 5 }]}>/</Text>
-                                <Text style={[styles.timerText, { color: THEME.text }]}>{formatTime(duration)}</Text>
+                                <Text style={[styles.timerText, { color: THEME?.text || '#fff' }]}>{formatTime(duration)}</Text>
                             </View>
 
-                            <TouchableOpacity onPress={() => player.muted = !isMuted}>
-                                <Feather name={isMuted ? "volume-x" : "volume-2"} size={20} color="white" />
-                            </TouchableOpacity>
+                            {/* Right Side: Settings & Mute */}
+                            <View style={styles.rightControls}>
+                                <TouchableOpacity
+                                    onPress={() => setShowSpeedMenu(!showSpeedMenu)}
+                                    style={styles.iconButton}
+                                >
+                                    <Feather name="settings" size={20} color="white" />
+                                    <Text style={styles.speedLabel}>{playbackSpeed}x</Text>
+                                </TouchableOpacity>
+
+                                <TouchableOpacity onPress={() => player.muted = !isMuted} style={styles.iconButton}>
+                                    <Feather name={isMuted ? "volume-x" : "volume-2"} size={20} color="white" />
+                                </TouchableOpacity>
+                            </View>
                         </View>
 
                         {/* PROGRESS BAR */}
                         <View {...panResponder.panHandlers} style={styles.progressBarBg}>
-                            <View style={[styles.progressFill, { width: `${progressPercent}%`, backgroundColor: THEME.accent }]}>
-                                <View style={[styles.progressDot, { backgroundColor: THEME.text }]} />
+                            {/* The Grey Background Track */}
+                            <View style={styles.progressTrack} />
+
+                            {/* The Blue Active Fill */}
+                            <View style={[styles.progressFill, { width: `${progressPercent}%`, backgroundColor: THEME?.accent || '#00a8ff' }]}>
+                                <View style={[styles.progressDot, { backgroundColor: THEME?.text || '#fff' }]} />
                             </View>
                         </View>
                     </View>
@@ -301,22 +375,27 @@ const LightboxVideoPlayer = ({ uri }) => {
 };
 
 const styles = StyleSheet.create({
-    container: { width: SCREEN_WIDTH, height: SCREEN_HEIGHT * 0.8, justifyContent: 'center', backgroundColor: '#000' },
-    topBar: { position: 'absolute', top: 20, right: 20, flexDirection: 'row' },
-    iconCircle: { backgroundColor: 'rgba(0,0,0,0.5)', padding: 8, borderRadius: 20, flexDirection: 'row', alignItems: 'center' },
-    speedLabel: { color: 'white', fontSize: 10, fontWeight: 'bold', marginLeft: 5 },
-    speedMenu: { position: 'absolute', top: 60, right: 20, padding: 10, borderRadius: 12, width: 100, zIndex: 200 },
-    speedOption: { paddingVertical: 8, alignItems: 'center' },
-    speedText: { fontSize: 14, fontWeight: 'bold' },
+    container: { width: SCREEN_WIDTH, height: SCREEN_HEIGHT, justifyContent: 'center', backgroundColor: '#000' },
     seekFeedback: { position: 'absolute', top: '45%', alignItems: 'center', backgroundColor: 'rgba(0,0,0,0.6)', padding: 20, borderRadius: 60, zIndex: 100 },
     seekText: { color: 'white', fontWeight: '900', marginTop: 5, fontSize: 12 },
     loaderContainer: { ...StyleSheet.absoluteFillObject, justifyContent: 'center', alignItems: 'center', backgroundColor: 'rgba(0,0,0,0.4)' },
     centerControl: { flex: 1, justifyContent: 'center', alignItems: 'center' },
     playButton: { backgroundColor: 'rgba(0, 0, 0, 0.5)', padding: 22, borderRadius: 60, borderWidth: 2, elevation: 12 },
+
     bottomHud: { position: 'absolute', bottom: 0, width: '100%', paddingBottom: 25 },
     timerRow: { flexDirection: 'row', justifyContent: 'space-between', paddingHorizontal: 20, marginBottom: 12, alignItems: 'center' },
     timerText: { fontSize: 12, fontWeight: '900' },
+
+    rightControls: { flexDirection: 'row', alignItems: 'center', gap: 15 },
+    iconButton: { flexDirection: 'row', alignItems: 'center' },
+    speedLabel: { color: 'white', fontSize: 12, fontWeight: 'bold', marginLeft: 5 },
+
+    speedMenu: { position: 'absolute', bottom: 70, right: 20, padding: 10, borderRadius: 12, width: 100, zIndex: 200 },
+    speedOption: { paddingVertical: 8, alignItems: 'center' },
+    speedText: { fontSize: 14, fontWeight: 'bold' },
+
     progressBarBg: { width: '100%', height: 30, justifyContent: 'center' },
+    progressTrack: { position: 'absolute', width: '100%', height: 6, backgroundColor: 'rgba(255,255,255,0.3)' },
     progressFill: { height: 6, justifyContent: 'center' },
     progressDot: { position: 'absolute', right: -10, width: 18, height: 18, borderRadius: 9, borderWidth: 3, borderColor: 'rgba(255,255,255,0.3)' }
 });
@@ -407,10 +486,18 @@ const MediaModal = ({ isOpen, onClose, mediaItems, currentIndex, setCurrentIndex
                         </View>
                     </View>
                 )}
+
+                {/* --- FULL SCREEN OVERLAY FOR INSTANT/CACHED DOWNLOAD STATE --- */}
+                {isDownloading && (
+                    <View className="absolute inset-0 items-center justify-center bg-black/60 z-[100]">
+                        <SyncLoading message="Saving to Gallery..." />
+                    </View>
+                )}
             </View>
         </Modal>
     );
 };
+
 
 const MemoizedClanHeader = memo(({ clanInfo, postId, isDark, isFeed }) => {
     if (!clanInfo) return null;
@@ -692,13 +779,43 @@ const PostCardComponent = ({ post, authorData, clanData, setPosts, isFeed, hideM
                 setIsDownloading(false);
                 return;
             }
-            const fileName = item.url.split('/').pop() || (item.type === "video" ? "video.mp4" : "image.jpg");
-            const fileUri = FileSystem.cacheDirectory + fileName;
-            const downloadRes = await FileSystem.downloadAsync(item.url, fileUri);
-            await MediaLibrary.saveToLibraryAsync(downloadRes.uri);
+
+            // --- INSTANT SAVE CACHE CHECK ---
+            // 1. Check if our LightboxVideoPlayer already hashed and cached this
+            const hashed = await Crypto.digestStringAsync(
+                Crypto.CryptoDigestAlgorithm.SHA256,
+                item.url
+            );
+            const cachedVideoUri = `${FileSystem.cacheDirectory}${hashed}.mp4`;
+            const videoInfo = await FileSystem.getInfoAsync(cachedVideoUri);
+
+            let uriToSave;
+
+            if (videoInfo.exists) {
+                // It's already cached! We use this for an instant save.
+                uriToSave = cachedVideoUri;
+            } else {
+                // 2. Fallback check for standard filename cache (or download it if missing)
+                const fileName = item.url.split('/').pop() || (item.type === "video" ? "video.mp4" : "image.jpg");
+                const fileUri = FileSystem.cacheDirectory + fileName;
+                const fileInfo = await FileSystem.getInfoAsync(fileUri);
+
+                if (fileInfo.exists) {
+                    uriToSave = fileUri;
+                } else {
+                    const downloadRes = await FileSystem.downloadAsync(item.url, fileUri);
+                    uriToSave = downloadRes.uri;
+                }
+            }
+
+            await MediaLibrary.saveToLibraryAsync(uriToSave);
             setIsMediaSaved(true);
             setTimeout(() => setIsMediaSaved(false), 3000);
-            await FileSystem.deleteAsync(fileUri, { idempotent: true });
+
+            // Clean up the temp file ONLY if it's not the cached video our player relies on
+            if (uriToSave !== cachedVideoUri) {
+                await FileSystem.deleteAsync(uriToSave, { idempotent: true });
+            }
         } catch (error) {
             CustomAlert("System Failure", "Unable to download media.");
         } finally { setIsDownloading(false); }
@@ -746,7 +863,52 @@ const PostCardComponent = ({ post, authorData, clanData, setPosts, isFeed, hideM
             switch (part.type) {
                 case "text": return <Text key={i} className="text-base leading-7 text-gray-800 dark:text-gray-200">{part.content}</Text>;
                 case "br": return <View key={i} className="h-2" />;
-                case "link": return <Text key={i} onPress={() => Linking.openURL(part.url)} className="text-blue-500 font-bold underline text-base">{part.content}</Text>;
+                case "link":
+                    return (
+                        <Pressable
+                            key={i}
+                            onPress={() => Linking.openURL(part.url)}
+                            style={({ pressed }) => [
+                                {
+                                    backgroundColor: pressed ? 'rgba(59, 130, 246, 0.2)' : 'rgba(59, 130, 246, 0.1)',
+                                    paddingVertical: 4,
+                                    paddingHorizontal: 10,
+                                    borderRadius: 8,
+                                    borderWidth: 1,
+                                    borderColor: 'rgba(59, 130, 246, 0.3)',
+                                    flexDirection: 'row',
+                                    alignItems: 'center',
+                                    marginVertical: 2,
+                                    alignSelf: 'flex-start', // Keeps the bubble tight to the text
+                                }
+                            ]}
+                        >
+                            <Feather
+                                name="link-2"
+                                size={14}
+                                color="#60a5fa"
+                                style={{ marginRight: 6 }}
+                            />
+                            <Text
+                                numberOfLines={1}
+                                ellipsizeMode="tail"
+                                style={{
+                                    color: '#60a5fa',
+                                    fontWeight: '700',
+                                    fontSize: 14,
+                                    textDecorationLine: 'none' // Removing the ugly underline
+                                }}
+                            >
+                                {part.content}
+                            </Text>
+                            <Feather
+                                name="external-link"
+                                size={12}
+                                color="#60a5fa"
+                                style={{ marginLeft: 6, opacity: 0.7 }}
+                            />
+                        </Pressable>
+                    );
                 case "heading": return <Text key={i} className="text-xl font-bold mt-4 mb-2 text-black dark:text-white uppercase tracking-tight">{part.content}</Text>;
                 case "listItem": return <View key={i} className="flex-row items-start ml-4 my-1"><Text className="text-blue-500 mr-2 text-lg">•</Text><Text className="flex-1 text-base leading-6 text-gray-800 dark:text-gray-200">{part.content}</Text></View>;
                 case "section": return <View key={i} className="bg-gray-100 dark:bg-gray-800/60 p-4 my-3 rounded-2xl border-l-4 border-blue-500"><Text className="text-base italic leading-6 text-gray-700 dark:text-gray-300">{part.content}</Text></View>;
@@ -924,11 +1086,11 @@ const PostCardComponent = ({ post, authorData, clanData, setPosts, isFeed, hideM
                             <Ionicons name={liked ? "heart" : "heart-outline"} size={20} color={liked ? "#ef4444" : isDark ? "#9ca3af" : "#4b5563"} />
                             <Text className={`text-xs font-black ${liked ? "text-red-500" : "text-gray-500"}`}>{totalLikes > 0 ? (post.formattedLikes || totalLikes) : "Like"}</Text>
                         </Pressable>
-                        <Pressable onPress={() => DeviceEventEmitter.emit("navigateSafely", `/post/${post.slug || post?._id}?comment=open`)} className="flex-row items-center gap-2">
+                        <Pressable onPress={() => isFeed && DeviceEventEmitter.emit("navigateSafely", `/post/${post.slug || post?._id}?comment=open`)} className="flex-row items-center gap-2">
                             <MaterialCommunityIcons name="comment-text-outline" size={18} color={isDark ? "#9ca3af" : "#4b5563"} />
                             <Text className="text-xs font-black text-gray-500">{totalComments}</Text>
                         </Pressable>
-                        <Pressable onPress={() => DeviceEventEmitter.emit("navigateSafely", `/post/${post.slug || post?._id}?comment=open`)} className="flex-row items-center gap-2 opacity-80">
+                        <Pressable onPress={() => isFeed && DeviceEventEmitter.emit("navigateSafely", `/post/${post.slug || post?._id}?comment=open`)} className="flex-row items-center gap-2 opacity-80">
                             <MaterialCommunityIcons name="forum-outline" size={18} color={isDark ? "#9ca3af" : "#4b5563"} />
                             <Text className="text-xs font-black text-gray-500">{post.discussionCount || 0}</Text>
                         </Pressable>

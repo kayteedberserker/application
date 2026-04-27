@@ -1822,36 +1822,96 @@ export default function MobileProfilePage() {
                 onEndReachedThreshold={0.5}
                 renderItem={({ item }) => (
                     <View className="px-6 mb-4">
-                        <View className="bg-gray-50 dark:bg-[#121212] border border-gray-200 dark:border-gray-800 p-5 rounded-2xl flex-row justify-between items-center shadow-sm">
-                            <Pressable onPress={() => router.push(`/post/${item.slug || item._id}`)} className="flex-1 pr-4">
-                                <Text className="font-black text-sm uppercase tracking-tight text-gray-900 dark:text-white" numberOfLines={1}>{item.title || item.message}</Text>
-                                <Text className="text-[9px] font-bold text-blue-600 dark:text-blue-400 uppercase tracking-widest mt-1.5">{new Date(item.createdAt).toLocaleDateString()}</Text>
-                                <View className="flex-row items-center gap-5 mt-3">
-                                    <View className="flex-row items-center gap-1.5">
-                                        <Ionicons name="heart-outline" size={14} color={isDark ? "#9ca3af" : "#6b7280"} />
-                                        <Text className="text-gray-600 dark:text-gray-400 text-[10px] font-bold">{item.likes?.length || 0}</Text>
+                        <View className="bg-white dark:bg-[#1A1A1A] border border-gray-100 dark:border-gray-800 p-5 rounded-2xl shadow-sm">
+                            <View className="flex-row justify-between items-start mb-3">
+                                <Pressable
+                                    onPress={() => router.push(`/post/${item.slug || item._id}`)}
+                                    className="flex-1 pr-4"
+                                >
+                                    <Text
+                                        className="font-black text-base uppercase tracking-tight text-gray-900 dark:text-white"
+                                        numberOfLines={2}
+                                    >
+                                        {item.title || item.message}
+                                    </Text>
+                                    <View className="flex-row items-center mt-2">
+                                        <View className="bg-blue-500/10 px-2 py-0.5 rounded-md mr-2">
+                                            <Text className="text-[9px] font-black text-blue-600 dark:text-blue-400 uppercase">
+                                                {new Date(item.createdAt).toLocaleDateString()}
+                                            </Text>
+                                        </View>
+                                        {item.category && (
+                                            <Text className="text-[10px] font-bold text-gray-400 uppercase tracking-widest">
+                                                • {item.category}
+                                            </Text>
+                                        )}
                                     </View>
-                                    <View className="flex-row items-center gap-1.5">
-                                        <Ionicons name="chatbubble-outline" size={14} color={isDark ? "#9ca3af" : "#6b7280"} />
-                                        <Text className="text-gray-600 dark:text-gray-400 text-[10px] font-bold">{item.comments?.length || 0}</Text>
+                                </Pressable>
+
+                                <TouchableOpacity
+                                    onPress={() => handleDelete(item._id)}
+                                    className="p-2 bg-red-50 dark:bg-red-500/10 rounded-lg"
+                                >
+                                    <Ionicons name="trash-outline" size={16} color="#ef4444" />
+                                </TouchableOpacity>
+                            </View>
+
+                            {/* --- STATS BAR --- */}
+                            <View className="flex-row items-center justify-between mt-4 pt-4 border-t border-gray-50 dark:border-gray-800/50">
+                                <View className="flex-row items-center gap-4">
+                                    {/* Likes */}
+                                    <View className="items-center flex-row gap-1">
+                                        <Ionicons name="heart" size={14} color="#ef4444" />
+                                        <Text className="text-gray-600 dark:text-gray-400 text-[11px] font-bold">
+                                            {item.likesCount || 0}
+                                        </Text>
                                     </View>
-                                    <View className="flex-row items-center gap-1.5">
-                                        <Ionicons name="eye-outline" size={14} color={isDark ? "#9ca3af" : "#6b7280"} />
-                                        <Text className="text-gray-600 dark:text-gray-400 text-[10px] font-bold">{item.views || 0}</Text>
+
+                                    {/* Comments */}
+                                    <View className="items-center flex-row gap-1">
+                                        <Ionicons name="chatbubble" size={14} color="#3b82f6" />
+                                        <Text className="text-gray-600 dark:text-gray-400 text-[11px] font-bold">
+                                            {item.commentsCount || 0}
+                                        </Text>
+                                    </View>
+
+                                    {/* Discussions - Deep engagement */}
+                                    <View className="items-center flex-row gap-1">
+                                        <Ionicons name="chatbox-ellipses" size={14} color="#f59e0b" />
+                                        <Text className="text-gray-600 dark:text-gray-400 text-[11px] font-bold">
+                                            {item.discussionCount || 0}
+                                        </Text>
                                     </View>
                                 </View>
-                            </Pressable>
-                            <TouchableOpacity onPress={() => handleDelete(item._id)} className="p-3 bg-red-500/10 rounded-xl active:bg-red-500/20 transition-colors">
-                                <Ionicons name="trash-outline" size={18} color="#ef4444" />
-                            </TouchableOpacity>
+
+                                <View className="flex-row items-center gap-4">
+                                    {/* Views */}
+                                    <View className="items-center flex-row gap-1">
+                                        <Ionicons name="eye" size={14} color={isDark ? "#6b7280" : "#9ca3af"} />
+                                        <Text className="text-gray-600 dark:text-gray-400 text-[11px] font-bold">
+                                            {item.formattedViews || "0"}
+                                        </Text>
+                                    </View>
+
+                                    {/* Shares (Frontend UI Placeholder) */}
+                                    <View className="items-center flex-row gap-1">
+                                        <Ionicons name="share-social" size={14} color={isDark ? "#6b7280" : "#9ca3af"} />
+                                        <Text className="text-gray-600 dark:text-gray-400 text-[11px] font-bold">
+                                            {item.sharesCount || 0}
+                                        </Text>
+                                    </View>
+                                </View>
+                            </View>
                         </View>
                     </View>
                 )}
                 ListEmptyComponent={() => isLoadingInitialData ? <SyncLoading /> : (
                     <View className="mx-6 p-10 bg-gray-50 dark:bg-[#121212] rounded-3xl border-2 border-dashed border-gray-200 dark:border-gray-800 items-center my-4">
-                        <Ionicons name="document-text-outline" size={32} color={isDark ? "#4b5563" : "#9ca3af"} className="mb-3" />
-                        <Text className="text-[11px] font-black uppercase tracking-widest text-gray-500 dark:text-gray-400 mt-2">Empty Logs</Text>
-                        <Text className="text-xs text-gray-400 dark:text-gray-500 mt-1 font-medium text-center">Your intel diary is empty. Start writing to build your archive.</Text>
+                        <Ionicons name="document-text-outline" size={32} color={isDark ? "#4b5563" : "#9ca3af"} />
+                        <Text className="text-[11px] font-black uppercase tracking-widest text-gray-500 dark:text-gray-400 mt-4">Empty Logs</Text>
+                        <Text className="text-xs text-gray-400 dark:text-gray-500 mt-2 font-medium text-center leading-5">
+                            Your intel diary is empty.{"\n"}Start writing to build your archive.
+                        </Text>
                     </View>
                 )}
                 ListFooterComponent={() => <View style={{ paddingBottom: insets.bottom + 100 }}>{isFetchingNextPage && <ActivityIndicator className="py-6" color="#2563eb" />}</View>}

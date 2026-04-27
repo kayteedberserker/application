@@ -720,9 +720,46 @@ export default function AuthorDiaryDashboard() {
                 inlineBuffer.push("\n");
             } else if (p.type === "link") {
                 inlineBuffer.push(
-                    <Text key={`link-${i}`} onPress={() => handlePress(p.url)} className="text-blue-500 font-bold underline" style={{ lineHeight: 24 }}>
-                        {p.content}
-                    </Text>
+                    <TouchableOpacity
+                        key={`link-${i}`}
+                        onPress={() => handlePress(p.url)}
+                        activeOpacity={0.7}
+                        style={{
+                            backgroundColor: 'rgba(59, 130, 246, 0.15)',
+                            paddingHorizontal: 8,
+                            paddingVertical: 2,
+                            borderRadius: 6,
+                            borderWidth: 1,
+                            borderColor: 'rgba(59, 130, 246, 0.3)',
+                            flexDirection: 'row',
+                            alignItems: 'center',
+                            marginHorizontal: 2,
+                            top: 4, // Aligns the pill vertically with standard text line-height 
+                        }}
+                    >
+                        <Feather
+                            name="link-2"
+                            size={12}
+                            color="#60a5fa"
+                            style={{ marginRight: 4 }}
+                        />
+                        <Text
+                            style={{
+                                color: '#60a5fa',
+                                fontWeight: '900',
+                                fontSize: 13,
+                                textTransform: 'lowercase'
+                            }}
+                        >
+                            {p.content}
+                        </Text>
+                        <Feather
+                            name="external-link"
+                            size={10}
+                            color="#60a5fa"
+                            style={{ marginLeft: 4, opacity: 0.6 }}
+                        />
+                    </TouchableOpacity>
                 );
             } else {
                 flushInlineBuffer(i);

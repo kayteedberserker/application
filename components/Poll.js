@@ -1,10 +1,10 @@
 import { MaterialCommunityIcons } from "@expo/vector-icons";
-import { usePathname, useRouter } from "expo-router"; 
+import { usePathname, useRouter } from "expo-router";
 import { useEffect, useState } from "react";
 import { DeviceEventEmitter, Pressable, View } from "react-native";
+import { useMMKV } from "react-native-mmkv"; // ⚡️ Correct Hook Import
 import Toast from "react-native-toast-message";
 import useSWR from "swr";
-import { useMMKV } from "react-native-mmkv"; // ⚡️ Correct Hook Import
 import { useUser } from "../context/UserContext";
 import apiFetch from "../utils/apiFetch";
 import { Text } from "./Text";
@@ -18,7 +18,7 @@ export default function Poll({ poll, postId, readOnly = false }) {
     const { user } = useUser();
     const pathname = usePathname();
     const router = useRouter();
-    
+
     const [selectedOptions, setSelectedOptions] = useState([]);
     const [submitted, setSubmitted] = useState(false);
     const [loading, setLoading] = useState(false);
@@ -39,10 +39,10 @@ export default function Poll({ poll, postId, readOnly = false }) {
 
     const livePoll = data?.poll || poll;
 
-    const displayOptions = isPostPage 
-        ? livePoll.options 
+    const displayOptions = isPostPage
+        ? livePoll.options
         : livePoll.options?.slice(0, 2);
-    
+
     const hasMoreOptions = !isPostPage && livePoll.options?.length > 2;
 
     // --- 🛡️ TWO-LAYER VOTE DETECTION ---
@@ -50,7 +50,7 @@ export default function Poll({ poll, postId, readOnly = false }) {
         if (!postId) return;
 
         const localVoteKey = `voted_poll_${postId}`;
-        
+
         // 1. Check local fast-memory first
         const hasVotedLocally = storage.getBoolean(localVoteKey);
 
@@ -59,7 +59,7 @@ export default function Poll({ poll, postId, readOnly = false }) {
 
         if (hasVotedLocally || hasVotedOnServer) {
             setSubmitted(true);
-            
+
             // Auto-sync: Rewrite local cache if the server knows they voted but cache is empty
             if (hasVotedOnServer && !hasVotedLocally) {
                 storage.set(localVoteKey, true);
@@ -131,7 +131,6 @@ export default function Poll({ poll, postId, readOnly = false }) {
                     throw new Error(result.message || "Vote failed");
                 }
             } else {
-                Toast.show({ type: "success", text1: "Vote submitted!" });
             }
 
             mutate();
@@ -140,7 +139,7 @@ export default function Poll({ poll, postId, readOnly = false }) {
             // 🚨 REVERT IF FAILED: Unlock UI and set local memory to false
             setSubmitted(false);
             storage.set(localVoteKey, false); // ⚡️ The safe alternative to .delete()
-            
+
             Toast.show({ type: "error", text1: "Vote failed, retrying…" });
             mutate();
         } finally {
@@ -176,8 +175,8 @@ export default function Poll({ poll, postId, readOnly = false }) {
                             key={i}
                             onPress={() => !readOnly && !submitted && handleOptionChange(i)}
                             className={`mb-3 w-full p-4 rounded-2xl border ${isSelected
-                                    ? "border-blue-600 bg-blue-600/5 dark:bg-blue-600/10"
-                                    : "border-gray-100 dark:border-gray-800 bg-gray-50 dark:bg-gray-900/50"
+                                ? "border-blue-600 bg-blue-600/5 dark:bg-blue-600/10"
+                                : "border-gray-100 dark:border-gray-800 bg-gray-50 dark:bg-gray-900/50"
                                 }`}
                         >
                             <View className="flex-row items-start justify-between mb-3">
@@ -201,8 +200,8 @@ export default function Poll({ poll, postId, readOnly = false }) {
                                 <Text className="text-[8px] font-mono text-gray-400">Data_Points: {opt.votes}</Text>
                                 {isSelected && (
                                     <View className="flex-row items-center gap-1">
-                                         <View className="w-1 h-1 bg-blue-600 rounded-full" />
-                                         <Text className="text-[8px] font-black text-blue-600 tracking-tighter">ACTIVE_SELECTION</Text>
+                                        <View className="w-1 h-1 bg-blue-600 rounded-full" />
+                                        <Text className="text-[8px] font-black text-blue-600 tracking-tighter">ACTIVE_SELECTION</Text>
                                     </View>
                                 )}
                             </View>
@@ -213,7 +212,7 @@ export default function Poll({ poll, postId, readOnly = false }) {
 
             {/* ✅ Check More Options Trigger (Only in Feed) */}
             {hasMoreOptions && (
-                <Pressable 
+                <Pressable
                     onPress={() => DeviceEventEmitter.emit("navigateSafely", `/post/${postId}`)}
                     className="mt-1 mb-4 pt-4 border-t border-gray-100 dark:border-gray-800 flex-row items-center justify-center gap-2"
                 >
