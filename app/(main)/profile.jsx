@@ -53,6 +53,7 @@ import Animated, {
 } from "react-native-reanimated";
 import AuraAvatar from "../../components/AuraAvatar"; // ⚡️ Needed for the preview
 import ImageEditorModal from "../../components/ImageEditorModal"; // Import the ImageEditorModal
+import TitleTag from "../../components/TitleTag";
 import { useClan } from "../../context/ClanContext";
 
 const { width, height } = Dimensions.get("window");
@@ -111,9 +112,9 @@ const getAuraVisuals = (rank) => {
         visualConfig.description = 'One of the ten elite warriors. Continue your ascent to reach the Top 5.';
     } else {
         visualConfig.color = '#1e293b';
-        visualConfig.label = 'OPERATIVE';
+        visualConfig.label = 'Player';
         visualConfig.icon = 'user';
-        visualConfig.description = 'A standard operative in the field. Increase your Aura to rise.';
+        visualConfig.description = 'A standard Player in the field. Increase your Aura to rise.';
     }
 
     return visualConfig;
@@ -649,11 +650,12 @@ const AuthorStoreModal = ({ visible, onClose, user, isDark, setInventory }) => {
 const AuthorInventoryModal = ({ visible, onClose, user, setUser, isDark, theinventory }) => {
     const [filter, setFilter] = useState('ALL');
     const [isUpdating, setIsUpdating] = useState(false);
+    const [updatingTitle, setUpdatingTitle] = useState(null); // ⚡️ Track specific title loading
     const [itemToPreview, setItemToPreview] = useState(null); // ⚡️ Setup preview state for inventory
     const CustomAlert = useAlert();
 
     const inventory = theinventory || user?.inventory || [];
-    const categories = ['ALL', 'GLOW', 'BORDER', 'WATERMARK', "AVATAR", 'AVATAR_VFX'];
+    const categories = ['ALL', 'TITLE', 'GLOW', 'BORDER', 'WATERMARK', "AVATAR", 'AVATAR_VFX'];
 
     const handleEquipToggle = async (selectedItem) => {
         if (isUpdating) return;
@@ -706,6 +708,68 @@ const AuthorInventoryModal = ({ visible, onClose, user, setUser, isDark, theinve
         }
     };
 
+    // ⚡️ NEW: Handle Equipping Titles
+    const handleEquipTitle = async (selectedTitle) => {
+        if (isUpdating) return;
+        setIsUpdating(true);
+        setUpdatingTitle(selectedTitle.name);
+
+        try {
+            const formData = new FormData();
+            formData.append("userId", user?._id || "");
+            formData.append("fingerprint", user?.deviceId || "");
+            formData.append("inventory", JSON.stringify(inventory)); // Send existing inventory unmodified
+            formData.append("username", user?.username || "");
+            formData.append("description", user?.description || "");
+            const titleName = user?.equippedTitle?.name || "";
+            // Toggle logic: If already equipped, send empty string to unequip
+            const isCurrentlyEquipped = titleName === selectedTitle.name;
+            const newEquippedTitle = isCurrentlyEquipped ? null : { name: selectedTitle.name, tier: selectedTitle.tier };
+            console.log(newEquippedTitle);
+
+            formData.append("equippedTitle", newEquippedTitle ? JSON.stringify(newEquippedTitle) : "");
+
+            if (user?.preferences) {
+                formData.append("preferences", JSON.stringify(user.preferences));
+            }
+
+            const res = await apiFetch(`/users/upload`, {
+                method: "PUT",
+                body: formData,
+            });
+
+            const result = await res.json();
+
+            if (res.ok) {
+                setUser(result.user);
+            } else {
+                throw new Error(result.message || "Sync failed");
+            }
+        } catch (err) {
+            console.error("Equip Title Error:", err);
+            CustomAlert("Error", "Failed to sync title changes.");
+        } finally {
+            setIsUpdating(false);
+            setUpdatingTitle(null);
+        }
+    };
+
+    // ⚡️ NEW: Confirm Title Equip
+    const confirmEquipTitle = (title) => {
+        const titleName = user?.equippedTitle?.name || "";
+        const isEquipped = user?.equippedTitle?.name === title.name;
+        const actionText = isEquipped ? "Unequip" : "Equip";
+
+        CustomAlert(
+            `${actionText} Title`,
+            `Do you want to ${actionText.toLowerCase()} the [${title.tier}] ${title.name} title?`,
+            [
+                { text: "Cancel", style: "cancel" },
+                { text: actionText, onPress: () => handleEquipTitle(title) }
+            ]
+        );
+    };
+
     const filteredInventory = filter === 'ALL'
         ? inventory
         : inventory.filter(item => item.category === filter);
@@ -734,7 +798,7 @@ const AuthorInventoryModal = ({ visible, onClose, user, setUser, isDark, theinve
                         <View>
                             <Text className="text-2xl font-black uppercase italic dark:text-white">Arsenal</Text>
                             <Text className="text-blue-500 font-black text-[10px] uppercase tracking-widest">
-                                {inventory.length} Collectibles Owned
+                                {filter === 'TITLE' ? user?.unlockedTitles?.length || 0 : inventory.length} Collectibles Owned
                             </Text>
                         </View>
                         <TouchableOpacity onPress={onClose}>
@@ -751,7 +815,11 @@ const AuthorInventoryModal = ({ visible, onClose, user, setUser, isDark, theinve
                                     className={`mr-2 px-4 py-2 rounded-full border ${filter === cat ? 'bg-blue-500 border-blue-500' : 'bg-transparent border-gray-700'}`}
                                 >
                                     <Text className={`text-[10px] font-black uppercase ${filter === cat ? 'text-white' : 'text-gray-500'}`}>
-                                        {cat}
+                                        {cat}{cat === "TITLE" && user?.unlockedTitles?.length > 0 && (
+                                            <Text className={`text-[10px] font-black uppercase ${filter === cat ? 'text-white' : 'text-gray-500'}`}>
+                                                ({user.unlockedTitles.length})
+                                            </Text>
+                                        )}
                                     </Text>
                                 </TouchableOpacity>
                             ))}
@@ -759,79 +827,65 @@ const AuthorInventoryModal = ({ visible, onClose, user, setUser, isDark, theinve
                     </View>
 
                     <ScrollView showsVerticalScrollIndicator={false} contentContainerStyle={{ paddingBottom: 40 }}>
-                        {filteredInventory.length > 0 ? (
-                            filteredInventory.map((item, idx) => {
-                                const expiration = getExpirationText(item.expiresAt);
-                                const isExpired = expiration === "Expired";
-                                const isBorder = item.category === 'BORDER';
-                                const isVfx = item.category === 'AVATAR_VFX';
-                                const visual = item.visualConfig || {};
-                                const rowRarityColor = getRarityColor(item.rarity); // ⚡️ Map color
-                                const isLottie = !!(visual.lottieUrl || visual.lottieJson);
-                                const PreviewIcon = (
-                                    <View
-                                        className={`w-16 h-16 bg-black/20 items-center justify-center rounded-2xl overflow-hidden ${isBorder ? '' : 'border relative'}`}
-                                        style={{ borderColor: `${rowRarityColor}40` }}
-                                    >
-                                        {isBorder ? (
-                                            <ClanBorder
-                                                color={visual.primaryColor || visual.color || "#ff0000"}
-                                                secondaryColor={visual.secondaryColor}
-                                                animationType={visual.animationType}
-                                                duration={visual.duration}
-                                            >
-                                                <View className="h-6 w-6 flex justify-center items-center">
-                                                    <Text className="text-[6px] dark:text-white/40 font-black uppercase">Frame</Text>
-                                                </View>
-                                            </ClanBorder>
-                                        ) : (isVfx || isLottie) ? (
-                                            /* ⚡️ Render Lottie for VFX or Animated Watermarks */
-                                            <LottieView
-                                                source={visual.lottieJson ? visual.lottieJson : { uri: visual.lottieUrl }}
-                                                autoPlay
-                                                loop
-                                                renderMode="hardware"
-                                                style={{
-                                                    width: (isVfx || isLottie) ? '140%' : '100%',
-                                                    height: (isVfx || isLottie) ? '140%' : '100%',
-                                                    position: 'absolute',
-                                                    bottom: isVfx ? -8 : 0
-                                                }}
-                                                resizeMode="contain"
-                                            />
-                                        ) : visual.svgCode ? (
-                                            <RemoteSvgIcon
-                                                xml={visual.svgCode}
-                                                size={40}
-                                                color={visual.primaryColor || visual.color}
-                                            />
-                                        ) : (
-                                            /* Fallback to Material Icon if no SVG/Lottie exists */
-                                            <MaterialCommunityIcons
-                                                name={visual.icon || 'star'}
-                                                size={30}
-                                                color={visual.primaryColor || visual.color || 'white'}
-                                            />
-                                        )}
+                        {filter === 'TITLE' ? (
+                            /* ⚡️ NEW: Special TITLE Tab Rendering */
+                            user?.unlockedTitles && user.unlockedTitles.length > 0 ? (
+                                user.unlockedTitles.map((title, idx) => {
+                                    const titleName = user?.equippedTitle?.name || "";
+                                    const isEquipped = titleName === title.name;
+                                    const isThisTitleUpdating = isUpdating && updatingTitle === title.name;
 
-                                        {/* Rarity Dot */}
+                                    return (
+                                        <TouchableOpacity
+                                            key={`title-${idx}`}
+                                            onPress={() => confirmEquipTitle(title)}
+                                            disabled={isUpdating}
+                                            className={`flex-row items-center justify-between py-4 px-2 rounded-3xl mb-3 border ${isEquipped
+                                                ? 'bg-blue-500/10 border-blue-500'
+                                                : 'bg-gray-50 dark:bg-[#161b22] border-gray-100 dark:border-gray-800'
+                                                }`}
+                                        >
+                                            <View className="flex-1 mr-4">
+                                                <TitleTag key={title.name} title={title.name} size={12} tier={title.tier} />
+                                            </View>
+
+                                            <View className="items-center justify-center min-w-[60px]">
+                                                {isThisTitleUpdating ? (
+                                                    <ActivityIndicator size="small" color="#3b82f6" />
+                                                ) : (
+                                                    <Text className={`text-[10px] font-black uppercase ${isEquipped ? 'text-blue-500' : 'text-gray-400'
+                                                        }`}>
+                                                        {isEquipped ? 'Equipped' : 'Equip'}
+                                                    </Text>
+                                                )}
+                                            </View>
+                                        </TouchableOpacity>
+                                    );
+                                })
+                            ) : (
+                                <View className="items-center mt-20 opacity-30">
+                                    <MaterialCommunityIcons name="format-title" size={80} color="gray" />
+                                    <Text className="mt-4 font-black uppercase text-xs tracking-widest dark:text-white">
+                                        No Titles Unlocked
+                                    </Text>
+                                </View>
+                            )
+                        ) : (
+                            /* Existing Inventory Rendering for other tabs */
+                            filteredInventory.length > 0 ? (
+                                filteredInventory.map((item, idx) => {
+                                    const expiration = getExpirationText(item.expiresAt);
+                                    const isExpired = expiration === "Expired";
+                                    const isBorder = item.category === 'BORDER';
+                                    const isVfx = item.category === 'AVATAR_VFX';
+                                    const visual = item.visualConfig || {};
+                                    const rowRarityColor = getRarityColor(item.rarity); // ⚡️ Map color
+                                    const isLottie = !!(visual.lottieUrl || visual.lottieJson);
+                                    const PreviewIcon = (
                                         <View
-                                            style={{ backgroundColor: rowRarityColor }}
-                                            className="absolute top-1.5 right-1.5 w-2 h-2 rounded-full shadow-sm"
-                                        />
-                                    </View>
-                                );
-
-                                return (
-                                    <View
-                                        key={item.itemId || idx}
-                                        className={`flex-row items-center p-4 rounded-3xl mb-3 border ${item.isEquipped
-                                            ? 'bg-blue-500/10 border-blue-500'
-                                            : 'bg-gray-50 dark:bg-[#161b22]'
-                                            } ${isExpired ? 'opacity-50 border-red-500/30' : 'border-gray-100 dark:border-gray-800'}`}
-                                    >
-                                        {/* ⚡️ Tap the Icon to Preview */}
-                                        <TouchableOpacity onPress={() => setItemToPreview(item)} className="mr-4">
+                                            className={`w-16 h-16 bg-black/20 items-center justify-center rounded-2xl overflow-hidden ${isBorder ? '' : 'border relative'}`}
+                                            style={{ borderColor: `${rowRarityColor}40` }}
+                                        >
                                             {isBorder ? (
                                                 <ClanBorder
                                                     color={visual.primaryColor || visual.color || "#ff0000"}
@@ -839,77 +893,137 @@ const AuthorInventoryModal = ({ visible, onClose, user, setUser, isDark, theinve
                                                     animationType={visual.animationType}
                                                     duration={visual.duration}
                                                 >
-                                                    <View className="h-10 flex justify-center items-center rounded-sm">
-                                                        <Text>Clan Banner</Text>
+                                                    <View className="h-6 w-6 flex justify-center items-center">
+                                                        <Text className="text-[6px] dark:text-white/40 font-black uppercase">Frame</Text>
                                                     </View>
                                                 </ClanBorder>
+                                            ) : (isVfx || isLottie) ? (
+                                                /* ⚡️ Render Lottie for VFX or Animated Watermarks */
+                                                <LottieView
+                                                    source={visual.lottieJson ? visual.lottieJson : { uri: visual.lottieUrl }}
+                                                    autoPlay
+                                                    loop
+                                                    renderMode="hardware"
+                                                    style={{
+                                                        width: (isVfx || isLottie) ? '140%' : '100%',
+                                                        height: (isVfx || isLottie) ? '140%' : '100%',
+                                                        position: 'absolute',
+                                                        bottom: isVfx ? -8 : 0
+                                                    }}
+                                                    resizeMode="contain"
+                                                />
+                                            ) : visual.svgCode ? (
+                                                <RemoteSvgIcon
+                                                    xml={visual.svgCode}
+                                                    size={40}
+                                                    color={visual.primaryColor || visual.color}
+                                                />
                                             ) : (
-                                                PreviewIcon
+                                                /* Fallback to Material Icon if no SVG/Lottie exists */
+                                                <MaterialCommunityIcons
+                                                    name={visual.icon || 'star'}
+                                                    size={30}
+                                                    color={visual.primaryColor || visual.color || 'white'}
+                                                />
                                             )}
-                                        </TouchableOpacity>
 
-                                        <View className="flex-1">
-                                            <Text className="font-black dark:text-white text-sm uppercase italic">
-                                                {item.name}
-                                            </Text>
-
-                                            <View className="flex-row mt-2 items-center">
-                                                <Text style={{ color: rowRarityColor }} className="text-[9px] uppercase font-bold tracking-widest">
-                                                    {item.rarity || 'COMMON'} {item.category}
-                                                </Text>
-
-                                                {expiration && (
-                                                    <>
-                                                        <Text className="text-gray-600 dark:text-gray-400 text-[9px] mx-1">•</Text>
-                                                        <View className="flex-row items-center">
-                                                            <MaterialCommunityIcons
-                                                                name="clock-outline"
-                                                                size={10}
-                                                                color={isExpired ? "#ef4444" : "#6b7280"}
-                                                            />
-                                                            <Text className={`text-[9px] font-bold ml-1 ${isExpired ? 'text-red-500' : 'text-gray-500'}`}>
-                                                                {expiration}
-                                                            </Text>
-                                                        </View>
-                                                    </>
-                                                )}
-                                            </View>
+                                            {/* Rarity Dot */}
+                                            <View
+                                                style={{ backgroundColor: rowRarityColor }}
+                                                className="absolute top-1.5 right-1.5 w-2 h-2 rounded-full shadow-sm"
+                                            />
                                         </View>
+                                    );
 
-                                        {/* ⚡️ BUG FIX: Only show Equip button if it's NOT EXPIRED */}
-                                        {!isExpired && item.category !== "VERIFIED" && (
-                                            <TouchableOpacity
-                                                disabled={isUpdating}
-                                                onPress={() => handleEquipToggle(item)}
-                                                className={`px-6 py-3 rounded-xl ${item.isEquipped ? 'bg-green-500' : 'bg-blue-600'
-                                                    } ${isUpdating ? 'opacity-50' : ''}`}
-                                            >
-                                                {isUpdating ? (
-                                                    <ActivityIndicator size="small" color="white" />
+                                    return (
+                                        <View
+                                            key={item.itemId || idx}
+                                            className={`flex-row items-center p-4 rounded-3xl mb-3 border ${item.isEquipped
+                                                ? 'bg-blue-500/10 border-blue-500'
+                                                : 'bg-gray-50 dark:bg-[#161b22]'
+                                                } ${isExpired ? 'opacity-50 border-red-500/30' : 'border-gray-100 dark:border-gray-800'}`}
+                                        >
+                                            {/* ⚡️ Tap the Icon to Preview */}
+                                            <TouchableOpacity onPress={() => setItemToPreview(item)} className="mr-4">
+                                                {isBorder ? (
+                                                    <ClanBorder
+                                                        color={visual.primaryColor || visual.color || "#ff0000"}
+                                                        secondaryColor={visual.secondaryColor}
+                                                        animationType={visual.animationType}
+                                                        duration={visual.duration}
+                                                    >
+                                                        <View className="h-10 flex justify-center items-center rounded-sm">
+                                                            <Text>Clan Banner</Text>
+                                                        </View>
+                                                    </ClanBorder>
                                                 ) : (
-                                                    <Text className="text-white text-[10px] font-black uppercase">
-                                                        {item.isEquipped ? 'Active' : 'Equip'}
-                                                    </Text>
+                                                    PreviewIcon
                                                 )}
                                             </TouchableOpacity>
-                                        )}
 
-                                        {/* ⚡️ Only show VOID if expired */}
-                                        {isExpired && (
-                                            <View className="px-4 py-2 bg-red-500/10 rounded-lg border border-red-500/20">
-                                                <Text className="text-red-500 text-[10px] font-black uppercase">Void</Text>
+                                            <View className="flex-1">
+                                                <Text className="font-black dark:text-white text-sm uppercase italic">
+                                                    {item.name}
+                                                </Text>
+
+                                                <View className="flex-row mt-2 items-center">
+                                                    <Text style={{ color: rowRarityColor }} className="text-[9px] uppercase font-bold tracking-widest">
+                                                        {item.rarity || 'COMMON'} {item.category}
+                                                    </Text>
+
+                                                    {expiration && (
+                                                        <>
+                                                            <Text className="text-gray-600 dark:text-gray-400 text-[9px] mx-1">•</Text>
+                                                            <View className="flex-row items-center">
+                                                                <MaterialCommunityIcons
+                                                                    name="clock-outline"
+                                                                    size={10}
+                                                                    color={isExpired ? "#ef4444" : "#6b7280"}
+                                                                />
+                                                                <Text className={`text-[9px] font-bold ml-1 ${isExpired ? 'text-red-500' : 'text-gray-500'}`}>
+                                                                    {expiration}
+                                                                </Text>
+                                                            </View>
+                                                        </>
+                                                    )}
+                                                </View>
                                             </View>
-                                        )}
-                                    </View>
-                                );
-                            })
-                        ) : (
-                            <View className="items-center mt-20 opacity-30">
-                                <MaterialCommunityIcons name="package-variant" size={80} color="gray" />
-                                <Text className="mt-4 font-black uppercase text-xs tracking-widest dark:text-white">
-                                    No {filter === 'ALL' ? '' : filter} items
-                                </Text>
-                            </View>
+
+                                            {/* ⚡️ BUG FIX: Only show Equip button if it's NOT EXPIRED */}
+                                            {!isExpired && item.category !== "VERIFIED" && (
+                                                <TouchableOpacity
+                                                    disabled={isUpdating}
+                                                    onPress={() => handleEquipToggle(item)}
+                                                    className={`px-6 py-3 rounded-xl ${item.isEquipped ? 'bg-green-500' : 'bg-blue-600'
+                                                        } ${isUpdating && !updatingTitle ? 'opacity-50' : ''}`}
+                                                >
+                                                    {isUpdating && !updatingTitle ? (
+                                                        <ActivityIndicator size="small" color="white" />
+                                                    ) : (
+                                                        <Text className="text-white text-[10px] font-black uppercase">
+                                                            {item.isEquipped ? 'Active' : 'Equip'}
+                                                        </Text>
+                                                    )}
+                                                </TouchableOpacity>
+                                            )}
+
+                                            {/* ⚡️ Only show VOID if expired */}
+                                            {isExpired && (
+                                                <View className="px-4 py-2 bg-red-500/10 rounded-lg border border-red-500/20">
+                                                    <Text className="text-red-500 text-[10px] font-black uppercase">Void</Text>
+                                                </View>
+                                            )}
+                                        </View>
+                                    );
+                                })
+                            ) : (
+                                <View className="items-center mt-20 opacity-30">
+                                    <MaterialCommunityIcons name="package-variant" size={80} color="gray" />
+                                    <Text className="mt-4 font-black uppercase text-xs tracking-widest dark:text-white">
+                                        No {filter === 'ALL' ? '' : filter} items
+                                    </Text>
+                                </View>
+                            )
                         )}
                     </ScrollView>
                 </View>
@@ -987,6 +1101,7 @@ export default function MobileProfilePage() {
     const CustomAlert = useAlert();
     const [theinventory, setInventory] = useState([])
     const { user, setUser, contextLoading } = useUser();
+
     const { clearClanData } = useClan();
 
     const { colorScheme } = useNativeWind();
@@ -1022,6 +1137,7 @@ export default function MobileProfilePage() {
     const [refCopied, setRefCopied] = useState(false);
 
     const [isOnboarding, setIsOnboarding] = useState(false);
+    const [isLoggingOut, setIsLoggingOut] = useState(false);
     const [onboardingStep, setOnboardingStep] = useState(0);
     const [currentPosTop, setcurrentPosTop] = useState(0);
 
@@ -1299,6 +1415,7 @@ export default function MobileProfilePage() {
                 style: "destructive",
                 onPress: async () => {
                     try {
+                        setIsLoggingOut(true)
                         // ⚡️ 0. NOTIFY BACKEND TO HALT TRANSMISSIONS
                         try {
                             if (user?.deviceId) {
@@ -1365,7 +1482,7 @@ export default function MobileProfilePage() {
                     } catch (error) {
                         console.error("Hibernation Error:", error);
                         Toast.show({ type: 'error', text1: 'Hibernation Failed' });
-                    }
+                    } finally { setIsLoggingOut(false) }
                 },
             },
         ]);
@@ -1646,11 +1763,8 @@ export default function MobileProfilePage() {
                                 fontSize={24}
                             />
 
-                            <View className="px-3 py-1 rounded-full border mt-2 overflow-hidden" style={{ borderColor: dynamicAuraColor }}>
-                                <View style={{ position: 'absolute', inset: 0, backgroundColor: dynamicAuraColor, opacity: 0.15 }} />
-                                <Text style={{ color: dynamicAuraColor, fontSize: 9, fontWeight: '900', zIndex: 1, letterSpacing: 1 }}>
-                                    {weeklyAuraTier?.label || 'NOVICE'} {weeklyGloryPoints.toLocaleString()}
-                                </Text>
+                            <View className="mt-2 flex justify-center items-center">
+                                <TitleTag key={user?.equippedTitle} rank={weeklyGloryRank} auraVisuals={weeklyAuraTier} equippedTitle={user?.equippedTitle} isTop10={weeklyGloryRank ? true : false} />
                             </View>
                         </Pressable>
 
@@ -1780,11 +1894,12 @@ export default function MobileProfilePage() {
 
                         <TouchableOpacity
                             onPress={handleLogout}
+                            disabled={isLoggingOut}
                             className="relative w-full h-14 rounded-2xl items-center justify-center mt-2 border-2 border-red-500/20 bg-red-500/5 active:bg-red-500/10 transition-all"
                         >
                             <View className="flex-row items-center gap-2">
                                 <Ionicons name="power" size={16} color="#ef4444" />
-                                <Text className="text-red-500 font-black uppercase tracking-widest text-[11px]">De-Synchronize (Log Out)</Text>
+                                <Text className="text-red-500 font-black uppercase tracking-widest text-[11px]"> {!isLoggingOut ? "De-Synchronize (Log Out)" : "Desynchronizing"}</Text>
                             </View>
                         </TouchableOpacity>
                     </View>

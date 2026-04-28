@@ -1580,7 +1580,7 @@ export default function EventHubScreen() {
         return 'gacha'; // Will be resolved to first gacha event in useEffect
     };
 
-    const [activeTab, setActiveTab] = useState(getDefaultTab());
+    const [activeTab, setActiveTab] = useState("gacha");
 
     useEffect(() => {
         if (tab) {

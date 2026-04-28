@@ -21,6 +21,7 @@ import PeakBadge from '../../components/PeakBadge';
 import PlayerNameplate from '../../components/PlayerNameplate';
 import { SyncLoading } from '../../components/SyncLoading';
 import { Text } from "../../components/Text";
+import TitleTag from '../../components/TitleTag';
 import apiFetch from "../../utils/apiFetch";
 
 const { width } = Dimensions.get('window');
@@ -196,7 +197,7 @@ export default function Leaderboard() {
             const streakCount = item.streak || 0;
             const peakLvl = item.peakLevel || 0;
             const purchasedCoins = item.totalPurchasedCoins || 0;
-
+            const equippedTitle = item.equippedTitle || null;
             const totalAura = item.aura || 0;
             const rankLevel = item.currentRankLevel || 1;
 
@@ -209,8 +210,8 @@ export default function Leaderboard() {
                         backgroundColor: isTop3 ? (isDark ? 'rgba(30, 41, 59, 0.4)' : '#f0f9ff') : 'transparent',
                         borderBottomWidth: 1,
                         borderBottomColor: isDark ? '#1e293b' : '#e2e8f0',
-                        paddingVertical: 18,
-                        paddingHorizontal: 12,
+                        paddingVertical: 14,
+                        paddingHorizontal: 8,
                         borderRadius: isTop3 ? 16 : 0,
                         marginBottom: isTop3 ? 8 : 0,
                         borderLeftWidth: isTop3 ? 4 : (weeklyAuraRank ? 2 : 0),
@@ -218,17 +219,17 @@ export default function Leaderboard() {
                     }}
                 >
                     <View style={{ flexDirection: 'row', alignItems: 'center' }}>
-                        <View style={{ width: 30, alignItems: 'center' }}>
-                            <Text style={{ fontSize: isTop3 ? 18 : 14, fontWeight: '900', color: isTop3 ? highlightColor : (isDark ? '#475569' : '#94a3b8') }}>
+                        <View style={{ width: 20, alignItems: 'center' }}>
+                            <Text style={{ fontSize: isTop3 ? 14 : 10, fontWeight: '900', color: isTop3 ? highlightColor : (isDark ? '#475569' : '#94a3b8') }}>
                                 {String(index + 1).padStart(2, '0')}
                             </Text>
                         </View>
 
-                        <View style={{ width: 32, alignItems: 'center', marginRight: 6 }}>
+                        <View style={{ width: 24, alignItems: 'center', marginRight: 6 }}>
                             {peakLvl > 0 ? (
-                                <PeakBadge level={peakLvl} size={28} />
+                                <PeakBadge level={peakLvl} size={18} />
                             ) : (
-                                <MaterialCommunityIcons name="lock" size={16} color={isDark ? "#334155" : "#cbd5e1"} />
+                                <MaterialCommunityIcons name="lock" size={14} color={isDark ? "#334155" : "#cbd5e1"} />
                             )}
                         </View>
 
@@ -246,11 +247,14 @@ export default function Leaderboard() {
                             />
 
                             {weeklyAuraRank && (
-                                <View style={{ backgroundColor: weeklyAuraRank.color, paddingHorizontal: 4, borderRadius: 4, alignSelf: 'flex-start', marginTop: 2 }}>
-                                    <Text style={{ fontSize: 9, fontWeight: 'bold', color: '#000' }}>{weeklyAuraRank.label}</Text>
+                                // <View style={{ backgroundColor: weeklyAuraRank.color, paddingHorizontal: 4, borderRadius: 4, alignSelf: 'flex-start', marginTop: 2 }}>
+                                //     <Text style={{ fontSize: 9, fontWeight: 'bold', color: '#000' }}>{weeklyAuraRank.label}</Text>
+                                // </View>
+                                <View className="">
+                                    <TitleTag rank={item.previousRank} key={equippedTitle} size={7} equippedTitle={equippedTitle} auraVisuals={weeklyAuraRank} isTop10={item.previousRank < 10} />
                                 </View>
                             )}
-                            <View style={{ flexDirection: 'row', alignItems: 'center', marginTop: 3 }}>
+                            <View style={{ flexDirection: 'row', alignItems: 'center', marginTop: 4 }}>
                                 <Text style={{ fontSize: 9, fontWeight: 'bold', color: writerRank.color, letterSpacing: 1 }}>
                                     {writerRank.icon} {writerRank.title}
                                 </Text>
@@ -261,24 +265,24 @@ export default function Leaderboard() {
                         </TouchableOpacity>
 
                         {/* ⚡️ REORDERED TO MATCH TABS: AURA -> GLRY -> DOCS -> STRK -> PEAK */}
-                        <View style={{ flexDirection: 'row', alignItems: 'center', gap: 2, width: 140, justifyContent: 'flex-end' }}>
-                            <View style={{ alignItems: 'center', width: 26 }}>
+                        <View style={{ flexDirection: 'row', alignItems: 'center', gap: 2, width: 100, justifyContent: 'flex-end' }}>
+                            <View style={{ alignItems: 'center', width: 20 }}>
                                 <Text style={{ fontSize: 6, color: '#3b82f6', fontWeight: 'bold' }}>AURA</Text>
                                 <Text style={{ fontSize: 11, fontWeight: '900', color: '#3b82f6' }}>{formatCoins(totalAura)}</Text>
                             </View>
-                            <View style={{ alignItems: 'center', width: 26 }}>
+                            <View style={{ alignItems: 'center', width: 20 }}>
                                 <Text style={{ fontSize: 6, color: '#ec4899', fontWeight: 'bold' }}>GLRY</Text>
                                 <Text style={{ fontSize: 11, fontWeight: '900', color: '#ec4899' }}>{formatCoins(item.weeklyAura || 0)}</Text>
                             </View>
-                            <View style={{ alignItems: 'center', width: 26 }}>
+                            <View style={{ alignItems: 'center', width: 20 }}>
                                 <Text style={{ fontSize: 6, color: '#8b5cf6', fontWeight: 'bold' }}>DOCS</Text>
                                 <Text style={{ fontSize: 11, fontWeight: '900', color: isDark ? '#fff' : '#000' }}>{formatCoins(postCount)}</Text>
                             </View>
-                            <View style={{ alignItems: 'center', width: 26 }}>
+                            <View style={{ alignItems: 'center', width: 20 }}>
                                 <Text style={{ fontSize: 6, color: '#f59e0b', fontWeight: 'bold' }}>STRK</Text>
                                 <Text style={{ fontSize: 11, fontWeight: '900', color: '#f59e0b' }}>{streakCount}</Text>
                             </View>
-                            <View style={{ alignItems: 'center', width: 26 }}>
+                            <View style={{ alignItems: 'center', width: 20 }}>
                                 <Text style={{ fontSize: 6, color: '#10b981', fontWeight: 'bold' }}>PEAK</Text>
                                 <Text style={{ fontSize: 11, fontWeight: '900', color: '#10b981' }}>{formatCoins(purchasedCoins)}</Text>
                             </View>
@@ -441,7 +445,7 @@ export default function Leaderboard() {
                         renderItem={renderItem}
                         removeClippedSubviews={true}
                         estimatedItemSize={80}
-                        drawDistance={3000}
+                        drawDistance={1000}
                         recycleItems={true}
                         showsVerticalScrollIndicator={false}
                         contentContainerStyle={{ paddingBottom: 40 }}

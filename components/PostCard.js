@@ -98,6 +98,7 @@ const formatTime = (timeInSeconds) => {
 };
 
 import * as Crypto from 'expo-crypto';
+import TitleTag from "./TitleTag";
 
 const LightboxVideoPlayer = ({ uri }) => {
     const hideTimerRef = useRef(null);
@@ -633,7 +634,7 @@ const PostCardComponent = ({ post, authorData, clanData, setPosts, isFeed, hideM
         inventory: [],
         peakLevel: 0,
         displayRank: "Verified Author",
-        auraVisuals: { color: '#1e293b', label: 'OPERATIVE', icon: 'target' }
+        auraVisuals: { color: '#1e293b', label: 'Player', icon: 'target' }
     };
 
     const clanInfo = clanData || post?.clanData || null;
@@ -1029,15 +1030,19 @@ const PostCardComponent = ({ post, authorData, clanData, setPosts, isFeed, hideM
                                         </View>
                                         <Text className="text-gray-500 font-normal flex-shrink-0"> • </Text>
                                         <Ionicons name="flame" size={12} color={author.streak < 0 ? "#ef4444" : "#f97316"} />
-                                        <Text className="text-gray-500 text-[10px] font-bold flex-shrink-0">{author.streak || "0"}</Text>
+                                        <Text className="text-gray-500 text-[10px] font-bold flex-shrink-0">{author?.streak || "0"}</Text>
                                     </View>
-                                    {isTop10 && (
-                                        <View className="bg-white/10 px-1.5 py-0.5 rounded border flex-row items-center gap-1" style={{ borderColor: activeGlowColor || aura.color + '40', alignSelf: 'flex-start' }}>
-                                            <MaterialCommunityIcons name={aura.icon} size={10} color={activeGlowColor || aura.color} />
-                                            <Text style={{ color: activeGlowColor || aura.color, fontSize: 8, fontWeight: '900' }}>{aura.label}</Text>
-                                        </View>
-                                    )}
-                                    <Text className="text-[10px] mt-2 text-gray-500 dark:text-gray-400 font-bold uppercase tracking-tighter">{author.displayRank}</Text>
+                                    <View className="">
+                                        <TitleTag
+                                            isTop10={isTop10}
+                                            size={8}
+                                            key={author?.equippedTitle}
+                                            rank={author.rank}
+                                            auraVisuals={author?.auraVisuals}
+                                            equippedTitle={author?.equippedTitle}
+                                        />
+                                    </View>
+                                    <Text className="text-[10px] mt-1 text-gray-500 dark:text-gray-400 font-bold uppercase tracking-tighter">{author.displayRank}</Text>
                                 </Pressable>
                             </View>
                         </View>

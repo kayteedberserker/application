@@ -44,6 +44,7 @@ import apiFetch from "../../../utils/apiFetch";
 import PlayerBackground from "../../../components/PlayerBackground";
 import PlayerNameplate from "../../../components/PlayerNameplate";
 import PlayerWatermark from "../../../components/PlayerWatermark";
+import TitleTag from "../../../components/TitleTag";
 
 const API_BASE = "https://oreblogda.com/api";
 const { width } = Dimensions.get('window');
@@ -203,6 +204,8 @@ export default function AuthorPage() {
     const showAlert = useAlert();
 
     const auraRank = author?.previousRank || null;
+
+    const equippedTitle = author?.equippedTitle || null;
     const aura = getAuraTier(auraRank);
     const equippedGlow = author?.inventory?.find(i => i.category === 'GLOW' && i.isEquipped);
     const activeGlowColor = equippedGlow?.visualConfig?.primaryColor || null;
@@ -256,6 +259,7 @@ export default function AuthorPage() {
 
             if (userRes.ok) {
                 setAuthor(userData.user);
+
                 AUTHOR_MEMORY_CACHE[CACHE_KEY_AUTHOR] = userData.user;
                 saveHeavyCache(CACHE_KEY_AUTHOR, userData.user);
             }
@@ -312,6 +316,7 @@ export default function AuthorPage() {
                     const parsed = JSON.parse(cAuth);
                     const authorData = parsed?.data || parsed;
                     setAuthor(authorData);
+
                     AUTHOR_MEMORY_CACHE[CACHE_KEY_AUTHOR] = authorData;
                 }
                 if (cPosts) {
@@ -456,18 +461,13 @@ export default function AuthorPage() {
                             size={130}
                         />
 
-                        {auraRank > 0 && (
-                            <View style={{ backgroundColor: themeColor }} className="absolute -bottom-3 px-4 py-1 rounded-full border-2 border-white dark:border-black shadow-lg z-20">
-                                <View className="flex-row items-center gap-1">
-                                    <MaterialCommunityIcons name={aura.icon} size={10} color={auraRank === 5 || activeGlowColor ? "black" : "white"} />
-                                    <Text style={{ color: auraRank === 5 || activeGlowColor ? "black" : "white" }} className="text-[9px] font-black uppercase tracking-widest">{aura.label} #{auraRank}</Text>
-                                </View>
-                            </View>
-                        )}
+                        <View className="absolute -bottom-4">
+                            <TitleTag rank={auraRank} size={13} key={equippedTitle} equippedTitle={equippedTitle} isTop10={auraRank > 0 && auraRank <= 10} auraVisuals={aura} />
+                        </View>
                     </View>
 
-                    <View className="items-center w-full mt-2">
-                        <View className="items-center justify-center mb-3">
+                    <View className="items-center w-full">
+                        <View className="items-center justify-center mb-2">
                             <PlayerNameplate
                                 author={author}
                                 themeColor={themeColor}
@@ -486,7 +486,7 @@ export default function AuthorPage() {
                             )} */}
                         </View>
 
-                        <Text className="text-sm text-gray-500 dark:text-gray-400 text-center leading-relaxed font-medium px-8 italic mb-4">
+                        <Text className="text-sm text-gray-500 dark:text-gray-400 text-center leading-relaxed font-medium px-8 italic mb-3">
                             "{author.description || "This operator is a ghost in the machine..."}"
                         </Text>
 

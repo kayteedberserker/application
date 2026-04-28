@@ -6,6 +6,7 @@ import PlayerBackground from "./PlayerBackground";
 import PlayerNameplate from "./PlayerNameplate";
 import PlayerWatermark from "./PlayerWatermark";
 import { Text } from "./Text";
+import TitleTag from "./TitleTag";
 
 const getAuraTier = (rank) => {
   const MONARCH_GOLD = '#fbbf24';
@@ -69,6 +70,7 @@ export default function PlayerCard({ author, totalPosts, isDark }) {
   const writerRank = resolveUserRank(rankLevel, totalAura);
 
   const weeklyGloryRank = author?.previousRank || 0;
+  const equippedTitle = author?.equippedTitle || null;
   const weeklyAuraTier = getAuraTier(weeklyGloryRank);
 
   const equippedGlow = author?.inventory?.find(i => i.category === 'GLOW' && i.isEquipped);
@@ -101,7 +103,7 @@ export default function PlayerCard({ author, totalPosts, isDark }) {
 
       {/* ⚡️ FIXED: Added w-full and centered everything perfectly inside */}
       <View className="flex-col items-center w-full relative z-10">
-        <View className="relative items-center justify-center mb-6">
+        <View className="relative items-center justify-center mb-4">
           <AuraAvatar
             author={{ ...author, rank: weeklyGloryRank, image: author.profilePic?.url, name: author.username }}
             aura={weeklyAuraTier}
@@ -110,16 +112,9 @@ export default function PlayerCard({ author, totalPosts, isDark }) {
             isDark={isDark}
             size={150}
           />
-          {weeklyGloryRank > 0 && (
-            <View style={{ backgroundColor: themeColor }} className="absolute -bottom-4 px-5 py-1.5 rounded-full border-2 border-white dark:border-black shadow-lg z-20">
-              <View className="flex-row items-center gap-1.5">
-                <MaterialCommunityIcons name={weeklyAuraTier.icon} size={12} color={weeklyGloryRank === 5 || equippedGlow ? "black" : "white"} />
-                <Text style={{ color: weeklyGloryRank === 5 || equippedGlow ? "black" : "white" }} className="text-[10px] font-black uppercase tracking-widest">
-                  {weeklyAuraTier.label} #{weeklyGloryRank}
-                </Text>
-              </View>
-            </View>
-          )}
+          <View className={`absolute bottom-0 ${weeklyGloryRank > 0 && weeklyGloryRank <= 10 ? 'z-20' : 'z-10'}`}>
+            <TitleTag key={equippedTitle} rank={weeklyGloryRank} size={13} auraVisuals={weeklyAuraTier} equippedTitle={equippedTitle} isTop10={weeklyGloryRank > 0 && weeklyGloryRank < 10} />
+          </View>
         </View>
 
         <View className="items-center w-full">

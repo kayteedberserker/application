@@ -6,6 +6,7 @@ import { SafeAreaView } from 'react-native-safe-area-context';
 import DiscussionDrawerScene from './scenes/DiscussionDrawerScene';
 import DiscussionScene from './scenes/DiscussionScene';
 import PlayerCardScene from './scenes/PlayerCardScene';
+import TitleShowcaseScene from './scenes/TitleShowcaseScene';
 
 export default function MarketingView() {
     const [currentScene, setCurrentScene] = useState(null);
@@ -20,6 +21,10 @@ export default function MarketingView() {
 
     if (currentScene === 'DISCUSSION') {
         return <DiscussionScene onBack={() => setCurrentScene(null)} />;
+    }
+
+    if (currentScene === 'TITLES') {
+        return <TitleShowcaseScene onBack={() => setCurrentScene(null)} />;
     }
 
     return (
@@ -50,6 +55,14 @@ export default function MarketingView() {
                 >
                     <Text className="text-green-400 font-bold text-lg">Discussion Drawer Demo</Text>
                     <Text className="text-gray-400 text-sm mt-1">100 comments scrolling showcase</Text>
+                </TouchableOpacity>
+
+                <TouchableOpacity
+                    onPress={() => setCurrentScene('TITLES')}
+                    className="p-6 bg-yellow-900/20 border border-yellow-500/30 rounded-3xl"
+                >
+                    <Text className="text-yellow-400 font-bold text-lg">Title Showcase</Text>
+                    <Text className="text-gray-400 text-sm mt-1">Cycle through all title tiers</Text>
                 </TouchableOpacity>
             </ScrollView>
         </SafeAreaView>
