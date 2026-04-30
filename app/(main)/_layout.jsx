@@ -32,6 +32,7 @@ import Animated, {
 import AnimeLoading from "../../components/AnimeLoading";
 import DailyModal from '../../components/DailyModal';
 import GlobalMarquee from '../../components/GlobalMarquee';
+import NeuralPinModal from "../../components/NeuralPinModal";
 import UpdateHandler from "../../components/UpdateModal";
 import { useClan } from "../../context/ClanContext";
 import { useUser } from "../../context/UserContext";
@@ -65,7 +66,8 @@ export default function MainLayout() {
     const [showTop, setShowTop] = useState(false);
     const [showClanMenu, setShowClanMenu] = useState(false);
 
-    const { user, setUser, contextLoading } = useUser();
+    const { user, setUser, contextLoading, pinModalVisible, setPinModalVisible } = useUser();
+    console.log(pinModalVisible);
 
     // ⚡️ CLAN HINT STATE
     const [showClanHint, setShowClanHint] = useState(false);
@@ -356,6 +358,8 @@ export default function MainLayout() {
             </Animated.View>
             {!isFirstPostFlow && <GlobalMarquee isDark={isDark} />}
             {!isFirstPostFlow && <UpdateHandler />}
+            {!isFirstPostFlow && <NeuralPinModal visible={pinModalVisible}
+                onSuccess={() => setPinModalVisible(false)} />}
 
             <Stack screenOptions={{ headerShown: false }}>
                 <Stack.Screen name="index" />

@@ -1,22 +1,21 @@
 import { createContext, useContext, useEffect, useRef, useState } from "react";
 import { useMMKV } from "react-native-mmkv";
 import apiFetch, { syncApiUser } from "../utils/apiFetch";
-import { getFingerprint } from "../utils/device"; // ⚡️ Ensure this path is correct
+import { getFingerprint } from "../utils/device";
 
 const UserContext = createContext();
 
 export const UserProvider = ({ children }) => {
   const storage = useMMKV();
 
-  // ⚡️ 1. SYNCHRONOUS INIT: Instantly load user from cache
+  // ⚡️ 1. SYNCHRONOUS INIT
   const [user, setUser] = useState(() => {
     try {
       const stored = storage.getString("mobileUser");
-
       if (stored) {
         const parsedUser = JSON.parse(stored);
         syncApiUser(parsedUser);
-        return parsedUser
+        return parsedUser;
       }
     } catch (e) {
       console.error("Failed to parse user from MMKV", e);
@@ -28,6 +27,9 @@ export const UserProvider = ({ children }) => {
     const stored = storage.getString("mobileUser");
     return !stored;
   });
+
+  // 🛡️ SECURITY STATE: Controls the NeuralPinModal globally
+  const [pinModalVisible, setPinModalVisible] = useState(false);
 
   const hasSyncedIdentity = useRef(false);
 
@@ -44,18 +46,16 @@ export const UserProvider = ({ children }) => {
         return;
       }
 
-      // ⚡️ IDENTITY SYNC PROTOCOL (For Legacy Users)
-      // Runs if they have a deviceId but are missing their UID or Hardware DNA
+      // ⚡️ IDENTITY SYNC PROTOCOL
       if ((!user.uid || !user.hardwareId) && !hasSyncedIdentity.current) {
         hasSyncedIdentity.current = true;
         try {
           const fingerprint = await getFingerprint();
-
           const res = await apiFetch('/mobile/sync-identity', {
             method: 'POST',
             body: JSON.stringify({
               deviceId: user.deviceId,
-              hardwareId: fingerprint.hardwareId // Capture the DNA now
+              hardwareId: fingerprint.hardwareId
             })
           });
 
@@ -65,23 +65,27 @@ export const UserProvider = ({ children }) => {
               const updatedUser = {
                 ...user,
                 uid: data.uid,
-                hardwareId: fingerprint.hardwareId
+                hardwareId: fingerprint.hardwareId,
+                securityLevel: data.securityLevel || 0 // Track security level
               };
               updateUserData(updatedUser);
-              console.log("SYSTEM: Identity Synchronized. UID Assigned:", data.uid);
+
+              // 🛡️ AUTO-TRIGGER: If new user or securityLevel is 0, force PIN setup
+              if (!data.securityLevel || data.securityLevel < 2) {
+                setPinModalVisible(true);
+              }
             }
           }
         } catch (err) {
           console.error("Identity Sync Failed:", err);
-          hasSyncedIdentity.current = false; // Allow retry on next mount if failed
+          hasSyncedIdentity.current = false;
         }
       }
 
-      // ⚡️ ORIGINAL BACKGROUND DATA SYNC (Referral codes, etc.)
+      // ⚡️ BACKGROUND DATA SYNC
       if (!user.referralCode) {
         try {
           const res = await apiFetch(`/users/me?fingerprint=${user.deviceId}`);
-
           if (res.ok) {
             const dbUser = await res.json();
             const updatedUser = {
@@ -90,8 +94,14 @@ export const UserProvider = ({ children }) => {
               username: dbUser.username || user.username,
               referralCode: dbUser.referralCode || user.referralCode,
               invitedUsers: dbUser.invitedUsers || user.invitedUsers || [],
+              securityLevel: dbUser.securityLevel || 0
             };
             updateUserData(updatedUser);
+
+            // 🛡️ Check security after sync
+            if (updatedUser.securityLevel < 2) {
+              setPinModalVisible(true);
+            }
           }
         } catch (fetchErr) {
           console.error("Failed to sync user stats:", fetchErr);
@@ -99,7 +109,7 @@ export const UserProvider = ({ children }) => {
           setLoading(false);
         }
       } else {
-        setLoading(false)
+        setLoading(false);
       }
     };
 
@@ -111,7 +121,9 @@ export const UserProvider = ({ children }) => {
       value={{
         user,
         setUser: updateUserData,
-        loading
+        loading,
+        pinModalVisible,    // Expose this
+        setPinModalVisible  // Expose this
       }}>
       {children}
     </UserContext.Provider>

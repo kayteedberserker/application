@@ -1848,7 +1848,7 @@ export default function MobileProfilePage() {
 
                         <View className="space-y-2 mt-2">
                             <Text className="text-[10px] font-black uppercase tracking-widest text-gray-400 ml-1">
-                                Recruitment Directive <Text className="text-gray-500 tracking-normal capitalize lowercase">- Share to build ranks</Text>
+                                Recruitment Directive <Text className="text-gray-500 tracking-normal capitalize lowercase">- Share to invite friends</Text>
                             </Text>
                             <View className="bg-gray-100 dark:bg-[#121212] border border-gray-200 dark:border-gray-800 p-4 rounded-2xl flex-row justify-between items-center">
                                 <View className="flex-1 mr-4">

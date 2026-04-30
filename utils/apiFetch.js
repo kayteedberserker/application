@@ -1,33 +1,43 @@
+import * as SecureStore from 'expo-secure-store';
 import { Platform } from 'react-native';
+
+// Create the storage instance outside the function
+// export const storage = new MMKV(); 
 
 const APP_SECRET = process.env.EXPO_PUBLIC_APP_SECRET || "thisismyrandomsuperlongsecretkey";
 
-// 🔹 Store the user in blazing-fast memory (RAM).
 let activeUser = null;
+let requestPinCallback = null;
 
-// 🔹 This function will be used by UserContext to feed data into this file
 export const syncApiUser = (userData) => {
   activeUser = userData;
 };
 
+export const setPinHandler = (handler) => {
+  requestPinCallback = handler
+};
+
 export const apiFetch = async (endpoint, options = {}) => {
-  const baseUrl = !__DEV__ ? "https://oreblogda.com/api" : "http://10.94.119.121:3000/api";
+  const baseUrl = !__DEV__ ? "https://oreblogda.com/api" : "http://10.179.101.121:3000/api";
+  console.log(baseUrl);
+
   const cleanEndpoint = endpoint.startsWith('/') ? endpoint : `/${endpoint}`;
   const url = endpoint.startsWith('http') ? endpoint : `${baseUrl}${cleanEndpoint}`;
 
-  let userCountry = "Unknown"
+  // 🛡️ SECURE RETRIEVAL (No hooks allowed here)
+  const token = await SecureStore.getItemAsync('userToken');
+
+  let userCountry = "Unknown";
   let userAnimes = "";
   let userGenres = "";
   let userCharacter = "";
   let userId = "";
 
-  // 🔹 Instantly read from the RAM variable
   if (activeUser) {
     userCountry = activeUser.country || "Unknown";
     userId = activeUser.deviceId;
 
     if (activeUser.preferences) {
-      // ⚡️ Combine Anime and Games into the single userAnimes header
       const animes = Array.isArray(activeUser.preferences.favAnimes) ? activeUser.preferences.favAnimes : [];
       const games = Array.isArray(activeUser.preferences.favGames) ? activeUser.preferences.favGames : [];
       userAnimes = [...animes, ...games].join(",");
@@ -48,6 +58,7 @@ export const apiFetch = async (endpoint, options = {}) => {
     "x-user-deviceId": userId,
     "x-user-genres": userGenres,
     "x-user-character": userCharacter,
+    "Authorization": token ? `Bearer ${token}` : "",
     ...options.headers,
   };
 
@@ -56,27 +67,35 @@ export const apiFetch = async (endpoint, options = {}) => {
   }
 
   try {
-    const response = await fetch(url, {
-      ...options,
-      headers,
-    });
+    let response = await fetch(url, { ...options, headers });
+
+    // Handle 401: Neural Link Locked
+    if (response.status === 401) {
+      // Use clone() so we don't consume the stream if we need to return the response later
+      const data = await response.clone().json();
+
+      if (data.message?.includes("NEURAL") || data.message?.includes("ENCRYPTION") || data.message?.includes("SESSION")) {
+        if (requestPinCallback) {
+          const success = await requestPinCallback();
+          if (success) {
+            const newToken = await SecureStore.getItemAsync('userToken');
+            headers["Authorization"] = `Bearer ${newToken}`;
+            response = await fetch(url, { ...options, headers });
+          }
+        }
+      }
+    }
+
     return response;
+
   } catch (error) {
-    // 🛡️ SECURITY & VERSION CHECK
-    // Android 7 is API level 24/25. If it fails here, it's almost certainly an SSL issue.
     if (
       error.message.includes("Network request failed") &&
       Platform.OS === 'android' &&
       Platform.Version <= 25
     ) {
-      console.error("Detected Android 7 SSL Security Conflict");
-      throw new Error(
-        "NETWORK_SECURITY_OUTDATED: Your Android version (7.0/7.1) is missing modern security certificates. " +
-        "Please update your system or use a newer device to connect to Oreblogda."
-      );
+      throw new Error("NETWORK_SECURITY_OUTDATED: Android 7 missing certificates.");
     }
-
-    // Rethrow the error for other cases
     throw error;
   }
 };
