@@ -6,12 +6,13 @@ on:
       action:
         description: "Choose what to run"
         required: true
-        default: "both"
+        default: "update"
         type: choice
         options:
           - update
           - build
           - both
+          - development
 
 jobs:
   android:
@@ -35,3 +36,7 @@ jobs:
       - name: Run EAS Build (Android production)
         if: ${{ github.event.inputs.action == 'build' || github.event.inputs.action == 'both' }}
         run: eas build --platform android --profile production --non-interactive
+
+      - name: Run EAS Build (Android Development)
+        if: ${{ github.event.inputs.action == 'development' }}
+        run: eas build --platform android --profile development --non-interactive
