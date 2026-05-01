@@ -200,7 +200,7 @@ export default function PlayerNameplate({
                         <PeakBadge level={peakLevel} size={badgeSize} />
                     </View>
                 )}
-                {showFlame && (
+                {(showFlame && lastStreak > 0) && (
                     <View className="flex-row items-center bg-orange-500/10 px-2.5 py-1 rounded-lg">
                         <Ionicons name="flame" size={flameIconSize} color="#f97316" />
                         <Text className="text-orange-500 font-black ml-1" style={{ fontSize: flameIconSize - 4 }}>{lastStreak}</Text>
@@ -273,7 +273,7 @@ export default function PlayerNameplate({
                 </View>
             )}
 
-            {showFlame && (
+            {(showFlame && lastStreak > 0) && (
                 <View className="flex-row items-center bg-orange-500/10 px-2.5 py-1 rounded-lg mt-1">
                     <Ionicons name="flame" size={flameIconSize} color="#f97316" />
                     <Text className="text-orange-500 font-black ml-1" style={{ fontSize: flameIconSize - 4 }}>{lastStreak}</Text>

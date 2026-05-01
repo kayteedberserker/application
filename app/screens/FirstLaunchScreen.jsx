@@ -38,6 +38,7 @@ import Animated, {
 } from "react-native-reanimated";
 
 import AnimeLoading from "../../components/AnimeLoading";
+import NeuralPinModal from "../../components/NeuralPinModal";
 import { Text } from "../../components/Text";
 import THEME from "../../components/useAppTheme";
 import { useAlert } from "../../context/AlertContext";
@@ -224,6 +225,8 @@ export default function FirstLaunchScreen() {
 	const [accessGate, setAccessGate] = useState(true);
 	const [showAwakeningModal, setShowAwakeningModal] = useState(false);
 	const [recoveredUid, setRecoveredUid] = useState("");
+	const [showPinModal, setShowPinModal] = useState(false);
+	const [pendingRecoveryData, setPendingRecoveryData] = useState(null);
 
 	const recentSessions = JSON.parse(storage.getString("session_history") || "[]");
 
@@ -413,7 +416,7 @@ export default function FirstLaunchScreen() {
 		}
 	};
 
-	const handleAction = async () => {
+	const handleAction = async (pin = null) => {
 		if (isProcessing) return;
 		setIsProcessing(true);
 		Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Heavy);
@@ -442,6 +445,11 @@ export default function FirstLaunchScreen() {
 				};
 			}
 
+			// Include PIN if provided from modal
+			if (pin) {
+				payload.pin = pin;
+			}
+
 			const res = await apiFetch(endpoint, {
 				method: "POST",
 				body: JSON.stringify(payload),
@@ -449,6 +457,16 @@ export default function FirstLaunchScreen() {
 
 			if (!res) throw new Error("No response from server.");
 			const data = await res.json();
+
+			// ⚡️ NEW: Check if PIN is required (401 with ENCRYPTION_REQUIRED)
+			if (res.status === 401 && data.message?.includes("ENCRYPTION_REQUIRED")) {
+				setIsProcessing(false);
+				// Store recovery data for retry after PIN
+				setPendingRecoveryData({ fingerprint, pushToken });
+				setShowPinModal(true);
+				return;
+			}
+
 			if (!res.ok) throw new Error(data.message || "Operation failed");
 			console.log(data);
 
@@ -485,6 +503,15 @@ export default function FirstLaunchScreen() {
 			Haptics.notificationAsync(Haptics.NotificationFeedbackType.Error);
 			notify("System Alert", err.message);
 			setIsProcessing(false);
+		}
+	};
+
+	// ⚡️ NEW: Handler for PIN modal success
+	const handlePinSuccess = async (verifiedPin) => {
+		setShowPinModal(false);
+		if (verifiedPin) {
+			// Retry recovery with the verified PIN
+			await handleAction(verifiedPin);
 		}
 	};
 
@@ -622,6 +649,14 @@ export default function FirstLaunchScreen() {
 						</Animated.View>
 					</View>
 				</Modal>
+
+				{/* ⚡️ NEW: Neural PIN Modal for Recovery */}
+				<NeuralPinModal
+					visible={showPinModal}
+					onSuccess={handlePinSuccess}
+					onClose={() => setShowPinModal(false)}
+					returnPinOnly={true}
+				/>
 			</View>
 		);
 	}

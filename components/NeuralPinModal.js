@@ -11,7 +11,7 @@ import apiFetch from '../utils/apiFetch';
 const PIN_LENGTH = 6;
 const BLACKLIST = ['123456', '654321', '000000', '111111', '222222', '333333', '444444', '555555', '666666', '777777', '888888', '999999'];
 
-const NeuralPinModal = ({ visible, onSuccess, onClose }) => {
+const NeuralPinModal = ({ visible, onSuccess, onClose, returnPinOnly = false }) => {
     const [pin, setPin] = useState('');
     const { user, setUser } = useUser();
     const shakeOffset = useSharedValue(0);
@@ -61,6 +61,16 @@ const NeuralPinModal = ({ visible, onSuccess, onClose }) => {
             return;
         }
 
+        // ⚡️ NEW: If returnPinOnly is true, just return the PIN to parent without API call
+        // This is used for recovery flow where parent handles the API call
+        if (returnPinOnly) {
+            Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
+            if (onSuccess) onSuccess(submittedPin);
+            setPin('');
+            return;
+        }
+
+        // Original behavior: call secure-uplink for logged-in users
         try {
             if (!user?.uid) {
                 triggerError("No Identity");
