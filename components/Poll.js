@@ -24,7 +24,7 @@ export default function Poll({ poll, isVisible, postId, readOnly = false }) {
     const [loading, setLoading] = useState(false);
 
     // ✅ Route Check
-    const isPostPage = pathname.includes("post/");
+    const isPostPage = pathname.includes("post/")
 
     // --- SWR: live post (poll source of truth) ---
     const { data, mutate } = useSWR(
@@ -78,14 +78,10 @@ export default function Poll({ poll, isVisible, postId, readOnly = false }) {
             }
             return;
         }
-
         setLoading(true);
         const localVoteKey = `voted_poll_${postId}`;
-
-        // ⚡️ INSTANT LOCK: Lock the UI and save locally immediately
         setSubmitted(true);
         storage.set(localVoteKey, true);
-
         // --- Optimistic UI update ---
         const optimisticPoll = {
             ...livePoll,

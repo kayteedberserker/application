@@ -93,11 +93,9 @@
           "android": {
             "newArchEnabled": true,
             "minSdkVersion": 25,
-            "compileSdkVersion": 36,
-            "targetSdkVersion": 36,
             "launchMode": "singleTop",
             "enableProguardInReleaseBuilds": true,
-            "enableMinifyInReleaseBuilds": false,
+            "enableMinifyInReleaseBuilds": true,
             "networkSecurityConfig": "./network_security_config.xml"
           },
           "ios": {
@@ -109,7 +107,14 @@
       "expo-font",
       "expo-image",
       "expo-sharing",
-      "expo-web-browser"
+      "expo-web-browser",
+      [
+        "expo-notifications",
+        {
+          "icon": "./assets/images/notification.png",
+          "color": "#E6F4FE"
+        }
+      ]
     ],
     "experiments": {
       "typedRoutes": true,

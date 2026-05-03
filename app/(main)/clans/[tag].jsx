@@ -50,7 +50,6 @@ import AnimatedReanimated, {
   withTiming
 } from "react-native-reanimated";
 import { SvgXml } from "react-native-svg";
-import { ScrollViewObserver } from "react-native-use-in-view";
 
 const API_BASE = "https://oreblogda.com/api";
 const { width } = Dimensions.get('window');
@@ -640,45 +639,43 @@ export default function ClanPage() {
   return (
     <View className="flex-1 bg-white dark:bg-[#0a0a0a]">
       {/* ⚡️ PERFORMANCE FIX 5: Full LegendList Config */}
-      <ScrollViewObserver>
-        <LegendList
-          key={`clan-list-${tag}`} // ⚡️ FIXED: Isolates scroll memory per clan
-          ref={scrollRef}
-          data={posts}
-          keyExtractor={(item) => item._id}
-          renderItem={renderItem}
-          ListHeaderComponent={ListHeader}
-          removeClippedSubviews={true}
+      <LegendList
+        key={`clan-list-${tag}`} // ⚡️ FIXED: Isolates scroll memory per clan
+        ref={scrollRef}
+        data={posts}
+        keyExtractor={(item) => item._id}
+        renderItem={renderItem}
+        ListHeaderComponent={ListHeader}
+        removeClippedSubviews={true}
 
-          estimatedItemSize={630}
-          recycleItems={true}
-          drawDistance={1000}
-          // ⚡️ FIXED: Removed recycleItems=true to stop weird SWR caching bugs and scroll jumping
+        estimatedItemSize={630}
+        recycleItems={true}
+        drawDistance={1000}
+        // ⚡️ FIXED: Removed recycleItems=true to stop weird SWR caching bugs and scroll jumping
 
-          onViewableItemsChanged={onViewableItemsChanged}
-          viewabilityConfig={viewabilityConfig}
-          onScroll={handleScroll}
-          scrollEventThrottle={16}
+        onViewableItemsChanged={onViewableItemsChanged}
+        viewabilityConfig={viewabilityConfig}
+        onScroll={handleScroll}
+        scrollEventThrottle={16}
 
-          contentContainerStyle={{ paddingBottom: insets.bottom + 100 }}
+        contentContainerStyle={{ paddingBottom: insets.bottom + 100 }}
 
-          ListFooterComponent={
-            <View className="py-10">
-              {loading && <SyncLoading />}
-              {!hasMore && posts.length > 0 && (
-                <View className="items-center opacity-30">
-                  <View className="h-[1px] w-24 bg-gray-500 mb-4" />
-                  <Text className="text-[10px] font-mono uppercase tracking-[0.4em] dark:text-white">End_Of_Transmission</Text>
-                </View>
-              )}
-            </View>
-          }
-          onEndReached={fetchMorePosts}
-          onEndReachedThreshold={0.5}
-          onRefresh={() => { setPage(1); fetchInitialData(); }}
-          refreshing={refreshing}
-        />
-      </ScrollViewObserver>
+        ListFooterComponent={
+          <View className="py-10">
+            {loading && <SyncLoading />}
+            {!hasMore && posts.length > 0 && (
+              <View className="items-center opacity-30">
+                <View className="h-[1px] w-24 bg-gray-500 mb-4" />
+                <Text className="text-[10px] font-mono uppercase tracking-[0.4em] dark:text-white">End_Of_Transmission</Text>
+              </View>
+            )}
+          </View>
+        }
+        onEndReached={fetchMorePosts}
+        onEndReachedThreshold={0.5}
+        onRefresh={() => { setPage(1); fetchInitialData(); }}
+        refreshing={refreshing}
+      />
       {cardPreviewVisible && (
         <View style={{ position: 'absolute', left: -10000, opacity: 0 }} pointerEvents="none">
           <ViewShot ref={clanCardRef} options={{ format: "png", quality: 1 }}>

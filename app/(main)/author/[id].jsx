@@ -41,7 +41,6 @@ import { Text } from "../../../components/Text";
 import { useAlert } from "../../../context/AlertContext";
 import apiFetch from "../../../utils/apiFetch";
 
-import { ScrollViewObserver } from "react-native-use-in-view";
 import PlayerBackground from "../../../components/PlayerBackground";
 import PlayerNameplate from "../../../components/PlayerNameplate";
 import PlayerWatermark from "../../../components/PlayerWatermark";
@@ -571,44 +570,42 @@ export default function AuthorPage() {
 
     return (
         <View className="flex-1 bg-white dark:bg-[#0a0a0a]">
-            <ScrollViewObserver>
-                <LegendList
-                    ref={scrollRef}
-                    data={listData}
-                    keyExtractor={(item) => item._id}
-                    renderItem={renderItem}
-                    removeClippedSubviews={true}
-                    ListHeaderComponent={ListHeader}
-                    recycleItems={true}
-                    estimatedItemSize={630}
-                    drawDistance={1000}
-                    // ⚡️ FIXED: Removed rcycleItems. Re-using old elements was confusing SWR keys
+            <LegendList
+                ref={scrollRef}
+                data={listData}
+                keyExtractor={(item) => item._id}
+                renderItem={renderItem}
+                removeClippedSubviews={true}
+                ListHeaderComponent={ListHeader}
+                recycleItems={true}
+                estimatedItemSize={630}
+                drawDistance={1000}
+                // ⚡️ FIXED: Removed rcycleItems. Re-using old elements was confusing SWR keys
 
-                    onScroll={handleScroll}
-                    scrollEventThrottle={16}
+                onScroll={handleScroll}
+                scrollEventThrottle={16}
 
-                    contentContainerStyle={{ paddingBottom: insets.bottom + 100 }}
+                contentContainerStyle={{ paddingBottom: insets.bottom + 100 }}
 
-                    ListFooterComponent={
-                        <View className="py-10">
-                            {isInitialMount &&
-                                <View style={{ backgroundColor: isDark ? "#050505" : "#ffffff" }} className="flex-1 h-full mt-[70%] items-center justify-center">
-                                    <SyncLoading message='Decrypting Anime Intel' />
-                                </View>
-                            }
-                            {loading && !isInitialMount && <SyncLoading message="Fetching Author Posts" />}
-                            {!hasMore && posts.length > 0 && (
-                                <View className="items-center opacity-30">
-                                    <View className="h-[1px] w-24 bg-gray-500 mb-4" />
-                                    <Text className="text-[10px] font-mono uppercase tracking-[0.4em] dark:text-white">End_Of_Transmission</Text>
-                                </View>
-                            )}
-                        </View>
-                    }
-                    onEndReached={fetchMorePosts}
-                    onEndReachedThreshold={0.5}
-                />
-            </ScrollViewObserver>
+                ListFooterComponent={
+                    <View className="py-10">
+                        {isInitialMount &&
+                            <View style={{ backgroundColor: isDark ? "#050505" : "#ffffff" }} className="flex-1 h-full mt-[70%] items-center justify-center">
+                                <SyncLoading message='Decrypting Anime Intel' />
+                            </View>
+                        }
+                        {loading && !isInitialMount && <SyncLoading message="Fetching Author Posts" />}
+                        {!hasMore && posts.length > 0 && (
+                            <View className="items-center opacity-30">
+                                <View className="h-[1px] w-24 bg-gray-500 mb-4" />
+                                <Text className="text-[10px] font-mono uppercase tracking-[0.4em] dark:text-white">End_Of_Transmission</Text>
+                            </View>
+                        )}
+                    </View>
+                }
+                onEndReached={fetchMorePosts}
+                onEndReachedThreshold={0.5}
+            />
             {cardPreviewVisible && (
                 <View style={{ position: 'absolute', left: -10000, opacity: 0 }} pointerEvents="none">
                     <ViewShot ref={playerCardRef} options={{ format: "png", quality: 1 }}>

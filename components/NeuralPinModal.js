@@ -67,6 +67,15 @@ const NeuralPinModal = ({ visible, onSuccess, onClose, returnPinOnly = false }) 
     };
 
     const handleVerify = async (submittedPin) => {
+        if (returnPinOnly) {
+            Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
+            if (onSuccess) onSuccess(submittedPin);
+            setPin('');
+            onClose();
+            return;
+        }
+
+
         if (BLACKLIST.includes(submittedPin)) {
             triggerError("Weak Signature");
             return;
@@ -75,14 +84,6 @@ const NeuralPinModal = ({ visible, onSuccess, onClose, returnPinOnly = false }) 
         // ⚡️ NEW: If returnPinOnly is true, just return the PIN to parent without API call
         // This is used for recovery flow where parent handles the API call
         console.log(returnPinOnly, "is returnPinOnly");
-
-        if (returnPinOnly) {
-            Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
-            if (onSuccess) onSuccess(submittedPin);
-            setPin('');
-            onClose();
-            return;
-        }
 
         // Original behavior: call secure-uplink for logged-in users
         try {
@@ -123,20 +124,20 @@ const NeuralPinModal = ({ visible, onSuccess, onClose, returnPinOnly = false }) 
                 <Animated.View
                     style={[
                         shakeStyle,
-                        { backgroundColor: THEME.card, borderColor: THEME.accent }
+                        { backgroundColor: THEME.card, borderColor: returnPinOnly ? THEME.success : THEME.accent }
                     ]}
                     className="w-[90%] border-2 rounded-[40px] p-8 items-center shadow-2xl"
                 >
                     {/* Header: Now using your Accent Blue */}
                     <View className="items-center mb-6">
-                        <View style={{ backgroundColor: THEME.glowBlue }} className="p-3 rounded-full mb-3">
-                            <Ionicons name="finger-print" size={32} color={THEME.accent} />
+                        <View style={{ backgroundColor: returnPinOnly ? THEME.glowGreen : THEME.glowBlue }} className="p-3 rounded-full mb-3">
+                            <Ionicons name="finger-print" size={32} color={returnPinOnly ? THEME.success : THEME.accent} />
                         </View>
                         <Text style={{ color: THEME.text }} className="text-xl font-bold tracking-tighter">
-                            DATA ENCRYPTION
+                            {returnPinOnly ? "DATA DECRYPTION" : "DATA ENCRYPTION"}
                         </Text>
                         <Text style={{ color: message ? THEME.danger : THEME.textSecondary }} className="mt-2 text-center text-sm px-4">
-                            {message ? message : "Neural signature required to authorize system uplink."}
+                            {message ? message : returnPinOnly ? "Your data was encrypted, input PIN to decrypt info" : "Input PIN, to enable data encryption and secure your info."}
                         </Text>
                     </View>
 
@@ -146,8 +147,8 @@ const NeuralPinModal = ({ visible, onSuccess, onClose, returnPinOnly = false }) 
                             <View
                                 key={i}
                                 style={{
-                                    borderColor: pin.length > i ? THEME.accent : THEME.border,
-                                    backgroundColor: pin.length > i ? THEME.accent : 'transparent',
+                                    borderColor: pin.length > i ? returnPinOnly ? THEME.success : THEME.accent : THEME.border,
+                                    backgroundColor: pin.length > i ? returnPinOnly ? THEME.success : THEME.accent : 'transparent',
                                     transform: [{ scale: pin.length > i ? 1.2 : 1 }]
                                 }}
                                 className="w-4 h-4 rounded-full border-2 mx-3"

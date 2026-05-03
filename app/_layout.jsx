@@ -401,19 +401,19 @@ function RootLayoutContent() {
 export default function RootLayout() {
     return (
         <SafeAreaProvider initialMetrics={initialWindowMetrics}>
-            <UserProvider>
-                <StreakProvider>
-                    <ClanProvider>
-                        <AlertProvider>
+            <AlertProvider>
+                <UserProvider>
+                    <StreakProvider>
+                        <ClanProvider>
                             <CoinProvider>
                                 <EventProvider>
                                     <RootLayoutContent />
                                 </EventProvider>
                             </CoinProvider>
-                        </AlertProvider>
-                    </ClanProvider>
-                </StreakProvider>
-            </UserProvider>
+                        </ClanProvider>
+                    </StreakProvider>
+                </UserProvider>
+            </AlertProvider>
         </SafeAreaProvider>
     );
 }

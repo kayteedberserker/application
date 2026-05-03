@@ -259,7 +259,7 @@ export default function FirstLaunchScreen() {
 				if (storedUser && storedUser !== "null" && isMounted.current) {
 					const parsed = JSON.parse(storedUser);
 					setUser(parsed);
-					router.replace("/authordiary");
+					router.replace("/profile");
 					return;
 				}
 
@@ -268,7 +268,7 @@ export default function FirstLaunchScreen() {
 					storage.set("mobileUser", legacyUserStr);
 					const parsed = JSON.parse(legacyUserStr);
 					setUser(parsed);
-					router.replace("/authordiary");
+					router.replace("/profile");
 					return;
 				}
 			} catch (e) { }
@@ -289,7 +289,7 @@ export default function FirstLaunchScreen() {
 
 		checkAndMigrateStorage();
 		return () => { isMounted.current = false; };
-	}, [router, setUser, storage]);
+	}, [router, storage]);
 
 	async function registerForPushNotificationsAsync() {
 		if (Platform.OS === "web") return null;
@@ -355,6 +355,7 @@ export default function FirstLaunchScreen() {
 			if (typeof pin == "string") {
 				realPin = pin
 			}
+			console.log(session.deviceId, "is the session deviceID");
 
 			// 2. 🔗 CALL BACKEND TO RESTORE SESSION
 			// This now returns sessionData with followedClans, onboarding flags
@@ -381,7 +382,7 @@ export default function FirstLaunchScreen() {
 						style: "default",
 						onPress: () => {
 							setAccessGate(true)
-							setPendingRecoveryData({ fingerprint, pushToken });
+							setPendingRecoveryData({ session, fingerprint, pushToken });
 							setShowPinModal(true);
 						}
 					}
@@ -438,6 +439,9 @@ export default function FirstLaunchScreen() {
 
 			setRecoveredUid(data.user?.uid);
 			setShowAwakeningModal(true);
+			setTimeout(() => {
+				router.replace("/profile");
+			}, 1000);
 
 		} catch (err) {
 			Haptics.notificationAsync(Haptics.NotificationFeedbackType.Error);
@@ -561,9 +565,12 @@ export default function FirstLaunchScreen() {
 			if (isRecoveryMode) {
 				setRecoveredUid(data.user?.uid);
 				setShowAwakeningModal(true);
+				setTimeout(() => {
+					router.replace("/profile");
+				}, 1000);
 			} else {
 				storage.set("trigger_first_post", 1);
-				setTimeout(() => router.replace("/profile"), 1000);
+				setTimeout(() => router.replace("/authordiary"), 1000);
 			}
 
 		} catch (err) {
@@ -580,7 +587,7 @@ export default function FirstLaunchScreen() {
 		if (verifiedPin) {
 			// Retry recovery with the verified PIN
 			if (isQuickLogin) {
-				await handleQuickLogin({ pin: verifiedPin });
+				await handleQuickLogin({ session: pendingRecoveryData.session, pin: verifiedPin });
 			} else {
 				await handleAction(verifiedPin);
 			}
@@ -730,7 +737,6 @@ export default function FirstLaunchScreen() {
 						<TouchableOpacity
 							onPress={() => {
 								setShowAwakeningModal(false);
-								router.replace("/authordiary");
 							}}
 							className="bg-blue-600 py-4 px-10 rounded-[20px] w-full items-center shadow-lg shadow-blue-500/30"
 						>

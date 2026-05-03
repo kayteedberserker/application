@@ -38,14 +38,12 @@ const isAppUpdateRequired = (installed, latest) => {
 
 // Helper to check runtime version
 const isRuntimeUpdateRequired = (installed, latest) => {
-  console.log(installed, latest);
 
   if (!latest) return false;
   const getVersionNumber = (verStr) => {
     const match = String(verStr).match(/\d+/);
     return match ? parseInt(match[0], 10) : 0;
   };
-  console.log(getVersionNumber(latest) > getVersionNumber(installed));
 
   return getVersionNumber(latest) > getVersionNumber(installed);
 };
@@ -110,7 +108,6 @@ export default function UpdateHandler() {
 
       if (data.appVersion && data.runtimeVersion) {
         setLatestVersion(data.appVersion);
-        console.log(data.appVersion, data.runtimeVersion);
 
         const runtimeNeedsUpdate = isRuntimeUpdateRequired(INSTALLED_RUNTIME, data.runtimeVersion);
         const appNeedsUpdate = isAppUpdateRequired(INSTALLED_VERSION, data.appVersion);

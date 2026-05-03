@@ -1,15 +1,16 @@
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { router } from "expo-router";
 import { createContext, useContext, useEffect, useRef, useState } from "react";
-import { Alert } from "react-native";
 import { useMMKV } from "react-native-mmkv";
 import apiFetch, { setSessionExpiredHandler, syncApiUser } from "../utils/apiFetch";
 import { getFingerprint } from "../utils/device";
+import { useAlert } from './AlertContext';
 
 const UserContext = createContext();
 
 export const UserProvider = ({ children }) => {
   const storage = useMMKV();
+  const CustomAlert = useAlert(); // ✅ Moved to top level
   const [isLoggingOut, setIsLoggingOut] = useState(false);
 
   // ⚡️ 1. SYNCHRONOUS INIT
@@ -47,7 +48,7 @@ export const UserProvider = ({ children }) => {
    */
   const updateUserData = (newData) => {
     setInternalUser(newData);
-    
+
     // Defensive check: Only touch storage if the instance and methods exist
     // This prevents the "undefined is not a function" crash during logout races
     try {
@@ -61,7 +62,7 @@ export const UserProvider = ({ children }) => {
     } catch (err) {
       console.warn("MMKV update intercepted during transition:", err);
     }
-    
+
     syncApiUser(newData);
   };
 
@@ -69,6 +70,7 @@ export const UserProvider = ({ children }) => {
    * 🛡️ THE SESSION TERMINATION PROTOCOL
    */
   const handleInternalLogout = async (isSystemKick = false) => {
+    // ❌ const CustomAlert = useAlert() <- This was the cause of the error
     if (isLoggingOut) return;
 
     const performCleanup = async () => {
@@ -130,7 +132,7 @@ export const UserProvider = ({ children }) => {
 
         // ⚡️ 3. CLEANUP & REDIRECT
         await AsyncStorage.clear().catch(() => { });
-        
+
         // IMPORTANT: We call setInternalUser directly to avoid updateUserData
         setInternalUser(null);
         hasSyncedIdentity.current = false;
@@ -149,7 +151,7 @@ export const UserProvider = ({ children }) => {
     };
 
     if (isSystemKick) {
-      Alert.alert(
+      CustomAlert(
         "Neural Link Severed",
         "Your session has been terminated.",
         [{ text: "Understood", onPress: performCleanup }]
@@ -262,7 +264,7 @@ export const UserProvider = ({ children }) => {
       }}>
       {children}
     </UserContext.Provider>
-  );
+  )
 };
 
 export const useUser = () => useContext(UserContext);

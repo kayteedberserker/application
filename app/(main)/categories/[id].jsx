@@ -24,7 +24,6 @@ import Animated, {
     withTiming
 } from 'react-native-reanimated';
 
-import { ScrollViewObserver } from 'react-native-use-in-view';
 import AnimeLoading from "../../../components/AnimeLoading";
 import PostCard from "../../../components/PostCard";
 import { SyncLoading } from "../../../components/SyncLoading";
@@ -292,51 +291,49 @@ export default function CategoryPage() {
                 className="absolute -top-20 -right-20 rounded-full opacity-[0.08]"
                 style={{ width: width * 0.7, height: width * 0.7, backgroundColor: isOfflineMode ? '#f97316' : (isDark ? '#2563eb' : '#3b82f6') }}
             />
-            <ScrollViewObserver>
-                <LegendList
-                    key={`category-list-${id}`} // ⚡️ FIXED: Isolates scroll memory per category
-                    ref={scrollRef}
-                    data={posts}
-                    keyExtractor={(item) => item._id}
-                    renderItem={renderItem}
-                    removeClippedSubviews={true}
-                    ListHeaderComponent={ListHeader}
-                    estimatedItemSize={630}
-                    recycleItems={true}
-                    drawDistance={1000}
-                    // ⚡️ FIXED: Removed recycleItems=true to stop weird SWR caching bugs and scroll jumping
-                    onViewableItemsChanged={onViewableItemsChanged}
-                    viewabilityConfig={viewabilityConfig}
-                    contentContainerStyle={{
-                        paddingTop: insets.top + 20,
-                        paddingBottom: insets.bottom + 120
-                    }}
-                    refreshControl={
-                        <RefreshControl
-                            refreshing={refreshing}
-                            onRefresh={handleRefresh}
-                            colors={["#2563eb"]}
-                            tintColor="#2563eb"
-                        />
-                    }
-                    ListFooterComponent={
-                        <View className="py-12 items-center justify-center min-h-[140px]">
-                            {(isLoading || (isValidating && size > 1)) && !refreshing ? (
-                                <SyncLoading />
-                            ) : !hasMore && posts.length > 0 ? (
-                                <View className="items-center">
-                                    <View className="h-[1px] w-12 bg-gray-200 dark:bg-gray-800 mb-4" />
-                                    <Text className="text-[10px] font-[900] uppercase tracking-[0.5em] text-gray-400">End of {categoryName} Archive</Text>
-                                </View>
-                            ) : null}
-                        </View>
-                    }
-                    onEndReached={loadMore}
-                    onEndReachedThreshold={0.5}
-                    onScroll={handleScroll}
-                    scrollEventThrottle={16}
-                />
-            </ScrollViewObserver>
+            <LegendList
+                key={`category-list-${id}`} // ⚡️ FIXED: Isolates scroll memory per category
+                ref={scrollRef}
+                data={posts}
+                keyExtractor={(item) => item._id}
+                renderItem={renderItem}
+                removeClippedSubviews={true}
+                ListHeaderComponent={ListHeader}
+                estimatedItemSize={630}
+                recycleItems={true}
+                drawDistance={1000}
+                // ⚡️ FIXED: Removed recycleItems=true to stop weird SWR caching bugs and scroll jumping
+                onViewableItemsChanged={onViewableItemsChanged}
+                viewabilityConfig={viewabilityConfig}
+                contentContainerStyle={{
+                    paddingTop: insets.top + 20,
+                    paddingBottom: insets.bottom + 120
+                }}
+                refreshControl={
+                    <RefreshControl
+                        refreshing={refreshing}
+                        onRefresh={handleRefresh}
+                        colors={["#2563eb"]}
+                        tintColor="#2563eb"
+                    />
+                }
+                ListFooterComponent={
+                    <View className="py-12 items-center justify-center min-h-[140px]">
+                        {(isLoading || (isValidating && size > 1)) && !refreshing ? (
+                            <SyncLoading />
+                        ) : !hasMore && posts.length > 0 ? (
+                            <View className="items-center">
+                                <View className="h-[1px] w-12 bg-gray-200 dark:bg-gray-800 mb-4" />
+                                <Text className="text-[10px] font-[900] uppercase tracking-[0.5em] text-gray-400">End of {categoryName} Archive</Text>
+                            </View>
+                        ) : null}
+                    </View>
+                }
+                onEndReached={loadMore}
+                onEndReachedThreshold={0.5}
+                onScroll={handleScroll}
+                scrollEventThrottle={16}
+            />
             <View
                 className="absolute left-6 flex-row items-center gap-2"
                 style={{ bottom: insets.bottom + 20, opacity: 0.6 }}

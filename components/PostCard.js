@@ -98,7 +98,6 @@ const formatTime = (timeInSeconds) => {
 };
 
 import * as Crypto from 'expo-crypto';
-import { useInView } from 'react-native-use-in-view';
 import TitleTag from "./TitleTag";
 
 const LightboxVideoPlayer = ({ uri }) => {
@@ -642,18 +641,13 @@ const PostCardComponent = ({ post, authorData, clanData, setPosts, isFeed, hideM
     // ⚡️ USE SERVER-PROVIDED hasLiked FIRST, THEN FALLBACK TO STORAGE
     useEffect(() => {
         // Priority 1: Use server-provided hasLiked (from API)
+        console.log("post has been liked to: ", post.hasLiked, post.title);
+
         if (post?.hasLiked !== undefined && post?.hasLiked !== null) {
             setLiked(post.hasLiked);
             return;
         }
-
-        // Priority 2: Fallback to local storage if server data is missing
-        try {
-            const savedLikesStr = storage.getString('user_likes');
-            const likedList = savedLikesStr ? JSON.parse(savedLikesStr) : [];
-            setLiked(likedList.includes(post?._id));
-        } catch (e) { console.error("MMKV Init Error", e); }
-    }, [post?._id, post?.hasLiked, storage]);
+    }, [post?._id, post?.hasLiked]);
 
     const mediaItems = useMemo(() => {
         if (post.media && Array.isArray(post.media) && post.media.length > 0) return post.media;
@@ -682,7 +676,7 @@ const PostCardComponent = ({ post, authorData, clanData, setPosts, isFeed, hideM
         (!syncing && post?._id && isVisible) ? `/posts/${post._id}` : null,
         fetcher,
         {
-            refreshInterval: inView ? 5000 : 180000,
+            refreshInterval: isVisible ? 5000 : 180000,
             fallbackData: post,
             revalidateOnMount: false
         }
@@ -701,19 +695,12 @@ const PostCardComponent = ({ post, authorData, clanData, setPosts, isFeed, hideM
         if (!post?._id || !user?.deviceId || syncing || !isVisible || postData?.hasViewed) return;
         const handleView = async () => {
             try {
-                const viewedKey = "viewedPosts";
-                const storedStr = storage.getString(viewedKey);
-                const viewed = storedStr ? JSON.parse(storedStr) : [];
-                if (viewed.includes(post._id)) return;
-
                 const res = await apiFetch(`/posts/${post._id}`, {
                     method: "PATCH",
                     body: JSON.stringify({ action: "view", fingerprint: user.deviceId }),
                 });
 
                 if (res.ok) {
-                    const newViewed = [...viewed, post._id].slice(-200);
-                    storage.set(viewedKey, JSON.stringify(newViewed));
                     if (typeof mutate === 'function') mutate();
                 }
             } catch (err) { console.error("View track err:", err); }
@@ -748,12 +735,7 @@ const PostCardComponent = ({ post, authorData, clanData, setPosts, isFeed, hideM
                 body: JSON.stringify({ action: "like", fingerprint }),
             });
             if (res.status === 400 || res.ok) {
-                const savedLikesStr = storage.getString('user_likes');
-                const likedList = savedLikesStr ? JSON.parse(savedLikesStr) : [];
-                if (!likedList.includes(post?._id)) {
-                    likedList.push(post?._id);
-                    storage.set('user_likes', JSON.stringify(likedList));
-                }
+                console.log("Like registered successfully");
             } else { throw new Error("Server rejected like request"); }
         } catch (err) {
             setLiked(false);
@@ -993,12 +975,6 @@ const PostCardComponent = ({ post, authorData, clanData, setPosts, isFeed, hideM
             </View>
         );
     };
-    const { ref, inView } = useInView({
-        threshold: 0.2,
-    });
-    useEffect(() => {
-        console.log(`Post: ${post.title.slice(0, 10)}... | Visible: ${inView}`);
-    }, [inView]);
 
     const aura = author.auraVisuals || { color: '#1e293b', label: 'OPERATIVE', icon: 'target' };
     const isTop10 = author.rank > 0 && author.rank <= 10;
@@ -1008,9 +984,9 @@ const PostCardComponent = ({ post, authorData, clanData, setPosts, isFeed, hideM
     const equippedWatermark = author.inventory?.find(i => i.category === 'WATERMARK' && i.isEquipped);
 
     return (
-        <View ref={ref} collapsable={false} className={`mb-8 overflow-hidden rounded-[32px] border ${isDark ? "bg-[#0d1117] border-gray-800" : "bg-white border-gray-100 shadow-sm"} relative`}>
+        <View className={`mb-8 overflow-hidden rounded-[32px] border ${isDark ? "bg-[#0d1117] border-gray-800" : "bg-white border-gray-100 shadow-sm"} relative`}>
 
-            <PlayerWatermark isFeed={inView} equippedWatermark={equippedWatermark} isDark={isDark} />
+            <PlayerWatermark isFeed={isFeed} equippedWatermark={equippedWatermark} isDark={isDark} />
 
             {isTop10 && (
                 <View className="absolute inset-0 opacity-[0.04]" style={{ backgroundColor: activeGlowColor || aura.color }} pointerEvents="none" />
@@ -1021,12 +997,12 @@ const PostCardComponent = ({ post, authorData, clanData, setPosts, isFeed, hideM
             <View className="p-4 px-2">
                 <View className="mb-5">
                     {isClanPost && clanInfo && (
-                        <MemoizedClanHeader clanInfo={clanInfo} isDark={isDark} postId={post._id} isFeed={inView} />
+                        <MemoizedClanHeader clanInfo={clanInfo} isDark={isDark} postId={post._id} isFeed={isFeed} />
                     )}
 
                     <View className="flex-row justify-between items-start">
                         <View className="flex-row items-center gap-4 flex-1 pr-2">
-                            <AuraAvatar author={author} glowColor={activeGlowColor} aura={aura} isTop10={isTop10} isDark={isDark} size={44} isFeed={inView} onPress={() => DeviceEventEmitter.emit("navigateSafely", `/author/${post.authorUserId}`)} />
+                            <AuraAvatar author={author} glowColor={activeGlowColor} aura={aura} isTop10={isTop10} isDark={isDark} size={44} isFeed={isFeed} onPress={() => DeviceEventEmitter.emit("navigateSafely", `/author/${post.authorUserId}`)} />
                             <View className="flex-1">
                                 <Pressable onPress={() => DeviceEventEmitter.emit("navigateSafely", `/author/${post.authorUserId}`)}>
                                     <View className="flex-row items-center gap-[2px]">
@@ -1040,7 +1016,7 @@ const PostCardComponent = ({ post, authorData, clanData, setPosts, isFeed, hideM
                                                 isDark={isDark}
                                                 showPeakBadge={false}
                                                 showFlame={false}
-                                                isFeed={inView}
+                                                isFeed={isFeed}
                                             />
                                         </View>
                                         <Text className="text-gray-500 font-normal flex-shrink-0"> • </Text>
@@ -1075,7 +1051,7 @@ const PostCardComponent = ({ post, authorData, clanData, setPosts, isFeed, hideM
                                 )} */}
                                 {author.peakLevel > 0 && (
                                     <View className="flex-row items-center gap-1 bg-purple-500/10 px-2 py-1 rounded-full border border-purple-500/30">
-                                        <PeakBadge level={author.peakLevel} size={25} isFeed={inView} />
+                                        <PeakBadge level={author.peakLevel} size={25} isFeed={isFeed} />
                                     </View>
                                 )}
                             </View>
@@ -1096,7 +1072,7 @@ const PostCardComponent = ({ post, authorData, clanData, setPosts, isFeed, hideM
 
                 {post.poll && (
                     <View className="mb-6 p-4 bg-gray-50 dark:bg-gray-900/50 rounded-2xl border border-gray-100 dark:border-gray-800">
-                        <Poll poll={post.poll} isVisible={inView} postId={post?._id} deviceId={user?.deviceId} />
+                        <Poll poll={post.poll} isVisible={isFeed} postId={post?._id} deviceId={user?.deviceId} />
                     </View>
                 )}
 
