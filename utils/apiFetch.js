@@ -14,7 +14,7 @@ export const setSessionExpiredHandler = (handler) => { onSessionExpired = handle
  * 🔄 Silent Refresh Logic
  */
 const attemptTokenRefresh = async () => {
-  const baseUrl = !__DEV__ ? "https://oreblogda-myblogapp-git-testing-env-kaytees-projects-d51dcd50.vercel.app/api" : "http://10.179.96.121:3000/api";
+  const baseUrl = !__DEV__ ? "https://oreblogda.com/api" : "http://10.179.96.121:3000/api";
   try {
     const refreshToken = await SecureStore.getItemAsync('refreshToken');
     const deviceId = activeUser?.deviceId || "unknown_device";
@@ -33,7 +33,7 @@ const attemptTokenRefresh = async () => {
     if (response.status === 200) {
       const data = await response.json();
       await SecureStore.setItemAsync('userToken', data.accessToken);
-      await SecureStore.setItemAsync('refreshToken', data.refreshToken);
+      await SecureStore.setItemAsync('refreshToken', data.refreshToken)
       return true;
     }
     return false;
@@ -46,14 +46,15 @@ const attemptTokenRefresh = async () => {
  * 🛡️ The System - Secure API Uplink
  */
 export const apiFetch = async (endpoint, options = {}) => {
-  const baseUrl = !__DEV__ ? "https://oreblogda-myblogapp-git-testing-env-kaytees-projects-d51dcd50.vercel.app/api" : "http://10.179.96.121:3000/api";
+  const baseUrl = !__DEV__ ? "https://oreblogda.com/api" : "http://10.179.96.121:3000/api";
   const cleanEndpoint = endpoint.startsWith('/') ? endpoint : `/${endpoint}`;
-  const url = endpoint.startsWith('http') ? endpoint : `${baseUrl}${cleanEndpoint}`;
+  const url = endpoint.startsWith('http') ? endpoint : `${baseUrl}${cleanEndpoint}`
 
   const token = await SecureStore.getItemAsync('userToken');
 
   // Build Metadata Headers
   const headers = {
+    "x-the-system-debug": 'true',
     "x-oreblogda-secret": APP_SECRET,
     "x-user-country": activeUser?.country || "Unknown",
     "x-user-deviceId": activeUser?.deviceId || "",
