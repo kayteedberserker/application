@@ -95,7 +95,7 @@
             "minSdkVersion": 25,
             "launchMode": "singleTop",
             "enableProguardInReleaseBuilds": true,
-            "enableMinifyInReleaseBuilds": true,
+            "enableMinifyInReleaseBuilds": false,
             "networkSecurityConfig": "./network_security_config.xml"
           },
           "ios": {
