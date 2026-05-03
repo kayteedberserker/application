@@ -50,7 +50,6 @@ export default function TopBar({ isDark }) {
     // =================================================================
     useEffect(() => {
         const checkFirstPost = storage.getNumber("trigger_first_post");
-        console.log(checkFirstPost);
 
         if (checkFirstPost !== 0 && checkFirstPost !== undefined) {
             setIsFirstPostFlow(true);
@@ -208,8 +207,7 @@ export default function TopBar({ isDark }) {
                     {/* ⚡️ THE FLOATING HUD HINT (UPDATED STYLING) */}
                     {!isFirstPostFlow && showWalletHint && (
                         <Animated.View
-                            style={hintAnimatedStyle}
-                            className="absolute top-[80%] right-0 items-end z-[100]"
+                            style={[hintAnimatedStyle, { position: 'absolute', top: '80%', right: 0, alignItems: 'flex-end', zIndex: 100 }]}
                         >
                             <Ionicons
                                 name="caret-up"
@@ -242,8 +240,19 @@ export default function TopBar({ isDark }) {
                         activeOpacity={showRestoreUI ? 0.7 : 1}
                     >
                         <Animated.View
-                            style={showRestoreUI ? urgentButtonStyle : {}}
-                            className={`px-1.5 py-1 rounded-xl flex-row items-center border-2 ${showRestoreUI ? "bg-red-500/20 border-red-500 animate-pulse" : isZeroStreak ? "bg-gray-500/5 border-gray-500/10" : "bg-orange-500/10 border-orange-500/20 border"}`}
+                            style={[
+                                showRestoreUI ? urgentButtonStyle : healthyFlameStyle || {},
+                                {
+                                    paddingHorizontal: 6,
+                                    paddingVertical: 4,
+                                    borderRadius: 12,
+                                    flexDirection: 'row',
+                                    alignItems: 'center',
+                                    borderWidth: 2,
+                                    backgroundColor: showRestoreUI ? 'rgba(239,68,68,0.2)' : isZeroStreak ? 'rgba(107,114,128,0.05)' : 'rgba(249,115,22,0.1)',
+                                    borderColor: showRestoreUI ? '#ef4444' : isZeroStreak ? 'rgba(107,114,128,0.1)' : 'rgba(249,115,22,0.2)'
+                                }
+                            ]}
                         >
                             {isProcessingTransaction ? (
                                 <ActivityIndicator size="small" color="#ef4444" />

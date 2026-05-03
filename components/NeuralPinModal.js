@@ -13,7 +13,9 @@ const BLACKLIST = ['123456', '654321', '000000', '111111', '222222', '333333', '
 
 const NeuralPinModal = ({ visible, onSuccess, onClose, returnPinOnly = false }) => {
     const [pin, setPin] = useState('');
+    const [message, setMessage] = useState('');
     const { user, setUser } = useUser();
+
     const shakeOffset = useSharedValue(0);
 
     const shakeStyle = useAnimatedStyle(() => ({
@@ -21,6 +23,7 @@ const NeuralPinModal = ({ visible, onSuccess, onClose, returnPinOnly = false }) 
     }));
 
     const triggerError = (reason = "Unauthorized") => {
+        setMessage(reason);
         // 📳 Error Haptics
         Haptics.notificationAsync(Haptics.NotificationFeedbackType.Error);
         shakeOffset.value = withSequence(
@@ -29,6 +32,9 @@ const NeuralPinModal = ({ visible, onSuccess, onClose, returnPinOnly = false }) 
             withTiming(0, { duration: 50 })
         );
         setPin('');
+        setTimeout(() => {
+            setMessage("");
+        }, 5000);
     };
 
     const onPressKey = (val) => {
@@ -37,6 +43,11 @@ const NeuralPinModal = ({ visible, onSuccess, onClose, returnPinOnly = false }) 
 
         if (val === 'back') {
             setPin(prev => prev.slice(0, -1));
+            return;
+        }
+
+        if (val === "clear" && returnPinOnly) {
+            onClose();
             return;
         }
 
@@ -57,23 +68,26 @@ const NeuralPinModal = ({ visible, onSuccess, onClose, returnPinOnly = false }) 
 
     const handleVerify = async (submittedPin) => {
         if (BLACKLIST.includes(submittedPin)) {
-            triggerError("Weak Pattern");
+            triggerError("Weak Signature");
             return;
         }
 
         // ⚡️ NEW: If returnPinOnly is true, just return the PIN to parent without API call
         // This is used for recovery flow where parent handles the API call
+        console.log(returnPinOnly, "is returnPinOnly");
+
         if (returnPinOnly) {
             Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
             if (onSuccess) onSuccess(submittedPin);
             setPin('');
+            onClose();
             return;
         }
 
         // Original behavior: call secure-uplink for logged-in users
         try {
             if (!user?.uid) {
-                triggerError("No Identity");
+                triggerError("No Identity")
                 return;
             }
 
@@ -85,7 +99,8 @@ const NeuralPinModal = ({ visible, onSuccess, onClose, returnPinOnly = false }) 
             const data = await res.json();
 
             if (res.ok) {
-                await SecureStore.setItemAsync('userToken', data.token);
+                await SecureStore.setItemAsync('userToken', data.accessToken);
+                await SecureStore.setItemAsync('refreshToken', data.refreshToken);
                 setUser({ ...user, securityLevel: data.securityLevel });
 
                 // 📳 Success Haptics
@@ -93,7 +108,7 @@ const NeuralPinModal = ({ visible, onSuccess, onClose, returnPinOnly = false }) 
                 setPin('');
 
                 // Trigger the callback to parent logic
-                if (onSuccess) onSuccess();
+                onClose();
             } else {
                 triggerError(data.message);
             }
@@ -104,7 +119,7 @@ const NeuralPinModal = ({ visible, onSuccess, onClose, returnPinOnly = false }) 
 
     return (
         <Modal visible={visible} transparent animationType="slide">
-            <View className="flex-1 justify-center items-center" style={{ backgroundColor: 'rgba(0,0,0,0.85)' }}>
+            <View className="flex-1 justify-center items-center z-50" style={{ backgroundColor: 'rgba(0,0,0,0.85)' }}>
                 <Animated.View
                     style={[
                         shakeStyle,
@@ -120,8 +135,8 @@ const NeuralPinModal = ({ visible, onSuccess, onClose, returnPinOnly = false }) 
                         <Text style={{ color: THEME.text }} className="text-xl font-bold tracking-tighter">
                             DATA ENCRYPTION
                         </Text>
-                        <Text style={{ color: THEME.textSecondary }} className="mt-2 text-center text-sm px-4">
-                            Neural signature required to authorize system uplink.
+                        <Text style={{ color: message ? THEME.danger : THEME.textSecondary }} className="mt-2 text-center text-sm px-4">
+                            {message ? message : "Neural signature required to authorize system uplink."}
                         </Text>
                     </View>
 
@@ -152,7 +167,7 @@ const NeuralPinModal = ({ visible, onSuccess, onClose, returnPinOnly = false }) 
                                 {key === 'back' ? (
                                     <Ionicons name="backspace-outline" size={28} color={THEME.textSecondary} />
                                 ) : key === 'clear' ? (
-                                    <Text style={{ color: THEME.danger }} className="text-3xl font-semibold tracking-widest">C</Text>
+                                    <Text style={{ color: THEME.danger }} className="text-3xl font-semibold tracking-widest">{returnPinOnly ? "X" : "C"}</Text>
                                 ) : (
                                     <Text style={{ color: THEME.text }} className="text-3xl font-light">
                                         {key}

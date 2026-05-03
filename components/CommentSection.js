@@ -972,7 +972,7 @@ export default function CommentSection({ postId, slug, discussionIdfromPage }) {
     const { data, mutate, isLoading } = useSWR(
         user?.deviceId ? `/posts/${postId}/comment?page=1&limit=40` : null,
         (url) => apiFetch(url).then(res => res.json()),
-        { refreshInterval: 30000 }
+        { refreshInterval: 15000, revalidateOnFocus: true }
     );
 
     useEffect(() => {

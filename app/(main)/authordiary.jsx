@@ -89,7 +89,6 @@ export default function AuthorDiaryDashboard() {
     const CustomAlert = useAlert();
     const storage = useMMKV()
     const { user, loading: contextLoading } = useUser();
-    // console.log(user, "is user");
 
     const { userClan, isInClan } = useClan();
     const { streak, refreshStreak } = useStreak();
@@ -149,7 +148,6 @@ export default function AuthorDiaryDashboard() {
     // =================================================================
     useEffect(() => {
         const checkFirstPost = storage.getNumber("trigger_first_post");
-        console.log(checkFirstPost);
 
         if (checkFirstPost !== 0 && checkFirstPost !== undefined) {
             setIsFirstPostFlow(true);

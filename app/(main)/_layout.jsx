@@ -359,7 +359,7 @@ export default function MainLayout() {
             {!isFirstPostFlow && <GlobalMarquee isDark={isDark} />}
             {!isFirstPostFlow && <UpdateHandler />}
             {!isFirstPostFlow && <NeuralPinModal visible={pinModalVisible}
-                onSuccess={() => setPinModalVisible(false)} />}
+                onSuccess={() => setPinModalVisible(false)} onClose={() => setPinModalVisible(false)} />}
 
             <Stack screenOptions={{ headerShown: false }}>
                 <Stack.Screen name="index" />

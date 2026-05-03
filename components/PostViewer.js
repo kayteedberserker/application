@@ -22,6 +22,7 @@ import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { mutate as globalMutate } from "swr"; // ⚡️ ADDED globalMutate for instant hydration
 import useSWRInfinite from "swr/infinite";
 
+import { ScrollViewObserver } from 'react-native-use-in-view';
 import apiFetch from "../utils/apiFetch";
 import AnimeLoading from "./AnimeLoading";
 import PostCard from "./PostCard";
@@ -299,52 +300,53 @@ export default function PostsViewer() {
 
     return (
         <View className={`flex-1 ${isDark ? "bg-[#050505]" : "bg-white"}`}>
-            <LegendList
-                key="main-feed-list" // ⚡️ FIXED: Isolates scroll memory from other pages
-                ref={scrollRef}
-                data={posts}
-                keyExtractor={(item) => item._id}
-                ListHeaderComponent={ListHeader}
-                removeClippedSubviews
-                contentContainerStyle={{
-                    paddingHorizontal: 16,
-                    paddingTop: insets.top + 20,
-                    paddingBottom: insets.bottom + 120,
-                }}
-                renderItem={renderItem}
-                estimatedItemSize={630}
-                drawDistance={1500}
-                // ⚡️ FIXED: Removed recycleItems=true to stop weird SWR caching bugs and scroll jumping
-                onViewableItemsChanged={onViewableItemsChanged}
-                viewabilityConfig={viewabilityConfig}
-                onEndReached={loadMore}
-                onEndReachedThreshold={0.5}
-                refreshControl={
-                    <RefreshControl
-                        refreshing={refreshing}
-                        onRefresh={handleRefresh}
-                        colors={["#2563eb"]}
-                        tintColor="#2563eb"
-                        title={"Updating Feed..."}
-                        titleColor={isDark ? "#ffffff" : "#2563eb"}
-                        progressBackgroundColor={isDark ? "#1a1a1a" : "#ffffff"}
-                    />
-                }
-                onScroll={handleScroll}
-                scrollEventThrottle={16}
-                ListFooterComponent={
-                    <View className="py-12 items-center justify-center min-h-[140px]">
-                        {(isLoading || (isValidating && size > 1)) ? (
-                            <SyncLoading />
-                        ) : !hasMore && posts.length > 0 ? (
-                            <Text className="text-[10px] font-[900] uppercase tracking-[0.5em] text-gray-400">
-                                End of Transmission
-                            </Text>
-                        ) : null}
-                    </View>
-                }
-            />
-
+            <ScrollViewObserver>
+                <LegendList
+                    key="main-feed-list" // ⚡️ FIXED: Isolates scroll memory from other pages
+                    ref={scrollRef}
+                    data={posts}
+                    keyExtractor={(item) => item._id}
+                    ListHeaderComponent={ListHeader}
+                    removeClippedSubviews
+                    contentContainerStyle={{
+                        paddingHorizontal: 16,
+                        paddingTop: insets.top + 20,
+                        paddingBottom: insets.bottom + 120,
+                    }}
+                    renderItem={renderItem}
+                    estimatedItemSize={630}
+                    drawDistance={1500}
+                    // ⚡️ FIXED: Removed recycleItems=true to stop weird SWR caching bugs and scroll jumping
+                    onViewableItemsChanged={onViewableItemsChanged}
+                    viewabilityConfig={viewabilityConfig}
+                    onEndReached={loadMore}
+                    onEndReachedThreshold={0.5}
+                    refreshControl={
+                        <RefreshControl
+                            refreshing={refreshing}
+                            onRefresh={handleRefresh}
+                            colors={["#2563eb"]}
+                            tintColor="#2563eb"
+                            title={"Updating Feed..."}
+                            titleColor={isDark ? "#ffffff" : "#2563eb"}
+                            progressBackgroundColor={isDark ? "#1a1a1a" : "#ffffff"}
+                        />
+                    }
+                    onScroll={handleScroll}
+                    scrollEventThrottle={16}
+                    ListFooterComponent={
+                        <View className="py-12 items-center justify-center min-h-[140px]">
+                            {(isLoading || (isValidating && size > 1)) ? (
+                                <SyncLoading />
+                            ) : !hasMore && posts.length > 0 ? (
+                                <Text className="text-[10px] font-[900] uppercase tracking-[0.5em] text-gray-400">
+                                    End of Transmission
+                                </Text>
+                            ) : null}
+                        </View>
+                    }
+                />
+            </ScrollViewObserver>
             <View
                 className="absolute left-6 flex-row items-center gap-2"
                 style={{ bottom: insets.bottom + 20, opacity: 0.4 }}

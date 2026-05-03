@@ -38,7 +38,6 @@ import { useCoins } from "../../context/CoinContext";
 import { useUser } from "../../context/UserContext";
 import apiFetch from "../../utils/apiFetch";
 // ⚡️ Correct Reanimated Imports
-import AsyncStorage from "@react-native-async-storage/async-storage";
 import LottieView from 'lottie-react-native'; // ⚡️ Added for Inventory Previews
 import { MotiView } from 'moti';
 import Animated, {
@@ -725,7 +724,6 @@ const AuthorInventoryModal = ({ visible, onClose, user, setUser, isDark, theinve
             // Toggle logic: If already equipped, send empty string to unequip
             const isCurrentlyEquipped = titleName === selectedTitle.name;
             const newEquippedTitle = isCurrentlyEquipped ? null : { name: selectedTitle.name, tier: selectedTitle.tier };
-            console.log(newEquippedTitle);
 
             formData.append("equippedTitle", newEquippedTitle ? JSON.stringify(newEquippedTitle) : "");
 
@@ -1100,7 +1098,7 @@ export default function MobileProfilePage() {
     const storage = useMMKV();
     const CustomAlert = useAlert();
     const [theinventory, setInventory] = useState([])
-    const { user, setUser, contextLoading } = useUser();
+    const { user, setUser, contextLoading, handleLogout, isLoggingOut } = useUser();
 
     const { clearClanData } = useClan();
 
@@ -1137,7 +1135,6 @@ export default function MobileProfilePage() {
     const [refCopied, setRefCopied] = useState(false);
 
     const [isOnboarding, setIsOnboarding] = useState(false);
-    const [isLoggingOut, setIsLoggingOut] = useState(false);
     const [onboardingStep, setOnboardingStep] = useState(0);
     const [currentPosTop, setcurrentPosTop] = useState(0);
 
@@ -1280,7 +1277,6 @@ export default function MobileProfilePage() {
     };
 
     const copyToClipboard = async () => {
-        console.log(user?.uid);
 
         if (user?.uid) {
             await Clipboard.setStringAsync(user.uid);
@@ -1387,12 +1383,10 @@ export default function MobileProfilePage() {
     });
 
     useEffect(() => {
-        console.log(user);
         if (!user?.deviceId) return;
 
         try {
             const cached = storage.getString(CACHE_KEY_USER_EXTRAS);
-            console.log(cached);
 
             if (cached && cached !== "") {
                 const data = JSON.parse(cached);
@@ -1407,87 +1401,17 @@ export default function MobileProfilePage() {
             console.error("Cache load error", e);
         }
     }, [user?.deviceId]);
-    const handleLogout = () => {
+
+    const tryhandleLogout = () => {
         CustomAlert("De-Synchronize", "Hibernating neural link... Your operative environment will be preserved for quick re-entry.", [
             { text: "Cancel", style: "cancel" },
             {
-                text: "Disconnect",
+                text: "LogOut",
                 style: "destructive",
-                onPress: async () => {
-                    try {
-                        setIsLoggingOut(true)
-                        // ⚡️ 0. NOTIFY BACKEND TO HALT TRANSMISSIONS
-                        try {
-                            if (user?.deviceId) {
-                                await apiFetch('/mobile/logout', {
-                                    method: 'POST',
-                                    body: JSON.stringify({ deviceId: user.deviceId })
-                                });
-                            }
-                        } catch (apiErr) {
-                            console.log("Server unreachable. Proceeding with local hibernation.");
-                        }
-
-                        // ⚡️ 1. EXTRACT ALL DATA INTO A LOCAL OBJECT FIRST
-                        const allKeys = storage.getAllKeys();
-                        const userDataArchive = {};
-
-                        allKeys.forEach(key => {
-                            if (key !== "session_history") {
-                                // ⚡️ FIXED: Safely extract the value while preserving its exact Type
-                                let val = storage.getString(key);
-
-                                if (val === undefined) {
-                                    val = storage.getNumber(key);
-                                }
-
-                                if (val === undefined) {
-                                    val = storage.getBoolean(key);
-                                }
-
-                                if (val !== undefined) {
-                                    userDataArchive[key] = val;
-                                }
-                            }
-                        });
-
-                        // ⚡️ 2. PREPARE THE NEW HISTORY
-                        const rawHistory = storage.getString("session_history");
-                        const sessionHistory = rawHistory ? JSON.parse(rawHistory) : [];
-
-                        const currentSession = {
-                            uid: user.uid || user.deviceId,
-                            username: user.username,
-                            pfp: user.profilePic?.url || user.image,
-                            hibernateBox: userDataArchive // 📦 The snapshotted environment with perfect types!
-                        };
-
-                        const updatedHistory = [
-                            currentSession,
-                            ...sessionHistory.filter(s => s.uid !== currentSession.uid)
-                        ].slice(0, 3);
-
-                        // ⚡️ 3. THE SWAP
-                        const cleared = storage.clearAll();
-
-                        // ⚡️ 4. RE-INJECT THE HISTORY
-                        storage.set("session_history", JSON.stringify(updatedHistory));
-
-                        // ⚡️ 5. CLEANUP & REDIRECT
-                        await AsyncStorage.clear();
-                        setUser(null);
-                        clearClanData();
-                        router.replace("/screens/FirstLaunchScreen");
-
-                    } catch (error) {
-                        console.error("Hibernation Error:", error);
-                        Toast.show({ type: 'error', text1: 'Hibernation Failed' });
-                    } finally { setIsLoggingOut(false) }
-                },
-            },
-        ]);
-    };
-
+                onPress: async () => { handleLogout() }
+            }]
+        )
+    }
     useEffect(() => {
         const syncUserWithDB = async () => {
             if (!user?.deviceId) return;
@@ -1525,11 +1449,11 @@ export default function MobileProfilePage() {
             } catch (err) { console.error("Sync User Error:", err); }
         };
         syncUserWithDB();
-    }, []);
+    }, [])
 
     const posts = useMemo(() => {
         return data ? data.flatMap((page) => page.posts || []) : [];
-    }, [data]);
+    }, [data])
 
     const isLoadingInitialData = isLoading && !data;
     const isReachingEnd = data && data[data.length - 1]?.posts?.length < LIMIT;
@@ -1891,17 +1815,18 @@ export default function MobileProfilePage() {
                             </Text>
                             {isUpdating && <Animated.View className="absolute bottom-0 h-1 bg-white/40 w-full" style={progressAnimatedStyle} />}
                         </TouchableOpacity>
-
                         <TouchableOpacity
-                            onPress={handleLogout}
+                            onPress={tryhandleLogout}
                             disabled={isLoggingOut}
                             className="relative w-full h-14 rounded-2xl items-center justify-center mt-2 border-2 border-red-500/20 bg-red-500/5 active:bg-red-500/10 transition-all"
                         >
+
                             <View className="flex-row items-center gap-2">
                                 <Ionicons name="power" size={16} color="#ef4444" />
                                 <Text className="text-red-500 font-black uppercase tracking-widest text-[11px]"> {!isLoggingOut ? "De-Synchronize (Log Out)" : "Desynchronizing"}</Text>
                             </View>
                         </TouchableOpacity>
+
                     </View>
                 </View>
             </View>
@@ -1911,17 +1836,6 @@ export default function MobileProfilePage() {
     return (
         <View className="flex-1 bg-white dark:bg-[#0a0a0a]" style={{ paddingTop: insets.top }}>
 
-            {/* ⚡️ BLOCK CLICKS TO BACKGROUND WHEN ONBOARDING */}
-            {/* {isOnboarding && (
-                <Pressable
-                    onPress={console.log("clicked me")
-                    }
-                    style={StyleSheet.absoluteFillObject}
-                    className="z-[10]"
-                // This creates an invisible shield. Clicks hit this instead of the UI underneath.
-                // The tooltip has a higher zIndex (110) so its buttons still work.
-                />
-            )} */}
             <AppOnboarding />
 
             <View className="absolute top-0 right-0 w-80 h-80 bg-blue-600/5 rounded-full" pointerEvents="none" />

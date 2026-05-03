@@ -1,15 +1,20 @@
+import AsyncStorage from '@react-native-async-storage/async-storage';
+import { router } from "expo-router";
 import { createContext, useContext, useEffect, useRef, useState } from "react";
+import { Alert } from "react-native";
 import { useMMKV } from "react-native-mmkv";
-import apiFetch, { syncApiUser } from "../utils/apiFetch";
+import apiFetch, { setSessionExpiredHandler, syncApiUser } from "../utils/apiFetch";
 import { getFingerprint } from "../utils/device";
 
 const UserContext = createContext();
 
 export const UserProvider = ({ children }) => {
   const storage = useMMKV();
+  const [isLoggingOut, setIsLoggingOut] = useState(false);
 
   // ⚡️ 1. SYNCHRONOUS INIT
-  const [user, setUser] = useState(() => {
+  // Renamed the setter to setInternalUser to distinguish between State vs Persistent 
+  const [user, setInternalUser] = useState(() => {
     try {
       const stored = storage.getString("mobileUser");
       if (stored) {
@@ -24,21 +29,149 @@ export const UserProvider = ({ children }) => {
   });
 
   const [loading, setLoading] = useState(() => {
-    const stored = storage.getString("mobileUser");
-    return !stored;
+    try {
+      const stored = storage.getString("mobileUser");
+      return !stored;
+    } catch (e) {
+      return true;
+    }
   });
 
-  // 🛡️ SECURITY STATE: Controls the NeuralPinModal globally
   const [pinModalVisible, setPinModalVisible] = useState(false);
-
+  const [pinSuccess, setPinSuccess] = useState(false);
   const hasSyncedIdentity = useRef(false);
 
+  /**
+   * 🛠️ DEFENSIVE STORAGE UPDATE
+   * This handles standard data updates while the user is active.
+   */
   const updateUserData = (newData) => {
-    setUser(newData);
-    storage.set("mobileUser", JSON.stringify(newData));
+    setInternalUser(newData);
+    
+    // Defensive check: Only touch storage if the instance and methods exist
+    // This prevents the "undefined is not a function" crash during logout races
+    try {
+      if (storage && typeof storage.set === 'function') {
+        if (newData) {
+          storage.set("mobileUser", JSON.stringify(newData));
+        } else if (typeof storage.delete === 'function') {
+          storage.delete("mobileUser");
+        }
+      }
+    } catch (err) {
+      console.warn("MMKV update intercepted during transition:", err);
+    }
+    
     syncApiUser(newData);
   };
 
+  /**
+   * 🛡️ THE SESSION TERMINATION PROTOCOL
+   */
+  const handleInternalLogout = async (isSystemKick = false) => {
+    if (isLoggingOut) return;
+
+    const performCleanup = async () => {
+      try {
+        setIsLoggingOut(true);
+
+        // ⚡️ 0. NOTIFY BACKEND
+        if (!isSystemKick && user?.deviceId) {
+          try {
+            await apiFetch('/mobile/logout', {
+              method: 'POST',
+              body: { deviceId: user.deviceId }
+            });
+          } catch (apiErr) {
+            console.log("Server unreachable. Proceeding with local hibernation.");
+          }
+        }
+
+        // ⚡️ 1. PREPARE SESSION HISTORY
+        let updatedHistory = [];
+        try {
+          const rawHistory = storage.getString("session_history");
+          const sessionHistory = rawHistory ? JSON.parse(rawHistory) : [];
+
+          if (user) {
+            const currentSession = {
+              uid: user.uid,
+              deviceId: user.deviceId,
+              username: user.username,
+              pfp: user.profilePic?.url || user.image,
+            };
+
+            updatedHistory = [
+              currentSession,
+              ...sessionHistory.filter(s => s && s.uid !== currentSession.uid)
+            ].slice(0, 3);
+          }
+        } catch (historyErr) {
+          console.log("History preservation skipped.");
+        }
+
+        // ⚡️ 2. THE SAFE SWAP
+        // We purge storage first
+        try {
+          if (storage && typeof storage.clearAll === 'function') {
+            storage.clearAll();
+          } else {
+            storage.delete("mobileUser");
+            storage.delete("auth_token");
+          }
+
+          // Re-inject history if we have it
+          if (updatedHistory.length > 0 && storage && typeof storage.set === 'function') {
+            storage.set("session_history", JSON.stringify(updatedHistory));
+          }
+        } catch (storageErr) {
+          console.warn("Storage purge encountered a snag:", storageErr);
+        }
+
+        // ⚡️ 3. CLEANUP & REDIRECT
+        await AsyncStorage.clear().catch(() => { });
+        
+        // IMPORTANT: We call setInternalUser directly to avoid updateUserData
+        setInternalUser(null);
+        hasSyncedIdentity.current = false;
+
+        // Force transition to entry point
+        router.replace("/screens/FirstLaunchScreen");
+
+      } catch (error) {
+        console.error("Critical Hibernation Error:", error);
+        // Fallback: Clear state and force redirect even if storage exploded
+        setInternalUser(null);
+        router.replace("/screens/FirstLaunchScreen");
+      } finally {
+        setIsLoggingOut(false);
+      }
+    };
+
+    if (isSystemKick) {
+      Alert.alert(
+        "Neural Link Severed",
+        "Your session has been terminated.",
+        [{ text: "Understood", onPress: performCleanup }]
+      );
+    } else {
+      performCleanup();
+    }
+  };
+
+  // 📡 ATTACH API LISTENER FOR SESSION KICKS
+  useEffect(() => {
+    setSessionExpiredHandler(() => {
+      handleInternalLogout(true);
+    });
+  }, [user?.deviceId]);
+
+  // Wrapper for external consumers
+  const updateUserDataWrapper = (newData) => {
+    updateUserData(newData);
+  };
+
+  // ⚡️ IDENTITY & DATA SYNC
   useEffect(() => {
     const backgroundSyncUser = async () => {
       if (!user?.deviceId) {
@@ -46,32 +179,31 @@ export const UserProvider = ({ children }) => {
         return;
       }
 
-      // ⚡️ IDENTITY SYNC PROTOCOL
+      // Identity Sync Protocol
       if ((!user.uid || !user.hardwareId) && !hasSyncedIdentity.current) {
         hasSyncedIdentity.current = true;
         try {
           const fingerprint = await getFingerprint();
           const res = await apiFetch('/mobile/sync-identity', {
             method: 'POST',
-            body: JSON.stringify({
+            body: {
               deviceId: user.deviceId,
               hardwareId: fingerprint.hardwareId
-            })
+            }
           });
 
-          if (res.ok) {
+          if (res.status === 200) {
             const data = await res.json();
             if (data.uid) {
               const updatedUser = {
                 ...user,
                 uid: data.uid,
                 hardwareId: fingerprint.hardwareId,
-                securityLevel: data.securityLevel || 0 // Track security level
+                securityLevel: data.securityLevel || 0
               };
               updateUserData(updatedUser);
 
-              // 🛡️ AUTO-TRIGGER: If new user or securityLevel is 0, force PIN setup
-              if (!data.securityLevel || data.securityLevel < 2) {
+              if (updatedUser.securityLevel < 2 && !pinSuccess) {
                 setPinModalVisible(true);
               }
             }
@@ -82,11 +214,11 @@ export const UserProvider = ({ children }) => {
         }
       }
 
-      // ⚡️ BACKGROUND DATA SYNC
+      // Stats Sync
       if (!user.referralCode) {
         try {
           const res = await apiFetch(`/users/me?fingerprint=${user.deviceId}`);
-          if (res.ok) {
+          if (res.status === 200) {
             const dbUser = await res.json();
             const updatedUser = {
               ...user,
@@ -98,8 +230,7 @@ export const UserProvider = ({ children }) => {
             };
             updateUserData(updatedUser);
 
-            // 🛡️ Check security after sync
-            if (updatedUser.securityLevel < 2) {
+            if (updatedUser.securityLevel < 2 && !pinSuccess) {
               setPinModalVisible(true);
             }
           }
@@ -120,10 +251,14 @@ export const UserProvider = ({ children }) => {
     <UserContext.Provider
       value={{
         user,
-        setUser: updateUserData,
+        setUser: updateUserDataWrapper,
         loading,
-        pinModalVisible,    // Expose this
-        setPinModalVisible  // Expose this
+        pinModalVisible,
+        setPinModalVisible,
+        pinSuccess,
+        setPinSuccess,
+        isLoggingOut,
+        handleLogout: () => handleInternalLogout(false)
       }}>
       {children}
     </UserContext.Provider>

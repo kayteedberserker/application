@@ -98,6 +98,7 @@ const formatTime = (timeInSeconds) => {
 };
 
 import * as Crypto from 'expo-crypto';
+import { useInView } from 'react-native-use-in-view';
 import TitleTag from "./TitleTag";
 
 const LightboxVideoPlayer = ({ uri }) => {
@@ -605,7 +606,6 @@ const MemoizedClanHeader = memo(({ clanInfo, postId, isDark, isFeed }) => {
         </View>
     );
 });
-
 // ⚡️ MAIN COMPONENT
 const PostCardComponent = ({ post, authorData, clanData, setPosts, isFeed, hideMedia, syncing, isVisible = true }) => {
     const CustomAlert = useAlert();
@@ -639,13 +639,21 @@ const PostCardComponent = ({ post, authorData, clanData, setPosts, isFeed, hideM
 
     const clanInfo = clanData || post?.clanData || null;
 
+    // ⚡️ USE SERVER-PROVIDED hasLiked FIRST, THEN FALLBACK TO STORAGE
     useEffect(() => {
+        // Priority 1: Use server-provided hasLiked (from API)
+        if (post?.hasLiked !== undefined && post?.hasLiked !== null) {
+            setLiked(post.hasLiked);
+            return;
+        }
+
+        // Priority 2: Fallback to local storage if server data is missing
         try {
             const savedLikesStr = storage.getString('user_likes');
             const likedList = savedLikesStr ? JSON.parse(savedLikesStr) : [];
             setLiked(likedList.includes(post?._id));
         } catch (e) { console.error("MMKV Init Error", e); }
-    }, [post?._id, storage]);
+    }, [post?._id, post?.hasLiked, storage]);
 
     const mediaItems = useMemo(() => {
         if (post.media && Array.isArray(post.media) && post.media.length > 0) return post.media;
@@ -674,7 +682,7 @@ const PostCardComponent = ({ post, authorData, clanData, setPosts, isFeed, hideM
         (!syncing && post?._id && isVisible) ? `/posts/${post._id}` : null,
         fetcher,
         {
-            refreshInterval: 120000,
+            refreshInterval: inView ? 5000 : 180000,
             fallbackData: post,
             revalidateOnMount: false
         }
@@ -689,7 +697,8 @@ const PostCardComponent = ({ post, authorData, clanData, setPosts, isFeed, hideM
     const totalDiscussions = postData?.discussionCount ?? post?.discussionCount ?? 0;
 
     useEffect(() => {
-        if (!post?._id || !user?.deviceId || syncing || !isVisible) return;
+        // Skip if already viewed per server, syncing, or not visible
+        if (!post?._id || !user?.deviceId || syncing || !isVisible || postData?.hasViewed) return;
         const handleView = async () => {
             try {
                 const viewedKey = "viewedPosts";
@@ -710,7 +719,7 @@ const PostCardComponent = ({ post, authorData, clanData, setPosts, isFeed, hideM
             } catch (err) { console.error("View track err:", err); }
         };
         handleView();
-    }, [post?._id, user?.deviceId, syncing, isVisible, storage]);
+    }, [post?._id, user?.deviceId, syncing, isVisible, storage, postData?.hasViewed]);
 
     const handleLike = async () => {
         if (liked || !user) {
@@ -984,6 +993,12 @@ const PostCardComponent = ({ post, authorData, clanData, setPosts, isFeed, hideM
             </View>
         );
     };
+    const { ref, inView } = useInView({
+        threshold: 0.2,
+    });
+    useEffect(() => {
+        console.log(`Post: ${post.title.slice(0, 10)}... | Visible: ${inView}`);
+    }, [inView]);
 
     const aura = author.auraVisuals || { color: '#1e293b', label: 'OPERATIVE', icon: 'target' };
     const isTop10 = author.rank > 0 && author.rank <= 10;
@@ -993,9 +1008,9 @@ const PostCardComponent = ({ post, authorData, clanData, setPosts, isFeed, hideM
     const equippedWatermark = author.inventory?.find(i => i.category === 'WATERMARK' && i.isEquipped);
 
     return (
-        <View className={`mb-8 overflow-hidden rounded-[32px] border ${isDark ? "bg-[#0d1117] border-gray-800" : "bg-white border-gray-100 shadow-sm"} relative`}>
+        <View ref={ref} collapsable={false} className={`mb-8 overflow-hidden rounded-[32px] border ${isDark ? "bg-[#0d1117] border-gray-800" : "bg-white border-gray-100 shadow-sm"} relative`}>
 
-            <PlayerWatermark isFeed={isFeed} equippedWatermark={equippedWatermark} isDark={isDark} />
+            <PlayerWatermark isFeed={inView} equippedWatermark={equippedWatermark} isDark={isDark} />
 
             {isTop10 && (
                 <View className="absolute inset-0 opacity-[0.04]" style={{ backgroundColor: activeGlowColor || aura.color }} pointerEvents="none" />
@@ -1006,12 +1021,12 @@ const PostCardComponent = ({ post, authorData, clanData, setPosts, isFeed, hideM
             <View className="p-4 px-2">
                 <View className="mb-5">
                     {isClanPost && clanInfo && (
-                        <MemoizedClanHeader clanInfo={clanInfo} isDark={isDark} postId={post._id} isFeed={isFeed} />
+                        <MemoizedClanHeader clanInfo={clanInfo} isDark={isDark} postId={post._id} isFeed={inView} />
                     )}
 
                     <View className="flex-row justify-between items-start">
                         <View className="flex-row items-center gap-4 flex-1 pr-2">
-                            <AuraAvatar author={author} glowColor={activeGlowColor} aura={aura} isTop10={isTop10} isDark={isDark} size={44} isFeed={isFeed} onPress={() => DeviceEventEmitter.emit("navigateSafely", `/author/${post.authorUserId}`)} />
+                            <AuraAvatar author={author} glowColor={activeGlowColor} aura={aura} isTop10={isTop10} isDark={isDark} size={44} isFeed={inView} onPress={() => DeviceEventEmitter.emit("navigateSafely", `/author/${post.authorUserId}`)} />
                             <View className="flex-1">
                                 <Pressable onPress={() => DeviceEventEmitter.emit("navigateSafely", `/author/${post.authorUserId}`)}>
                                     <View className="flex-row items-center gap-[2px]">
@@ -1025,7 +1040,7 @@ const PostCardComponent = ({ post, authorData, clanData, setPosts, isFeed, hideM
                                                 isDark={isDark}
                                                 showPeakBadge={false}
                                                 showFlame={false}
-                                                isFeed={isFeed}
+                                                isFeed={inView}
                                             />
                                         </View>
                                         <Text className="text-gray-500 font-normal flex-shrink-0"> • </Text>
@@ -1060,7 +1075,7 @@ const PostCardComponent = ({ post, authorData, clanData, setPosts, isFeed, hideM
                                 )} */}
                                 {author.peakLevel > 0 && (
                                     <View className="flex-row items-center gap-1 bg-purple-500/10 px-2 py-1 rounded-full border border-purple-500/30">
-                                        <PeakBadge level={author.peakLevel} size={25} isFeed={isFeed} />
+                                        <PeakBadge level={author.peakLevel} size={25} isFeed={inView} />
                                     </View>
                                 )}
                             </View>
@@ -1081,7 +1096,7 @@ const PostCardComponent = ({ post, authorData, clanData, setPosts, isFeed, hideM
 
                 {post.poll && (
                     <View className="mb-6 p-4 bg-gray-50 dark:bg-gray-900/50 rounded-2xl border border-gray-100 dark:border-gray-800">
-                        <Poll poll={post.poll} postId={post?._id} deviceId={user?.deviceId} />
+                        <Poll poll={post.poll} isVisible={inView} postId={post?._id} deviceId={user?.deviceId} />
                     </View>
                 )}
 

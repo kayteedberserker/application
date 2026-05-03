@@ -2,7 +2,7 @@ import { MaterialCommunityIcons } from '@expo/vector-icons';
 import { LinearGradient } from 'expo-linear-gradient';
 import { useRouter } from 'expo-router';
 import { useEffect, useMemo, useState } from 'react';
-import { Alert, Dimensions, FlatList, Modal, Pressable, ScrollView, View } from 'react-native';
+import { Dimensions, FlatList, Modal, Pressable, ScrollView, View } from 'react-native';
 import { useMMKV } from 'react-native-mmkv';
 import Animated, {
     Easing,
@@ -17,6 +17,7 @@ import useSWR from 'swr';
 import apiFetch from '../utils/apiFetch';
 import { Text } from './Text';
 
+import { useAlert } from '../context/AlertContext';
 import { useClan } from '../context/ClanContext';
 import { useUser } from '../context/UserContext';
 
@@ -47,6 +48,7 @@ const getPillTheme = (type) => {
 export default function GlobalMarquee({ isDark }) {
     const { user } = useUser();
     const { userClan } = useClan();
+    const CustomAlert = useAlert()
     const storage = useMMKV();
     const router = useRouter();
 
@@ -123,7 +125,7 @@ export default function GlobalMarquee({ isDark }) {
             newCounts[pill._id] = Math.max(newCounts[pill._id] || 0, MAX_VIEWS_MARQUEE);
         });
         setViewCounts(newCounts);
-        Alert.alert('All notifications marked as seen!');
+        CustomAlert('All notifications marked as seen!');
     };
 
     // Marquee animation logic (unchanged)

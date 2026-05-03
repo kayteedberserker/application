@@ -37,6 +37,7 @@ import Animated, {
 	withTiming
 } from "react-native-reanimated";
 
+import * as SecureStore from 'expo-secure-store';
 import AnimeLoading from "../../components/AnimeLoading";
 import NeuralPinModal from "../../components/NeuralPinModal";
 import { Text } from "../../components/Text";
@@ -47,7 +48,6 @@ import { useStreak } from "../../context/StreakContext";
 import { useUser } from "../../context/UserContext";
 import apiFetch, { syncApiUser } from "../../utils/apiFetch";
 import { getFingerprint } from "../../utils/device";
-
 const { width, height } = Dimensions.get('window');
 const FORBIDDEN_NAMES = ["admin", "system", "the admin", "the system", "administrator", "moderator"];
 
@@ -227,8 +227,8 @@ export default function FirstLaunchScreen() {
 	const [recoveredUid, setRecoveredUid] = useState("");
 	const [showPinModal, setShowPinModal] = useState(false);
 	const [pendingRecoveryData, setPendingRecoveryData] = useState(null);
-
-	const recentSessions = JSON.parse(storage.getString("session_history") || "[]");
+	const [isQuickLogin, setIsQuickLogin] = useState(false);
+	const recentSessions = JSON.parse(storage.getString("session_history") || "[]")
 
 	const [loading, setLoading] = useState(true);
 	const [isProcessing, setIsProcessing] = useState(false);
@@ -342,81 +342,120 @@ export default function FirstLaunchScreen() {
 		} else if (step === 6) setStep(7);
 	};
 
-	const handleQuickLogin = async (session) => {
+	const handleQuickLogin = async ({ session, pin }) => {
 		if (isProcessing) return;
+		setIsQuickLogin(true);
 		setIsProcessing(true);
 		Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Heavy);
 
 		try {
-			const box = session.hibernateBox;
-			if (box) {
-				Object.keys(box).forEach(key => {
-					// ⚡️ MMKV's storage.set() will automatically check if box[key] 
-					// is a String, Number, or Boolean and save it correctly!
-					storage.set(key, box[key]);
-				});
+			const fingerprint = await getFingerprint();
+			const pushToken = await registerForPushNotificationsAsync();
+			let realPin = ""
+			if (typeof pin == "string") {
+				realPin = pin
 			}
 
-			const fingerprint = await getFingerprint();
-			// ⚡️ ALWAYS get a fresh token on re-entry since we nullified it on logout
-			const pushToken = await registerForPushNotificationsAsync();
-
+			// 2. 🔗 CALL BACKEND TO RESTORE SESSION
+			// This now returns sessionData with followedClans, onboarding flags
 			const res = await apiFetch("/mobile/recover", {
 				method: "POST",
 				body: JSON.stringify({
 					deviceId: session.deviceId,
 					hardwareId: fingerprint.hardwareId,
 					recoverId: session.uid,
-					pushToken // ⚡️ Sends the fresh token to the backend
+					pushToken,
+					pin: realPin
 				})
 			});
 
 			const data = await res.json();
+
+			// 3. 🛡️ PIN CHALLENGE (Encryption Layer)
+			if (res.status === 401 && data.message?.includes("ENCRYPTION_REQUIRED")) {
+				setIsProcessing(false);
+				CustomAlert(data.message, data.detail, [
+					{ text: "Cancel", style: "cancel", onPress: () => setAccessGate(true) },
+					{
+						text: "Decrypt",
+						style: "default",
+						onPress: () => {
+							setAccessGate(true)
+							setPendingRecoveryData({ fingerprint, pushToken });
+							setShowPinModal(true);
+						}
+					}
+				]);
+				return;
+			}
+
 			if (!res.ok) throw new Error(data.message || "Session recovery failed");
 
+			// 4. 🔑 SECURE NEW TOKENS
+			// Essential: Save the new session tokens to SecureStore!
+			if (data.accessToken && data.refreshToken) {
+				await SecureStore.setItemAsync('userToken', data.accessToken);
+				await SecureStore.setItemAsync('refreshToken', data.refreshToken);
+			}
+
+			// 5. 🧬 SYNC USER IDENTITY
 			const userData = {
 				deviceId: data.user?.deviceId,
 				uid: data.user?.uid,
 				username: data.user?.username,
-				pushToken: pushToken || data.user?.pushToken, // ⚡️ Secures it in local MMKV
+				pushToken: pushToken || data.user?.pushToken,
 				country: data.user?.country || "Unknown",
 				referredBy: data.user?.referredBy,
 				preferences: data.user?.preferences || {}
 			};
 
+			// Save user data to MMKV
 			storage.set("mobileUser", JSON.stringify(userData));
 			setUser(userData);
-			syncApiUser(userData); // Ensure API headers are set immediately
+			syncApiUser(userData);
 
+			// 6. 💾 SAVE SESSION DATA FROM BACKEND TO MMKV
+			// Store each field individually for quickLogin to use later
+
+			if (data.sessionData) {
+				const { followedClans, ...onboardingFlags } = data.sessionData;
+
+				// Save followed clans (as JSON string array)
+				storage.set("followed_clans", JSON.stringify(followedClans || []));
+
+				// Save onboarding flags individually
+				storage.set("HAS_SEEN_CLAN_UPDATE", onboardingFlags.HAS_SEEN_CLAN_UPDATE || "true");
+				storage.set("has_seen_profile_onboarding", onboardingFlags.has_seen_profile_onboarding ? "true" : "false");
+				storage.set("HAS_SEEN_COINS_V3", onboardingFlags.HAS_SEEN_COINS_V3 || "true");
+				storage.set("HAS_SEEN_PEAK_V5", onboardingFlags.HAS_SEEN_PEAK_V5 || "true");
+				storage.set("HAS_SEEN_STORE_V4", onboardingFlags.HAS_SEEN_STORE_V4 || "true");
+				storage.set("HAS_SEEN_WELCOME", onboardingFlags.HAS_SEEN_WELCOME || "true");
+			}
+
+			// 7. 🔄 REFRESH APP STATE
 			if (refreshStreak) refreshStreak();
 			if (refreshClanStatus) refreshClanStatus();
+
 			setRecoveredUid(data.user?.uid);
 			setShowAwakeningModal(true);
 
-			setTimeout(() => {
-				router.replace("/profile");
-			}, 3000);
-
 		} catch (err) {
 			Haptics.notificationAsync(Haptics.NotificationFeedbackType.Error);
-
-			// ⚡️ 1. Backup the history BEFORE the wipe
+			// ⚠️ FAILSAFE: Preserve session history so login buttons remain
 			const rawHistory = storage.getString("session_history");
-
-			// ⚡️ 2. Wipe everything (Clears old/corrupt session data)
 			storage.clearAll();
-
-			// ⚡️ 3. Restore only the history so the login buttons don't disappear
 			if (rawHistory) {
 				storage.set("session_history", rawHistory);
 			}
+			console.log(err);
 
 			notify("Access Denied", err.message);
-			setIsProcessing(false);
+			setIsProcessing(false)
+			setIsQuickLogin(false);
 		}
 	};
 
-	const handleAction = async (pin = null) => {
+	const handleAction = async (pin = "") => {
 		if (isProcessing) return;
 		setIsProcessing(true);
 		Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Heavy);
@@ -430,6 +469,7 @@ export default function FirstLaunchScreen() {
 				deviceId: fingerprint.softwareId,
 				hardwareId: fingerprint.hardwareId,
 				pushToken,
+				pin: ""
 			};
 
 			if (isRecoveryMode) {
@@ -437,7 +477,6 @@ export default function FirstLaunchScreen() {
 			} else {
 				payload.username = username.trim();
 				payload.referredBy = referrerCode.trim();
-				// ⚡️ UPDATED: Send everything in favAnimes
 				payload.preferences = {
 					favAnimes: selectedAnimes,
 					favGenres: selectedGenres,
@@ -445,8 +484,7 @@ export default function FirstLaunchScreen() {
 				};
 			}
 
-			// Include PIN if provided from modal
-			if (pin) {
+			if (typeof pin == "string") {
 				payload.pin = pin;
 			}
 
@@ -455,20 +493,35 @@ export default function FirstLaunchScreen() {
 				body: JSON.stringify(payload),
 			});
 
-			if (!res) throw new Error("No response from server.");
+			// if (!res) throw new Error("No response from server.");
 			const data = await res.json();
+			console.log("data is", data);
 
-			// ⚡️ NEW: Check if PIN is required (401 with ENCRYPTION_REQUIRED)
 			if (res.status === 401 && data.message?.includes("ENCRYPTION_REQUIRED")) {
 				setIsProcessing(false);
-				// Store recovery data for retry after PIN
-				setPendingRecoveryData({ fingerprint, pushToken });
-				setShowPinModal(true);
+				CustomAlert(data.message, data.detail, [
+					{ text: "Cancel", style: "cancel", onPress: () => setAccessGate(true) },
+					{
+						text: "Decrypt",
+						style: "default",
+						onPress: () => {
+							setAccessGate(true)
+							setPendingRecoveryData({ fingerprint, pushToken });
+							setShowPinModal(true);
+						}
+					}
+				]);
 				return;
 			}
 
 			if (!res.ok) throw new Error(data.message || "Operation failed");
-			console.log(data);
+
+			// 🛡️ SECURITY UPGRADE: SAVE TO SECURE STORE
+			// We save the tokens separately from the profile for security
+			if (data.accessToken && data.refreshToken) {
+				await SecureStore.setItemAsync('userToken', data.accessToken);
+				await SecureStore.setItemAsync('refreshToken', data.refreshToken);
+			}
 
 			const userData = {
 				deviceId: data.user?.deviceId,
@@ -484,19 +537,33 @@ export default function FirstLaunchScreen() {
 				}
 			};
 
+			// Standard storage for UI data
 			storage.set("mobileUser", JSON.stringify(userData));
+
 			setUser(userData);
-			syncApiUser(userData); // Ensure API headers are set immediately
+			syncApiUser(userData);
+
+			if (data.sessionData) {
+				const { followedClans, ...onboardingFlags } = data.sessionData;
+				// Save followed clans (as JSON string array)
+				storage.set("followed_clans", JSON.stringify(followedClans || []));
+				// Save onboarding flags individually
+				storage.set("HAS_SEEN_CLAN_UPDATE", onboardingFlags.HAS_SEEN_CLAN_UPDATE || "true");
+				storage.set("has_seen_profile_onboarding", onboardingFlags.has_seen_profile_onboarding ? "true" : "false");
+				storage.set("HAS_SEEN_COINS_V3", onboardingFlags.HAS_SEEN_COINS_V3 || "true");
+				storage.set("HAS_SEEN_PEAK_V5", onboardingFlags.HAS_SEEN_PEAK_V5 || "true");
+				storage.set("HAS_SEEN_STORE_V4", onboardingFlags.HAS_SEEN_STORE_V4 || "true");
+				storage.set("HAS_SEEN_WELCOME", onboardingFlags.HAS_SEEN_WELCOME || "true");
+			}
 			if (refreshStreak) refreshStreak();
 
 			Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
-
 			if (isRecoveryMode) {
 				setRecoveredUid(data.user?.uid);
 				setShowAwakeningModal(true);
 			} else {
 				storage.set("trigger_first_post", 1);
-				setTimeout(() => router.replace("/authordiary"), 1000);
+				setTimeout(() => router.replace("/profile"), 1000);
 			}
 
 		} catch (err) {
@@ -509,9 +576,14 @@ export default function FirstLaunchScreen() {
 	// ⚡️ NEW: Handler for PIN modal success
 	const handlePinSuccess = async (verifiedPin) => {
 		setShowPinModal(false);
+
 		if (verifiedPin) {
 			// Retry recovery with the verified PIN
-			await handleAction(verifiedPin);
+			if (isQuickLogin) {
+				await handleQuickLogin({ pin: verifiedPin });
+			} else {
+				await handleAction(verifiedPin);
+			}
 		}
 	};
 
@@ -577,7 +649,7 @@ export default function FirstLaunchScreen() {
 								{recentSessions.map((session, idx) => (
 									<TouchableOpacity
 										key={`${session.uid}-${idx}`}
-										onPress={() => handleQuickLogin(session)}
+										onPress={() => handleQuickLogin({ session: session })}
 										className="items-center"
 									>
 										<View style={{ borderColor: THEME.accent }} className="p-1 rounded-[24px] border-2 shadow-[0_0_15px_rgba(6,182,212,0.3)]">
@@ -618,37 +690,6 @@ export default function FirstLaunchScreen() {
 						</TouchableOpacity>
 					</Animated.View>
 				</View>
-
-				<Modal visible={showAwakeningModal} transparent animationType="fade">
-					<View className="flex-1 bg-black/90 items-center justify-center p-8">
-						<Animated.View entering={ZoomIn.duration(400).springify()} className="bg-zinc-900 border-2 border-blue-500 p-8 rounded-[40px] w-full items-center shadow-[0_0_50px_rgba(59,130,246,0.3)]">
-							<MaterialCommunityIcons name="auto-fix" size={50} color="#3b82f6" />
-							<Text className="text-blue-500 font-black uppercase tracking-widest text-[10px] mt-4">Legacy Account Detected</Text>
-							<Text className="text-2xl font-black italic text-white uppercase text-center mt-2">Identity Awakened</Text>
-
-							<View className="bg-black/50 p-6 rounded-2xl border border-blue-500/20 my-6 w-full">
-								<Text className="text-gray-500 text-[9px] font-black uppercase text-center mb-2 tracking-widest">New Operative UID</Text>
-								<Text className="text-blue-400 font-mono text-lg text-center font-bold tracking-tighter" selectable>
-									{recoveredUid}
-								</Text>
-							</View>
-
-							<Text className="text-gray-400 text-[11px] text-center leading-5 mb-8 font-medium px-2">
-								Your profile has been upgraded to the ORE-DA global standard. Save this UID; it is now your permanent key to the system.
-							</Text>
-
-							<TouchableOpacity
-								onPress={() => {
-									setShowAwakeningModal(false);
-									router.replace("/authordiary");
-								}}
-								className="bg-blue-600 py-4 px-10 rounded-[20px] w-full items-center shadow-lg shadow-blue-500/30"
-							>
-								<Text className="text-white font-black uppercase text-xs tracking-widest">Enter System</Text>
-							</TouchableOpacity>
-						</Animated.View>
-					</View>
-				</Modal>
 
 				{/* ⚡️ NEW: Neural PIN Modal for Recovery */}
 				<NeuralPinModal
@@ -702,7 +743,7 @@ export default function FirstLaunchScreen() {
 			<View className="flex-1 px-8 pt-20">
 				<TouchableOpacity
 					onPress={() => setAccessGate(true)}
-					className="absolute top-16 left-6 z-50 p-2"
+					className="absolute top-16 left-6 z-30 p-2"
 				>
 					<Ionicons name="chevron-back" size={24} color={THEME.textSecondary} />
 				</TouchableOpacity>

@@ -13,7 +13,7 @@ const API_URL = "https://oreblogda.com";
 
 const fetcher = (url) => apiFetch(url).then(res => res.json());
 
-export default function Poll({ poll, postId, readOnly = false }) {
+export default function Poll({ poll, isVisible, postId, readOnly = false }) {
     const storage = useMMKV(); // ⚡️ Initialized safely inside the component
     const { user } = useUser();
     const pathname = usePathname();
@@ -28,16 +28,19 @@ export default function Poll({ poll, postId, readOnly = false }) {
 
     // --- SWR: live post (poll source of truth) ---
     const { data, mutate } = useSWR(
-        postId ? `${API_URL}/api/posts/${postId}` : null,
+        postId ? `/posts/${postId}` : null,
         fetcher,
         {
-            refreshInterval: 5000,
+            refreshInterval: isVisible ? 5000 : 180000,
             revalidateOnFocus: true,
             dedupingInterval: 0,
         }
     );
+    const livePoll = data?.poll ? data?.poll : poll;
+    // --- Server-driven vote status (priority) ---
+    const serverVoteStatus = livePoll?.hasVoted;
 
-    const livePoll = data?.poll || poll;
+    const serverVotedOptions = livePoll?.userVotedOptions || [];
 
     const displayOptions = isPostPage
         ? livePoll.options
@@ -45,30 +48,17 @@ export default function Poll({ poll, postId, readOnly = false }) {
 
     const hasMoreOptions = !isPostPage && livePoll.options?.length > 2;
 
-    // --- 🛡️ TWO-LAYER VOTE DETECTION ---
+    // Init selected from server if voted
     useEffect(() => {
-        if (!postId) return;
-
-        const localVoteKey = `voted_poll_${postId}`;
-
-        // 1. Check local fast-memory first
-        const hasVotedLocally = storage.getBoolean(localVoteKey);
-
-        // 2. Check server truth
-        const hasVotedOnServer = user?.deviceId && livePoll?.voters?.includes(user.deviceId);
-
-        if (hasVotedLocally || hasVotedOnServer) {
+        if (serverVoteStatus) {
+            setSelectedOptions(serverVotedOptions);
             setSubmitted(true);
-
-            // Auto-sync: Rewrite local cache if the server knows they voted but cache is empty
-            if (hasVotedOnServer && !hasVotedLocally) {
-                storage.set(localVoteKey, true);
-            }
         }
-    }, [livePoll?.voters, user?.deviceId, postId, storage]);
+    }, [serverVoteStatus, serverVotedOptions]);
 
     const handleOptionChange = (optionIndex) => {
-        if (readOnly || submitted) return;
+        // Disable changes if already voted per server
+        if (readOnly || serverVoteStatus) return;
 
         if (livePoll.pollMultiple) {
             setSelectedOptions((prev) =>
@@ -113,7 +103,7 @@ export default function Poll({ poll, postId, readOnly = false }) {
         );
 
         try {
-            const res = await apiFetch(`${API_URL}/api/posts/${postId}`, {
+            const res = await apiFetch(`/posts/${postId}`, {
                 method: "PATCH",
                 body: JSON.stringify({
                     action: "vote",
@@ -174,9 +164,11 @@ export default function Poll({ poll, postId, readOnly = false }) {
                         <Pressable
                             key={i}
                             onPress={() => !readOnly && !submitted && handleOptionChange(i)}
-                            className={`mb-3 w-full p-4 rounded-2xl border ${isSelected
-                                ? "border-blue-600 bg-blue-600/5 dark:bg-blue-600/10"
-                                : "border-gray-100 dark:border-gray-800 bg-gray-50 dark:bg-gray-900/50"
+                            className={`mb-3 w-full p-4 rounded-2xl border ${serverVoteStatus && serverVotedOptions.includes(i)
+                                ? "border-green-600 bg-green-600/5 dark:bg-green-600/10"
+                                : isSelected
+                                    ? "border-blue-600 bg-blue-600/5 dark:bg-blue-600/10"
+                                    : "border-gray-100 dark:border-gray-800 bg-gray-50 dark:bg-gray-900/50"
                                 }`}
                         >
                             <View className="flex-row items-start justify-between mb-3">

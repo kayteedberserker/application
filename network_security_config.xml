@@ -1,0 +1,24 @@
+<?xml version="1.0" encoding="utf-8"?>
+<network-security-config>
+    <domain-config>
+        <domain includeSubdomains="true">oreblogda.com</domain>
+        <pin-set>
+            <!-- Let's Encrypt R3 (Intermediate) - Valid until 2025/2026 -->
+            <pin digest="SHA-256">jQ9UES9h47YWrqPxIslWFYBX9O7S9GU0S2v9/S01y2g=</pin>
+            
+            <!-- ISRG Root X1 (Root) - Valid until 2035 -->
+            <pin digest="SHA-256">C5+OTf6MRpT69Rizh4niTcxqnre/+UihV5u5mYV70lM=</pin>
+
+            <!-- Backup: Let's Encrypt E1 (In case they switch to Elliptic Curve) -->
+            <pin digest="SHA-256">989vY766No0AnZp00Wms0S2Fp277+MAnx+pZ8U3zL78=</pin>
+        </pin-set>
+    </domain-config>
+    
+    <!-- This allows your local dev server to work without pinning -->
+    <debug-config>
+        <trust-anchors>
+            <certificates src="user" />
+            <certificates src="system" />
+        </trust-anchors>
+    </debug-config>
+</network-security-config>

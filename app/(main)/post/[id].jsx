@@ -14,6 +14,7 @@ import { useSafeAreaInsets } from "react-native-safe-area-context";
 // ⚡️ Swapped to MMKV
 import { useMMKV } from 'react-native-mmkv';
 
+import { ScrollViewObserver } from 'react-native-use-in-view';
 import CommentSection from "../../../components/CommentSection";
 import PostCard from "../../../components/PostCard";
 import { SyncLoading } from '../../../components/SyncLoading';
@@ -215,80 +216,81 @@ export default function PostDetailScreen() {
           style={[streamStyle, { shadowColor: '#3b82f6', shadowRadius: 4, shadowOpacity: 0.5 }]}
         />
       </View>
-
-      <ScrollView
-        ref={scrollRef}
-        onScroll={(e) => {
-          DeviceEventEmitter.emit("onScroll", e.nativeEvent.contentOffset.y);
-        }}
-        scrollEventThrottle={16}
-        style={{ flex: 1 }}
-        contentContainerStyle={{
-          paddingTop: insets.top + 20,
-          paddingBottom: insets.bottom + 100,
-          paddingHorizontal: 16
-        }}
-      >
-        {/* --- BREADCRUMB HUD --- */}
-        <View className="flex-row items-center gap-2 mb-6 px-1">
-          <View className={`h-1.5 w-1.5 rounded-full ${isOffline ? 'bg-orange-500' : 'bg-green-500'}`} />
-          <Text className={`text-[10px] font-black tracking-widest uppercase ${isOffline ? 'text-orange-500' : 'text-blue-600'}`}>
-            {isOffline ? "OFFLINE_CACHE" : "INTEL_STREAM"}
-          </Text>
-          <View className="h-[1px] w-8 bg-gray-200 dark:bg-gray-800" />
-          <Text
-            numberOfLines={1}
-            className="text-[10px] font-bold text-gray-500 dark:text-gray-400 uppercase tracking-widest flex-1"
-          >
-            {post?.category || "Unclassified"}
-          </Text>
-        </View>
-
-        {/* --- MAIN CONTENT SECTOR --- */}
-        <View className="mb-8 relative">
-          <PostCard
-            post={post}
-            // ⚡️ INJECTING BACKEND PROPS
-            authorData={post.authorData}
-            clanData={post.clanData}
-            isFeed={false}
-            posts={[post]}
-            setPosts={() => { }}
-            hideComments={true}
-            isDark={isDark}
-          />
-        </View>
-
-        {/* --- COMMS CHANNEL (Comment Section) --- */}
-        <View
-          className="mb-10"
-          onLayout={(event) => {
-            commentSectionY.current = event.nativeEvent.layout.y;
+      <ScrollViewObserver>
+        <ScrollView
+          ref={scrollRef}
+          onScroll={(e) => {
+            DeviceEventEmitter.emit("onScroll", e.nativeEvent.contentOffset.y);
+          }}
+          scrollEventThrottle={16}
+          style={{ flex: 1 }}
+          contentContainerStyle={{
+            paddingTop: insets.top + 20,
+            paddingBottom: insets.bottom + 100,
+            paddingHorizontal: 16
           }}
         >
-          <View className="flex-row items-center gap-2 mb-4 px-2">
-            <View className="w-1.5 h-1.5 bg-blue-600 rounded-full" />
-            <Text className="text-[11px] font-[900] uppercase tracking-[0.2em] text-gray-900 dark:text-white">
-              Comms_Channel
+          {/* --- BREADCRUMB HUD --- */}
+          <View className="flex-row items-center gap-2 mb-6 px-1">
+            <View className={`h-1.5 w-1.5 rounded-full ${isOffline ? 'bg-orange-500' : 'bg-green-500'}`} />
+            <Text className={`text-[10px] font-black tracking-widest uppercase ${isOffline ? 'text-orange-500' : 'text-blue-600'}`}>
+              {isOffline ? "OFFLINE_CACHE" : "INTEL_STREAM"}
             </Text>
-            {isOffline && (
-              <Text className="text-[9px] font-bold text-orange-500 uppercase tracking-wide ml-auto">
-                (Read Only)
-              </Text>
-            )}
+            <View className="h-[1px] w-8 bg-gray-200 dark:bg-gray-800" />
+            <Text
+              numberOfLines={1}
+              className="text-[10px] font-bold text-gray-500 dark:text-gray-400 uppercase tracking-widest flex-1"
+            >
+              {post?.category || "Unclassified"}
+            </Text>
           </View>
 
-          <View className="bg-gray-50/50 dark:bg-gray-900/30 rounded-[32px] border border-gray-100 dark:border-blue-900/20 p-1">
-            <CommentSection
-              slug={post?.slug}
-              postId={post?._id}
-              mutatePost={() => { }}
-              isOffline={isOffline}
-              discussionIdfromPage={discussionId}
+          {/* --- MAIN CONTENT SECTOR --- */}
+          <View className="mb-8 relative">
+            <PostCard
+              post={post}
+              // ⚡️ INJECTING BACKEND PROPS
+              authorData={post.authorData}
+              clanData={post.clanData}
+              isFeed={false}
+              posts={[post]}
+              setPosts={() => { }}
+              hideComments={true}
+              isDark={isDark}
             />
           </View>
-        </View>
-      </ScrollView>
+
+          {/* --- COMMS CHANNEL (Comment Section) --- */}
+          <View
+            className="mb-10"
+            onLayout={(event) => {
+              commentSectionY.current = event.nativeEvent.layout.y;
+            }}
+          >
+            <View className="flex-row items-center gap-2 mb-4 px-2">
+              <View className="w-1.5 h-1.5 bg-blue-600 rounded-full" />
+              <Text className="text-[11px] font-[900] uppercase tracking-[0.2em] text-gray-900 dark:text-white">
+                Comms_Channel
+              </Text>
+              {isOffline && (
+                <Text className="text-[9px] font-bold text-orange-500 uppercase tracking-wide ml-auto">
+                  (Read Only)
+                </Text>
+              )}
+            </View>
+
+            <View className="bg-gray-50/50 dark:bg-gray-900/30 rounded-[32px] border border-gray-100 dark:border-blue-900/20 p-1">
+              <CommentSection
+                slug={post?.slug}
+                postId={post?._id}
+                mutatePost={() => { }}
+                isOffline={isOffline}
+                discussionIdfromPage={discussionId}
+              />
+            </View>
+          </View>
+        </ScrollView>
+      </ScrollViewObserver>
     </View>
   );
 }
