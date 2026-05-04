@@ -3,7 +3,7 @@ import { Ionicons, MaterialCommunityIcons } from '@expo/vector-icons';
 import { LinearGradient } from 'expo-linear-gradient';
 import { useGlobalSearchParams, usePathname, useRouter } from "expo-router";
 import { memo, useCallback, useEffect, useRef, useState } from "react";
-import { FlatList, Modal, Pressable, TouchableOpacity, View } from "react-native";
+import { DeviceEventEmitter, FlatList, Modal, Pressable, TouchableOpacity, View } from "react-native";
 import { useMMKV } from 'react-native-mmkv';
 import Animated, { Easing, cancelAnimation, useAnimatedStyle, useSharedValue, withRepeat, withTiming } from 'react-native-reanimated';
 import useSWR from 'swr';
@@ -144,6 +144,7 @@ export default function CategoryNav({ isDark }) {
     });
 
     const rawPills = data?.pills || [];
+
     const activeCount = rawPills.filter(pill => (viewCounts[pill._id] || 0) < MAX_VIEWS_MARQUEE).length;
 
     const filteredPills = rawPills.filter(pill => {
@@ -186,7 +187,7 @@ export default function CategoryNav({ isDark }) {
 
     const handleCategoryPress = useCallback((categoryId) => {
         if (id === categoryId) return;
-        router.push(`/categories/${categoryId}`);
+        DeviceEventEmitter.emit("navigateSafely", `/categories/${categoryId}`)
     }, [id, router]);
 
     const renderItem = useCallback(({ item }) => {
@@ -217,7 +218,7 @@ export default function CategoryNav({ isDark }) {
                 </View>
                 {item.link && (
                     <TouchableOpacity
-                        onPress={() => { router.push(item.link); markSeen(item._id); setShowModal(false); }}
+                        onPress={() => { DeviceEventEmitter.emit("navigateSafely", item.link); markSeen(item._id); setShowModal(false); }}
                         activeOpacity={0.7}
                     >
                         <LinearGradient

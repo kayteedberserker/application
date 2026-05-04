@@ -99,21 +99,26 @@ export const apiFetch = async (endpoint, options = {}) => {
     ...options.headers,
   };
 
+  // Prevent application/json for FormData
   if (options.body && !(options.body instanceof FormData) && !headers["Content-Type"]) {
     headers["Content-Type"] = "application/json";
   }
+
+  // ✅ CRITICAL FIX: Only stringify if it's a plain object and NOT FormData
+  const isObject = options.body && typeof options.body === 'object';
+  const isFormData = options.body instanceof FormData;
 
   const fetchOptions = {
     ...options,
     method,
     headers,
-    body: options.body && typeof options.body === 'object' ? JSON.stringify(options.body) : options.body
+    body: (isObject && !isFormData) ? JSON.stringify(options.body) : options.body
   };
 
   try {
     const response = await fetch(url, fetchOptions);
 
-    // Bypass Interception for GET requests (As per previous request)
+    // Bypass Interception for GET requests
     if (method === 'GET') {
       return response;
     }
@@ -132,18 +137,14 @@ export const apiFetch = async (endpoint, options = {}) => {
 
     // 2. Handle Token Expiry
     if (response.status === 421 && data.message?.includes("TOKEN_EXPIRED")) {
-
-      // All concurrent requests will hit this, but attemptTokenRefresh will only fire ONCE
       const refreshSuccess = await attemptTokenRefresh();
 
       if (refreshSuccess) {
         const newToken = await SecureStore.getItemAsync('userToken');
         const retryHeaders = { ...headers, "Authorization": `Bearer ${newToken}` };
-        // Retry with the fresh token
         return await apiFetch(url, { ...options, headers: retryHeaders });
       }
 
-      // If refresh fails, try PIN callback
       if (requestPinCallback) {
         const pinSuccess = await requestPinCallback();
         if (pinSuccess) {
@@ -164,4 +165,4 @@ export const apiFetch = async (endpoint, options = {}) => {
   }
 };
 
-export default apiFetch
+export default apiFetch;

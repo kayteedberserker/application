@@ -61,64 +61,6 @@ const LIMIT = 5;
 
 const fetcher = (url) => apiFetch(url).then((res) => res.json());
 
-const getAuraVisuals = (rank) => {
-    const AURA_PURPLE = '#a78bfa';
-    let visualConfig = {
-        color: AURA_PURPLE,
-        label: 'AURA OPERATIVE',
-        icon: 'target',
-        description: 'Your standing in the global hierarchy. Increase your points by engaging and posting logs.'
-    };
-
-    if (!rank || rank <= 0) return visualConfig;
-
-    if (rank === 1) {
-        visualConfig.color = '#fbbf24';
-        visualConfig.label = 'MONARCH';
-        visualConfig.icon = 'crown';
-        visualConfig.description = 'The absolute peak of the hierarchy. You command the shadows of the network.';
-    } else if (rank === 2) {
-        visualConfig.color = '#ef4444';
-        visualConfig.label = 'YONKO';
-        visualConfig.icon = 'flare';
-        visualConfig.description = 'An Emperor of the New World. Your influence is felt across all sectors.';
-    } else if (rank === 3) {
-        visualConfig.color = '#a855f7';
-        visualConfig.label = 'KAGE';
-        visualConfig.icon = 'moon';
-        visualConfig.description = 'The Shadow Leader. Tactical mastery has earned you this seat.';
-    } else if (rank === 4) {
-        visualConfig.color = '#3b82f6';
-        visualConfig.label = 'SHOGUN';
-        visualConfig.icon = 'shield-star';
-        visualConfig.description = 'Supreme Commander. You lead the elite guard with iron resolve.';
-    } else if (rank === 5) {
-        visualConfig.color = '#e0f2fe';
-        visualConfig.label = 'ESPADA 0';
-        visualConfig.icon = 'skull';
-        visualConfig.description = 'The Secret Elite. You have surpassed the limits of the numbered guard.';
-    } else if (rank >= 6 && rank <= 10) {
-        const espadaColors = {
-            6: '#cbd5e1',
-            7: '#94a3b8',
-            8: '#64748b',
-            9: '#475569',
-            10: '#334155'
-        };
-        visualConfig.color = espadaColors[rank];
-        visualConfig.label = `ESPADA ${rank - 5}`;
-        visualConfig.icon = 'sword-cross';
-        visualConfig.description = 'One of the ten elite warriors. Continue your ascent to reach the Top 5.';
-    } else {
-        visualConfig.color = '#1e293b';
-        visualConfig.label = 'Player';
-        visualConfig.icon = 'user';
-        visualConfig.description = 'A standard Player in the field. Increase your Aura to rise.';
-    }
-
-    return visualConfig;
-};
-
 // 🎨 --- RENDERER FOR BACKEND SVGS ---
 const RemoteSvgIcon = ({ xml, size = 50, color }) => {
     if (!xml) return <MaterialCommunityIcons name="help-circle-outline" size={size} color={color || "gray"} />;
@@ -1042,27 +984,52 @@ const AuthorInventoryModal = ({ visible, onClose, user, setUser, isDark, theinve
 };
 
 const getAuraTier = (rank) => {
+    // 🎨 Global Constants
     const MONARCH_GOLD = '#fbbf24';
-    const CRIMSON_RED = '#ef4444';
+    const JADE_GREEN = '#10b981';    // 🐉 Yonko (Consistent Jade)
     const SHADOW_PURPLE = '#a855f7';
     const STEEL_BLUE = '#3b82f6';
-    const REI_WHITE = '#e0f2fe';
+
+    // ⚔️ Progressive Espada Gradient (Brightest -> Darkest)
+    const ESPADA_0 = '#f43f5e'; // Bright Rose (Rank 5)
+    const ESPADA_1 = '#e11d48'; // Vibrant Ruby
+    const ESPADA_2 = '#be123c'; // Royal Crimson
+    const ESPADA_3 = '#9f1239'; // Deep Crimson
+    const ESPADA_4 = '#881337'; // Dark Wine
+    const ESPADA_5 = '#4c0519'; // Black Cherry (Rank 10)
 
     if (!rank || rank > 10 || rank <= 0) return { color: '#3b82f6', label: 'ACTIVE', icon: 'radar' };
+
     switch (rank) {
-        case 1: return { color: MONARCH_GOLD, label: 'MONARCH', icon: 'crown' };
-        case 2: return { color: CRIMSON_RED, label: 'YONKO', icon: 'flare' };
-        case 3: return { color: SHADOW_PURPLE, label: 'KAGE', icon: 'moon-waxing-crescent' };
-        case 4: return { color: STEEL_BLUE, label: 'SHOGUN', icon: 'shield-star' };
-        case 5: return { color: REI_WHITE, label: 'ESPADA 0', icon: 'skull' };
-        case 6: return { color: '#cbd5e1', label: 'ESPADA 1', icon: 'sword-cross' };
-        case 7: return { color: '#94a3b8', label: 'ESPADA 2', icon: 'sword-cross' };
-        case 8: return { color: '#64748b', label: 'ESPADA 3', icon: 'sword-cross' };
-        case 9: return { color: '#475569', label: 'ESPADA 4', icon: 'sword-cross' };
-        case 10: return { color: '#334155', label: 'ESPADA 5', icon: 'sword-cross' };
-        default: return { color: '#1e293b', label: 'VANGUARD', icon: 'shield-check' };
+        case 1:
+            return { color: MONARCH_GOLD, label: 'MONARCH', icon: 'crown' };
+        case 2:
+            return { color: JADE_GREEN, label: 'YONKO', icon: 'flare' };
+        case 3:
+            return { color: SHADOW_PURPLE, label: 'KAGE', icon: 'moon-waxing-crescent' };
+        case 4:
+            return { color: STEEL_BLUE, label: 'SHOGUN', icon: 'shield-star' };
+
+        // --- ESPADA RANKS (Progressive & Unique) ---
+        case 5:
+            return { color: ESPADA_0, label: 'ESPADA 0', icon: 'skull' };
+        case 6:
+            return { color: ESPADA_1, label: 'ESPADA 1', icon: 'sword-cross' };
+        case 7:
+            return { color: ESPADA_2, label: 'ESPADA 2', icon: 'sword-cross' };
+        case 8:
+            return { color: ESPADA_3, label: 'ESPADA 3', icon: 'sword-cross' };
+        case 9:
+            return { color: ESPADA_4, label: 'ESPADA 4', icon: 'sword-cross' };
+        case 10:
+            return { color: ESPADA_5, label: 'ESPADA 5', icon: 'sword-cross' };
+
+        default:
+            return { color: '#1e293b', label: 'VANGUARD', icon: 'shield-check' };
     }
 };
+
+
 export const AURA_TIERS = [
     { level: 1, req: 0, title: "E-Rank Novice", icon: "🌱", color: "#94a3b8" },
     { level: 2, req: 100, title: "D-Rank Operative", icon: "⚔️", color: "#34d399" },

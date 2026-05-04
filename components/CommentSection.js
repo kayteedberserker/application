@@ -176,7 +176,7 @@ const SingleComment = ({ comment, isDark, onOpenDiscussion, stickerCache, storag
 };
 
 const DiscussionDrawer = ({ visible, isDark, comment, onClose, onReply, isPosting, slug, highlightId, stickerCache, storage }) => {
-    const [replyText, setReplyText] = useState("");
+    const [replyText, setReplyText] = useState("")
     const [showJumpToBottom, setShowJumpToBottom] = useState(false);
     const [stickerModalVisible, setStickerModalVisible] = useState(false); // NEW STATE
 

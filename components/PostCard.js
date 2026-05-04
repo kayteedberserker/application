@@ -641,7 +641,6 @@ const PostCardComponent = ({ post, authorData, clanData, setPosts, isFeed, hideM
     // ⚡️ USE SERVER-PROVIDED hasLiked FIRST, THEN FALLBACK TO STORAGE
     useEffect(() => {
         // Priority 1: Use server-provided hasLiked (from API)
-        console.log("post has been liked to: ", post.hasLiked, post.title);
 
         if (post?.hasLiked !== undefined && post?.hasLiked !== null) {
             setLiked(post.hasLiked);

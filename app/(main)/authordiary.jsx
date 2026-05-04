@@ -1488,9 +1488,11 @@ export default function AuthorDiaryDashboard() {
 // ============================================================================
 const AnimatedWord = ({ word, index, style }) => {
     const opacity = useSharedValue(0);
-    const translateY = useSharedValue(10)
+    const translateY = useSharedValue(10);
 
     useEffect(() => {
+        // Performance tip: If this lags on Android, you might want to remove the Haptics 
+        // here. Firing haptics 40 times in a row for a long paragraph can overload the thread!
         const timer = setTimeout(() => { Haptics.selectionAsync(); }, index * 150);
         opacity.value = withDelay(index * 150, withTiming(1, { duration: 600, easing: Easing.out(Easing.ease) }));
         translateY.value = withDelay(index * 150, withTiming(0, { duration: 600, easing: Easing.out(Easing.back(1.5)) }));
@@ -1502,7 +1504,8 @@ const AnimatedWord = ({ word, index, style }) => {
         transform: [{ translateY: translateY.value }]
     }));
 
-    return <Animated.Text style={[style, animStyle, { marginRight: 6 }]}>{word}</Animated.Text>;
+    // Removed the inline marginRight to prevent off-center layout skewing
+    return <Animated.Text style={[style, animStyle]}>{word}</Animated.Text>;
 };
 
 const PremiumTextReveal = ({ text, style }) => {
@@ -1512,7 +1515,17 @@ const PremiumTextReveal = ({ text, style }) => {
     return (
         <View style={{ alignItems: 'center', width: '100%' }}>
             {lines.map((line, lineIndex) => (
-                <View key={`line-${lineIndex}`} style={{ flexDirection: 'row', flexWrap: 'wrap', justifyContent: 'center', marginBottom: line === '' ? 12 : 0 }}>
+                <View
+                    key={`line-${lineIndex}`}
+                    style={{
+                        flexDirection: 'row',
+                        flexWrap: 'wrap',
+                        justifyContent: 'center',
+                        marginBottom: line === '' ? 16 : 0,
+                        columnGap: 5, // Replaces the marginRight on the text
+                        rowGap: 2   // Adds proper breathing room when text wraps
+                    }}
+                >
                     {line.split(' ').map((word, wIndex) => {
                         if (word === '') return null;
                         const currentIndex = globalWordIndex++;

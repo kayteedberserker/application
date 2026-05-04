@@ -1,8 +1,7 @@
 import { MaterialCommunityIcons } from '@expo/vector-icons';
 import { LinearGradient } from 'expo-linear-gradient';
-import { useRouter } from 'expo-router';
 import { useEffect, useMemo, useState } from 'react';
-import { Dimensions, Pressable, ScrollView, View } from 'react-native';
+import { DeviceEventEmitter, Dimensions, Pressable, ScrollView, View } from 'react-native';
 import { useMMKV } from 'react-native-mmkv';
 import Animated, {
     Easing,
@@ -23,8 +22,10 @@ import { useUser } from '../context/UserContext';
 const { width: SCREEN_WIDTH } = Dimensions.get('window');
 const fetcher = url => apiFetch(url).then(res => res.json());
 
-// ⚡️ Max times a specific pill loops in marquee before being hidden from the bar
-const MAX_VIEWS_MARQUEE = 3;
+// ⚡️ Logic Constants
+const MAX_VIEWS_MARQUEE = 1; // Show each pill exactly once
+const BATCH_SIZE = 5;        // Show 5 pills per session
+const COOLDOWN_MS = 5 * 60 * 1000; // 5 minutes cooldown
 
 const getPillTheme = (type) => {
     switch (type) {
@@ -34,12 +35,15 @@ const getPillTheme = (type) => {
         case 'drop': return { color: '#10b981', icon: 'diamond-stone' };
         case 'aura_gain': return { color: '#06b6d4', icon: 'flash' };
         case 'clan_points': return { color: '#22c55e', icon: 'shield-star' };
+        case 'post_vote': return { color: '#f97316', icon: 'thumb-up-outline' };
         case 'post_like': return { color: '#ef4444', icon: 'heart-outline' };
-        case 'post_rejection': return { color: '#ef4444', icon: 'alert-outline' };
         case 'post_comment': return { color: '#3b82f6', icon: 'message-outline' };
+        case 'post_discussion': return { color: '#ec4899', icon: 'forum' };
         case 'post_reply': return { color: '#10b981', icon: 'reply' };
         case 'clan_post': return { color: '#f59e0b', icon: 'post-outline' };
         case 'clan_message': return { color: '#8b5cf6', icon: 'forum-outline' };
+        case 'clan_alert': return { color: '#ef4444', icon: 'shield-alert-outline' };
+        case 'clan_request': return { color: '#0ea5e9', icon: 'shield-account-outline' };
         case 'system':
         default: return { color: '#3b82f6', icon: 'console' };
     }
@@ -49,7 +53,6 @@ export default function GlobalMarquee({ isDark }) {
     const { user } = useUser();
     const { userClan } = useClan();
     const storage = useMMKV();
-    const router = useRouter();
 
     const userId = user?._id || '';
     const clanId = userClan?.tag || '';
@@ -58,39 +61,43 @@ export default function GlobalMarquee({ isDark }) {
     const { data } = useSWR(endpoint, fetcher, { refreshInterval: 30000 });
 
     const [viewCounts, setViewCounts] = useState({});
-    const [marqueeVisible, setMarqueeVisible] = useState(true);
+    const [batchCount, setBatchCount] = useState(0);
+    const [nextAvailableTime, setNextAvailableTime] = useState(0);
+    const [marqueeVisible, setMarqueeVisible] = useState(false);
 
-    // Load view counts
+    // Load persisted state (Views, Current Batch Count, and Cooldown Timestamp)
     useEffect(() => {
         try {
-            const stored = storage.getString('pill_views');
-            setViewCounts(stored ? JSON.parse(stored) : {});
+            const storedViews = storage.getString('pill_views');
+            const storedBatch = storage.getNumber('pill_batch_count');
+            const storedCooldown = storage.getNumber('pill_cooldown_time');
+
+            setViewCounts(storedViews ? JSON.parse(storedViews) : {});
+            setBatchCount(storedBatch || 0);
+            setNextAvailableTime(storedCooldown || 0);
         } catch (e) {
             setViewCounts({});
         }
     }, []);
 
-    // Save view counts every 5s
-    useEffect(() => {
-        const timer = setTimeout(() => {
-            storage.set('pill_views', JSON.stringify(viewCounts));
-        }, 5000);
-        return () => clearTimeout(timer);
-    }, [viewCounts]);
+    // ⚡️ Derived Logic: Is the cooldown currently active?
+    const isCoolingDown = Date.now() < nextAvailableTime;
 
     const rawPills = data?.pills || [];
+
+    // Filter for pills never seen before
     const activePills = useMemo(() =>
         rawPills.filter(pill => (viewCounts[pill._id] || 0) < MAX_VIEWS_MARQUEE)
         , [rawPills, viewCounts]);
 
-    // Update marquee visibility
+    // Handle visibility based on cooldown and batch status
     useEffect(() => {
-        if (activePills.length === 0) {
+        if (activePills.length === 0 || isCoolingDown) {
             setMarqueeVisible(false);
         } else {
             setMarqueeVisible(true);
         }
-    }, [activePills.length]);
+    }, [activePills.length, isCoolingDown]);
 
     const [currentIndex, setCurrentIndex] = useState(0);
     const [textWidth, setTextWidth] = useState(0);
@@ -101,21 +108,37 @@ export default function GlobalMarquee({ isDark }) {
 
     const translateX = useSharedValue(0);
 
-    // Mark pill as seen (increments the marquee loop count)
+    // Mark pill as seen and track batch progress
     const markSeen = (pillId) => {
-        setViewCounts(prev => {
-            const newCounts = { ...prev, [pillId]: (prev[pillId] || 0) + 1 };
-            // Cleanup logic to prevent local storage bloat
-            const keys = Object.keys(newCounts).slice(-50);
-            const cleaned = {};
-            keys.forEach(k => cleaned[k] = newCounts[k]);
-            return cleaned;
-        });
+        // 1. Mark individual pill as seen
+        const newViews = { ...viewCounts, [pillId]: (viewCounts[pillId] || 0) + 1 };
+        const keys = Object.keys(newViews).slice(-50);
+        const cleanedViews = {};
+        keys.forEach(k => cleanedViews[k] = newViews[k]);
+
+        setViewCounts(cleanedViews);
+        storage.set('pill_views', JSON.stringify(cleanedViews));
+
+        // 2. Update Batch logic
+        const newBatchCount = batchCount + 1;
+
+        if (newBatchCount >= BATCH_SIZE) {
+            // Batch limit reached: Start 5 min cooldown
+            const cooldownExpiry = Date.now() + COOLDOWN_MS;
+            setBatchCount(0);
+            setNextAvailableTime(cooldownExpiry);
+
+            storage.set('pill_batch_count', 0);
+            storage.set('pill_cooldown_time', cooldownExpiry);
+        } else {
+            setBatchCount(newBatchCount);
+            storage.set('pill_batch_count', newBatchCount);
+        }
     };
 
     // Marquee animation logic
     useEffect(() => {
-        if (!currentPill) return;
+        if (!currentPill || !marqueeVisible) return;
 
         let timer;
         const containerWidth = SCREEN_WIDTH - 60;
@@ -154,13 +177,13 @@ export default function GlobalMarquee({ isDark }) {
         return () => {
             if (timer) clearTimeout(timer);
         };
-    }, [textWidth, safeIndex, activePills.length, currentPill]);
+    }, [textWidth, safeIndex, activePills.length, currentPill, marqueeVisible]);
 
     const panStyle = useAnimatedStyle(() => ({
         transform: [{ translateX: translateX.value }],
     }));
 
-    if (!marqueeVisible) return null;
+    if (!marqueeVisible || !currentPill) return null;
 
     const themeBg = isDark ? '#050505' : '#ffffff';
     const borderColor = isDark ? 'border-zinc-800' : 'border-zinc-200';
@@ -169,9 +192,13 @@ export default function GlobalMarquee({ isDark }) {
         <View
             className={`w-full border-b z-[100] ${borderColor}`}
             style={{
-                height: 45, backgroundColor: themeBg, position: 'absolute', top: 85,               // ⬅️ Ensure it starts at the top of its parent
+                height: 45,
+                backgroundColor: themeBg,
+                position: 'absolute',
+                top: 85,
                 left: 0,
-                right: 0, overflow: 'hidden'
+                right: 0,
+                overflow: 'hidden'
             }}
         >
             <Animated.View
@@ -184,7 +211,7 @@ export default function GlobalMarquee({ isDark }) {
                     style={{ flex: 1, flexDirection: 'row', alignItems: 'center', height: '100%' }}
                     onPress={() => {
                         if (currentPill?.link) {
-                            router.push(currentPill.link);
+                            DeviceEventEmitter.emit("navigateSafely", currentPill.link)
                             markSeen(currentPill._id);
                         }
                     }}
