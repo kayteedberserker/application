@@ -33,7 +33,8 @@ export default function TopBar({ isDark }) {
     const CustomAlert = useAlert();
     const { streak, loading, refreshStreak } = useStreak();
     const { user, refreshUser } = useUser();
-    const { coins, clanCoins, peakLevel, processTransaction, isProcessingTransaction } = useCoins();
+    const { coins, peakLevel, processTransaction, isProcessingTransaction } = useCoins();
+
     const pathName = usePathname();
 
     const pulse = useSharedValue(1);
@@ -183,7 +184,7 @@ export default function TopBar({ isDark }) {
                 <View className="relative z-50">
                     <TouchableOpacity
                         onPress={handleWalletClick}
-                        className={`flex-row items-center pl-1.5 pr-2 py-1 gap-1.5 rounded-xl border ${isDark ? "bg-white/5 border-white/10" : "bg-gray-50 border-gray-200"}`}
+                        className={`flex-row items-center pl-1.5 pr-2 py-1 px-1 gap-1.5 rounded-xl border ${isDark ? "bg-white/5 border-white/10" : "bg-gray-50 border-gray-200"}`}
                     >
                         {peakLevel > 0 ? (
                             <View className="mr-0.5">
@@ -195,12 +196,6 @@ export default function TopBar({ isDark }) {
                                 <Text className="text-yellow-500 font-black text-[11px] mr-1">{coins || 0}</Text>
                                 {isProcessingTransaction ? <ActivityIndicator size={10} color="#ca8a04" /> : <CoinIcon type="OC" size={14} />}
                             </View>
-                            {clanCoins > 0 ? (
-                                <View className="flex-row items-center mt-[1px]">
-                                    <Text style={{ color: isDark ? "#c084fc" : "#9333ea" }} className="font-black text-[11px] mr-1">{clanCoins}</Text>
-                                    <CoinIcon type="CC" size={14} />
-                                </View>
-                            ) : null}
                         </View>
                     </TouchableOpacity>
 

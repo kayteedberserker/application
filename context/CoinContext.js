@@ -14,6 +14,7 @@ const STORAGE_KEYS = {
 };
 
 const calculatePeakLevel = (totalPurchased) => {
+    if (totalPurchased == 0) return 0;
     if (totalPurchased < 1000) return 1;
     if (totalPurchased < 5000) return 2;
     if (totalPurchased < 10000) return 3;

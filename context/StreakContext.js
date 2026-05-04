@@ -1,8 +1,8 @@
 import apiFetch from "@/utils/apiFetch";
-import { useMMKV } from 'react-native-mmkv';
 import * as Notifications from 'expo-notifications';
 import { createContext, useCallback, useContext, useEffect, useMemo, useRef, useState } from "react";
 import { Platform } from "react-native";
+import { useMMKV } from 'react-native-mmkv';
 
 const StreakContext = createContext();
 const STREAK_CACHE_KEY = "streak_local_cache";
@@ -53,7 +53,7 @@ const scheduleStreakReminders = async (expiresAt, setScheduledList = null) => {
     const expiryDate = new Date(expiresAt).getTime();
     const now = Date.now();
     const GROUP_KEY = "com.oreblogda.STREAK_GROUP";
-    
+
     // 1. 24 Hour Reminder
     const trigger24h = expiryDate - (24 * 60 * 60 * 1000);
     if (trigger24h > now) {
@@ -69,7 +69,7 @@ const scheduleStreakReminders = async (expiresAt, setScheduledList = null) => {
         trigger: {
           type: Notifications.SchedulableTriggerInputTypes.DATE,
           date: new Date(trigger24h),
-          channelId: CHANNEL_ID 
+          channelId: CHANNEL_ID
         },
       });
     }
@@ -82,7 +82,7 @@ const scheduleStreakReminders = async (expiresAt, setScheduledList = null) => {
         content: {
           title: "⚠️ FINAL WARNING",
           body: "2 hours left! Post now!",
-          sound: 'default',
+          sound: true,
           priority: 'high',
           data: { screen: 'CreatePost' },
           android: { channelId: CHANNEL_ID, groupKey: GROUP_KEY },
@@ -126,7 +126,7 @@ const scheduleStreakReminders = async (expiresAt, setScheduledList = null) => {
 
 export function StreakProvider({ children }) {
   // 🔹 Using the hook to get the storage instance
-  const storage = useMMKV(); 
+  const storage = useMMKV();
 
   // ⚡️ LAZY INITIALIZATION: Load from cache synchronously on the very first frame
   const [streakData, setStreakData] = useState(() => {
@@ -147,10 +147,10 @@ export function StreakProvider({ children }) {
 
   // ⚡️ Ensure loading is false instantly if we successfully loaded cached data
   const [loading, setLoading] = useState(() => {
-      const saved = storage.getString(STREAK_CACHE_KEY);
-      return !saved; // Only true if nothing is cached
+    const saved = storage.getString(STREAK_CACHE_KEY);
+    return !saved; // Only true if nothing is cached
   });
-  
+
   const [scheduledList, setScheduledList] = useState([]);
   const isScheduling = useRef(false);
 
@@ -160,13 +160,13 @@ export function StreakProvider({ children }) {
       // This stops the top bar from disappearing/flickering during background refreshes.
       const hasCache = !!storage.getString(STREAK_CACHE_KEY);
       if (!hasCache) setLoading(true);
-      
+
       const userDataRaw = storage.getString("mobileUser");
       if (!userDataRaw) {
         setLoading(false);
         return;
       }
-      
+
       const { deviceId } = JSON.parse(userDataRaw);
       if (!deviceId) {
         setLoading(false);
@@ -184,7 +184,7 @@ export function StreakProvider({ children }) {
       if (res.ok) {
         const data = await res.json();
         setStreakData(data);
-        
+
         // 🔹 Sync to storage instance
         storage.set(STREAK_CACHE_KEY, JSON.stringify(data));
 
@@ -207,7 +207,7 @@ export function StreakProvider({ children }) {
     if (streakData.expiresAt && !isScheduling.current) {
       isScheduling.current = true;
       scheduleStreakReminders(streakData.expiresAt, setScheduledList).finally(() => {
-          isScheduling.current = false;
+        isScheduling.current = false;
       });
     }
 
@@ -219,7 +219,7 @@ export function StreakProvider({ children }) {
     streak: streakData,
     loading,
     refreshStreak: fetchStreak,
-    scheduledList, 
+    scheduledList,
   }), [streakData, loading, fetchStreak, scheduledList]);
 
   return (

@@ -373,7 +373,7 @@ export default function AuthorDiaryDashboard() {
                         content: {
                             title: "Cooldown Finished! 🎉",
                             body: "A post slot has opened up. Share your intel now!",
-                            sound: 'default',
+                            sound: true,
                             priority: 'high',
                             data: { type: "open_diary" },
                             android: {

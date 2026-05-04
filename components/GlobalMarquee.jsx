@@ -35,6 +35,7 @@ const getPillTheme = (type) => {
         case 'aura_gain': return { color: '#06b6d4', icon: 'flash' };
         case 'clan_points': return { color: '#22c55e', icon: 'shield-star' };
         case 'post_like': return { color: '#ef4444', icon: 'heart-outline' };
+        case 'post_rejection': return { color: '#ef4444', icon: 'alert-outline' };
         case 'post_comment': return { color: '#3b82f6', icon: 'message-outline' };
         case 'post_reply': return { color: '#10b981', icon: 'reply' };
         case 'clan_post': return { color: '#f59e0b', icon: 'post-outline' };
@@ -167,7 +168,11 @@ export default function GlobalMarquee({ isDark }) {
     return (
         <View
             className={`w-full border-b z-[100] ${borderColor}`}
-            style={{ height: 36, backgroundColor: themeBg, position: 'relative', overflow: 'hidden' }}
+            style={{
+                height: 45, backgroundColor: themeBg, position: 'absolute', top: 85,               // ⬅️ Ensure it starts at the top of its parent
+                left: 0,
+                right: 0, overflow: 'hidden'
+            }}
         >
             <Animated.View
                 key={`${currentPill?._id}-${currentIndex}`}
@@ -180,9 +185,7 @@ export default function GlobalMarquee({ isDark }) {
                     onPress={() => {
                         if (currentPill?.link) {
                             router.push(currentPill.link);
-                            // Optional: you can manually trigger markSeen here if you want it to disappear 
-                            // immediately from the marquee after a click.
-                            // markSeen(currentPill._id); 
+                            markSeen(currentPill._id);
                         }
                     }}
                 >

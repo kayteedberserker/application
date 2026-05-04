@@ -423,6 +423,7 @@ export default function FirstLaunchScreen() {
 
 				// Save followed clans (as JSON string array)
 				storage.set("followed_clans", JSON.stringify(followedClans || []));
+				storage.set("ONBOARDING_KEY", JSON.stringify(onboardingFlags.ONBOARDING_KEY || "true"));
 
 				// Save onboarding flags individually
 				storage.set("HAS_SEEN_CLAN_UPDATE", onboardingFlags.HAS_SEEN_CLAN_UPDATE || "true");

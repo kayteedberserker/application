@@ -1,14 +1,13 @@
 import { Feather, Ionicons, MaterialCommunityIcons } from "@expo/vector-icons";
 import * as Clipboard from 'expo-clipboard';
+import { Image } from 'expo-image';
 import * as MediaLibrary from 'expo-media-library';
 import { useRouter } from 'expo-router';
 import * as Sharing from 'expo-sharing';
 import { useEffect, useMemo, useRef, useState } from 'react';
 import {
     ActivityIndicator,
-    DeviceEventEmitter,
     Dimensions,
-    Image,
     Keyboard,
     Modal,
     Pressable,
@@ -24,7 +23,7 @@ import { useMMKV } from "react-native-mmkv";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { SvgXml } from "react-native-svg";
 import ViewShot from "react-native-view-shot";
-
+import { Text } from "../../components/Text";
 // ⚡️ Swapped to LegendList for maximum performance
 import { LegendList } from "@legendapp/list";
 
@@ -49,7 +48,6 @@ import ClanCard from "../../components/ClanCard";
 import ClanCrest from "../../components/ClanCrest";
 import CoinIcon from "../../components/ClanIcon";
 import { SyncLoading } from "../../components/SyncLoading";
-import { Text } from "../../components/Text";
 import { useAlert } from "../../context/AlertContext";
 import { useClan } from '../../context/ClanContext';
 import { useCoins } from "../../context/CoinContext";
@@ -297,7 +295,7 @@ const ClanProfile = () => {
     const { userClan, isLoading: clanLoading, canManageClan, userRole, hasUnreadChat, markChatAsRead } = useClan();
     const insets = useSafeAreaInsets();
     const router = useRouter();
-
+    const [selectedMessage, setSelectedMessage] = useState()
     const [fullData, setFullData] = useState(null);
     const [loading, setLoading] = useState(true);
     const [activeTab, setActiveTab] = useState('Dojo');
@@ -786,21 +784,15 @@ const ClanProfile = () => {
                 </View>
 
                 <View className="w-full mt-3">
-                    <Text className="text-[9px] font-black text-gray-400 uppercase tracking-widest mb-3 text-center">Clan Achievements</Text>
-                    <ScrollView
-                        horizontal
-                        showsHorizontalScrollIndicator={false}
-                        contentContainerStyle={{
-                            paddingHorizontal: 10,
-                            flexGrow: 1,
-                            justifyContent: fullData?.badges?.length > 0 ? 'flex-start' : 'center',
-                            alignItems: 'center'
-                        }}
-                    >
-                        {fullData?.badges?.length > 0 ? (
-                            fullData.badges.map((badge, idx) => (
-                                <ClanBadge key={`${badge}-${idx}`} badgeName={badge} size={40} />
-                            ))
+                    <Text className="text-[14px] font-black text-gray-400 uppercase tracking-widest mb-4 text-center">Clan Achievements</Text>
+                    {/* Earned Medals Container */}
+                    <View className="w-full">
+                        {fullData.badges?.length > 0 ? (
+                            <View className="flex-row flex-wrap justify-center gap-2 w-full px-4">
+                                {fullData.badges.map((badge, idx) => (
+                                    <ClanBadge key={`${badge}-${idx}`} isClanPage={true} badgeName={badge} size={50} />
+                                ))}
+                            </View>
                         ) : (
                             <View className="items-center opacity-40 py-2">
                                 <View className="bg-gray-500/10 p-4 rounded-full mb-2">
@@ -811,7 +803,7 @@ const ClanProfile = () => {
                                 </Text>
                             </View>
                         )}
-                    </ScrollView>
+                    </View>
                 </View>
             </View>
 
@@ -901,7 +893,7 @@ const ClanProfile = () => {
             </Modal>
             {activeTab === 'Hall' && (
                 <View className="px-4 pb-4">
-                    <ClanChatInput onSend={handleSendMessage} isDark={isDark} appBlue={APP_BLUE} />
+                    <ClanChatInput onSend={handleSendMessage} copyText={selectedMessage} isDark={isDark} appBlue={APP_BLUE} />
                 </View>
             )}
         </View>
@@ -1014,6 +1006,7 @@ const ClanProfile = () => {
                                     status={fullData.isRecruiting ? "OPEN" : "CLOSED"}
                                     onPress={() => triggerAction("TOGGLE_RECRUIT")}
                                     accent={APP_BLUE}
+                                    isDark={isDark}
                                 />
                                 <View className="mt-8">
                                     <Text className="text-black dark:text-white font-black text-xs mb-4 uppercase tracking-widest italic">Seekers of the Leaf</Text>
@@ -1043,20 +1036,86 @@ const ClanProfile = () => {
                     if (activeTab === 'Scrolls') {
                         return (
                             <View className="px-6 mb-4">
-                                <View className="bg-white dark:bg-zinc-900 border border-gray-100 dark:border-zinc-800 p-5 rounded-2xl flex-row justify-between items-center">
-                                    <Pressable onPress={() => DeviceEventEmitter.emit("navigateSafely", `/post/${item.slug || item._id}`)} className="flex-1 pr-4">
-                                        <Text className="font-black text-sm uppercase tracking-tight text-gray-800 dark:text-gray-200" numberOfLines={1}>
-                                            {item.title || item.message}
-                                        </Text>
-                                        <Text className="text-[9px] font-bold text-blue-600 uppercase tracking-widest mt-1">
-                                            {new Date(item.createdAt).toLocaleDateString()}
-                                        </Text>
-                                    </Pressable>
-                                    {canManageClan && (
-                                        <TouchableOpacity onPress={() => handleDeletePost(item._id)} className="p-3 bg-red-500/10 rounded-xl">
-                                            <Ionicons name="trash-outline" size={18} color="#ef4444" />
+                                <View className="bg-white dark:bg-[#1A1A1A] border border-gray-100 dark:border-gray-800 p-5 rounded-2xl shadow-sm">
+                                    <View className="flex-row justify-between items-start mb-3">
+                                        <Pressable
+                                            onPress={() => router.push(`/post/${item.slug || item._id}`)}
+                                            className="flex-1 pr-4"
+                                        >
+                                            <Text
+                                                className="font-black text-base uppercase tracking-tight text-gray-900 dark:text-white"
+                                                numberOfLines={2}
+                                            >
+                                                {item.title || item.message}
+                                            </Text>
+                                            <View className="flex-row items-center mt-2">
+                                                <View className="bg-blue-500/10 px-2 py-0.5 rounded-md mr-2">
+                                                    <Text className="text-[9px] font-black text-blue-600 dark:text-blue-400 uppercase">
+                                                        {new Date(item.createdAt).toLocaleDateString()}
+                                                    </Text>
+                                                </View>
+                                                {item.category && (
+                                                    <Text className="text-[10px] font-bold text-gray-400 uppercase tracking-widest">
+                                                        • {item.category}
+                                                    </Text>
+                                                )}
+                                            </View>
+                                        </Pressable>
+
+                                        <TouchableOpacity
+                                            onPress={() => handleDelete(item._id)}
+                                            className="p-2 bg-red-50 dark:bg-red-500/10 rounded-lg"
+                                        >
+                                            <Ionicons name="trash-outline" size={16} color="#ef4444" />
                                         </TouchableOpacity>
-                                    )}
+                                    </View>
+
+                                    {/* --- STATS BAR --- */}
+                                    <View className="flex-row items-center justify-between mt-4 pt-4 border-t border-gray-50 dark:border-gray-800/50">
+                                        <View className="flex-row items-center gap-4">
+                                            {/* Likes */}
+                                            <View className="items-center flex-row gap-1">
+                                                <Ionicons name="heart" size={14} color="#ef4444" />
+                                                <Text className="text-gray-600 dark:text-gray-400 text-[11px] font-bold">
+                                                    {item.likesCount || 0}
+                                                </Text>
+                                            </View>
+
+                                            {/* Comments */}
+                                            <View className="items-center flex-row gap-1">
+                                                <Ionicons name="chatbubble" size={14} color="#3b82f6" />
+                                                <Text className="text-gray-600 dark:text-gray-400 text-[11px] font-bold">
+                                                    {item.commentsCount || 0}
+                                                </Text>
+                                            </View>
+
+                                            {/* Discussions - Deep engagement */}
+                                            <View className="items-center flex-row gap-1">
+                                                <Ionicons name="chatbox-ellipses" size={14} color="#f59e0b" />
+                                                <Text className="text-gray-600 dark:text-gray-400 text-[11px] font-bold">
+                                                    {item.discussionCount || 0}
+                                                </Text>
+                                            </View>
+                                        </View>
+
+                                        <View className="flex-row items-center gap-4">
+                                            {/* Views */}
+                                            <View className="items-center flex-row gap-1">
+                                                <Ionicons name="eye" size={14} color={isDark ? "#6b7280" : "#9ca3af"} />
+                                                <Text className="text-gray-600 dark:text-gray-400 text-[11px] font-bold">
+                                                    {item.formattedViews || "0"}
+                                                </Text>
+                                            </View>
+
+                                            {/* Shares (Frontend UI Placeholder) */}
+                                            <View className="items-center flex-row gap-1">
+                                                <Ionicons name="share-social" size={14} color={isDark ? "#6b7280" : "#9ca3af"} />
+                                                <Text className="text-gray-600 dark:text-gray-400 text-[11px] font-bold">
+                                                    {item.sharesCount || 0}
+                                                </Text>
+                                            </View>
+                                        </View>
+                                    </View>
                                 </View>
                             </View>
                         );
@@ -1065,9 +1124,12 @@ const ClanProfile = () => {
                         return <WarHistoryItem war={item} clanTag={userClan.tag} />;
                     }
                     if (activeTab === 'Hall') {
-                        return <ClanMessageItem message={item} isDark={isDark} isMe={item.authorId === user.deviceId} appBlue={APP_BLUE} />;
+                        return <ClanMessageItem onSelectMessage={(msg) => {
+                            console.log("Captured message data:", msg);
+                            setSelectedMessage(msg); // Now 'msg' is accessible outside the component
+                        }} message={item} isDark={isDark} isMe={item.authorId === user.deviceId} appBlue={APP_BLUE} />;
                     }
-                    return null;
+                    return null
                 }}
                 onEndReached={() => {
                     if (activeTab === 'Scrolls' && !isReachingEnd && !isFetchingNextPage) {
@@ -1141,61 +1203,169 @@ const ClanProfile = () => {
 };
 
 
-// 💬 --- CHAT SUBCOMPONENTS ---
-
-const ClanChatInput = ({ onSend, isDark, appBlue }) => {
+const ClanChatInput = ({ onSend, isDark, appBlue, copyText }) => {
     const [text, setText] = useState('');
+    const [isFocused, setIsFocused] = useState(false);
+
+    // ⚡️ Handle external copy events
+    useEffect(() => {
+        if (copyText && copyText.trim().length > 0) {
+            // Append the copied text to the existing text state
+            setText(prev => {
+                const separator = prev.length > 0 ? " " : "";
+                // Kept your preferred order: copyText first
+                return `${copyText}${separator}${prev}`;
+            });
+        }
+    }, [copyText]);
+
+    const handleSend = () => {
+        if (text.trim()) {
+            onSend(text.trim());
+            setText(''); // Clear the state
+            Keyboard.dismiss();
+        }
+    };
 
     return (
-        <View className={`p-2 rounded-[30px] border ${isDark ? 'bg-[#111] border-zinc-800' : 'bg-gray-50 border-gray-200'} flex-row items-center`}>
-            <TextInput
-                className={`flex-1 min-h-[44px] max-h-32 px-5 py-3 font-bold text-sm ${isDark ? 'text-white' : 'text-black'}`}
-                placeholder="Speak to the village..."
-                placeholderTextColor={isDark ? '#52525b' : '#a1a1aa'}
-                multiline
-                value={text}
-                onChangeText={setText}
-                keyboardAppearance={isDark ? "dark" : "light"}
-            />
-            <TouchableOpacity
-                onPress={() => {
-                    if (text.trim()) {
-                        onSend(text.trim());
-                        setText('');
-                        Keyboard.dismiss();
-                    }
-                }}
-                style={{ backgroundColor: text.trim() ? appBlue : (isDark ? '#27272a' : '#e4e4e7') }}
-                className="w-12 h-12 rounded-full items-center justify-center ml-2"
-            >
-                <Ionicons name="send" size={16} color={text.trim() ? 'white' : (isDark ? '#52525b' : '#a1a1aa')} style={{ marginLeft: 3 }} />
-            </TouchableOpacity>
-        </View>
-    );
-};
-
-const ClanMessageItem = ({ message, isMe, isDark, appBlue }) => {
-    return (
-        <View className={`px-6 py-1.5 flex-row ${isMe ? 'justify-end' : 'justify-start'}`}>
+        <View
+            className="px-4 pb-4 pt-2" // Outer container to handle spacing
+        >
             <View
-                className={`max-w-[80%] px-4 py-3 ${isMe ? 'rounded-3xl rounded-tr-sm' : 'rounded-3xl rounded-tl-sm'}`}
-                style={{ backgroundColor: isMe ? appBlue : (isDark ? '#18181b' : '#f4f4f5') }}
+                style={{
+                    // ⚡️ Glassmorphism UI Style
+                    backgroundColor: isDark
+                        ? 'rgba(39, 39, 42, 0.8)'
+                        : 'rgba(255, 255, 255, 0.9)',
+                    borderColor: isFocused
+                        ? appBlue
+                        : (isDark ? 'rgba(255, 255, 255, 0.1)' : 'rgba(0, 0, 0, 0.05)'),
+                    borderWidth: 1.5,
+                    borderRadius: 32,
+                    // Glow effect when typing
+                    shadowColor: isFocused ? appBlue : "#000",
+                    shadowOffset: { width: 0, height: 4 },
+                    shadowOpacity: isFocused ? 0.3 : 0.1,
+                    shadowRadius: 8,
+                    elevation: 5,
+                }}
+                className="flex-row items-center p-1.5"
             >
-                {!isMe && (
-                    <Text className={`text-[10px] font-black mb-1 ${isDark ? 'text-zinc-500' : 'text-zinc-400'}`}>
-                        {message.authorName?.toUpperCase()}
-                    </Text>
-                )}
-                <Text className={`text-sm font-medium ${isMe ? 'text-white' : (isDark ? 'text-zinc-200' : 'text-zinc-800')}`}>
-                    {message.text}
-                </Text>
-                <Text className={`text-[8px] font-black mt-1 ${isMe ? 'text-blue-200 text-right' : (isDark ? 'text-zinc-600 text-left' : 'text-zinc-400 text-left')}`}>
-                    {new Date(message.date).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
-                </Text>
+                <TextInput
+                    className={`flex-1 min-h-[48px] max-h-32 px-5 py-3 font-bold text-sm ${isDark ? 'text-white' : 'text-zinc-900'
+                        }`}
+                    placeholder="Speak to the village..."
+                    placeholderTextColor={isDark ? 'rgba(255, 255, 255, 0.3)' : 'rgba(0, 0, 0, 0.3)'}
+                    multiline
+                    value={text}
+                    onChangeText={setText}
+                    onFocus={() => setIsFocused(true)}
+                    onBlur={() => setIsFocused(false)}
+                    keyboardAppearance={isDark ? "dark" : "light"}
+                    autoCapitalize="sentences"
+                    textAlignVertical="center"
+                />
+
+                <TouchableOpacity
+                    onPress={handleSend}
+                    activeOpacity={0.7}
+                    style={{
+                        backgroundColor: text.trim() ? appBlue : (isDark ? 'rgba(255, 255, 255, 0.05)' : 'rgba(0, 0, 0, 0.05)'),
+                        // Send button glow
+                        shadowColor: text.trim() ? appBlue : 'transparent',
+                        shadowOpacity: 0.6,
+                        shadowRadius: 10,
+                        elevation: text.trim() ? 8 : 0,
+                        width: 44,
+                        height: 44
+                    }}
+                    className="rounded-full items-center justify-center ml-1"
+                >
+                    <Ionicons
+                        name="send"
+                        size={18}
+                        color={text.trim() ? 'white' : (isDark ? '#3f3f46' : '#d1d5db')}
+                        style={{ marginLeft: 3 }}
+                    />
+                </TouchableOpacity>
             </View>
         </View>
     );
-};
+}
+
+
+const ClanMessageItem = ({ message, isMe, isDark, appBlue, onSelectMessage }) => {
+
+
+    const handleLongPress = async () => {
+        await Clipboard.setStringAsync(message.text);
+        if (onSelectMessage) {
+            // Appends the separator as you requested
+            onSelectMessage(`${message.text} // `);
+        }
+    };
+
+    return (
+        <View className={`px-6 py-1.5 flex-row ${isMe ? 'justify-end' : 'justify-start'}`}>
+            <Pressable
+                onLongPress={handleLongPress}
+                delayLongPress={300}
+                style={{
+                    // ⚡️ Fix: Use slightly lighter tints for Dark Mode so it's not "just black"
+                    backgroundColor: isMe
+                        ? appBlue
+                        : (isDark ? 'rgba(45, 45, 50, 0.8)' : 'rgba(255, 255, 255, 0.9)'),
+
+                    // ⚡️ Critical: High contrast borders make glass look real
+                    borderColor: isMe
+                        ? 'rgba(255, 255, 255, 0.3)'
+                        : (isDark ? 'rgba(255, 255, 255, 0.15)' : 'rgba(0, 0, 0, 0.05)'),
+
+                    borderWidth: 1.5,
+
+                    // Shadow for depth
+                    shadowColor: "#000",
+                    shadowOffset: { width: 0, height: 2 },
+                    shadowOpacity: 0.1,
+                    shadowRadius: 4,
+                    elevation: 3
+                }}
+                className={`max-w-[85%] px-4 py-1 ${isMe ? 'rounded-2xl rounded-tr-none' : 'rounded-2xl rounded-tl-none'
+                    }`}
+            >
+                {!isMe && (
+                    <Text
+                        className={`text-[9px] font-black mb-1 uppercase tracking-widest ${isDark ? 'text-zinc-400' : 'text-zinc-500'
+                            }`}
+                    >
+                        {message.authorName}
+                    </Text>
+                )}
+
+                <Text
+                    className={`text-sm font-bold leading-5 ${isMe ? 'text-white' : (isDark ? 'text-zinc-100' : 'text-zinc-900')
+                        }`}
+                >
+                    {message.text}
+                </Text>
+
+                <View className="flex-row items-center justify-end mt-1 space-x-1">
+                    <Text
+                        className={`text-[8px] font-black uppercase tracking-tighter ${isMe ? 'text-white/60' : (isDark ? 'text-zinc-500' : 'text-zinc-400')
+                            }`}
+                    >
+                        {new Date(message.date).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
+                    </Text>
+                    {isMe && (
+                        <View className="ml-1 opacity-70">
+                            <Text style={{ color: '#fff', fontSize: 10 }}>✓</Text>
+                        </View>
+                    )}
+                </View>
+            </Pressable>
+        </View>
+    );
+}
 
 // 🎨 --- RENDERER FOR BACKEND SVGS ---
 const RemoteSvgIcon = ({ xml, size = 150, color }) => {
@@ -2043,79 +2213,237 @@ const StatRow = ({ label, value, highlight, color }) => (
     </View>
 );
 
-const MemberItem = ({ member, roleLabel, canManage, isLeader, onKick, onAppoint, accent, isProcessingAction }) => (
-    <View className="flex-row items-center mb-3 bg-white dark:bg-zinc-900/40 p-4 rounded-[24px] border border-gray-100 dark:border-zinc-800">
-        {/* ⚡️ Explicit width, height, and contentFit fix invisible expo-image bug */}
-        <Image
-            source={{ uri: member.profilePic?.url || "https://oreblogda.com/default-avatar.png" }}
-            contentFit="cover"
-            style={{ width: 48, height: 48 }}
-            className="rounded-full border-2 border-zinc-100 dark:border-zinc-800"
-        />
-        <View className="flex-1 ml-4">
-            <Text className="text-black dark:text-white font-black uppercase text-xs tracking-tight">{member.username}</Text>
-            <Text style={{ color: accent }} className="text-[8px] font-black uppercase tracking-widest mt-0.5">{roleLabel}</Text>
-        </View>
-        <View className="flex-row gap-x-2">
-            {isLeader && roleLabel !== "Kage" && roleLabel !== "Jonin" && (
-                <TouchableOpacity onPress={onAppoint} disabled={isProcessingAction} className="bg-blue-500/10 px-4 py-2 rounded-xl border border-blue-500/20">
-                    <Text className="text-blue-600 dark:text-blue-400 font-black text-[9px] uppercase">{isProcessingAction ? "Appointing..." : "Appoint Jonin"}</Text>
-                </TouchableOpacity>
-            )}
-            {canManage && (
-                <TouchableOpacity onPress={onKick} disabled={isProcessingAction} className="bg-red-500/10 px-4 py-2 rounded-xl">
-                    <Text className="text-red-600 dark:text-red-500 font-black text-[9px] uppercase">{isProcessingAction ? "Banishing..." : "Banish"}</Text>
-                </TouchableOpacity>
-            )}
-        </View>
-    </View>
-);
+const MemberItem = ({
+    member,
+    roleLabel,
+    canManage,
+    isLeader,
+    onKick,
+    onAppoint,
+    accent,
+    isProcessingAction,
+    isDark
+}) => {
+    const router = useRouter();
 
-const AdminToggle = ({ label, status, onPress, accent }) => (
-    <TouchableOpacity
-        onPress={onPress}
-        className="p-6 bg-zinc-900 rounded-[30px] flex-row justify-between items-center border border-zinc-800 shadow-2xl"
-    >
-        <View>
-            <Text className="text-white font-black uppercase text-[10px] tracking-widest">{label}</Text>
-            <Text className="text-zinc-500 text-[8px] font-bold uppercase mt-1">Manage Gate Access</Text>
-        </View>
-        <View className={`px-4 py-2 rounded-xl ${status === 'OPEN' ? 'bg-green-500' : 'bg-red-500'}`}>
-            <Text className="text-white font-black text-[10px] uppercase">{status}</Text>
-        </View>
-    </TouchableOpacity>
-);
+    const handleProfilePress = () => {
+        router.push(`/author/${member._id}`);
+    };
 
-const RequestItem = ({ user, onApprove, onDecline, accent, isProcessingAction }) => (
-    <View className="flex-row items-center mb-3 bg-white dark:bg-zinc-900 p-4 rounded-[24px] border border-gray-100 dark:border-zinc-800">
-        {/* ⚡️ Explicit width, height, and contentFit fix invisible expo-image bug */}
-        <Image
-            source={{ uri: user?.profilePic?.url || "https://oreblogda.com/default-avatar.png" }}
-            contentFit="cover"
-            style={{ width: 40, height: 40 }}
-            className="rounded-full"
-        />
-        <View className="flex-1 ml-4">
-            <Text className="text-black dark:text-white font-black text-xs">{user?.username || 'Rogue'}</Text>
-            <Text className="text-gray-500 text-[8px] font-bold uppercase">Awaiting Authorization</Text>
+    return (
+        <Pressable
+            onPress={handleProfilePress}
+            style={({ pressed }) => [
+                {
+                    // ⚡️ Glassmorphism simulation without expo-blur
+                    backgroundColor: isDark
+                        ? (pressed ? 'rgba(39, 39, 42, 0.98)' : 'rgba(24, 24, 27, 0.95)')
+                        : (pressed ? 'rgba(244, 244, 245, 0.98)' : 'rgba(255, 255, 255, 0.95)'),
+                    transform: [{ scale: pressed ? 0.98 : 1 }]
+                }
+            ]}
+            className="flex-row items-center mb-3 p-4 rounded-[24px] border border-gray-100 dark:border-zinc-800 shadow-sm"
+        >
+            {/* ⚡️ Explicit width, height, and contentFit fix invisible expo-image bug */}
+            <View
+                className="shadow-sm"
+                style={{
+                    width: 52,
+                    height: 52,
+                    borderRadius: 26, // Half of 52 for a perfect circle
+                }}
+            >
+                <Image
+                    source={{ uri: member.profilePic?.url || "https://oreblogda.com/default-avatar.png" }}
+                    contentFit="cover"
+                    style={{
+                        width: 52,
+                        height: 52,
+                        borderRadius: 26,
+                        borderWidth: 2,
+                    }}
+                />
+            </View>
+
+            <View className="flex-1 ml-4">
+                <Text className="text-black dark:text-white font-black uppercase text-sm tracking-tighter">
+                    {member.username}
+                </Text>
+                <View
+                    style={{ backgroundColor: `${accent}15`, alignSelf: 'flex-start' }}
+                    className="px-2 py-0.5 rounded-md mt-1"
+                >
+                    <Text
+                        style={{ color: accent }}
+                        className="text-[9px] font-black uppercase tracking-widest"
+                    >
+                        {roleLabel}
+                    </Text>
+                </View>
+            </View>
+
+            <View className="flex-row items-center gap-x-2">
+                {/* APPOINT BUTTON: Icon version */}
+                {isLeader && roleLabel !== "Kage" && roleLabel !== "Jonin" && (
+                    <TouchableOpacity
+                        onPress={onAppoint}
+                        disabled={isProcessingAction}
+                        className="bg-blue-500/10 w-10 h-10 items-center justify-center rounded-2xl border border-blue-500/20"
+                    >
+                        {isProcessingAction ? (
+                            <ActivityIndicator size="small" color="#3b82f6" />
+                        ) : (
+                            <MaterialCommunityIcons name="shield-star-outline" size={20} color="#3b82f6" />
+                        )}
+                    </TouchableOpacity>
+                )}
+
+                {/* BANISH BUTTON: Icon version */}
+                {canManage && (
+                    <TouchableOpacity
+                        onPress={onKick}
+                        disabled={isProcessingAction}
+                        className="bg-red-500/10 w-10 h-10 items-center justify-center rounded-2xl border border-red-500/20"
+                    >
+                        {isProcessingAction ? (
+                            <ActivityIndicator size="small" color="#ef4444" />
+                        ) : (
+                            <MaterialCommunityIcons name="sword-cross" size={20} color="#ef4444" />
+                        )}
+                    </TouchableOpacity>
+                )}
+
+                {/* PROFILE LINK INDICATOR */}
+                <View className="ml-1">
+                    <MaterialCommunityIcons
+                        name="chevron-right"
+                        size={20}
+                        color={isDark ? "#3f3f46" : "#d1d5db"}
+                    />
+                </View>
+            </View>
+        </Pressable>
+    );
+};
+
+const AdminToggle = ({ label, status, onPress, appBlue, isDark }) => {
+    const isOpen = status === 'OPEN';
+
+    return (
+        <Pressable
+            onPress={onPress}
+            style={({ pressed }) => [
+                {
+                    backgroundColor: isDark ? 'rgba(45, 45, 50, 0.8)' : 'rgba(255, 255, 255, 0.9)',
+                    borderColor: isOpen ? appBlue : (isDark ? 'rgba(255,255,255,0.1)' : 'rgba(0,0,0,0.05)'),
+                    borderWidth: 1.5,
+                    transform: [{ scale: pressed ? 0.98 : 1 }],
+                    // Glow effect when the gate is OPEN
+                    shadowColor: isOpen ? appBlue : "#000",
+                    shadowOpacity: isOpen ? 0.4 : 0.1,
+                    shadowRadius: 10,
+                    elevation: 5
+                }
+            ]}
+            className="p-5 rounded-[32px] flex-row justify-between items-center mb-4"
+        >
+            <View>
+                <Text className={`font-black uppercase text-[13px] tracking-[2px] ${isDark ? 'text-white' : 'text-zinc-900'}`}>
+                    {label}
+                </Text>
+                <View className="flex-row items-center mt-1">
+                    <View className={`w-1.5 h-1.5 rounded-full mr-2 ${isOpen ? 'bg-green-500' : 'bg-zinc-500'}`} />
+                    <Text className="text-zinc-500 text-[8px] font-black uppercase tracking-tighter">
+                        {isOpen ? 'Access Unlocked' : 'Access Restricted'}
+                    </Text>
+                </View>
+            </View>
+
+            <View
+                style={{ backgroundColor: isOpen ? 'rgba(34, 197, 94, 0.15)' : 'rgba(239, 68, 68, 0.15)' }}
+                className="w-12 h-12 rounded-2xl items-center justify-center border border-white/5"
+            >
+                <Ionicons
+                    name={isOpen ? "lock-open" : "lock-closed"}
+                    size={20}
+                    color={isOpen ? "#22c55e" : "#ef4444"}
+                />
+            </View>
+        </Pressable>
+    );
+};
+
+const RequestItem = ({ user, onApprove, onDecline, appBlue, isDark, isProcessingAction }) => {
+    // Both buttons disable if either is processing
+    const isDisabled = !!isProcessingAction;
+    const [currentProcess, setCurrentProcess] = useState("")
+    return (
+        <View
+            style={{
+                backgroundColor: isDark ? 'rgba(39, 39, 42, 0.7)' : 'rgba(255, 255, 255, 0.8)',
+                borderColor: isDark ? 'rgba(255, 255, 255, 0.08)' : 'rgba(0, 0, 0, 0.05)',
+                borderWidth: 1.5,
+            }}
+            className="flex-row items-center mb-3 p-4 rounded-[28px]"
+        >
+            <Image
+                source={{ uri: user?.profilePic?.url || "https://oreblogda.com/default-avatar.png" }}
+                contentFit="cover"
+                style={{ width: 44, height: 44, borderRadius: 22, borderWidth: 1, borderColor: appBlue }}
+            />
+
+            <View className="flex-1 ml-4">
+                <Text className={`font-black text-xs ${isDark ? 'text-white' : 'text-zinc-900'}`}>
+                    {user?.username || 'Rogue'}
+                </Text>
+                <Text className="text-zinc-500 text-[8px] font-bold uppercase tracking-widest mt-0.5">
+                    Awaiting Auth
+                </Text>
+            </View>
+
+            <View className="flex-row space-x-2">
+                {/* Approve Button */}
+                <Pressable
+                    onPress={onApprove, setCurrentProcess("approving")}
+                    disabled={isDisabled}
+                    style={({ pressed }) => ({
+                        backgroundColor: isProcessingAction && currentProcess === 'approving' ? appBlue : 'rgba(255,255,255,0.05)',
+                        borderColor: appBlue,
+                        borderWidth: 1,
+                        opacity: isDisabled && isProcessingAction && currentProcess !== 'approving' ? 0.3 : 1,
+                        transform: [{ scale: pressed ? 0.95 : 1 }]
+                    })}
+                    className="w-11 h-11 rounded-2xl items-center justify-center"
+                >
+                    {isProcessingAction && currentProcess === 'approving' ? (
+                        <ActivityIndicator size="small" color="white" />
+                    ) : (
+                        <Ionicons name="checkmark-sharp" size={18} color={isDark ? "white" : appBlue} />
+                    )}
+                </Pressable>
+
+                {/* Decline Button */}
+                <Pressable
+                    onPress={onDecline, setCurrentProcess("declining")}
+                    disabled={isDisabled}
+                    style={({ pressed }) => ({
+                        backgroundColor: isProcessingAction && currentProcess === 'declining' ? '#ef4444' : 'rgba(255,255,255,0.05)',
+                        borderColor: '#ef4444',
+                        borderWidth: 1,
+                        opacity: isDisabled && isProcessingAction && currentProcess !== 'declining' ? 0.3 : 1,
+                        transform: [{ scale: pressed ? 0.95 : 1 }]
+                    })}
+                    className="w-11 h-11 rounded-2xl items-center justify-center"
+                >
+                    {isProcessingAction && currentProcess === 'declining' ? (
+                        <ActivityIndicator size="small" color="white" />
+                    ) : (
+                        <Ionicons name="close-sharp" size={18} color={isDark ? "white" : "#ef4444"} />
+                    )}
+                </Pressable>
+            </View>
         </View>
-        <TouchableOpacity
-            onPress={onApprove}
-            style={{ backgroundColor: accent }}
-            className="px-5 py-2.5 rounded-2xl"
-            disabled={isProcessingAction}
-        >
-            <Text className="text-white font-black text-[10px] uppercase italic">{isProcessingAction ? 'Accepting...' : 'Accept'}</Text>
-        </TouchableOpacity>
-        <TouchableOpacity
-            onPress={onDecline}
-            style={{ backgroundColor: "red" }}
-            className="px-5 py-2.5 rounded-2xl ml-2"
-            disabled={isProcessingAction}
-        >
-            <Text className="text-white font-black text-[10px] uppercase italic">{isProcessingAction ? 'Declining...' : 'Decline'}</Text>
-        </TouchableOpacity>
-    </View>
-);
+    );
+};
 
 export default ClanProfile;

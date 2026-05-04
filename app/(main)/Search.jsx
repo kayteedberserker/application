@@ -394,7 +394,7 @@ const SearchScreen = () => {
             } else {
                 setResults({ players: [], clans: [], posts: [] });
             }
-        }, 400);
+        }, 1000)
         return () => clearTimeout(delayDebounceFn);
     }, [query, performSearch, saveSearch]);
 

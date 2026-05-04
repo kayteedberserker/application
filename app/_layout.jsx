@@ -109,7 +109,7 @@ function RootLayoutContent() {
     const pendingNavigation = useRef(null);
 
     useEffect(() => {
-        const t = setTimeout(() => setMinLoadDone(true), 3000);
+        const t = setTimeout(() => setMinLoadDone(true), 1200);
         return () => clearTimeout(t);
     }, []);
 
@@ -215,10 +215,17 @@ function RootLayoutContent() {
         // ⚡️ Apply Global Lock
         IS_NAVIGATING_GLOBAL = true;
         LAST_PROCESSED_NOTIF_ID = currentNotifId;
-
+        // ⚡️ Check if we are currently at the very beginning
+        const isInitialRoute = currentPathRef.current === "/" || currentPathRef.current === "/index";
         requestAnimationFrame(() => {
-            router.replace(finalUrl);
-            // Unlock after a delay to allow the router to settle
+            if (isInitialRoute) {
+                // On cold starts, 'push' is often more reliable to ensure 
+                // the navigation stack registers the transition correctly.
+                router.push(finalUrl);
+            } else {
+                router.replace(finalUrl);
+            }
+
             setTimeout(() => { IS_NAVIGATING_GLOBAL = false; }, 1000);
         });
     }, [router, isNavigationReady]);
@@ -252,16 +259,22 @@ function RootLayoutContent() {
 
     useEffect(() => { setAppReady(true); }, []);
 
-    // 🔹 FLUSH PENDING NAVIGATION (Now waits for isNavigationReady)
+    // ⚡️ UPDATED FLUSH LOGIC
     useEffect(() => {
-        if (appReady && isNavigationReady && pendingNavigation.current) {
+        // We only proceed if everything is ready AND the Stack is actually rendered
+        if (appReady && isNavigationReady && minLoadDone && pendingNavigation.current) {
             const data = pendingNavigation.current;
             pendingNavigation.current = null;
-            // Short delay to ensure context is fully stable
-            const timer = setTimeout(() => processRouting(data), 300);
+
+            // Give the Stack a moment to actually mount its children
+            const timer = setTimeout(() => {
+                console.log("🚀 Flushing Cold Start Navigation");
+                processRouting(data);
+            }, 500); // 👈 Increased delay for stability on cold starts
+
             return () => clearTimeout(timer);
         }
-    }, [appReady, isNavigationReady, processRouting]);
+    }, [appReady, isNavigationReady, minLoadDone, processRouting]);
 
     // 🔹 DEEP LINKING HANDLER
     useEffect(() => {
