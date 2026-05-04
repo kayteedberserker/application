@@ -54,21 +54,31 @@ import { useCoins } from "../../context/CoinContext";
 import { useUser } from '../../context/UserContext';
 import apiFetch from "../../utils/apiFetch";
 const { width, height: SCREEN_HEIGHT } = Dimensions.get("window");
-
 // ============================================================================
-// ✍️ PREMIUM CINEMATIC WORD REVEAL
+// ✍️ PREMIUM CINEMATIC WORD REVEAL (REFINED FOR ALIGNMENT)
 // ============================================================================
-const AnimatedWord = ({ word, index, style }) => {
+const AnimatedWord = ({ word, index, style, isLast }) => {
     const opacity = useSharedValue(0);
-    const translateY = useSharedValue(10);
+    const translateY = useSharedValue(8);
 
     useEffect(() => {
-        // ⚡️ Haptic feedback syncs perfectly with each word appearing
-        setTimeout(() => { Haptics.selectionAsync(); }, index * 60);
-        const timer = setTimeout(() => { Haptics.selectionAsync(); }, index * 60);
-        opacity.value = withDelay(index * 60, withTiming(1, { duration: 400, easing: Easing.out(Easing.ease) }));
-        translateY.value = withDelay(index * 60, withTiming(0, { duration: 400, easing: Easing.out(Easing.back(1.5)) }));
-        return () => clearTimeout(timer);
+        const delay = index * 50; // Snappier reveal
+
+        // Single haptic trigger per word
+        const hapticTimer = setTimeout(() => {
+            Haptics.selectionAsync();
+        }, delay);
+
+        opacity.value = withDelay(
+            delay,
+            withTiming(1, { duration: 350, easing: Easing.out(Easing.quad) })
+        );
+        translateY.value = withDelay(
+            delay,
+            withTiming(0, { duration: 400, easing: Easing.out(Easing.back(1.2)) })
+        );
+
+        return () => clearTimeout(hapticTimer);
     }, [word]);
 
     const animStyle = useAnimatedStyle(() => ({
@@ -76,24 +86,35 @@ const AnimatedWord = ({ word, index, style }) => {
         transform: [{ translateY: translateY.value }]
     }));
 
-    return <Animated.Text style={[style, animStyle, { marginRight: 6 }]}>{word}</Animated.Text>;
+    // We use Animated.Text as an inline element
+    return (
+        <Animated.Text style={[style, animStyle]}>
+            {word}{isLast ? "" : " "}
+        </Animated.Text>
+    );
 };
 
 const PremiumTextReveal = ({ text, style }) => {
-    const lines = text.split('\n');
-    let globalWordIndex = 0;
+    // Split by space and handle line breaks as actual characters or spaces
+    const words = useMemo(() => text.split(/\s+/), [text]);
 
     return (
-        <View style={{ width: '100%' }}>
-            {lines.map((line, lineIndex) => (
-                <View key={`line-${lineIndex}`} style={{ flexDirection: 'row', flexWrap: 'wrap', marginBottom: line === '' ? 12 : 0 }}>
-                    {line.split(' ').map((word, wIndex) => {
-                        if (word === '') return null;
-                        const currentIndex = globalWordIndex++;
-                        return <AnimatedWord key={`word-${currentIndex}`} word={word} index={currentIndex} style={style} />;
-                    })}
-                </View>
-            ))}
+        <View style={styles.revealContainer}>
+            {/* 
+                CRITICAL FIX: Nesting Animated.Text inside a parent Text 
+                forces the layout engine to treat words as inline spans.
+            */}
+            <Text style={[style, { textAlign: 'left' }]}>
+                {words.map((word, index) => (
+                    <AnimatedWord
+                        key={`${word}-${index}`}
+                        word={word}
+                        index={index}
+                        style={style}
+                        isLast={index === words.length - 1}
+                    />
+                ))}
+            </Text>
         </View>
     );
 };
@@ -101,47 +122,41 @@ const PremiumTextReveal = ({ text, style }) => {
 // ============================================================================
 // ⚡️ FULL-SCREEN CINEMATIC ONBOARDING MODAL
 // ============================================================================
-const CinematicClanOnboarding = ({ visible, onClose, isLeader, appBlue }) => {
+export const CinematicClanOnboarding = ({ visible, onClose, isLeader, appBlue }) => {
     const [step, setStep] = useState(0);
 
-    // Dynamic steps based on permissions
     const ONBOARDING_STEPS = useMemo(() => {
         const baseSteps = [
             {
-                // ⚡️ Groups: Dojo Tab + Shinobi Tab
                 title: "THE_SYNDICATE_DOJO",
                 intel: "SYS: COMMAND_CENTER",
                 desc: "Welcome to your Clan's hub. Track World Rank and Clan Funds in the Dojo, and inspect your fellow operatives in the Shinobi tab. Your alliance's strength is measured here.",
-                icon: "shield", // Fixed invalid icon
+                icon: "shield",
                 color: appBlue
             },
             {
-                // ⚡️ Groups: Scrolls Tab + Hall Tab
                 title: "INTEL_&_COMMS",
                 intel: "SYS: NETWORK_SYNC",
                 desc: "Read clan-exclusive Transmissions in the Scrolls tab. Coordinate real-time attack strategies with your allies in the Great Hall. Silence is defeat.",
                 icon: "chatbubbles",
-                color: "#a855f7" // Purple
+                color: "#a855f7"
             },
             {
-                // ⚡️ Groups: Wars Tab + Top-Right Store/Inventory Modals
                 title: "WARS_&_BLACK_MARKET",
                 intel: "SYS: COMBAT_&_ASSETS",
                 desc: "Review past combat history in the Wars tab. Tap the top-right icons to access the Black Market and Inventory, burning Clan Coins (CC) to unlock and equip legendary visual aesthetics.",
                 icon: "flame",
-                color: "#f59e0b" // Amber
+                color: "#f59e0b"
             }
         ];
 
-        // ⚡️ Only inject this step if they are a Leader / Anbu Captain
         if (isLeader) {
             baseSteps.push({
-                // ⚡️ Groups: Kage Desk Tab (Admin)
                 title: "THE_KAGE_DESK",
                 intel: "SYS: ADMIN_AUTHORITY",
                 desc: "As village brass, you control the gates. Manage recruitment, approve seekers, and banish rogues from the Kage Desk.",
                 icon: "key",
-                color: "#ef4444" // Red
+                color: "#ef4444"
             });
         }
 
@@ -169,105 +184,79 @@ const CinematicClanOnboarding = ({ visible, onClose, isLeader, appBlue }) => {
 
     return (
         <Modal transparent animationType="fade" visible={visible}>
-            {/* ⚡️ TRUE FULL SCREEN: Fills the entire device, black background */}
-            <View style={{ flex: 1, backgroundColor: '#050505', paddingHorizontal: 30, paddingTop: 60, paddingBottom: 40, justifyContent: 'space-between' }}>
-
-                <Animated.View entering={FadeIn.duration(800)} style={{ position: 'absolute', width: '100%', height: '100%' }} />
+            <View style={styles.modalContainer}>
 
                 {/* --- TOP NAVIGATION BAR --- */}
-                <View style={{
-                    flexDirection: 'row',
-                    justifyContent: 'space-between',
-                    alignItems: 'center',
-                    zIndex: 10,
-                    borderBottomWidth: 1,
-                    borderBottomColor: '#1a1a1a',
-                    paddingBottom: 20
-                }}>
+                <View style={styles.topNav}>
                     <View style={{ width: 80 }}>
                         {step > 0 && (
-                            <TouchableOpacity
-                                onPress={handlePrev}
-                                style={{ flexDirection: 'row', alignItems: 'center', gap: 4 }}
-                            >
-                                <Ionicons name="chevron-back" size={14} color="#60a5fa" />
-                                <Text style={{ fontSize: 10, color: '#60a5fa', fontWeight: 'bold', letterSpacing: 1 }}>PREV</Text>
+                            <TouchableOpacity onPress={handlePrev} style={styles.navButton}>
+                                <Ionicons name="chevron-back" size={14} color={appBlue} />
+                                <Text style={[styles.navText, { color: appBlue }]}>PREV</Text>
                             </TouchableOpacity>
                         )}
                     </View>
 
                     <View style={{ alignItems: 'center' }}>
-                        <Text style={{ fontSize: 9, color: currentStep.color, fontWeight: 'bold', letterSpacing: 2 }}>[ SYNC_PROGRESS: {step + 1}/{ONBOARDING_STEPS.length} ]</Text>
+                        <Text style={[styles.progressText, { color: currentStep.color }]}>
+                            [ SYNC_PROGRESS: {step + 1}/{ONBOARDING_STEPS.length} ]
+                        </Text>
                     </View>
 
                     <TouchableOpacity onPress={() => {
                         Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
                         onClose();
-                    }}>
-                        <Text style={{ fontSize: 10, color: '#475569', fontWeight: 'bold', letterSpacing: 1 }}>SKIP_SYNC_X</Text>
+                    }} style={{ width: 80, alignItems: 'flex-end' }}>
+                        <Text style={styles.skipText}>SKIP_X</Text>
                     </TouchableOpacity>
                 </View>
 
                 {/* --- MAIN CONTENT AREA --- */}
                 <View style={{ flex: 1, justifyContent: 'center' }}>
-                    {/* Icon Container with Glow */}
-                    <Animated.View key={`icon-${step}`} entering={FadeIn} style={{ marginBottom: 40 }}>
-                        <View style={{
-                            width: 80, height: 80, borderRadius: 24, backgroundColor: '#000',
-                            borderWidth: 1, borderColor: currentStep.color,
-                            justifyContent: 'center', alignItems: 'center',
-                            shadowColor: currentStep.color, shadowOpacity: 0.4, shadowRadius: 20,
-                            elevation: 10
-                        }}>
+                    <Animated.View key={`icon-${step}`} entering={FadeIn.duration(600)} style={styles.iconWrapper}>
+                        <View style={[styles.iconContainer, { borderColor: currentStep.color, shadowColor: currentStep.color }]}>
                             <Ionicons name={currentStep.icon} size={40} color={currentStep.color} />
                         </View>
                     </Animated.View>
 
-                    {/* Text Content */}
-                    <Animated.View key={`text-${step}`} entering={FadeInDown}>
-                        <Text style={{ fontSize: 11, color: currentStep.color, fontWeight: '900', letterSpacing: 3, marginBottom: 16 }}>
+                    <Animated.View key={`text-${step}`} entering={FadeInDown.springify().damping(15)}>
+                        <Text style={[styles.intelLabel, { color: currentStep.color }]}>
                             {currentStep.intel}
                         </Text>
-                        <Text style={{ fontSize: 32, fontWeight: '900', color: '#fff', marginBottom: 24, lineHeight: 38, fontStyle: 'italic' }}>
+                        <Text style={styles.stepTitle}>
                             {currentStep.title.replace(/_/g, ' ')}
                         </Text>
 
-                        {/* ⚡️ THE CINEMATIC REVEAL */}
                         <PremiumTextReveal
-                            key={step} // Forces remount to restart typing animation
+                            key={`reveal-${step}`}
                             text={currentStep.desc}
-                            style={{ fontSize: 16, color: '#94a3b8', lineHeight: 26, fontWeight: '500' }}
+                            style={styles.descriptionText}
                         />
                     </Animated.View>
                 </View>
 
                 {/* --- FOOTER CONTROLS --- */}
-                <View style={{ marginTop: 20 }}>
-                    {/* Progress Dots */}
-                    <View style={{ flexDirection: 'row', gap: 8, marginBottom: 40, justifyContent: 'center' }}>
+                <View>
+                    <View style={styles.dotContainer}>
                         {ONBOARDING_STEPS.map((_, i) => (
-                            <View key={i} style={{
-                                height: 4, width: i === step ? 32 : 8, borderRadius: 10,
-                                backgroundColor: i === step ? currentStep.color : '#1e293b'
-                            }} />
+                            <View key={i} style={[
+                                styles.dot,
+                                {
+                                    width: i === step ? 32 : 8,
+                                    backgroundColor: i === step ? currentStep.color : '#1e293b'
+                                }
+                            ]} />
                         ))}
                     </View>
 
-                    {/* Main Action Button */}
                     <TouchableOpacity
                         onPress={handleNext}
                         activeOpacity={0.8}
-                        style={{
-                            backgroundColor: currentStep.color,
-                            paddingVertical: 20, borderRadius: 20,
-                            alignItems: 'center', flexDirection: 'row',
-                            justifyContent: 'center', gap: 12,
-                            shadowColor: currentStep.color, shadowOpacity: 0.3, shadowRadius: 10
-                        }}
+                        style={[styles.mainButton, { backgroundColor: currentStep.color, shadowColor: currentStep.color }]}
                     >
-                        <Animated.View entering={FadeIn} style={{ flexDirection: 'row', alignItems: 'center', gap: 10 }}>
-                            <Text style={{ color: '#000', fontWeight: '900', fontSize: 14, letterSpacing: 2 }}>
-                                {isLastStep ? "INITIALIZE_DOJO" : "NEXT_SYNC_LEVEL"}
+                        <Animated.View entering={FadeIn} style={styles.buttonContent}>
+                            <Text style={styles.buttonText}>
+                                {isLastStep ? "INITIALIZE_SYSTEM" : "NEXT_SYNC_LEVEL"}
                             </Text>
                             <Ionicons
                                 name={isLastStep ? "flash" : "chevron-forward"}
@@ -281,6 +270,114 @@ const CinematicClanOnboarding = ({ visible, onClose, isLeader, appBlue }) => {
         </Modal>
     );
 };
+
+const styles = StyleSheet.create({
+    modalContainer: {
+        flex: 1,
+        backgroundColor: '#050505',
+        paddingHorizontal: 30,
+        paddingTop: 60,
+        paddingBottom: 40,
+        justifyContent: 'space-between'
+    },
+    topNav: {
+        flexDirection: 'row',
+        justifyContent: 'space-between',
+        alignItems: 'center',
+        zIndex: 10,
+        borderBottomWidth: 1,
+        borderBottomColor: '#1a1a1a',
+        paddingBottom: 20
+    },
+    navButton: {
+        flexDirection: 'row',
+        alignItems: 'center',
+        gap: 4
+    },
+    navText: {
+        fontSize: 10,
+        fontWeight: 'bold',
+        letterSpacing: 1
+    },
+    progressText: {
+        fontSize: 9,
+        fontWeight: 'bold',
+        letterSpacing: 2
+    },
+    skipText: {
+        fontSize: 10,
+        color: '#475569',
+        fontWeight: 'bold',
+        letterSpacing: 1
+    },
+    iconWrapper: {
+        marginBottom: 40
+    },
+    iconContainer: {
+        width: 80,
+        height: 80,
+        borderRadius: 24,
+        backgroundColor: '#000',
+        borderWidth: 1,
+        justifyContent: 'center',
+        alignItems: 'center',
+        shadowOpacity: 0.4,
+        shadowRadius: 20,
+        elevation: 10
+    },
+    intelLabel: {
+        fontSize: 11,
+        fontWeight: '900',
+        letterSpacing: 3,
+        marginBottom: 16
+    },
+    stepTitle: {
+        fontSize: 32,
+        fontWeight: '900',
+        color: '#fff',
+        marginBottom: 24,
+        lineHeight: 38,
+        fontStyle: 'italic'
+    },
+    revealContainer: {
+        width: '100%',
+        minHeight: 100 // Prevents layout jump
+    },
+    descriptionText: {
+        fontSize: 16,
+        color: '#94a3b8',
+        lineHeight: 26,
+        fontWeight: '500'
+    },
+    dotContainer: {
+        flexDirection: 'row',
+        gap: 8,
+        marginBottom: 40,
+        justifyContent: 'center'
+    },
+    dot: {
+        height: 4,
+        borderRadius: 10
+    },
+    mainButton: {
+        paddingVertical: 20,
+        borderRadius: 20,
+        alignItems: 'center',
+        shadowOpacity: 0.3,
+        shadowRadius: 10
+    },
+    buttonContent: {
+        flexDirection: 'row',
+        alignItems: 'center',
+        gap: 12
+    },
+    buttonText: {
+        color: '#000',
+        fontWeight: '900',
+        fontSize: 14,
+        letterSpacing: 2
+    }
+});
 
 // =================================================================
 // MAIN COMPONENT

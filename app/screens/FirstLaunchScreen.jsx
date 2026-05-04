@@ -55,8 +55,8 @@ const ANIME_LIST = [
 	"Naruto", "One Piece", "Bleach", "Dragon Ball Z", "Hunter x Hunter",
 	"JJK", "Solo Leveling", "My Hero Academia", "Hell's Paradise", "Demon Slayer", "AOT", "Chainsaw Man",
 	"Death Note", "Fullmetal Alchemist", "Code Geass", "Steins;Gate",
-	"Berserk", "Vinland Saga", "Monster", "Vagabond",
-	"Baki", "Nana", "Horimiya", "Fruits Basket", "Ouran High",
+	"Berserk", "Vinland Saga", "Vagabond",
+	"Baki", "Horimiya", "Fruits Basket",
 	"Haikyuu", "Blue Lock", "One Punch Man"
 ];
 
@@ -166,7 +166,7 @@ const PremiumTextReveal = ({ text, style }) => {
 			))}
 		</View>
 	);
-};
+}
 
 // ============================================================================
 // 🧠 3. THE LORE ENGINE
@@ -423,7 +423,7 @@ export default function FirstLaunchScreen() {
 
 				// Save followed clans (as JSON string array)
 				storage.set("followed_clans", JSON.stringify(followedClans || []));
-				storage.set("ONBOARDING_KEY", JSON.stringify(onboardingFlags.ONBOARDING_KEY || "true"));
+				storage.set("ONBOARDING_KEY", onboardingFlags.ONBOARDING_KEY || "true");
 
 				// Save onboarding flags individually
 				storage.set("HAS_SEEN_CLAN_UPDATE", onboardingFlags.HAS_SEEN_CLAN_UPDATE || "true");
@@ -442,7 +442,7 @@ export default function FirstLaunchScreen() {
 			setShowAwakeningModal(true);
 			setTimeout(() => {
 				router.replace("/profile");
-			}, 1000);
+			}, 600);
 
 		} catch (err) {
 			Haptics.notificationAsync(Haptics.NotificationFeedbackType.Error);
@@ -552,6 +552,7 @@ export default function FirstLaunchScreen() {
 				const { followedClans, ...onboardingFlags } = data.sessionData;
 				// Save followed clans (as JSON string array)
 				storage.set("followed_clans", JSON.stringify(followedClans || []));
+				storage.set("ONBOARDING_KEY", onboardingFlags.ONBOARDING_KEY || "true");
 				// Save onboarding flags individually
 				storage.set("HAS_SEEN_CLAN_UPDATE", onboardingFlags.HAS_SEEN_CLAN_UPDATE || "true");
 				storage.set("has_seen_profile_onboarding", onboardingFlags.has_seen_profile_onboarding ? "true" : "false");
@@ -568,7 +569,7 @@ export default function FirstLaunchScreen() {
 				setShowAwakeningModal(true);
 				setTimeout(() => {
 					router.replace("/profile");
-				}, 1000);
+				}, 600);
 			} else {
 				storage.set("trigger_first_post", 1);
 				setTimeout(() => router.replace("/authordiary"), 1000);
@@ -785,7 +786,7 @@ export default function FirstLaunchScreen() {
 									style={{
 										color: primaryTextColor,
 										fontSize: 20,
-										lineHeight: 28,
+										lineHeight: 25,
 										fontWeight: '900',
 										fontStyle: 'italic',
 										textTransform: 'uppercase'

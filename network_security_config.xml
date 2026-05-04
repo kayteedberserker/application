@@ -11,6 +11,9 @@
 
             <!-- Backup: Let's Encrypt E1 (In case they switch to Elliptic Curve) -->
             <pin digest="SHA-256">989vY766No0AnZp00Wms0S2Fp277+MAnx+pZ8U3zL78=</pin>
+
+            <!-- Let's Encrypt R10 (The new standard rolling out) -->
+            <pin digest="SHA-256">v8vscQ0A2SpS93ofgdI+b648PjYtH6j/Y4N2Yp/n33I=</pin>
         </pin-set>
     </domain-config>
     
