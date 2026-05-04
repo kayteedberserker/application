@@ -52,7 +52,7 @@ export default function MainLayout() {
     const storage = useMMKV();
 
     useEffect(() => {
-        if (pathname === "/Search" || pathname === "/" || pathname === "/authordiary" || pathname === "/profile" || pathname.includes("categories")) {
+        if (pathname === "/Search" || pathname === "/" || pathname === "/authordiary" || pathname === "/profile") {
             setIsActive(true);
         } else {
             setIsActive(false);
@@ -98,7 +98,7 @@ export default function MainLayout() {
         }
     }, []);
     const tabs = [
-        { id: 'home', label: 'HOME', icon: 'home', route: '/', color: '#3b82f6', match: (p) => p === "/" || p.startsWith("/categories") },
+        { id: 'home', label: 'HOME', icon: 'home', route: '/', color: '#3b82f6', match: (p) => p === "/" },
         { id: 'search', label: 'SEARCH', icon: 'search', route: '/Search', color: '#a855f7', match: (p) => p === "/Search" },
         { id: 'diary', label: 'DIARY', icon: 'add-circle', route: '/authordiary', color: '#10b981', match: (p) => p === "/authordiary" },
         { id: 'profile', label: 'PROFILE', icon: 'person', route: '/profile', color: '#f59e0b', match: (p) => p === "/profile" },
@@ -411,7 +411,7 @@ export default function MainLayout() {
                     position: "absolute",
                     bottom: insets.bottom + 15,
                     height: 60,
-                    left: isActive ? 25 : 60,
+                    left: isActive ? 25 : 50,
                     borderRadius: 30,
                     backgroundColor: isDark ? "rgba(17, 17, 17, 0.95)" : "rgba(255, 255, 255, 0.95)",
                     flexDirection: "row",

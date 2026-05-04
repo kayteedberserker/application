@@ -3,8 +3,9 @@ import { Ionicons, MaterialCommunityIcons } from '@expo/vector-icons';
 import { LinearGradient } from 'expo-linear-gradient';
 import { useGlobalSearchParams, usePathname, useRouter } from "expo-router";
 import { memo, useCallback, useEffect, useRef, useState } from "react";
-import { ActivityIndicator, FlatList, Modal, Pressable, TouchableOpacity, View } from "react-native";
+import { FlatList, Modal, Pressable, TouchableOpacity, View } from "react-native";
 import { useMMKV } from 'react-native-mmkv';
+import Animated, { Easing, cancelAnimation, useAnimatedStyle, useSharedValue, withRepeat, withTiming } from 'react-native-reanimated';
 import useSWR from 'swr';
 import { useAlert } from '../context/AlertContext';
 import { useClan } from '../context/ClanContext';
@@ -97,12 +98,20 @@ export default function CategoryNav({ isDark }) {
     const [activeTab, setActiveTab] = useState('All');
     const navListRef = useRef(null);
 
+    // Reanimated shared value for the sync icon
+    const spinValue = useSharedValue(0);
+
     const notificationTabs = ['All', 'Player', 'Clan', 'System'];
 
     const userId = user?._id || '';
     const clanId = userClan?.tag || '';
     const endpoint = `/message-pills?userId=${userId}&clanId=${clanId}`;
-    const { data, isValidating } = useSWR(endpoint, fetcher, { refreshInterval: 30000 });
+
+    // Updated SWR config: 2 minutes interval (120000ms), refocus revalidation true, and grabbed mutate to allow manual fetching
+    const { data, isValidating, mutate } = useSWR(endpoint, fetcher, {
+        refreshInterval: 120000,
+        revalidateOnFocus: true
+    });
 
     useEffect(() => {
         try {
@@ -110,6 +119,29 @@ export default function CategoryNav({ isDark }) {
             setViewCounts(stored ? JSON.parse(stored) : {});
         } catch (e) { setViewCounts({}); }
     }, []);
+
+    // Handle the spinning animation when isValidating is true
+    useEffect(() => {
+        if (isValidating) {
+            spinValue.value = withRepeat(
+                withTiming(360, {
+                    duration: 1000,
+                    easing: Easing.linear,
+                }),
+                -1, // infinite loop
+                false // no reverse
+            );
+        } else {
+            cancelAnimation(spinValue);
+            spinValue.value = 0;
+        }
+    }, [isValidating, spinValue]);
+
+    const animatedSpinStyle = useAnimatedStyle(() => {
+        return {
+            transform: [{ rotate: `${spinValue.value}deg` }]
+        };
+    });
 
     const rawPills = data?.pills || [];
     const activeCount = rawPills.filter(pill => (viewCounts[pill._id] || 0) < MAX_VIEWS_MARQUEE).length;
@@ -216,7 +248,8 @@ export default function CategoryNav({ isDark }) {
                 extraData={id}
                 showsHorizontalScrollIndicator={false}
                 style={{ flex: 1 }}
-                contentContainerStyle={{ paddingHorizontal: 15, alignItems: 'center' }}
+                // Adjusted paddingRight down to 5 to utilize the empty space effectively before the bell icon
+                contentContainerStyle={{ paddingLeft: 20, alignItems: 'center' }}
                 renderItem={renderItem}
                 onScrollToIndexFailed={(info) => {
                     setTimeout(() => {
@@ -262,7 +295,17 @@ export default function CategoryNav({ isDark }) {
                             <View className="flex-row justify-between items-center mb-4">
                                 <View className="flex-row items-center">
                                     <Text className="text-2xl font-black text-zinc-900 dark:text-white tracking-tight">System Feed</Text>
-                                    {isValidating && <ActivityIndicator size="small" color="#3b82f6" style={{ marginLeft: 10 }} />}
+
+                                    {/* 🔄 Replaced Activity Indicator with tap-to-sync Animated arrows */}
+                                    <TouchableOpacity onPress={() => mutate()} activeOpacity={0.7} style={{ padding: 4, marginLeft: 6 }}>
+                                        <Animated.View style={animatedSpinStyle}>
+                                            <MaterialCommunityIcons
+                                                name="sync"
+                                                size={22}
+                                                color={isValidating ? "#3b82f6" : (isDark ? "#52525b" : "#a1a1aa")}
+                                            />
+                                        </Animated.View>
+                                    </TouchableOpacity>
                                 </View>
                                 <TouchableOpacity onPress={() => setShowModal(false)} className="bg-gray-200 dark:bg-zinc-800 p-2 rounded-full">
                                     <MaterialCommunityIcons name="close" size={20} color={isDark ? "#d4d4d8" : "#3f3f46"} />

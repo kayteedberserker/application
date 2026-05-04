@@ -423,7 +423,7 @@ export default function FirstLaunchScreen() {
 
 				// Save followed clans (as JSON string array)
 				storage.set("followed_clans", JSON.stringify(followedClans || []));
-				storage.set("ONBOARDING_KEY", onboardingFlags.ONBOARDING_KEY || "true");
+				storage.set("ONBOARDING_KEY", true);
 
 				// Save onboarding flags individually
 				storage.set("HAS_SEEN_CLAN_UPDATE", onboardingFlags.HAS_SEEN_CLAN_UPDATE || "true");
@@ -552,7 +552,7 @@ export default function FirstLaunchScreen() {
 				const { followedClans, ...onboardingFlags } = data.sessionData;
 				// Save followed clans (as JSON string array)
 				storage.set("followed_clans", JSON.stringify(followedClans || []));
-				storage.set("ONBOARDING_KEY", onboardingFlags.ONBOARDING_KEY || "true");
+				storage.set("ONBOARDING_KEY", true);
 				// Save onboarding flags individually
 				storage.set("HAS_SEEN_CLAN_UPDATE", onboardingFlags.HAS_SEEN_CLAN_UPDATE || "true");
 				storage.set("has_seen_profile_onboarding", onboardingFlags.has_seen_profile_onboarding ? "true" : "false");

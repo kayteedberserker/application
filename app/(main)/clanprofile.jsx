@@ -477,6 +477,8 @@ const ClanProfile = () => {
         // ⚡️ Check Onboarding exactly when fullData is ready
         if (fullData && !loading) {
             const hasSeenOnboarding = storage.getBoolean(ONBOARDING_KEY);
+            console.log(hasSeenOnboarding, "ishas");
+
             if (!hasSeenOnboarding) {
                 setShowOnboarding(true);
             }
@@ -2501,7 +2503,10 @@ const RequestItem = ({ user, onApprove, onDecline, appBlue, isDark, isProcessing
             <View className="flex-row space-x-2">
                 {/* Approve Button */}
                 <Pressable
-                    onPress={onApprove, setCurrentProcess("approving")}
+                    onPress={() => {
+                        onApprove();
+                        setCurrentProcess("approving");
+                    }}
                     disabled={isDisabled}
                     style={({ pressed }) => ({
                         backgroundColor: isProcessingAction && currentProcess === 'approving' ? appBlue : 'rgba(255,255,255,0.05)',
@@ -2521,7 +2526,10 @@ const RequestItem = ({ user, onApprove, onDecline, appBlue, isDark, isProcessing
 
                 {/* Decline Button */}
                 <Pressable
-                    onPress={onDecline, setCurrentProcess("declining")}
+                    onPress={() => {
+                        onDecline();
+                        setCurrentProcess("declining");
+                    }}
                     disabled={isDisabled}
                     style={({ pressed }) => ({
                         backgroundColor: isProcessingAction && currentProcess === 'declining' ? '#ef4444' : 'rgba(255,255,255,0.05)',
