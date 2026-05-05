@@ -1,5 +1,5 @@
 import { MaterialCommunityIcons } from "@expo/vector-icons";
-import { useEffect } from "react";
+import React, { useEffect } from "react";
 import { Image, View } from "react-native";
 import Animated, {
   Easing,
@@ -31,10 +31,10 @@ const getClanTierDetails = (title) => {
   }
 };
 
-const RemoteSvgIcon = ({ xml, size = 50, color }) => {
+const RemoteSvgIcon = React.memo(({ xml, size = 50, color }) => {
   if (!xml) return <MaterialCommunityIcons name="help-circle-outline" size={size} color="gray" />;
   return <SvgXml xml={xml} width={size} height={size} />;
-};
+});
 
 export default function ClanCard({ clan, isDark, THEME = { card: '#0a0a0a', text: '#ffffff', border: '#262626', accent: '#3b82f6' } }) {
   if (!clan) return null;

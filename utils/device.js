@@ -47,7 +47,7 @@ export const getFingerprint = async () => {
     };
 
   } catch (error) {
-    console.log("Fingerprint Sync Failed:", error);
+    if (__DEV__) console.log("Fingerprint Sync Failed:", error);
     // Return a fallback so the app doesn't crash, but flag it
     return { softwareId: "error", hardwareId: "error" };
   }

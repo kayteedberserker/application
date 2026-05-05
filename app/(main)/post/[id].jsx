@@ -75,7 +75,7 @@ export default function PostDetailScreen() {
       if (!res.ok) throw new Error("Network response was not ok");
 
       const data = await res.json();
-      console.log(data.authorData);
+      if (__DEV__) console.log(data.authorData);
 
       // Step C: Update State & MMKV Cache
       setPost(data);
@@ -85,7 +85,7 @@ export default function PostDetailScreen() {
       handleViewIncrement(data._id);
 
     } catch (error) {
-      console.log("Fetch error:", error);
+      if (__DEV__) ("Fetch error:", error);
       const hasCache = storage.getString(CACHE_KEY);
       if (!hasCache) {
         setIsOffline(true);
@@ -126,7 +126,7 @@ export default function PostDetailScreen() {
         method: "PATCH",
         body: JSON.stringify({ action: "view" }),
       });
-    } catch (e) { console.log("View count error", e); }
+    } catch (e) { if (__DEV__) console.log("View count error", e); }
   };
 
   const handleRefresh = () => {

@@ -355,7 +355,7 @@ export default function FirstLaunchScreen() {
 			if (typeof pin == "string") {
 				realPin = pin
 			}
-			console.log(session.deviceId, "is the session deviceID");
+			if (__DEV__) console.log(session.deviceId, "is the session deviceID");
 
 			// 2. 🔗 CALL BACKEND TO RESTORE SESSION
 			// This now returns sessionData with followedClans, onboarding flags
@@ -452,7 +452,7 @@ export default function FirstLaunchScreen() {
 			if (rawHistory) {
 				storage.set("session_history", rawHistory);
 			}
-			console.log(err);
+			if (__DEV__) console.log(err);
 
 			notify("Access Denied", err.message);
 			setIsProcessing(false)
@@ -500,7 +500,7 @@ export default function FirstLaunchScreen() {
 
 			// if (!res) throw new Error("No response from server.");
 			const data = await res.json();
-			console.log("data is", data);
+			if (__DEV__) console.log("data is", data);
 
 			if (res.status === 401 && data.message?.includes("ENCRYPTION_REQUIRED")) {
 				setIsProcessing(false);

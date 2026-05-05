@@ -1,7 +1,8 @@
 import { MaterialCommunityIcons } from "@expo/vector-icons";
-import { useEffect } from 'react';
+import React, { useEffect } from 'react'; // Added React for memo
 import { View } from 'react-native';
 import Animated, {
+    cancelAnimation, // ⚡️ ADDED: For cleanup
     interpolate,
     useAnimatedStyle,
     useSharedValue,
@@ -19,26 +20,30 @@ const CLAN_TIERS = {
     1: { label: 'I', color: '#94a3b8', icon: 'weather-windy', title: "Wandering Ronin" },
 };
 
-const ClanCrest = ({ rank = 1, size = 120, isFeed = false, glowColor = null }) => {
+// ⚡️ PERFORMANCE: Wrap in memo to prevent unnecessary re-renders in feeds
+const ClanCrest = React.memo(({ rank = 1, size = 120, isFeed = false, glowColor = null }) => {
     const config = CLAN_TIERS[rank] || CLAN_TIERS[1];
-
-    // Use glowColor if provided, otherwise fallback to rank color
     const displayColor = glowColor || config.color;
-
     const pulseValue = useSharedValue(0);
 
     useEffect(() => {
-        if (isFeed) {
-            pulseValue.value = 0.5; // Set to a middle-point static state
-            return;
-        }
+        // Clear any existing animation before starting or stopping
+        cancelAnimation(pulseValue);
+
+        // if (isFeed) {
+        //     pulseValue.value = 0.5;
+        //     return;
+        // }
 
         pulseValue.value = withRepeat(
             withTiming(1, { duration: 3000 }),
             -1,
             false
         );
-    }, [isFeed]);
+
+        // ⚡️ CLEANUP: Stop the UI thread animation when component unmounts
+        return () => cancelAnimation(pulseValue);
+    }, [isFeed, rank]);
 
     const pulseStyle = useAnimatedStyle(() => {
         const scale = interpolate(pulseValue.value, [0, 1], [0.6, 1.4]);
@@ -54,7 +59,7 @@ const ClanCrest = ({ rank = 1, size = 120, isFeed = false, glowColor = null }) =
     return (
         <View style={{ width: size, height: size }} className="items-center justify-center relative">
             {/* Background Symbol Icon */}
-            <View className="absolute opacity-20">
+            <View className="absolute opacity-20" pointerEvents="none">
                 <MaterialCommunityIcons name={config.icon} size={size * 0.7} color={displayColor} />
             </View>
 
@@ -103,6 +108,6 @@ const ClanCrest = ({ rank = 1, size = 120, isFeed = false, glowColor = null }) =
             )}
         </View>
     );
-};
+});
 
 export default ClanCrest;

@@ -1,7 +1,7 @@
 import { Ionicons, MaterialCommunityIcons } from '@expo/vector-icons';
 import { useRouter } from 'expo-router';
 import LottieView from 'lottie-react-native';
-import { useEffect, useState } from 'react';
+import React, { useEffect, useMemo, useState } from 'react';
 import { ActivityIndicator, Dimensions, Modal, TouchableOpacity, View } from 'react-native';
 import { useMMKV } from 'react-native-mmkv';
 import { SvgXml } from 'react-native-svg';
@@ -17,7 +17,8 @@ const GLOBAL_COOLDOWN_KEY = "global_promo_cooldown_timestamp";
 
 let hasShownThisSession = false;
 
-const RemoteSvgIcon = ({ xml, lottieUrl, lottieJson, size = 50, color }) => {
+const RemoteSvgIcon = React.memo(({ xml, lottieUrl, lottieJson, size = 50, color }) => {
+
     if (lottieJson || lottieUrl) {
         return (
             <View style={{ width: size, height: size, alignItems: 'center', justifyContent: 'center' }}>
@@ -27,16 +28,30 @@ const RemoteSvgIcon = ({ xml, lottieUrl, lottieJson, size = 50, color }) => {
                     loop
                     style={{ width: size * 1.2, height: size * 1.2 }}
                     resizeMode="contain"
-                    renderMode="hardware"
+                    renderMode="hardware" // 🔥 Good choice for performance
                 />
             </View>
         );
     }
-    if (!xml || typeof xml !== 'string' || !xml.includes('<svg')) {
+
+    // ⚡️ 2. SVG Validation & Color Injection
+    // We use useMemo so the string replacement ONLY happens when inputs change
+    const processedXml = useMemo(() => {
+        if (!xml || typeof xml !== 'string' || !xml.includes('<svg')) {
+            return null;
+        }
+        // Injects the color into the XML string
+        return xml.replace(/currentColor/g, color || 'white');
+    }, [xml, color]);
+
+    // ⚡️ 3. Strict SVG Check (Prevents 'push of null' crashes)
+    if (!processedXml) {
         return <MaterialCommunityIcons name="help-circle-outline" size={size} color={color || "gray"} />;
     }
-    return <SvgXml xml={xml.replace(/currentColor/g, color || 'white')} width={size} height={size} />;
-};
+
+    // ⚡️ 4. Render Valid SVG
+    return <SvgXml xml={processedXml} width={size} height={size} />;
+});
 
 const CountdownTimer = ({ startsAt, color }) => {
     const [timeLeft, setTimeLeft] = useState(null);

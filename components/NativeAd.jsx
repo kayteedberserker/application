@@ -35,7 +35,7 @@ export const NativeAdAuthorStyle = ({ isDark }) => {
     const adListener = {
       onAdLoaded: (adInfo, nativeAdData) => {
         if (isMountedRef.current) {
-          console.log("✅ [Author Ad] Loaded:", adInfo?.adNetwork || "Unknown");
+          if (__DEV__) console.log("✅ [Author Ad] Loaded:", adInfo?.adNetwork || "Unknown");
           if (timeoutRef.current) clearTimeout(timeoutRef.current);
           setAdData(nativeAdData);
           setLoaded(true);
@@ -49,15 +49,15 @@ export const NativeAdAuthorStyle = ({ isDark }) => {
           handleRetry();
         }
       },
-      onAdClicked: (adInfo) => console.log("Author Native Ad Clicked"),
+      onAdClicked: (adInfo) => { if (__DEV__) console.log("Author Native Ad Clicked") },
     };
 
     const handleRetry = () => {
       if (timeoutRef.current) clearTimeout(timeoutRef.current);
-      
+
       if (retryCountRef.current < MAX_RETRIES) {
         retryCountRef.current += 1;
-        console.log(`🔄 [Author Ad] Retrying (${retryCountRef.current}/${MAX_RETRIES})...`);
+        if (__DEV__) console.log(`🔄 [Author Ad] Retrying (${retryCountRef.current}/${MAX_RETRIES})...`);
         setTimeout(() => loadAd(), RETRY_DELAY);
       } else {
         setError(true);
@@ -67,7 +67,7 @@ export const NativeAdAuthorStyle = ({ isDark }) => {
     let nativeAd;
     try {
       nativeAd = new LevelPlayNativeAd(NATIVE_AD_UNIT_ID, null, null, null, null, adListener);
-      
+
       timeoutRef.current = setTimeout(() => {
         if (isMountedRef.current && !loaded) {
           console.warn(`⚠️ [Author Ad] Timeout. Triggering retry...`);
@@ -97,9 +97,8 @@ export const NativeAdAuthorStyle = ({ isDark }) => {
     return (
       <View
         style={{ height: 140 }}
-        className={`mb-3 w-full justify-center items-center rounded-3xl border ${
-          isDark ? "bg-[#0f0f0f] border-zinc-800" : "bg-white border-zinc-100"
-        }`}
+        className={`mb-3 w-full justify-center items-center rounded-3xl border ${isDark ? "bg-[#0f0f0f] border-zinc-800" : "bg-white border-zinc-100"
+          }`}
       >
         {!error && <ActivityIndicator color={isDark ? "white" : "#3b82f6"} />}
         {error && (
@@ -118,9 +117,8 @@ export const NativeAdAuthorStyle = ({ isDark }) => {
     <Animated.View key="author-ad-container" entering={FadeInDown.duration(400)} className="mb-3">
       <LevelPlayNativeAdView nativeAd={adInstance} style={{ width: "100%", height: 140 }}>
         <View
-          className={`p-4 rounded-3xl border flex-row items-center ${
-            isDark ? "bg-[#0f0f0f] border-zinc-800" : "bg-white border-zinc-100 shadow-sm"
-          }`}
+          className={`p-4 rounded-3xl border flex-row items-center ${isDark ? "bg-[#0f0f0f] border-zinc-800" : "bg-white border-zinc-100 shadow-sm"
+            }`}
           style={{ height: 140 }}
         >
           <View style={{ borderColor: adColor }} className="w-16 h-16 rounded-full border-2 p-0.5 overflow-hidden">
@@ -193,7 +191,7 @@ export const NativeAdPostStyle = ({ isDark }) => {
     const adListener = {
       onAdLoaded: (adInfo, nativeAdData) => {
         if (isMountedRef.current) {
-          console.log("✅ [Post Ad] Loaded:", adInfo?.adNetwork || "Unknown");
+          if (__DEV__) console.log("✅ [Post Ad] Loaded:", adInfo?.adNetwork || "Unknown");
           if (timeoutRef.current) clearTimeout(timeoutRef.current);
           setAdData(nativeAdData);
           setLoaded(true);
@@ -207,15 +205,15 @@ export const NativeAdPostStyle = ({ isDark }) => {
           handleRetry();
         }
       },
-      onAdClicked: (adInfo) => console.log("Post Native Ad Clicked"),
+      onAdClicked: (adInfo) => { if (__DEV__) console.log("Post Native Ad Clicked") },
     };
 
     const handleRetry = () => {
       if (timeoutRef.current) clearTimeout(timeoutRef.current);
-      
+
       if (retryCountRef.current < MAX_RETRIES) {
         retryCountRef.current += 1;
-        console.log(`🔄 [Post Ad] Retrying (${retryCountRef.current}/${MAX_RETRIES})...`);
+        if (__DEV__) console.log(`🔄 [Post Ad] Retrying (${retryCountRef.current}/${MAX_RETRIES})...`);
         setTimeout(() => loadAd(), RETRY_DELAY);
       } else {
         setError(true);
@@ -225,7 +223,7 @@ export const NativeAdPostStyle = ({ isDark }) => {
     let nativeAd;
     try {
       nativeAd = new LevelPlayNativeAd(NATIVE_AD_UNIT_ID, null, null, null, null, adListener);
-      
+
       timeoutRef.current = setTimeout(() => {
         if (isMountedRef.current && !loaded) {
           console.warn(`⚠️ [Post Ad] Timeout. Retrying...`);
@@ -255,9 +253,8 @@ export const NativeAdPostStyle = ({ isDark }) => {
     return (
       <View
         style={{ height: 350 }}
-        className={`mb-5 w-full justify-center items-center rounded-[2.5rem] border ${
-          isDark ? "bg-zinc-900/40 border-zinc-800" : "bg-white border-zinc-100"
-        }`}
+        className={`mb-5 w-full justify-center items-center rounded-[2.5rem] border ${isDark ? "bg-zinc-900/40 border-zinc-800" : "bg-white border-zinc-100"
+          }`}
       >
         {!error && <ActivityIndicator color={isDark ? "white" : "#3b82f6"} />}
         {error && (
@@ -274,13 +271,12 @@ export const NativeAdPostStyle = ({ isDark }) => {
     <Animated.View key="post-ad-container" entering={FadeIn.duration(500)} className="mb-5">
       <LevelPlayNativeAdView nativeAd={adInstance} style={{ width: "100%", height: 350 }}>
         <View
-          className={`rounded-[2.5rem] border overflow-hidden ${
-            isDark ? "bg-zinc-900/40 border-zinc-800" : "bg-white border-zinc-100 shadow-sm"
-          }`}
+          className={`rounded-[2.5rem] border overflow-hidden ${isDark ? "bg-zinc-900/40 border-zinc-800" : "bg-white border-zinc-100 shadow-sm"
+            }`}
           style={{ height: 350 }}
         >
           {adData.media ? (
-             <Image source={{ uri: adData.media }} style={{ width: "100%", height: 190, backgroundColor: isDark ? "#111" : "#eee" }} />
+            <Image source={{ uri: adData.media }} style={{ width: "100%", height: 190, backgroundColor: isDark ? "#111" : "#eee" }} />
           ) : (
             <View style={{ width: "100%", height: 190, backgroundColor: isDark ? "#111" : "#eee" }} />
           )}

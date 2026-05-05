@@ -85,7 +85,7 @@ export const UserProvider = ({ children }) => {
               body: { deviceId: user.deviceId }
             });
           } catch (apiErr) {
-            console.log("Server unreachable. Proceeding with local hibernation.");
+            if (__DEV__) console.log("Server unreachable. Proceeding with local hibernation.");
           }
         }
 
@@ -109,7 +109,7 @@ export const UserProvider = ({ children }) => {
             ].slice(0, 3);
           }
         } catch (historyErr) {
-          console.log("History preservation skipped.");
+          if (__DEV__) console.log("History preservation skipped.");
         }
 
         // ⚡️ 2. THE SAFE SWAP

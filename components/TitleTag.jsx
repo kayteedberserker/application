@@ -1,7 +1,9 @@
 import { MaterialCommunityIcons } from '@expo/vector-icons';
-import { useEffect, useMemo, useState } from 'react';
+import { memo, useEffect, useMemo, useState } from 'react'; // ⚡️ ADDED: memo
 import { StyleSheet, Text, View } from 'react-native';
 import Animated, {
+    cancelAnimation // ⚡️ ADDED: For cleanup
+    ,
     Easing,
     interpolate,
     useAnimatedProps,
@@ -22,7 +24,8 @@ const TITLE_TIERS = {
     COMMON: { colors: ['#1f2937', '#111827'], border: '#9ca3af', text: '#9ca3af', glow: 'transparent' }
 };
 
-const TitleTag = ({
+// ⚡️ Wrapped in memo to prevent unnecessary re-renders in the feed
+const TitleTag = memo(({
     rank = 11,
     isTop10 = false,
     auraVisuals = null,
@@ -47,7 +50,6 @@ const TitleTag = ({
     const isEpic = finalTier === 'EPIC';
     const isRare = finalTier === 'RARE';
 
-    // Animation Flag Logic - Memoized for optimization
     const animFlags = useMemo(() => ({
         hasSweep: isMythic || isLegendary || (isTop10 && rank <= 5),
         hasPulse: isMythic || isEpic || isRare || (isTop10 && (rank <= 2 || (rank >= 6 && rank <= 10)))
@@ -67,8 +69,6 @@ const TitleTag = ({
                 -1,
                 false
             );
-        } else {
-            sweepAnim.value = 0;
         }
 
         if (animFlags.hasPulse) {
@@ -77,10 +77,14 @@ const TitleTag = ({
                 -1,
                 true
             );
-        } else {
-            pulseAnim.value = 0;
         }
-    }, [animFlags, isMythic]);
+
+        // ⚡️ CLEANUP: Kill active loops when the tag unmounts
+        return () => {
+            cancelAnimation(sweepAnim);
+            cancelAnimation(pulseAnim);
+        };
+    }, [animFlags.hasSweep, animFlags.hasPulse, isMythic]);
 
     const paths = useMemo(() => {
         if (dimensions.width === 0) return { main: '', hex: '' };
@@ -125,6 +129,7 @@ const TitleTag = ({
         x: interpolate(sweepAnim.value, [0, 1], [-dimensions.width, dimensions.width])
     }));
 
+    // Memoized sub-component to prevent unnecessary SVG recalculations
     const FrameBase = ({ color, children }) => {
         const bgDark = "rgba(10, 10, 10, 0.92)";
         const strokeColor = color || '#ffffff';
@@ -178,7 +183,6 @@ const TitleTag = ({
         );
     };
 
-    // PRIORITY 1: Check for an explicitly equipped title first
     if (finalTitle) {
         return (
             <Animated.View
@@ -217,7 +221,6 @@ const TitleTag = ({
         );
     }
 
-    // PRIORITY 2: Fallback to the Top 10 Aura if no title is equipped
     if (isTop10 && auraVisuals) {
         const finalColor = activeGlowColor || auraVisuals.color || '#fbbf24';
         return (
@@ -231,7 +234,7 @@ const TitleTag = ({
                         elevation: 8,
                         shadowRadius: 4 * scale
                     },
-                    pulseStyle, // Pass animated style directly
+                    pulseStyle,
                     style
                 ]}
                 {...props}
@@ -249,7 +252,7 @@ const TitleTag = ({
     }
 
     return null;
-};
+});
 
 const styles = StyleSheet.create({
     outerContainer: { alignSelf: 'flex-start', overflow: 'visible' },

@@ -19,6 +19,7 @@ import {
     View
 } from 'react-native';
 import {
+    cancelAnimation, // ⚡️ ADDED: For cleaning up the shine animation
     useDerivedValue,
     useSharedValue,
     withRepeat,
@@ -142,6 +143,11 @@ const ClanBadgeComponent = ({ badgeName, size = 80 }) => {
             -1,
             false
         );
+
+        // ⚡️ PERFORMANCE FIX 1: Cleanup the shared value animation when component unmounts
+        return () => {
+            cancelAnimation(shine);
+        };
     }, [badge?.tier]);
 
     if (!badge) return null;
@@ -203,11 +209,14 @@ const ClanBadgeComponent = ({ badgeName, size = 80 }) => {
                 </View>
             </Pressable>
 
-            <BadgeDetailModal
-                visible={modalVisible}
-                onClose={handleCloseModal}
-                badge={badge}
-            />
+            {/* ⚡️ PERFORMANCE FIX 2: Only mount the Modal node when it's actually visible */}
+            {modalVisible && (
+                <BadgeDetailModal
+                    visible={modalVisible}
+                    onClose={handleCloseModal}
+                    badge={badge}
+                />
+            )}
         </>
     );
 };

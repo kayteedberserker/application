@@ -316,6 +316,7 @@ export default function PostsViewer() {
                 drawDistance={1500}
                 // ⚡️ FIXED: Removed recycleItems=true to stop weird SWR caching bugs and scroll jumping
                 onViewableItemsChanged={onViewableItemsChanged}
+                recycleItems={true}
                 viewabilityConfig={viewabilityConfig}
                 onEndReached={loadMore}
                 onEndReachedThreshold={0.5}

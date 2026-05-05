@@ -2,7 +2,7 @@ import { Ionicons, MaterialCommunityIcons } from '@expo/vector-icons';
 import { useNavigation } from '@react-navigation/native';
 import { Canvas, Circle, Fill, Group, LinearGradient, Rect, vec } from "@shopify/react-native-skia";
 import { Image } from 'expo-image';
-import { useCallback, useEffect, useState } from 'react';
+import React, { useCallback, useEffect, useState } from 'react';
 import {
   ActivityIndicator,
   Dimensions,
@@ -18,23 +18,25 @@ import {
 } from 'react-native';
 import { useMMKV } from 'react-native-mmkv';
 import Purchases from 'react-native-purchases';
+import Animated, {
+  Easing,
+  FadeIn,
+  FadeInDown,
+  interpolate,
+  ScaleIn,
+  useAnimatedStyle,
+  useSharedValue,
+  withRepeat,
+  withSequence,
+  withTiming
+} from "react-native-reanimated";
 import { SafeAreaView, useSafeAreaInsets } from 'react-native-safe-area-context';
 import { SvgXml } from 'react-native-svg';
-import Animated, {
-    Easing,
-    interpolate,
-    useAnimatedStyle,
-    useSharedValue,
-    withRepeat,
-    withSequence,
-    withTiming,
-    FadeIn,
-    FadeInDown,
-    ScaleIn
-} from "react-native-reanimated";
 
+import AnimeLoading from '../../components/AnimeLoading';
 import ClanBorder from '../../components/ClanBorder';
 import CoinIcon from '../../components/ClanIcon';
+import PeakBadge from '../../components/PeakBadge';
 import PullSpinModal from '../../components/PullSpinModal';
 import Topbar from '../../components/Topbar';
 import THEME from '../../components/useAppTheme';
@@ -43,8 +45,6 @@ import { useClan } from '../../context/ClanContext';
 import { useCoins } from '../../context/CoinContext';
 import { useUser } from '../../context/UserContext';
 import apiFetch from '../../utils/apiFetch';
-import PeakBadge from '../../components/PeakBadge'; 
-import AnimeLoading from '../../components/AnimeLoading';
 
 const { width, height } = Dimensions.get('window');
 const ITEM_WIDTH = (width - 60) / 3;
@@ -75,205 +75,205 @@ const PEAK_REWARDS = [
   { level: 10, title: "Mythic Status", desc: "Absolute Peak. Unlocks all Mythic items." }
 ];
 
-const RemoteSvgIcon = ({ xml, size = 50, color }) => {
+const RemoteSvgIcon = React.memo(({ xml, size = 50, color }) => {
   if (!xml) return <MaterialCommunityIcons name="help-circle-outline" size={size} color={color || "gray"} />;
   return <SvgXml xml={xml} width={size} height={size} color={color} />;
-};
+});
 
 // ==========================================
 // ⚡️ WALLET ONBOARDING MODAL
 // ==========================================
 const WalletOnboarding = () => {
-    const storage = useMMKV();
-    const [isVisible, setIsVisible] = useState(false);
-    const [step, setStep] = useState(0);
+  const storage = useMMKV();
+  const [isVisible, setIsVisible] = useState(false);
+  const [step, setStep] = useState(0);
 
-    const allFeatures = [
-        {
-            title: "ENERGY_RESERVES",
-            desc: "Welcome to the Vault. Here you manage your Ore Coins (OC) and Clan Coins (CC). OC is the universal currency, while CC is earned and spent exclusively within Clan Alliances.",
-            icon: "wallet",
-            color: "#3b82f6",
-            intel: "SYSTEM: WALLET_INITIALIZED"
-        },
-        {
-            title: "CLAIM_&_DISPATCH",
-            desc: "Don't forget to claim your daily OC allowance! Feeling generous? Use the Dispatch feature to transfer OC directly to allied operatives.",
-            icon: "send",
-            color: "#10b981",
-            intel: "ACTION: PEER_TO_PEER"
-        },
-        {
-            title: "THE_PEAK_SYSTEM",
-            desc: "Your Ascension begins here. Purchasing OC increases your Peak Level. Reach higher tiers to unlock exclusive permanent rewards and a glowing Peak Badge on your profile.",
-            icon: "rocket",
-            color: "#ec4899",
-            intel: "STATUS: ASCENSION_PROTOCOL"
-        },
-        {
-            title: "THE_VAULT",
-            desc: "Access the Vault to purchase Limited Bundles. These packs contain exclusive skins, borders, and OC. Join a Clan to unlock the highly classified Clan Vault.",
-            icon: "lock-closed",
-            color: "#f59e0b",
-            intel: "STORE: VAULT_ACCESS"
-        },
-        {
-            title: "READY_FOR_DEPLOYMENT",
-            desc: "Your wallet is fully synced. Secure your assets and upgrade your arsenal, Operator.",
-            icon: "checkmark-done-circle",
-            color: "#22c55e",
-            intel: "FINAL_INIT: SECURE"
-        }
-    ];
+  const allFeatures = [
+    {
+      title: "ENERGY_RESERVES",
+      desc: "Welcome to the Vault. Here you manage your Ore Coins (OC) and Clan Coins (CC). OC is the universal currency, while CC is earned and spent exclusively within Clan Alliances.",
+      icon: "wallet",
+      color: "#3b82f6",
+      intel: "SYSTEM: WALLET_INITIALIZED"
+    },
+    {
+      title: "CLAIM_&_DISPATCH",
+      desc: "Don't forget to claim your daily OC allowance! Feeling generous? Use the Dispatch feature to transfer OC directly to allied operatives.",
+      icon: "send",
+      color: "#10b981",
+      intel: "ACTION: PEER_TO_PEER"
+    },
+    {
+      title: "THE_PEAK_SYSTEM",
+      desc: "Your Ascension begins here. Purchasing OC increases your Peak Level. Reach higher tiers to unlock exclusive permanent rewards and a glowing Peak Badge on your profile.",
+      icon: "rocket",
+      color: "#ec4899",
+      intel: "STATUS: ASCENSION_PROTOCOL"
+    },
+    {
+      title: "THE_VAULT",
+      desc: "Access the Vault to purchase Limited Bundles. These packs contain exclusive skins, borders, and OC. Join a Clan to unlock the highly classified Clan Vault.",
+      icon: "lock-closed",
+      color: "#f59e0b",
+      intel: "STORE: VAULT_ACCESS"
+    },
+    {
+      title: "READY_FOR_DEPLOYMENT",
+      desc: "Your wallet is fully synced. Secure your assets and upgrade your arsenal, Operator.",
+      icon: "checkmark-done-circle",
+      color: "#22c55e",
+      intel: "FINAL_INIT: SECURE"
+    }
+  ];
 
-    useEffect(() => {
-        const hasSeen = storage.getBoolean('HAS_SEEN_WALLET_ONBOARDING');
-        if (!hasSeen) {
-            setIsVisible(true);
-        }
-    }, [storage]);
+  useEffect(() => {
+    const hasSeen = storage.getBoolean('HAS_SEEN_WALLET_ONBOARDING');
+    if (!hasSeen) {
+      setIsVisible(true);
+    }
+  }, [storage]);
 
-    const handleComplete = () => {
-        storage.set('HAS_SEEN_WALLET_ONBOARDING', true);
-        setIsVisible(false);
-    };
+  const handleComplete = () => {
+    storage.set('HAS_SEEN_WALLET_ONBOARDING', true);
+    setIsVisible(false);
+  };
 
-    const nextStep = () => {
-        if (step < allFeatures.length - 1) setStep(step + 1);
-        else handleComplete();
-    };
+  const nextStep = () => {
+    if (step < allFeatures.length - 1) setStep(step + 1);
+    else handleComplete();
+  };
 
-    const prevStep = () => {
-        if (step > 0) setStep(step - 1);
-    };
+  const prevStep = () => {
+    if (step > 0) setStep(step - 1);
+  };
 
-    if (!isVisible) return null;
+  if (!isVisible) return null;
 
-    return (
-        <Modal transparent visible={isVisible} animationType="none">
-            <View style={{ 
-                flex: 1, 
-                backgroundColor: 'rgba(0,0,0,0.96)', 
-                justifyContent: 'center', 
-                alignItems: 'center',
-                padding: 20 
-            }}>
-                <Animated.View entering={FadeIn} style={{ position: 'absolute', width: '100%', height: '100%' }} />
+  return (
+    <Modal transparent visible={isVisible} animationType="none">
+      <View style={{
+        flex: 1,
+        backgroundColor: 'rgba(0,0,0,0.96)',
+        justifyContent: 'center',
+        alignItems: 'center',
+        padding: 20
+      }}>
+        <Animated.View entering={FadeIn} style={{ position: 'absolute', width: '100%', height: '100%' }} />
 
-                <Animated.View 
-                    entering={ScaleIn}
-                    style={{ 
-                        width: '100%', 
-                        height: height * 0.78, 
-                        backgroundColor: '#050505', 
-                        borderRadius: 32, 
-                        borderWidth: 1, 
-                        borderColor: '#1e293b',
-                        padding: 30,
-                        justifyContent: 'space-between'
-                    }}
+        <Animated.View
+          entering={ScaleIn}
+          style={{
+            width: '100%',
+            height: height * 0.78,
+            backgroundColor: '#050505',
+            borderRadius: 32,
+            borderWidth: 1,
+            borderColor: '#1e293b',
+            padding: 30,
+            justifyContent: 'space-between'
+          }}
+        >
+          {/* --- TOP NAVIGATION BAR --- */}
+          <View style={{
+            flexDirection: 'row',
+            justifyContent: 'space-between',
+            alignItems: 'center',
+            zIndex: 10,
+            borderBottomWidth: 1,
+            borderBottomColor: '#111',
+            paddingBottom: 15
+          }}>
+            <View style={{ width: 80 }}>
+              {step > 0 && (
+                <TouchableOpacity
+                  onPress={prevStep}
+                  style={{ flexDirection: 'row', alignItems: 'center', gap: 4 }}
                 >
-                    {/* --- TOP NAVIGATION BAR --- */}
-                    <View style={{ 
-                        flexDirection: 'row', 
-                        justifyContent: 'space-between', 
-                        alignItems: 'center', 
-                        zIndex: 10,
-                        borderBottomWidth: 1,
-                        borderBottomColor: '#111',
-                        paddingBottom: 15
-                    }}>
-                        <View style={{ width: 80 }}> 
-                            {step > 0 && (
-                                <TouchableOpacity 
-                                    onPress={prevStep} 
-                                    style={{ flexDirection: 'row', alignItems: 'center', gap: 4 }}
-                                >
-                                    <Ionicons name="chevron-back" size={14} color="#60a5fa" />
-                                    <Text style={{ fontSize: 10, color: '#60a5fa', fontWeight: 'bold' }}>PREV_DATA</Text>
-                                </TouchableOpacity>
-                            )}
-                        </View>
-                        
-                        <View style={{ alignItems: 'center' }}>
-                            <Text style={{ fontSize: 9, color: '#22d3ee', fontWeight: 'bold' }}>[ INITIALIZING ]</Text>
-                        </View>
-
-                        <TouchableOpacity onPress={handleComplete}>
-                            <Text style={{ fontSize: 10, color: '#475569', fontWeight: 'bold', letterSpacing: 1 }}>SKIP_SYNC_X</Text>
-                        </TouchableOpacity>
-                    </View>
-
-                    <View>
-                        {/* Icon Container with Glow */}
-                        <Animated.View key={`icon-${step}`} entering={FadeIn} style={{ marginBottom: 30, marginTop: 10 }}>
-                            <View style={{ 
-                                width: 68, height: 68, borderRadius: 20, backgroundColor: '#000', 
-                                borderWidth: 1, borderColor: allFeatures[step].color, 
-                                justifyContent: 'center', alignItems: 'center',
-                                shadowColor: allFeatures[step].color, shadowOpacity: 0.3, shadowRadius: 15,
-                                elevation: 5
-                            }}>
-                                {allFeatures[step].icon === "auto-fix" ? (
-                                     <MaterialCommunityIcons name="auto-fix" size={34} color={allFeatures[step].color} />
-                                ) : (
-                                    <Ionicons name={allFeatures[step].icon} size={34} color={allFeatures[step].color} />
-                                )}
-                            </View>
-                        </Animated.View>
-
-                        {/* Text Content */}
-                        <Animated.View key={`text-${step}`} entering={FadeInDown}>
-                            <Text style={{ fontSize: 10, color: allFeatures[step].color, fontWeight: '900', letterSpacing: 3, marginBottom: 12 }}>
-                                {allFeatures[step].intel}
-                            </Text>
-                            <Text style={{ fontSize: 28, fontWeight: '900', color: '#fff', marginBottom: 18, lineHeight: 34 }}>
-                                {allFeatures[step].title.replace(/_/g, ' ')}
-                            </Text>
-                            <Text style={{ fontSize: 15, color: '#94a3b8', lineHeight: 24 }}>
-                                {allFeatures[step].desc}
-                            </Text>
-                        </Animated.View>
-                    </View>
-
-                    <View>
-                        {/* Progress Dots */}
-                        <View style={{ flexDirection: 'row', gap: 6, marginBottom: 30 }}>
-                            {allFeatures.map((_, i) => (
-                                <View key={i} style={{ 
-                                    height: 4, width: i === step ? 24 : 6, borderRadius: 10, 
-                                    backgroundColor: i === step ? allFeatures[step].color : '#1e293b' 
-                                }} />
-                            ))}
-                        </View>
-
-                        {/* Main Action Button */}
-                        <TouchableOpacity
-                            onPress={nextStep}
-                            activeOpacity={0.8}
-                            style={{
-                                backgroundColor: allFeatures[step].color,
-                                paddingVertical: 18, borderRadius: 18,
-                                alignItems: 'center', flexDirection: 'row',
-                                justifyContent: 'center', gap: 10
-                            }}
-                        >
-                            <Animated.View entering={FadeIn} style={{ flexDirection: 'row', alignItems: 'center', gap: 10 }}>
-                                <Text style={{ color: '#000', fontWeight: '900', fontSize: 14, letterSpacing: 2 }}>
-                                    {step === allFeatures.length - 1 ? "INITIALIZE_CORE" : "NEXT_SYNC_LEVEL"}
-                                </Text>
-                                <Ionicons 
-                                    name={step === allFeatures.length - 1 ? "flash" : "chevron-forward"} 
-                                    size={20} 
-                                    color="#000" 
-                                />
-                            </Animated.View>
-                        </TouchableOpacity>
-                    </View>
-                </Animated.View>
+                  <Ionicons name="chevron-back" size={14} color="#60a5fa" />
+                  <Text style={{ fontSize: 10, color: '#60a5fa', fontWeight: 'bold' }}>PREV_DATA</Text>
+                </TouchableOpacity>
+              )}
             </View>
-        </Modal>
-    );
+
+            <View style={{ alignItems: 'center' }}>
+              <Text style={{ fontSize: 9, color: '#22d3ee', fontWeight: 'bold' }}>[ INITIALIZING ]</Text>
+            </View>
+
+            <TouchableOpacity onPress={handleComplete}>
+              <Text style={{ fontSize: 10, color: '#475569', fontWeight: 'bold', letterSpacing: 1 }}>SKIP_SYNC_X</Text>
+            </TouchableOpacity>
+          </View>
+
+          <View>
+            {/* Icon Container with Glow */}
+            <Animated.View key={`icon-${step}`} entering={FadeIn} style={{ marginBottom: 30, marginTop: 10 }}>
+              <View style={{
+                width: 68, height: 68, borderRadius: 20, backgroundColor: '#000',
+                borderWidth: 1, borderColor: allFeatures[step].color,
+                justifyContent: 'center', alignItems: 'center',
+                shadowColor: allFeatures[step].color, shadowOpacity: 0.3, shadowRadius: 15,
+                elevation: 5
+              }}>
+                {allFeatures[step].icon === "auto-fix" ? (
+                  <MaterialCommunityIcons name="auto-fix" size={34} color={allFeatures[step].color} />
+                ) : (
+                  <Ionicons name={allFeatures[step].icon} size={34} color={allFeatures[step].color} />
+                )}
+              </View>
+            </Animated.View>
+
+            {/* Text Content */}
+            <Animated.View key={`text-${step}`} entering={FadeInDown}>
+              <Text style={{ fontSize: 10, color: allFeatures[step].color, fontWeight: '900', letterSpacing: 3, marginBottom: 12 }}>
+                {allFeatures[step].intel}
+              </Text>
+              <Text style={{ fontSize: 28, fontWeight: '900', color: '#fff', marginBottom: 18, lineHeight: 34 }}>
+                {allFeatures[step].title.replace(/_/g, ' ')}
+              </Text>
+              <Text style={{ fontSize: 15, color: '#94a3b8', lineHeight: 24 }}>
+                {allFeatures[step].desc}
+              </Text>
+            </Animated.View>
+          </View>
+
+          <View>
+            {/* Progress Dots */}
+            <View style={{ flexDirection: 'row', gap: 6, marginBottom: 30 }}>
+              {allFeatures.map((_, i) => (
+                <View key={i} style={{
+                  height: 4, width: i === step ? 24 : 6, borderRadius: 10,
+                  backgroundColor: i === step ? allFeatures[step].color : '#1e293b'
+                }} />
+              ))}
+            </View>
+
+            {/* Main Action Button */}
+            <TouchableOpacity
+              onPress={nextStep}
+              activeOpacity={0.8}
+              style={{
+                backgroundColor: allFeatures[step].color,
+                paddingVertical: 18, borderRadius: 18,
+                alignItems: 'center', flexDirection: 'row',
+                justifyContent: 'center', gap: 10
+              }}
+            >
+              <Animated.View entering={FadeIn} style={{ flexDirection: 'row', alignItems: 'center', gap: 10 }}>
+                <Text style={{ color: '#000', fontWeight: '900', fontSize: 14, letterSpacing: 2 }}>
+                  {step === allFeatures.length - 1 ? "INITIALIZE_CORE" : "NEXT_SYNC_LEVEL"}
+                </Text>
+                <Ionicons
+                  name={step === allFeatures.length - 1 ? "flash" : "chevron-forward"}
+                  size={20}
+                  color="#000"
+                />
+              </Animated.View>
+            </TouchableOpacity>
+          </View>
+        </Animated.View>
+      </View>
+    </Modal>
+  );
 };
 
 
@@ -286,7 +286,7 @@ const WalletPage = () => {
   const insets = useSafeAreaInsets();
   const navigation = useNavigation();
   const { user } = useUser();
-  
+
   const { coins, clanCoins, totalPurchasedCoins = 0, peakLevel = 0, processTransaction, isProcessingTransaction } = useCoins();
   const { cCoins, isLoading: clanLoading, userClan, clanRank, isInClan } = useClan();
 
@@ -294,7 +294,7 @@ const WalletPage = () => {
   const isDark = colorScheme === "dark";
 
   const [activeTab, setActiveTab] = useState('OC');
-  const [vaultTab, setVaultTab] = useState('AUTHOR'); 
+  const [vaultTab, setVaultTab] = useState('AUTHOR');
   const [packages, setPackages] = useState([]);
 
   const [authorVaultPacks, setAuthorVaultPacks] = useState([]);
@@ -606,14 +606,14 @@ const WalletPage = () => {
 
   const onPullComplete = (generatedNumber) => {
     setPullModalVisible(false);
-    
+
     const updatedRewards = activePullData.allRewards.map(reward => {
       if (reward.requiresPull) {
         const meta = reward.pullMetadata;
         const numberSvgTag = `<text x="${meta.targetTextX}" y="${meta.targetTextY}" font-family="Arial, sans-serif" font-size="100" fill="${meta.primaryFill || "#00a86b"}" font-weight="bold">${generatedNumber}</text>`;
-        
+
         const updatedSvg = reward.visualConfig.svgCode.replace('</svg>', `${numberSvgTag}</svg>`);
-        
+
         return {
           ...reward,
           visualConfig: { ...reward.visualConfig, svgCode: updatedSvg },
@@ -693,16 +693,16 @@ const WalletPage = () => {
       );
     }
   };
-  
+
   if (!minLoadDone) {
-        return (
-            <AnimeLoading
-                tipType={"wallet"}
-                message={"LOADING_WALLET"}
-                subMessage={"Loading Author Account"}
-            />
-        );
-    }
+    return (
+      <AnimeLoading
+        tipType={"wallet"}
+        message={"LOADING_WALLET"}
+        subMessage={"Loading Author Account"}
+      />
+    );
+  }
 
   const currentTierMin = peakLevel === 0 ? 0 : (PEAK_THRESHOLDS[peakLevel - 1] || 0);
   const nextTierMin = peakLevel === 0 ? 1 : (PEAK_THRESHOLDS[peakLevel] || PEAK_THRESHOLDS[PEAK_THRESHOLDS.length - 1]);
@@ -752,7 +752,7 @@ const WalletPage = () => {
       <WalletOnboarding />
 
       <ScrollView contentContainerStyle={{ paddingBottom: 100 }} className="p-5" showsVerticalScrollIndicator={false}>
-        
+
         <View className="mb-6 rounded-[35px] overflow-hidden h-fit" style={{ backgroundColor: THEME.card, borderWidth: 1, borderColor: THEME.border }}>
           <Canvas style={{ flex: 1, position: 'absolute', width: '100%', height: '100%' }}>
             <Rect x={0} y={0} width={width} height={200}>
@@ -831,11 +831,11 @@ const WalletPage = () => {
               <View style={{ backgroundColor: THEME.card, borderColor: THEME.border, borderWidth: 1 }} className="p-8 rounded-[35px] items-center mb-8 shadow-sm">
                 <View className="mb-4">
                   {peakLevel > 0 ? (
-                      <PeakBadge level={peakLevel} size={90} />
+                    <PeakBadge level={peakLevel} size={90} />
                   ) : (
-                      <View style={{ width: 90, height: 90, justifyContent: 'center', alignItems: 'center', backgroundColor: THEME.border, borderRadius: 20 }}>
-                          <MaterialCommunityIcons name="lock" size={40} color={THEME.textSecondary} />
-                      </View>
+                    <View style={{ width: 90, height: 90, justifyContent: 'center', alignItems: 'center', backgroundColor: THEME.border, borderRadius: 20 }}>
+                      <MaterialCommunityIcons name="lock" size={40} color={THEME.textSecondary} />
+                    </View>
                   )}
                 </View>
                 <Text style={{ color: THEME.text }} className="text-2xl font-black uppercase tracking-tighter">
@@ -1208,7 +1208,7 @@ const WalletPage = () => {
       </Modal>
 
       {activePullData && (
-        <PullSpinModal 
+        <PullSpinModal
           isVisible={pullModalVisible}
           rewardName={activePullData.reward.name}
           pullMetadata={activePullData.reward.pullMetadata}

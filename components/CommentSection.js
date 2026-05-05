@@ -241,7 +241,7 @@ const DiscussionDrawer = ({ visible, isDark, comment, onClose, onReply, isPostin
                 message: `Join the discussion on OreBlogda: ${API_URL}/post/${slug}?discussion=${comment._id}`,
             });
         } catch (error) {
-            console.log(error.message);
+            if (__DEV__) console.log(error.message);
         }
     };
 

@@ -3,7 +3,7 @@ import * as FileSystem from 'expo-file-system/legacy';
 import { Image } from "expo-image";
 import * as MediaLibrary from 'expo-media-library';
 import { useVideoPlayer, VideoView } from "expo-video";
-import { memo, useEffect, useMemo, useRef, useState } from "react";
+import React, { memo, useEffect, useMemo, useRef, useState } from "react";
 import {
     ActivityIndicator,
     BackHandler,
@@ -84,10 +84,10 @@ const MediaPlaceholder = ({ height = 250, onPress, type, thumbUrl, showPlayIcon 
     </Pressable>
 );
 
-const RemoteSvgIcon = ({ xml, size = 50, color }) => {
+const RemoteSvgIcon = React.memo(({ xml, size = 50, color }) => {
     if (!xml) return <MaterialCommunityIcons name="help-circle-outline" size={size} color="gray" />;
     return <SvgXml xml={xml} width={size} height={size} />;
-};
+});
 
 // Helper to format seconds into MM:SS
 const formatTime = (timeInSeconds) => {
@@ -137,10 +137,10 @@ const LightboxVideoPlayer = ({ uri }) => {
                 const fileInfo = await FileSystem.getInfoAsync(localUri);
 
                 if (fileInfo.exists) {
-                    console.log("Playing from cache:", localUri);
+                    if (__DEV__) console.log("Playing from cache:", localUri);
                     if (isMounted) setFinalUri(localUri);
                 } else {
-                    console.log("Downloading to cache...");
+                    if (__DEV__) console.log("Downloading to cache...");
                     const download = await FileSystem.downloadAsync(uri, localUri);
                     if (isMounted) setFinalUri(download.uri);
                 }
@@ -734,7 +734,7 @@ const PostCardComponent = ({ post, authorData, clanData, setPosts, isFeed, hideM
                 body: JSON.stringify({ action: "like", fingerprint }),
             });
             if (res.status === 400 || res.ok) {
-                console.log("Like registered successfully");
+                if (__DEV__) console.log("Like registered successfully");
             } else { throw new Error("Server rejected like request"); }
         } catch (err) {
             setLiked(false);

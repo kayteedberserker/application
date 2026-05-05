@@ -531,7 +531,7 @@ const SearchScreen = () => {
                                     renderItem={renderItem}
                                     estimatedItemSize={180}
                                     removeClippedSubviews={true}
-                                    drawDistance={1000}
+                                    drawDistance={2000}
                                     recycleItems={true}
                                     keyboardShouldPersistTaps="handled"
                                     onEndReached={handleLoadMore}

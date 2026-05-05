@@ -177,7 +177,7 @@ function RootLayoutContent() {
         if (IS_NAVIGATING_GLOBAL || LAST_PROCESSED_NOTIF_ID === currentNotifId) return;
 
         if (!appReadyRef.current || !isNavigationReady) {
-            console.log("⏳ Navigation not ready. Queueing...");
+            if (__DEV__) console.log("⏳ Navigation not ready. Queueing...");
             pendingNavigation.current = data;
             return;
         }
@@ -268,7 +268,7 @@ function RootLayoutContent() {
 
             // Give the Stack a moment to actually mount its children
             const timer = setTimeout(() => {
-                console.log("🚀 Flushing Cold Start Navigation");
+                if (__DEV__) console.log("🚀 Flushing Cold Start Navigation");
                 processRouting(data);
             }, 500); // 👈 Increased delay for stability on cold starts
 

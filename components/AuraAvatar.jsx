@@ -1,9 +1,10 @@
 import { Image } from "expo-image";
 import LottieView from 'lottie-react-native';
-import { useEffect, useMemo, useState } from "react";
+import React, { useEffect, useMemo, useState } from "react";
 import { ActivityIndicator, Pressable, View } from "react-native";
 import Animated, {
     Easing,
+    cancelAnimation, // ⚡️ Added to clean up animations
     interpolate,
     useAnimatedStyle,
     useSharedValue,
@@ -13,7 +14,9 @@ import Animated, {
 import { SvgXml } from "react-native-svg";
 import { Text } from "./Text";
 
-export default function AuraAvatar({
+// ⚡️ PERFORMANCE FIX 1: Wrap the entire component in React.memo
+// This stops it from re-rendering in LegendList unless its specific props change.
+const AuraAvatar = React.memo(function AuraAvatar({
     author,
     aura,
     isTop10,
@@ -44,6 +47,16 @@ export default function AuraAvatar({
     const animatedAvatarUrl = equippedAnimatedAvatar?.visualConfig?.lottieUrl || null;
     const rawSvgAvatarCode = equippedAnimatedAvatar?.visualConfig?.svgCode || null;
 
+    // ⚡️ PERFORMANCE FIX 2: Memoize Lottie Sources to prevent object re-creation on scroll
+    const vfxSource = useMemo(() => vfxUrl ? { uri: vfxUrl } : null, [vfxUrl]);
+    const animatedAvatarSource = useMemo(() => animatedAvatarUrl ? { uri: animatedAvatarUrl } : null, [animatedAvatarUrl]);
+
+    // ⚡️ PERFORMANCE FIX 3: Memoize SVG String parsing
+    const processedSvgAvatarCode = useMemo(() => {
+        if (!rawSvgAvatarCode) return null;
+        return rawSvgAvatarCode.replace(/currentColor/g, isDark ? 'white' : 'black');
+    }, [rawSvgAvatarCode, isDark]);
+
     // --- REANIMATED SHARED VALUES ---
     const pulseAnim = useSharedValue(1);
     const floatAnim = useSharedValue(0);
@@ -63,13 +76,13 @@ export default function AuraAvatar({
     useEffect(() => {
         if (!hasPremiumAura) return;
 
-        if (isFeed) {
-            pulseAnim.value = 1;
-            floatAnim.value = 0;
-            rotateCW.value = 0;
-            rotateCCW.value = 360;
-            return;
-        }
+        // if (isFeed) {
+        //     pulseAnim.value = 1;
+        //     floatAnim.value = 0;
+        //     rotateCW.value = 0;
+        //     rotateCCW.value = 360;
+        //     return;
+        // }
 
         const pulseSpeed = rank === 1 ? 800 : rank <= 3 ? 1200 : rank <= 5 || glowColor ? 1500 : 2000;
         pulseAnim.value = withRepeat(
@@ -90,6 +103,14 @@ export default function AuraAvatar({
             withTiming(0, { duration: rank === 1 ? 4000 : 6000, easing: Easing.linear }),
             -1, false
         );
+
+        // ⚡️ PERFORMANCE FIX 4: Cleanup animations on unmount to free up the UI thread
+        return () => {
+            cancelAnimation(pulseAnim);
+            cancelAnimation(floatAnim);
+            cancelAnimation(rotateCW);
+            cancelAnimation(rotateCCW);
+        };
     }, [hasPremiumAura, rank, glowColor, isFeed]);
 
     // --- STYLES: THE BREATHING FIRE AURA ---
@@ -187,7 +208,7 @@ export default function AuraAvatar({
             )}
 
             {/* ⚡️ FIXED: PERFECTLY ANCHORED & SCALED LOTTIE VFX LAYER */}
-            {vfxUrl && (
+            {vfxSource && (
                 <View
                     style={{
                         position: 'absolute',
@@ -202,9 +223,9 @@ export default function AuraAvatar({
                     }}
                 >
                     <LottieView
-                        source={{ uri: vfxUrl }}
-                        autoPlay={!isFeed}
-                        loop={!isFeed}
+                        source={vfxSource}
+                        autoPlay={isFeed}
+                        loop={isFeed}
                         style={{
                             width: '100%',
                             height: '100%',
@@ -233,11 +254,11 @@ export default function AuraAvatar({
                 ]}
             >
                 {/* ⚡️ CHECK 1: Is it an Animated Lottie Avatar? */}
-                {animatedAvatarUrl ? (
+                {animatedAvatarSource ? (
                     <LottieView
-                        source={{ uri: animatedAvatarUrl }}
-                        autoPlay={!isFeed}
-                        loop={!isFeed}
+                        source={animatedAvatarSource}
+                        autoPlay={isFeed}
+                        loop={isFeed}
                         style={[
                             { width: '100%', height: '100%' },
                             rank === 1 ? { transform: [{ rotate: '-45deg' }], scale: 1.4 } : {}
@@ -246,7 +267,7 @@ export default function AuraAvatar({
                         renderMode="hardware"
                     />
 
-                ) : rawSvgAvatarCode ? (
+                ) : processedSvgAvatarCode ? (
                     <View
                         style={[
                             { flex: 1, alignItems: 'center', justifyContent: 'center' },
@@ -256,7 +277,7 @@ export default function AuraAvatar({
                         <SvgXml
                             width="100%"
                             height="100%"
-                            xml={rawSvgAvatarCode.replace(/currentColor/g, isDark ? 'white' : 'black')}
+                            xml={processedSvgAvatarCode}
                         />
                     </View>
 
@@ -293,4 +314,6 @@ export default function AuraAvatar({
             </Animated.View>
         </Pressable>
     );
-}
+});
+
+export default AuraAvatar;

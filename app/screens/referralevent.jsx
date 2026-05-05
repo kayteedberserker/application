@@ -1,7 +1,7 @@
 import { Ionicons, MaterialCommunityIcons } from "@expo/vector-icons";
 import * as Haptics from 'expo-haptics';
 import { useColorScheme as useNativeWind } from "nativewind";
-import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import React, { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import {
     ActivityIndicator,
     Clipboard,
@@ -52,12 +52,12 @@ const GACHA_POOLS_CACHE_KEY = "gacha_pools_cache_v2";
 const GACHA_OWNED_CACHE_KEY = "gacha_owned_cache_v2";
 const GACHA_PITY_CACHE_KEY = "gacha_pity_cache_v2";
 const GACHA_POINTS_CACHE_KEY = "gacha_points_cache_v2";
-
 // ==========================================
 // ⚡️ HELPER: CRASH-SAFE SVG ICON
 // ==========================================
-const RemoteSvgIcon = ({ xml, lottieUrl, lottieJson, size = 50, color }) => {
-    // ⚡️ 1. Lottie Animation Check
+const RemoteSvgIcon = React.memo(({ xml, lottieUrl, lottieJson, size = 50, color }) => {
+
+    // ⚡️ 1. Lottie Animation Check (Stays the same)
     if (lottieJson || lottieUrl) {
         return (
             <View style={{ width: size, height: size, alignItems: 'center', justifyContent: 'center' }}>
@@ -65,23 +65,32 @@ const RemoteSvgIcon = ({ xml, lottieUrl, lottieJson, size = 50, color }) => {
                     source={lottieJson ? lottieJson : { uri: lottieUrl }}
                     autoPlay
                     loop
-                    // Scaling it slightly (1.2) ensures it fills the bounding box nicely just like the SVGs do
                     style={{ width: size * 1.2, height: size * 1.2 }}
                     resizeMode="contain"
-                    renderMode="hardware"
+                    renderMode="hardware" // 🔥 Good choice for performance
                 />
             </View>
         );
     }
 
-    // ⚡️ 2. Strict SVG Check (Prevents 'push of null' crashes)
-    if (!xml || typeof xml !== 'string' || !xml.includes('<svg')) {
+    // ⚡️ 2. SVG Validation & Color Injection
+    // We use useMemo so the string replacement ONLY happens when inputs change
+    const processedXml = useMemo(() => {
+        if (!xml || typeof xml !== 'string' || !xml.includes('<svg')) {
+            return null;
+        }
+        // Injects the color into the XML string
+        return xml.replace(/currentColor/g, color || 'white');
+    }, [xml, color]);
+
+    // ⚡️ 3. Strict SVG Check (Prevents 'push of null' crashes)
+    if (!processedXml) {
         return <MaterialCommunityIcons name="help-circle-outline" size={size} color={color || "gray"} />;
     }
 
-    // ⚡️ 3. Render Valid SVG
-    return <SvgXml xml={xml.replace(/currentColor/g, color || 'white')} width={size} height={size} />;
-};
+    // ⚡️ 4. Render Valid SVG
+    return <SvgXml xml={processedXml} width={size} height={size} />;
+});
 
 // ==========================================
 // ⚡️ HELPER: RARITY COLOR MAPPER
@@ -1565,7 +1574,7 @@ const ComingSoonView = ({ event, isDark }) => {
 export default function EventHubScreen() {
     const storage = useMMKV();
     const { user } = useUser();
-    console.log(user.deviceId);
+    if (__DEV__) console.log(user.deviceId);
 
     const { activeEvents, isLoading: contextLoading } = useEvent();
     const { colorScheme } = useNativeWind();

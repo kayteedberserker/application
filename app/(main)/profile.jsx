@@ -6,7 +6,7 @@ import * as MediaLibrary from 'expo-media-library';
 import { useRouter } from "expo-router";
 import * as Sharing from "expo-sharing";
 import { useColorScheme as useNativeWind } from "nativewind";
-import { useEffect, useMemo, useRef, useState } from "react";
+import React, { useEffect, useMemo, useRef, useState } from "react";
 import {
     ActivityIndicator,
     Dimensions,
@@ -62,10 +62,10 @@ const LIMIT = 5;
 const fetcher = (url) => apiFetch(url).then((res) => res.json());
 
 // 🎨 --- RENDERER FOR BACKEND SVGS ---
-const RemoteSvgIcon = ({ xml, size = 50, color }) => {
+const RemoteSvgIcon = React.memo(({ xml, size = 50, color }) => {
     if (!xml) return <MaterialCommunityIcons name="help-circle-outline" size={size} color={color || "gray"} />;
     return <SvgXml xml={xml} width={size} height={size} color={color} />;
-};
+});
 
 const getRarityColor = (rarity) => {
     switch (rarity?.toUpperCase()) {
@@ -1275,7 +1275,7 @@ export default function MobileProfilePage() {
                 }
             }
         } catch (error) {
-            console.error("Capture Error:", error);
+            if (__DEV__) console.error("Capture Error:", error);
             Toast.show({ type: 'error', text1: 'Error', text2: 'Failed to capture the card.' });
         }
     };

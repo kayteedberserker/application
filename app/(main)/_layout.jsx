@@ -67,7 +67,7 @@ export default function MainLayout() {
     const [showClanMenu, setShowClanMenu] = useState(false);
 
     const { user, setUser, contextLoading, pinModalVisible, setPinModalVisible } = useUser();
-    console.log(pinModalVisible);
+    if (__DEV__) console.log(pinModalVisible);
 
     // ⚡️ CLAN HINT STATE
     const [showClanHint, setShowClanHint] = useState(false);
@@ -91,8 +91,6 @@ export default function MainLayout() {
     // =================================================================
     useEffect(() => {
         const checkFirstPost = storage.getNumber("trigger_first_post");
-        console.log(checkFirstPost);
-
         if (checkFirstPost !== 0 && checkFirstPost !== undefined) {
             setIsFirstPostFlow(true);
         }
@@ -176,7 +174,7 @@ export default function MainLayout() {
             const legacyUserStr = await AsyncStorage.getItem("mobileUser");
 
             if (legacyUserStr) {
-                console.log("Gatekeeper: Migrating veteran operative to MMKV...");
+                if (__DEV__) console.log("Gatekeeper: Migrating veteran operative to MMKV...");
                 storage.set("mobileUser", legacyUserStr);
                 const parsed = JSON.parse(legacyUserStr);
                 setUser(parsed);

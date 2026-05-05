@@ -6,12 +6,14 @@ import {
     Path,
     Rect,
     Shadow,
+    Skia, // ⚡️ NEW IMPORT: For pre-compiling paths
     vec
 } from '@shopify/react-native-skia';
 import { memo, useEffect, useMemo } from 'react';
 import { View } from 'react-native';
 import {
     Easing,
+    cancelAnimation, // ⚡️ ADDED: For thread cleanup
     useDerivedValue,
     useSharedValue,
     withRepeat,
@@ -47,16 +49,22 @@ function PeakBadgeComponent({ level = 1, size = 32, isFeed = false }) {
     const progress = useSharedValue(-0.5);
 
     useEffect(() => {
-        if (isFeed) {
-            progress.value = 0.5; // Freeze the light sweep in the center
-            return;
-        }
+        // ⚡️ CLEANUP: Cancel existing animation to prevent overlap
+        cancelAnimation(progress);
+
+        // if (isFeed) {
+        //     progress.value = 0.5; // Freeze the light sweep in the center
+        //     return;
+        // }
 
         progress.value = withRepeat(
             withTiming(1.5, { duration: 2500, easing: Easing.inOut(Easing.ease) }),
             -1,
             false
         );
+
+        // ⚡️ CLEANUP: Stop animation on unmount
+        return () => cancelAnimation(progress);
     }, [progress, isFeed]);
 
     // ⚡️ DYNAMIC DIMENSION MATH & PATH GENERATION (MEMOIZED)
@@ -73,33 +81,28 @@ function PeakBadgeComponent({ level = 1, size = 32, isFeed = false }) {
         const cx = cw / 2;
         const cy = h / 2;
 
-        const hexPath = `M ${offsetX + w / 2} 0 L ${offsetX + w} ${h * 0.25} L ${offsetX + w} ${h * 0.75} L ${offsetX + w / 2} ${h} L ${offsetX} ${h * 0.75} L ${offsetX} ${h * 0.25} Z`;
+        const hexPathStr = `M ${offsetX + w / 2} 0 L ${offsetX + w} ${h * 0.25} L ${offsetX + w} ${h * 0.75} L ${offsetX + w / 2} ${h} L ${offsetX} ${h * 0.75} L ${offsetX} ${h * 0.25} Z`;
 
         const inset = size * 0.15;
         const innerH = h - inset * 2;
-        const innerHexPath = `M ${offsetX + w / 2} ${inset} L ${offsetX + w - inset} ${inset + innerH * 0.25} L ${offsetX + w - inset} ${inset + innerH * 0.75} L ${offsetX + w / 2} ${h - inset} L ${offsetX + inset} ${inset + innerH * 0.75} L ${offsetX + inset} ${inset + innerH * 0.25} Z`;
+        const innerHexPathStr = `M ${offsetX + w / 2} ${inset} L ${offsetX + w - inset} ${inset + innerH * 0.25} L ${offsetX + w - inset} ${inset + innerH * 0.75} L ${offsetX + w / 2} ${h - inset} L ${offsetX + inset} ${inset + innerH * 0.75} L ${offsetX + inset} ${inset + innerH * 0.25} Z`;
 
-        let wingsPath = '';
+        let wingsPathStr = '';
         if (safeLevel >= 3) {
-            wingsPath += `M ${cx} ${cy - h * 0.2} L ${cx + w * 0.8} ${cy - h * 0.5} L ${cx + w * 0.6} ${cy} L ${cx} ${cy + h * 0.1} Z `;
-            wingsPath += `M ${cx} ${cy - h * 0.2} L ${cx - w * 0.8} ${cy - h * 0.5} L ${cx - w * 0.6} ${cy} L ${cx} ${cy + h * 0.1} Z `;
+            wingsPathStr += `M ${cx} ${cy - h * 0.2} L ${cx + w * 0.8} ${cy - h * 0.5} L ${cx + w * 0.6} ${cy} L ${cx} ${cy + h * 0.1} Z `;
+            wingsPathStr += `M ${cx} ${cy - h * 0.2} L ${cx - w * 0.8} ${cy - h * 0.5} L ${cx - w * 0.6} ${cy} L ${cx} ${cy + h * 0.1} Z `;
         }
         if (safeLevel >= 7) {
-            wingsPath += `M ${cx} ${cy} L ${cx + w * 0.7} ${cy + h * 0.2} L ${cx + w * 0.5} ${cy + h * 0.5} L ${cx} ${cy + h * 0.2} Z `;
-            wingsPath += `M ${cx} ${cy} L ${cx - w * 0.7} ${cy + h * 0.2} L ${cx - w * 0.5} ${cy + h * 0.5} L ${cx} ${cy + h * 0.2} Z `;
+            wingsPathStr += `M ${cx} ${cy} L ${cx + w * 0.7} ${cy + h * 0.2} L ${cx + w * 0.5} ${cy + h * 0.5} L ${cx} ${cy + h * 0.2} Z `;
+            wingsPathStr += `M ${cx} ${cy} L ${cx - w * 0.7} ${cy + h * 0.2} L ${cx - w * 0.5} ${cy + h * 0.5} L ${cx} ${cy + h * 0.2} Z `;
         }
         if (safeLevel >= 9) {
-            wingsPath += `M ${cx} ${cy - h * 0.1} L ${cx + w * 0.9} ${cy - h * 0.2} L ${cx + w * 0.8} ${cy - h * 0.1} L ${cx} ${cy} Z `;
-            wingsPath += `M ${cx} ${cy - h * 0.1} L ${cx - w * 0.9} ${cy - h * 0.2} L ${cx - w * 0.8} ${cy - h * 0.1} L ${cx} ${cy} Z `;
+            wingsPathStr += `M ${cx} ${cy - h * 0.1} L ${cx + w * 0.9} ${cy - h * 0.2} L ${cx + w * 0.8} ${cy - h * 0.1} L ${cx} ${cy} Z `;
+            wingsPathStr += `M ${cx} ${cy - h * 0.1} L ${cx - w * 0.9} ${cy - h * 0.2} L ${cx - w * 0.8} ${cy - h * 0.1} L ${cx} ${cy} Z `;
         }
 
-        // ====================================================================
-        // ⚡️ DYNAMIC LAYOUT ENGINE (Smart Scaling & Grids)
-        // ====================================================================
         const chevronCount = Math.floor(safeLevel / 5);
         const diamondCount = safeLevel % 5;
-
-        // 1. Calculate Rows
         const rows = [];
         for (let i = 0; i < chevronCount; i++) rows.push({ type: 'chevron' });
 
@@ -109,48 +112,50 @@ function PeakBadgeComponent({ level = 1, size = 32, isFeed = false }) {
         else if (diamondCount === 4) { rows.push({ type: 'diamond', count: 2 }); rows.push({ type: 'diamond', count: 2 }); }
 
         const totalRowsCount = rows.length;
-
-        // 2. Determine Scale based on total elements
         let scaleMultiplier = 1.0;
-        if (totalRowsCount === 1) scaleMultiplier = 1.25; // Massive single indicator
-        else if (totalRowsCount === 2) scaleMultiplier = 0.95; // Side by side or 2 rows
-        else if (totalRowsCount === 3) scaleMultiplier = 0.75; // Triangle + Chevron
-        else scaleMultiplier = 0.6; // Heavy stacking
+        if (totalRowsCount === 1) scaleMultiplier = 1.25;
+        else if (totalRowsCount === 2) scaleMultiplier = 0.95;
+        else if (totalRowsCount === 3) scaleMultiplier = 0.75;
+        else scaleMultiplier = 0.6;
 
-        // 3. Size variables with scaling applied
         const chevronW = size * 0.5 * scaleMultiplier;
         const chevronH = size * 0.2 * scaleMultiplier;
         const diamondR = size * 0.12 * scaleMultiplier;
         const gap = size * 0.08 * scaleMultiplier;
-        const diamondSpacing = diamondR * 2.2; // Space between side-by-side diamonds
+        const diamondSpacing = diamondR * 2.2;
 
-        // 4. Calculate Total Height to perfectly vertically center the cluster
         let totalStackHeight = 0;
         rows.forEach(row => {
             totalStackHeight += (row.type === 'chevron' ? chevronH : diamondR * 2) + gap;
         });
-        totalStackHeight -= gap; // Remove trailing gap
+        totalStackHeight -= gap;
 
         let currentY = cy - (totalStackHeight / 2);
-        let indicatorPaths = '';
+        let indicatorPathsStr = '';
 
-        // 5. Draw the Rows
         rows.forEach(row => {
             if (row.type === 'chevron') {
-                indicatorPaths += createChevronPath(cx, currentY, chevronW, chevronH) + ' ';
+                indicatorPathsStr += createChevronPath(cx, currentY, chevronW, chevronH) + ' ';
                 currentY += chevronH + gap;
             } else {
                 if (row.count === 1) {
-                    indicatorPaths += createDiamondPath(cx, currentY + diamondR, diamondR) + ' ';
+                    indicatorPathsStr += createDiamondPath(cx, currentY + diamondR, diamondR) + ' ';
                 } else if (row.count === 2) {
-                    indicatorPaths += createDiamondPath(cx - diamondSpacing / 2, currentY + diamondR, diamondR) + ' ';
-                    indicatorPaths += createDiamondPath(cx + diamondSpacing / 2, currentY + diamondR, diamondR) + ' ';
+                    indicatorPathsStr += createDiamondPath(cx - diamondSpacing / 2, currentY + diamondR, diamondR) + ' ';
+                    indicatorPathsStr += createDiamondPath(cx + diamondSpacing / 2, currentY + diamondR, diamondR) + ' ';
                 }
                 currentY += (diamondR * 2) + gap;
             }
         });
 
-        return { cw, h, w, offsetX, wingsPath, hexPath, innerHexPath, indicatorPaths };
+        // ⚡️ PERFORMANCE FIX: Pre-compile paths so Skia doesn't parse strings in the draw loop
+        return {
+            cw, h, w, offsetX,
+            wingsPath: Skia.Path.MakeFromSVGString(wingsPathStr),
+            hexPath: Skia.Path.MakeFromSVGString(hexPathStr),
+            innerHexPath: Skia.Path.MakeFromSVGString(innerHexPathStr),
+            indicatorPaths: Skia.Path.MakeFromSVGString(indicatorPathsStr)
+        };
     }, [safeLevel, size]);
 
     // Extract layout values

@@ -1,5 +1,4 @@
 import { Ionicons, MaterialCommunityIcons } from "@expo/vector-icons";
-import { useMMKV } from "react-native-mmkv"; // 🔹 Swapped to MMKV
 import { useCallback, useEffect, useState } from "react";
 import {
     Clipboard,
@@ -10,13 +9,14 @@ import {
     useColorScheme,
     View
 } from "react-native";
+import { useMMKV } from "react-native-mmkv"; // 🔹 Swapped to MMKV
 import { SafeAreaView } from 'react-native-safe-area-context';
 import CoinIcon from "../../components/ClanIcon";
 import { Text } from "../../components/Text";
+import TopBar from "../../components/Topbar";
 import THEME from "../../components/useAppTheme";
 import { useUser } from "../../context/UserContext";
 import apiFetch from "../../utils/apiFetch";
-import TopBar from "../../components/Topbar";
 
 const CACHE_KEY = "referral_dashboard_cache";
 
@@ -70,7 +70,7 @@ export default function ReferralDashboard() {
         } catch (e) {
             console.error("Cache load failed", e);
         }
-        
+
         fetchLatestData(); // Background fetch immediately after
     }, [fetchLatestData, storage]);
 
@@ -91,20 +91,20 @@ export default function ReferralDashboard() {
                 message: `Join me on Oreblogda! Use my link to get +20 Aura, 50 OC and 3 days of Double Streak boosts: ${referralLink}`,
             });
         } catch (error) {
-            console.log(error.message);
+            if (__DEV__) console.log(error.message);
         }
     };
 
     const RewardCard = ({ icon, title, sub, color, isCoin }) => (
-        <View 
-            style={{ backgroundColor: THEME.card, borderColor: THEME.border }} 
+        <View
+            style={{ backgroundColor: THEME.card, borderColor: THEME.border }}
             className="flex-1 p-5 py-3 rounded-[24px] border-2 m-1 relative overflow-hidden"
         >
             <View className="absolute -right-3 -top-3 opacity-10">
-                 {!isCoin ?<MaterialCommunityIcons name={icon} size={70} color={color} /> : <CoinIcon type="OC" size={70} />}
+                {!isCoin ? <MaterialCommunityIcons name={icon} size={70} color={color} /> : <CoinIcon type="OC" size={70} />}
             </View>
             <View style={{ backgroundColor: `${color}20` }} className="w-10 h-10 rounded-xl items-center justify-center mb-3">
-                 {!isCoin ?<MaterialCommunityIcons name={icon} size={22} color={color} /> : <CoinIcon type="OC" size={22} />}
+                {!isCoin ? <MaterialCommunityIcons name={icon} size={22} color={color} /> : <CoinIcon type="OC" size={22} />}
             </View>
             <Text className="text-[14px] font-black uppercase italic" style={{ color: THEME.text }}>{title}</Text>
             <Text className="text-[8px] font-bold uppercase tracking-[0.1em] opacity-60" style={{ color: THEME.textSecondary }}>{sub}</Text>
@@ -115,14 +115,14 @@ export default function ReferralDashboard() {
     return (
         <SafeAreaView style={{ flex: 1, backgroundColor: THEME.bg }}>
             <TopBar isDark={isDark} />
-            <ScrollView 
-                showsVerticalScrollIndicator={false} 
+            <ScrollView
+                showsVerticalScrollIndicator={false}
                 className="px-6"
                 refreshControl={
                     <RefreshControl refreshing={refreshing} onRefresh={onRefresh} tintColor={THEME.accent} />
                 }
             >
-                
+
                 {/* Visual Header - Anime/Spirit Theme */}
                 <View className="mt-10 mb-8 flex-row justify-between items-end">
                     <View>
@@ -144,11 +144,11 @@ export default function ReferralDashboard() {
                     </View>
 
                     <Text style={{ color: THEME.textSecondary }} className="text-[9px] font-black uppercase tracking-[0.3em] mb-4 opacity-50 text-center">Your Summoning Signature</Text>
-                    
+
                     <View style={{ backgroundColor: 'rgba(0,0,0,0.3)', borderColor: THEME.border }} className="flex-row items-center justify-between p-6 rounded-[24px] border-2 border-dashed mb-6">
                         <Text style={{ color: THEME.text }} className="text-3xl font-black italic tracking-[0.2em]">{dbData.referralCode}</Text>
-                        <TouchableOpacity 
-                            onPress={copyToClipboard} 
+                        <TouchableOpacity
+                            onPress={copyToClipboard}
                             style={{ backgroundColor: `${THEME.accent}20`, borderColor: THEME.accent }}
                             className="p-3 rounded-2xl border"
                         >
@@ -156,7 +156,7 @@ export default function ReferralDashboard() {
                         </TouchableOpacity>
                     </View>
 
-                    <TouchableOpacity 
+                    <TouchableOpacity
                         onPress={onShare}
                         activeOpacity={0.9}
                         style={{ backgroundColor: THEME.accent, shadowColor: THEME.accent, shadowOffset: { width: 0, height: 10 }, shadowRadius: 20, shadowOpacity: 0.3 }}
@@ -193,9 +193,9 @@ export default function ReferralDashboard() {
 
                     {dbData.invitedUsers.length > 0 ? (
                         dbData.invitedUsers.map((item, index) => (
-                            <View 
-                                key={index} 
-                                style={{ backgroundColor: THEME.card, borderColor: THEME.border }} 
+                            <View
+                                key={index}
+                                style={{ backgroundColor: THEME.card, borderColor: THEME.border }}
                                 className="w-full p-4 rounded-[22px] border-2 mb-3 flex-row items-center justify-between"
                             >
                                 <View className="flex-row items-center">
@@ -215,8 +215,8 @@ export default function ReferralDashboard() {
                             </View>
                         ))
                     ) : (
-                        <View 
-                            style={{ backgroundColor: THEME.card, borderColor: THEME.border }} 
+                        <View
+                            style={{ backgroundColor: THEME.card, borderColor: THEME.border }}
                             className="py-16 items-center rounded-[35px] border-2 border-dashed opacity-50"
                         >
                             <MaterialCommunityIcons name="meditation" size={40} color={THEME.textSecondary} className="mb-2" />

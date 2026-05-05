@@ -140,7 +140,7 @@ export default function AppOnboarding() {
                 }
             }
         } catch (e) {
-            console.log("Onboarding logic error:", e);
+            if (__DEV__) console.log("Onboarding logic error:", e);
         }
     };
 
@@ -155,7 +155,7 @@ export default function AppOnboarding() {
             storage.set("HAS_SEEN_PEAK_V5", "true"); // ⚡️ Marks the update as seen
             setIsVisible(false);
         } catch (e) {
-            console.log("Error saving onboarding state:", e);
+            if (__DEV__) console.log("Error saving onboarding state:", e);
         }
     };
 

@@ -4,7 +4,7 @@ import { Image } from 'expo-image';
 import * as MediaLibrary from 'expo-media-library';
 import { useRouter } from 'expo-router';
 import * as Sharing from 'expo-sharing';
-import { useEffect, useMemo, useRef, useState } from 'react';
+import React, { useEffect, useMemo, useRef, useState } from 'react';
 import {
     ActivityIndicator,
     Dimensions,
@@ -477,7 +477,7 @@ const ClanProfile = () => {
         // ⚡️ Check Onboarding exactly when fullData is ready
         if (fullData && !loading) {
             const hasSeenOnboarding = storage.getBoolean(ONBOARDING_KEY);
-            console.log(hasSeenOnboarding, "ishas");
+            if (__DEV__) console.log(hasSeenOnboarding, "ishas");
 
             if (!hasSeenOnboarding) {
                 setShowOnboarding(true);
@@ -1224,7 +1224,7 @@ const ClanProfile = () => {
                     }
                     if (activeTab === 'Hall') {
                         return <ClanMessageItem onSelectMessage={(msg) => {
-                            console.log("Captured message data:", msg);
+                            if (__DEV__) console.log("Captured message data:", msg);
                             setSelectedMessage(msg); // Now 'msg' is accessible outside the component
                         }} message={item} isDark={isDark} isMe={item.authorId === user.deviceId} appBlue={APP_BLUE} />;
                     }
@@ -1467,10 +1467,10 @@ const ClanMessageItem = ({ message, isMe, isDark, appBlue, onSelectMessage }) =>
 }
 
 // 🎨 --- RENDERER FOR BACKEND SVGS ---
-const RemoteSvgIcon = ({ xml, size = 150, color }) => {
+const RemoteSvgIcon = React.memo(({ xml, size = 150, color }) => {
     if (!xml) return <MaterialCommunityIcons name="help-circle-outline" size={size} color={color || "gray"} />;
     return <SvgXml xml={xml} width={size} height={size} color={color} />;
-};
+});
 
 const getRarityColor = (rarity) => {
     switch (rarity?.toUpperCase()) {

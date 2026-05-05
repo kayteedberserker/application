@@ -83,7 +83,7 @@ const NeuralPinModal = ({ visible, onSuccess, onClose, returnPinOnly = false }) 
 
         // ⚡️ NEW: If returnPinOnly is true, just return the PIN to parent without API call
         // This is used for recovery flow where parent handles the API call
-        console.log(returnPinOnly, "is returnPinOnly");
+        if (__DEV__) console.log(returnPinOnly, "is returnPinOnly");
 
         // Original behavior: call secure-uplink for logged-in users
         try {

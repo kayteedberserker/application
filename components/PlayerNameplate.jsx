@@ -1,9 +1,10 @@
 import { Ionicons } from "@expo/vector-icons";
 import MaskedView from '@react-native-masked-view/masked-view';
 import { LinearGradient } from 'expo-linear-gradient';
-import { useEffect, useState } from 'react';
+import { memo, useEffect, useMemo, useState } from 'react'; // ⚡️ ADDED: React, useMemo, memo
 import { StyleSheet, View } from 'react-native';
 import Animated, {
+    cancelAnimation, // ⚡️ ADDED: For cleanup
     interpolate,
     useAnimatedStyle,
     useSharedValue,
@@ -14,7 +15,7 @@ import Animated, {
 import PeakBadge from "./PeakBadge";
 import { Text } from "./Text";
 
-export default function PlayerNameplate({
+const PlayerNameplate = memo(({
     author,
     themeColor,
     equippedGlow,
@@ -24,17 +25,17 @@ export default function PlayerNameplate({
     isFeed = false,
     showPeakBadge = true,
     showFlame = true
-}) {
+}) => {
     const username = author?.username || author?.name || "GUEST";
     const peakLevel = author?.peakLevel || 0;
     const lastStreak = author?.lastStreak || author?.streak || "0";
 
     const glowConfig = equippedGlow?.visualConfig || {};
-    let hasAura = false
+    let hasAura = false;
     if (auraRank > 0 && auraRank < 5) {
-        hasAura = true
+        hasAura = true;
     } else if (auraRank == null) {
-        hasAura = false
+        hasAura = false;
     }
 
     const hasGlow = !!equippedGlow || hasAura;
@@ -46,28 +47,41 @@ export default function PlayerNameplate({
         animationType = 'sweep';
     }
 
-    const badgeSize = Math.max(16, fontSize * 0.77);
-    const flameIconSize = Math.max(12, fontSize * 0.5);
+    const badgeSize = useMemo(() => Math.max(16, fontSize * 0.77), [fontSize]);
+    const flameIconSize = useMemo(() => Math.max(12, fontSize * 0.5), [fontSize]);
 
     const progress = useSharedValue(0);
     const glitchX = useSharedValue(0);
     const glitchY = useSharedValue(0);
     const glitchOpacity = useSharedValue(1);
     const pulseAnim = useSharedValue(0);
+    const loadingOpacity = useSharedValue(1); // ⚡️ NEW: For the measurement loading state
 
     const [textDimensions, setTextDimensions] = useState({ width: 0, height: 0 });
     const [isReadyToAnimate, setIsReadyToAnimate] = useState(false);
 
     useEffect(() => {
+        // Start a subtle loading animation while waiting for measurement
+        if (textDimensions.width === 0) {
+            loadingOpacity.value = withRepeat(
+                withTiming(0.5, { duration: 800 }),
+                -1,
+                true
+            );
+        } else {
+            cancelAnimation(loadingOpacity);
+            loadingOpacity.value = 1;
+        }
+
         if (!isAnimated) return;
 
-        if (isFeed) {
-            progress.value = 0.5;
-            glitchX.value = 0;
-            glitchY.value = 0;
-            pulseAnim.value = 1;
-            return;
-        }
+        // if (isFeed) {
+        //     progress.value = 0.5;
+        //     glitchX.value = 0;
+        //     glitchY.value = 0;
+        //     pulseAnim.value = 1;
+        //     return;
+        // }
 
         const timer = setTimeout(() => {
             setIsReadyToAnimate(true);
@@ -121,8 +135,17 @@ export default function PlayerNameplate({
             }
         }, 100);
 
-        return () => clearTimeout(timer);
-    }, [isAnimated, animationType, progress, glitchX, glitchY, glitchOpacity, pulseAnim, isFeed]);
+        return () => {
+            clearTimeout(timer);
+            // ⚡️ CLEANUP: Cancel all animations to save resources
+            cancelAnimation(progress);
+            cancelAnimation(glitchX);
+            cancelAnimation(glitchY);
+            cancelAnimation(glitchOpacity);
+            cancelAnimation(pulseAnim);
+            cancelAnimation(loadingOpacity);
+        };
+    }, [isAnimated, animationType, isFeed, textDimensions.width]);
 
     const sweepStyle = useAnimatedStyle(() => {
         const translationRange = textDimensions.width > 0 ? textDimensions.width * 1.5 : 300;
@@ -152,7 +175,10 @@ export default function PlayerNameplate({
         textShadowRadius: interpolate(pulseAnim.value, [0, 1], [3, 12])
     }));
 
-    // ⚡️ FIXED: Added numberOfLines={1} so it never wraps, and fixed styles
+    const loadingStyle = useAnimatedStyle(() => ({
+        opacity: loadingOpacity.value
+    }));
+
     const BaseText = ({ styleOverride, onLayout, forceNoShadow }) => (
         <Text
             numberOfLines={1}
@@ -176,24 +202,22 @@ export default function PlayerNameplate({
 
     const shouldAnimateNow = isAnimated && hasGlow && isReadyToAnimate && textDimensions.width > 0;
 
-    // ⚡️ FIXED: Measurement layout logic
     if (!shouldAnimateNow) {
         return (
             <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8, alignSelf: 'flex-start' }}>
-                <View>
+                <Animated.View style={loadingStyle}>
                     <BaseText
                         forceNoShadow={!hasGlow}
                         onLayout={(e) => {
                             if (textDimensions.width === 0) {
                                 setTextDimensions({
-                                    // Math.ceil rounds up, and +10 gives buffer for text shadow and custom fonts!
                                     width: Math.ceil(e.nativeEvent.layout.width) + 10,
                                     height: Math.ceil(e.nativeEvent.layout.height) + 4
                                 });
                             }
                         }}
                     />
-                </View>
+                </Animated.View>
 
                 {(showPeakBadge && peakLevel > 0) && (
                     <View className="ml-1">
@@ -238,25 +262,20 @@ export default function PlayerNameplate({
                 </MaskedView>
             )}
 
-            {/* ⚡️ FIXED ANIMATION: GLITCH (Stacking & Layout) */}
+            {/* ⚡️ ANIMATION: GLITCH */}
             {animationType === 'glitch' && (
                 <View style={{ position: 'relative', height: textDimensions.height, width: textDimensions.width }}>
-
-                    {/* Ghost Cyan */}
                     <Animated.View style={[{ position: 'absolute', top: 0, bottom: 0, left: 0, zIndex: 1, justifyContent: 'center' }, glitchStyleCyan]}>
                         <BaseText styleOverride={{ color: '#0ff', opacity: 0.6, textShadowRadius: 0 }} />
                     </Animated.View>
 
-                    {/* Ghost Red */}
                     <Animated.View style={[{ position: 'absolute', top: 0, bottom: 0, left: 0, zIndex: 2, justifyContent: 'center' }, glitchStyleRed]}>
                         <BaseText styleOverride={{ color: '#f00', opacity: 0.6, textShadowRadius: 0 }} />
                     </Animated.View>
 
-                    {/* Solid Base */}
                     <View style={{ position: 'absolute', top: 0, bottom: 0, left: 0, zIndex: 3, justifyContent: 'center' }}>
                         <BaseText />
                     </View>
-
                 </View>
             )}
 
@@ -282,4 +301,8 @@ export default function PlayerNameplate({
 
         </View>
     );
-}
+});
+
+PlayerNameplate.displayName = 'PlayerNameplate';
+
+export default PlayerNameplate;

@@ -18,11 +18,11 @@ export const setSessionExpiredHandler = (handler) => { onSessionExpired = handle
  * 🔄 Silent Refresh Logic (With Promise Locking)
  */
 const attemptTokenRefresh = async () => {
-  const baseUrl = !__DEV__ ? "https://oreblogda.com/api" : "http://10.211.123.121:3000/api";
+  const baseUrl = !__DEV__ ? "https://oreblogda.com/api" : "http://10.174.224.122:3000/api";
 
   // 🛡️ LOCK: If a refresh is already happening, return the existing promise
   if (refreshPromise) {
-    console.log("🔄 Refresh already in progress, waiting...")
+    if (__DEV__) console.log("🔄 Refresh already in progress, waiting...")
     return refreshPromise;
   }
 
@@ -32,7 +32,7 @@ const attemptTokenRefresh = async () => {
       const refreshToken = await SecureStore.getItemAsync('refreshToken');
       const deviceId = activeUser?.deviceId || "unknown_device";
 
-      console.log("🚀 Starting Token Refresh...");
+      if (__DEV__) console.log("🚀 Starting Token Refresh...");
 
       if (!refreshToken) return false;
 
@@ -45,11 +45,11 @@ const attemptTokenRefresh = async () => {
         body: JSON.stringify({ refreshToken, deviceId }),
       });
 
-      console.log("Refresh response status: ", response.status);
+      if (__DEV__) console.log("Refresh response status: ", response.status);
 
       // Handle Compromised Session
       if (response.status === 405) {
-        console.log("🛑 Session Compromised - Forcing Logout");
+        if (__DEV__) console.log("🛑 Session Compromised - Forcing Logout");
         if (!isLoggingOut && onSessionExpired) {
           isLoggingOut = true;
           onSessionExpired();
@@ -61,7 +61,7 @@ const attemptTokenRefresh = async () => {
         const data = await response.json();
         await SecureStore.setItemAsync('userToken', data.accessToken);
         await SecureStore.setItemAsync('refreshToken', data.refreshToken);
-        console.log("✅ Token Refresh Successful");
+        if (__DEV__) console.log("✅ Token Refresh Successful");
         return true;
       }
 
@@ -82,7 +82,7 @@ const attemptTokenRefresh = async () => {
  * 🛡️ THE SYSTEM - SECURE API UPLINK
  */
 export const apiFetch = async (endpoint, options = {}) => {
-  const baseUrl = !__DEV__ ? "https://oreblogda.com/api" : "http://10.211.123.121:3000/api";
+  const baseUrl = !__DEV__ ? "https://oreblogda.com/api" : "http://10.174.224.122:3000/api";
   const cleanEndpoint = endpoint.startsWith('/') ? endpoint : `/${endpoint}`;
   const url = endpoint.startsWith('http') ? endpoint : `${baseUrl}${cleanEndpoint}`;
 

@@ -1,8 +1,9 @@
 import LottieView from 'lottie-react-native';
-import { useEffect } from 'react';
+import React, { useEffect, useMemo, useRef } from 'react'; // ⚡️ ADDED: React, useMemo, useRef
 import { StyleSheet, View } from 'react-native';
 import Animated, {
     Easing,
+    cancelAnimation, // ⚡️ ADDED: For thread cleanup
     useAnimatedStyle,
     useSharedValue,
     withRepeat,
@@ -11,26 +12,39 @@ import Animated, {
 } from 'react-native-reanimated';
 import Svg, { Defs, LinearGradient, Rect, Stop, SvgXml } from "react-native-svg";
 
-export default function PlayerBackground({ equippedBg, themeColor, borderRadius = 48, isFeed = false }) {
+const PlayerBackground = React.memo(({ equippedBg, themeColor, borderRadius = 48, isFeed = false }) => {
+    const lottieRef = useRef(null);
     const bgVisual = equippedBg?.visualConfig || equippedBg?.visualData || {};
 
     const primary = bgVisual.primaryColor || themeColor || '#22c55e';
     const secondary = bgVisual.secondaryColor || primary;
 
-    // ⚡️ 1. Dynamic Opacity (Defaults to 0.6 if server doesn't send one)
     const bgOpacity = bgVisual.opacity !== undefined ? bgVisual.opacity : 0.6;
-
-    // ⚡️ 2. Dynamic Native Animation Type
     const animationType = bgVisual.animationType || 'none';
 
-    const lottieSource = bgVisual.lottieJson ? bgVisual.lottieJson : { uri: bgVisual.lottieUrl };
+    // ⚡️ PERFORMANCE: Memoize Lottie source to prevent re-initialization
+    const lottieSource = useMemo(() =>
+        bgVisual.lottieJson ? bgVisual.lottieJson : { uri: bgVisual.lottieUrl },
+        [bgVisual.lottieJson, bgVisual.lottieUrl]
+    );
+
     const hasLottie = !!(bgVisual.lottieUrl || bgVisual.lottieJson);
+
+    // ⚡️ PERFORMANCE: Memoize SVG string replacement
+    const processedSvg = useMemo(() => {
+        if (!bgVisual.svgCode) return null;
+        return bgVisual.svgCode.replace(/currentColor/g, primary);
+    }, [bgVisual.svgCode, primary]);
 
     // --- REANIMATED VALUES ---
     const pulseAnim = useSharedValue(1);
     const sweepAnim = useSharedValue(0);
 
     useEffect(() => {
+        // Clear previous animations to keep the UI thread clean
+        cancelAnimation(pulseAnim);
+        cancelAnimation(sweepAnim);
+
         if (isFeed) {
             pulseAnim.value = 1;
             sweepAnim.value = 0.5;
@@ -48,9 +62,15 @@ export default function PlayerBackground({ equippedBg, themeColor, borderRadius 
         } else if (animationType === 'sweep') {
             sweepAnim.value = withRepeat(
                 withTiming(1, { duration: 3000, easing: Easing.linear }),
-                -1, false // false = restart from beginning instead of reversing
+                -1, false
             );
         }
+
+        // ⚡️ CLEANUP: Stop all background animations on unmount
+        return () => {
+            cancelAnimation(pulseAnim);
+            cancelAnimation(sweepAnim);
+        };
     }, [animationType, isFeed]);
 
     // --- ANIMATED STYLES ---
@@ -60,7 +80,6 @@ export default function PlayerBackground({ equippedBg, themeColor, borderRadius 
     });
 
     const sweepStyle = useAnimatedStyle(() => {
-        // Moves from -100% (left) to 200% (right)
         return {
             left: `${(sweepAnim.value * 300) - 100}%`
         };
@@ -70,15 +89,17 @@ export default function PlayerBackground({ equippedBg, themeColor, borderRadius 
         <View style={[{ borderRadius, overflow: 'hidden' }, StyleSheet.absoluteFillObject]}>
             {/* Ambient Background Glow */}
             <View
+                pointerEvents="none"
                 className="absolute -top-10 -right-10 w-72 h-72 opacity-10 rounded-full blur-3xl"
                 style={{ backgroundColor: primary }}
             />
 
-            {/* MAIN BACKGROUND LAYER (Wrapped in Animated.View for Pulse) */}
+            {/* MAIN BACKGROUND LAYER */}
             <Animated.View style={[StyleSheet.absoluteFillObject, animatedBgStyle]}>
                 {/* 1. LOTTIE ANIMATION */}
                 {hasLottie ? (
                     <LottieView
+                        ref={lottieRef}
                         source={lottieSource}
                         autoPlay={!isFeed}
                         loop={!isFeed}
@@ -89,11 +110,10 @@ export default function PlayerBackground({ equippedBg, themeColor, borderRadius 
                     />
 
                     /* 2. CUSTOM SVG DESIGNS */
-                ) : bgVisual.svgCode ? (
-                    // ⚡️ Applies your backend opacity here!
+                ) : processedSvg ? (
                     <View style={[StyleSheet.absoluteFillObject, { opacity: bgOpacity }]}>
                         <SvgXml
-                            xml={bgVisual.svgCode.replace(/currentColor/g, primary)}
+                            xml={processedSvg}
                             width="100%"
                             height="100%"
                             preserveAspectRatio="xMidYMid slice"
@@ -102,7 +122,6 @@ export default function PlayerBackground({ equippedBg, themeColor, borderRadius 
 
                     /* 3. FALLBACK GRADIENT */
                 ) : (
-                    // ⚡️ Applies your backend opacity here too!
                     <Animated.View style={[StyleSheet.absoluteFillObject, { opacity: bgOpacity }]}>
                         <Svg height="100%" width="100%" style={StyleSheet.absoluteFillObject}>
                             <Defs>
@@ -117,9 +136,10 @@ export default function PlayerBackground({ equippedBg, themeColor, borderRadius 
                 )}
             </Animated.View>
 
-            {/* ⚡️ THE SWEEP OVERLAY (Only renders if animationType is 'sweep') */}
+            {/* ⚡️ THE SWEEP OVERLAY */}
             {animationType === 'sweep' && (
                 <Animated.View
+                    pointerEvents="none"
                     style={[
                         sweepStyle,
                         { position: 'absolute', top: 0, bottom: 0, width: '50%', opacity: 0.3 }
@@ -139,4 +159,8 @@ export default function PlayerBackground({ equippedBg, themeColor, borderRadius 
             )}
         </View>
     );
-}
+});
+
+PlayerBackground.displayName = 'PlayerBackground';
+
+export default PlayerBackground;

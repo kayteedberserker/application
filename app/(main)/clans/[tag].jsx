@@ -217,7 +217,7 @@ export default function ClanPage() {
       if (!user) return;
       try {
         const followedClansStr = storage.getString('followed_clans');
-        console.log(followedClansStr);
+        if (__DEV__) (followedClansStr);
 
         const checkedClansStr = storage.getString('checked_clans');
         let followedClans = followedClansStr ? JSON.parse(followedClansStr) : [];
@@ -239,7 +239,7 @@ export default function ClanPage() {
               storage.set('checked_clans', JSON.stringify(checkedClans));
             }
           })
-          .catch(e => console.error("Follow status sync error", e));
+          .catch(e => { console.error("Follow status sync error", e) });
 
       } catch (e) { console.error("Follow status sync error", e); }
     };
