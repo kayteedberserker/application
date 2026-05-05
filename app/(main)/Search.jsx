@@ -31,7 +31,7 @@ const getAuraTier = (rank) => {
     const STEEL_BLUE = '#3b82f6';
     const REI_WHITE = '#e0f2fe';
 
-    if (!rank || rank > 10 || rank <= 0) return { color: '#3b82f6', label: 'ACTIVE', icon: 'radar' };
+    if (!rank || rank > 10 || rank <= 0) return;
     switch (rank) {
         case 1: return { color: MONARCH_GOLD, label: 'MONARCH', icon: 'crown' };
         case 2: return { color: CRIMSON_RED, label: 'YONKO', icon: 'flare' };

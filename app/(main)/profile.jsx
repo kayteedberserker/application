@@ -998,7 +998,7 @@ const getAuraTier = (rank) => {
     const ESPADA_4 = '#881337'; // Dark Wine
     const ESPADA_5 = '#4c0519'; // Black Cherry (Rank 10)
 
-    if (!rank || rank > 10 || rank <= 0) return { color: '#3b82f6', label: 'ACTIVE', icon: 'radar' };
+    if (!rank || rank > 10 || rank <= 0) return;
 
     switch (rank) {
         case 1:
