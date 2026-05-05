@@ -7,6 +7,8 @@ import Animated, {
     cancelAnimation // ⚡️ ADDED: For thread cleanup
     ,
 
+
+
     useAnimatedStyle,
     useSharedValue,
     withTiming
@@ -115,6 +117,5 @@ const PlayerWatermark = memo(({ equippedWatermark, isDark, isFeed = false }) => 
     );
 });
 
-PlayerWatermark.displayName = 'PlayerWatermark';
 
 export default PlayerWatermark;

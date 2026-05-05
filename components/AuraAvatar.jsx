@@ -76,14 +76,6 @@ const AuraAvatar = React.memo(function AuraAvatar({
     useEffect(() => {
         if (!hasPremiumAura) return;
 
-        // if (isFeed) {
-        //     pulseAnim.value = 1;
-        //     floatAnim.value = 0;
-        //     rotateCW.value = 0;
-        //     rotateCCW.value = 360;
-        //     return;
-        // }
-
         const pulseSpeed = rank === 1 ? 800 : rank <= 3 ? 1200 : rank <= 5 || glowColor ? 1500 : 2000;
         pulseAnim.value = withRepeat(
             withTiming(1.15, { duration: pulseSpeed, easing: Easing.inOut(Easing.ease) }),
@@ -111,7 +103,7 @@ const AuraAvatar = React.memo(function AuraAvatar({
             cancelAnimation(rotateCW);
             cancelAnimation(rotateCCW);
         };
-    }, [hasPremiumAura, rank, glowColor, isFeed]);
+    }, [hasPremiumAura, rank, glowColor]);
 
     // --- STYLES: THE BREATHING FIRE AURA ---
     const fireGlowStyle = useAnimatedStyle(() => {
@@ -224,8 +216,8 @@ const AuraAvatar = React.memo(function AuraAvatar({
                 >
                     <LottieView
                         source={vfxSource}
-                        autoPlay={isFeed}
-                        loop={isFeed}
+                        autoPlay={!isFeed}
+                        loop={!isFeed}
                         style={{
                             width: '100%',
                             height: '100%',
@@ -257,8 +249,8 @@ const AuraAvatar = React.memo(function AuraAvatar({
                 {animatedAvatarSource ? (
                     <LottieView
                         source={animatedAvatarSource}
-                        autoPlay={isFeed}
-                        loop={isFeed}
+                        autoPlay={!isFeed}
+                        loop={!isFeed}
                         style={[
                             { width: '100%', height: '100%' },
                             rank === 1 ? { transform: [{ rotate: '-45deg' }], scale: 1.4 } : {}

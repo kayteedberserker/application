@@ -537,10 +537,10 @@ const MemoizedClanHeader = memo(({ clanInfo, postId, isDark, isFeed }) => {
             />
 
             {/* {displayBadge && (
-                <View className="absolute -right-2 -top-4 opacity-[0.4] pointer-events-none">
-                    <BadgeIcon badge={displayBadge} size={80} containerStyle="bg-transparent border-0" />
-                </View>
-            )} */}
+<View className="absolute -right-2 -top-4 opacity-[0.4] pointer-events-none">
+<BadgeIcon badge={displayBadge} size={80} containerStyle="bg-transparent border-0" />
+</View>
+)} */}
 
             <Pressable onPress={() => DeviceEventEmitter.emit("navigateSafely", `/clans/${clanInfo.tag}`)} className="flex-row items-center flex-1 z-10">
                 <View className="mr-4">
@@ -571,10 +571,10 @@ const MemoizedClanHeader = memo(({ clanInfo, postId, isDark, isFeed }) => {
 
             <View className="flex-row items-center z-10 pl-4 border-l border-white/5">
                 {/* {displayBadge && (
-                    <View className="mr-[7px] items-center justify-center">
-                        <BadgeIcon badge={displayBadge} size={22} />
-                    </View>
-                )} */}
+<View className="mr-[7px] items-center justify-center">
+<BadgeIcon badge={displayBadge} size={22} />
+</View>
+)} */}
 
                 {clanInfo.isInWar ? (
                     <View className="items-center">
@@ -638,6 +638,16 @@ const PostCardComponent = ({ post, authorData, clanData, setPosts, isFeed, hideM
 
     const clanInfo = clanData || post?.clanData || null;
 
+    const { data: postData, mutate } = useSWR(
+        (!syncing && post?._id && isVisible) ? `/posts/${post._id}` : null,
+        fetcher,
+        {
+            refreshInterval: isVisible ? 5000 : 180000,
+            fallbackData: post,
+            revalidateOnMount: false
+        }
+    );
+
     // ⚡️ USE SERVER-PROVIDED hasLiked FIRST, THEN FALLBACK TO STORAGE
     useEffect(() => {
         // Priority 1: Use server-provided hasLiked (from API)
@@ -670,16 +680,6 @@ const PostCardComponent = ({ post, authorData, clanData, setPosts, isFeed, hideM
         const backHandler = BackHandler.addEventListener("hardwareBackPress", backAction);
         return () => backHandler.remove();
     }, [lightbox.open]);
-
-    const { data: postData, mutate } = useSWR(
-        (!syncing && post?._id && isVisible) ? `/posts/${post._id}` : null,
-        fetcher,
-        {
-            refreshInterval: isVisible ? 5000 : 180000,
-            fallbackData: post,
-            revalidateOnMount: false
-        }
-    );
 
     // ⚡️ CONSUME SERVER-BAKED COUNTS
     const totalLikes = postData?.likesCount ?? postData?.likes?.length ?? post?.likesCount ?? post?.likes?.length ?? 0;
@@ -1044,10 +1044,10 @@ const PostCardComponent = ({ post, authorData, clanData, setPosts, isFeed, hideM
                             </View>
                             <View className="flex-row items-center gap-2 mt-2">
                                 {/* {customBadges.length > 0 && (
-                                    <View className="flex-row items-center gap-1">
-                                        {customBadges.map((badge, idx) => <BadgeIcon key={idx} badge={badge} size={25} />)}
-                                    </View>
-                                )} */}
+<View className="flex-row items-center gap-1">
+{customBadges.map((badge, idx) => <BadgeIcon key={idx} badge={badge} size={25} />)}
+</View>
+)} */}
                                 {author.peakLevel > 0 && (
                                     <View className="flex-row items-center gap-1 bg-purple-500/10 px-2 py-1 rounded-full border border-purple-500/30">
                                         <PeakBadge level={author.peakLevel} size={25} isFeed={isFeed} />
