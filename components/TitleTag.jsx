@@ -177,8 +177,10 @@ const TitleTag = ({
             </View>
         );
     };
-    if (auraVisuals.label == "PLAYER") {
-        return
+    if (auraVisuals) {
+        if (auraVisuals.label == "PLAYER") {
+            return
+        }
     }
     // PRIORITY 1: Check for an explicitly equipped title first
     if (finalTitle) {
