@@ -182,7 +182,36 @@ const TitleTag = ({
             return
         }
     }
-    // PRIORITY 1: Check for an explicitly equipped title first
+    if (isTop10 && auraVisuals) {
+        const finalColor = activeGlowColor || auraVisuals.color || '#fbbf24';
+        return (
+            <Animated.View
+                onLayout={(e) => setDimensions({ width: e.nativeEvent.layout.width, height: e.nativeEvent.layout.height })}
+                style={[
+                    styles.outerContainer,
+                    {
+                        shadowColor: finalColor,
+                        shadowOpacity: 0.5,
+                        elevation: 8,
+                        shadowRadius: 4 * scale
+                    },
+                    pulseStyle, // Pass animated style directly
+                    style
+                ]}
+                {...props}
+            >
+                <FrameBase color={finalColor}>
+                    <View style={{ flexDirection: 'row', alignItems: 'center', paddingHorizontal: paddingX, paddingVertical: paddingY, minHeight: minContainerHeight }}>
+                        {auraVisuals.icon && <MaterialCommunityIcons name={auraVisuals.icon} size={iconSize} color={finalColor} style={{ marginRight: 4 }} />}
+                        <Text style={[styles.textBase, { color: finalColor, fontSize: size, lineHeight: size * 1.3, letterSpacing, textShadowColor: finalColor, textShadowRadius: 2 }]}>
+                            {auraVisuals.label.toUpperCase()}
+                        </Text>
+                    </View>
+                </FrameBase>
+            </Animated.View>
+        );
+    }
+
     if (finalTitle) {
         return (
             <Animated.View
@@ -214,37 +243,6 @@ const TitleTag = ({
                             }
                         ]}>
                             {finalTitle.toUpperCase()}
-                        </Text>
-                    </View>
-                </FrameBase>
-            </Animated.View>
-        );
-    }
-
-    // PRIORITY 2: Fallback to the Top 10 Aura if no title is equipped
-    if (isTop10 && auraVisuals) {
-        const finalColor = activeGlowColor || auraVisuals.color || '#fbbf24';
-        return (
-            <Animated.View
-                onLayout={(e) => setDimensions({ width: e.nativeEvent.layout.width, height: e.nativeEvent.layout.height })}
-                style={[
-                    styles.outerContainer,
-                    {
-                        shadowColor: finalColor,
-                        shadowOpacity: 0.5,
-                        elevation: 8,
-                        shadowRadius: 4 * scale
-                    },
-                    pulseStyle, // Pass animated style directly
-                    style
-                ]}
-                {...props}
-            >
-                <FrameBase color={finalColor}>
-                    <View style={{ flexDirection: 'row', alignItems: 'center', paddingHorizontal: paddingX, paddingVertical: paddingY, minHeight: minContainerHeight }}>
-                        {auraVisuals.icon && <MaterialCommunityIcons name={auraVisuals.icon} size={iconSize} color={finalColor} style={{ marginRight: 4 }} />}
-                        <Text style={[styles.textBase, { color: finalColor, fontSize: size, lineHeight: size * 1.3, letterSpacing, textShadowColor: finalColor, textShadowRadius: 2 }]}>
-                            {auraVisuals.label.toUpperCase()}
                         </Text>
                     </View>
                 </FrameBase>
