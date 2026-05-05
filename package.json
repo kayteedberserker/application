@@ -81,13 +81,13 @@
   },
   "devDependencies": {
     "@types/react": "~19.2.0",
+    "babel-plugin-transform-remove-console": "^6.9.4",
     "baseline-browser-mapping": "^2.9.11",
     "eslint": "^9.39.2",
     "eslint-config-expo": "~55.0.0",
     "typescript": "^5.9.3"
   },
-  "overrides": {
-  },
+  "overrides": {},
   "private": true,
   "optionalDependencies": {
     "lightningcss-linux-x64-gnu": "^1.30.2"
