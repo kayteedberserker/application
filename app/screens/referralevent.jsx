@@ -1583,7 +1583,8 @@ export default function EventHubScreen() {
     const { tab } = useLocalSearchParams();
 
 
-    const [activeTab, setActiveTab] = useState(activeEvents[0].id);
+    const [activeTab, setActiveTab] = useState(activeEvents.length > 0 ? activeEvents[0].id : null);
+
     // Default to 'referral' in dev build, otherwise use first gacha event
     useEffect(() => {
         if (tab) {
