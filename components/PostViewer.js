@@ -1,6 +1,6 @@
 import { MaterialCommunityIcons } from '@expo/vector-icons';
 import { LegendList } from "@legendapp/list";
-import { useFocusEffect } from "expo-router"; // ⚡️ ADDED useFocusEffect
+import { useFocusEffect } from "expo-router";
 import { useColorScheme } from "nativewind";
 import { memo, useCallback, useEffect, useMemo, useRef, useState } from "react";
 import {
@@ -19,7 +19,7 @@ import Animated, {
     withTiming
 } from "react-native-reanimated";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
-import { mutate as globalMutate } from "swr"; // ⚡️ ADDED globalMutate for instant hydration
+import { mutate as globalMutate } from "swr";
 import useSWRInfinite from "swr/infinite";
 
 import apiFetch from "../utils/apiFetch";
@@ -63,19 +63,17 @@ const SESSION_STATE = {
     hasFetched: false
 };
 
-// ⚡️ PERFORMANCE FIX 1: Aggressively Memoize the List Item
 const MemoizedPostItem = memo(({ item, isVisible, syncing, mutate, posts }) => {
-    // ⚡️ INSTANT HYDRATION: If we already have a session cache, render immediately
     const [isReady, setIsReady] = useState(SESSION_STATE.hasFetched);
 
     useEffect(() => {
-        if (isReady) return; // Skip if already ready (prevents flicker on return)
+        if (isReady) return;
 
         const task = InteractionManager.runAfterInteractions(() => {
             setIsReady(true);
         });
         return () => task.cancel();
-    }, []); // Only run on mount
+    }, []);
 
     if (!isReady) return <PostSkeleton />;
 
@@ -101,7 +99,6 @@ const MemoizedPostItem = memo(({ item, isVisible, syncing, mutate, posts }) => {
 
 export default function PostsViewer() {
     const storage = useMMKV();
-
     const scrollRef = useRef(null);
     const insets = useSafeAreaInsets();
     const { colorScheme } = useColorScheme();
@@ -126,7 +123,6 @@ export default function PostsViewer() {
 
     const [isOfflineMode, setIsOfflineMode] = useState(false);
     const [refreshing, setRefreshing] = useState(false);
-
     const pulseAnim = useSharedValue(0);
 
     const saveHeavyCache = useCallback((data) => {
@@ -179,10 +175,8 @@ export default function PostsViewer() {
         }
     });
 
-    // ⚡️ INSTANT FOCUS SYNC: Solves the "likes not updating" bug
     useFocusEffect(
         useCallback(() => {
-            // Silently tells SWR to re-verify the active posts in the background
             globalMutate(
                 key => typeof key === 'string' && key.startsWith('/posts/'),
                 undefined,
@@ -205,6 +199,10 @@ export default function PostsViewer() {
     }).current;
 
     const viewabilityConfig = useRef({ itemVisiblePercentThreshold: 60 }).current;
+    const ghostBatchId = useRef(0);
+
+    // ⚡️ FIXED: Calculate hasMore BEFORE the posts useMemo to avoid ReferenceError crash
+    const hasMore = data ? (data[data.length - 1]?.posts?.length === LIMIT) : false;
 
     const posts = useMemo(() => {
         const sourceData = data || cachedData;
@@ -224,19 +222,22 @@ export default function PostsViewer() {
             }
         });
 
-        // ⚡️ THE TRICK: If we are fetching more, add 3 "Ghost" items
         if (isValidating && hasMore) {
             orderedList.push(
-                { _id: 'ghost-1', isGhost: true },
-                { _id: 'ghost-2', isGhost: true },
-                { _id: 'ghost-3', isGhost: true }
+                { _id: `ghost-1-${ghostBatchId.current}`, isGhost: true },
+                { _id: `ghost-2-${ghostBatchId.current}`, isGhost: true },
+                { _id: `ghost-3-${ghostBatchId.current}`, isGhost: true }
             );
         }
 
         return orderedList;
     }, [data, cachedData, isValidating, hasMore]);
 
-    const hasMore = data ? data[data.length - 1]?.posts?.length === LIMIT : false;
+    useEffect(() => {
+        if (isValidating && hasMore) {
+            ghostBatchId.current += 1;
+        }
+    }, [isValidating, hasMore]);
 
     useEffect(() => {
         const sub = DeviceEventEmitter.addListener("doScrollToTop", () => {
@@ -251,7 +252,7 @@ export default function PostsViewer() {
     }, [hasMore, isValidating, isLoading, isOfflineMode, size, setSize]);
 
     const renderItem = useCallback(({ item }) => {
-        // ⚡️ Check for Ghost
+
         if (item.isGhost) {
             return <PostSkeleton />;
         }
@@ -259,13 +260,14 @@ export default function PostsViewer() {
         return (
             <MemoizedPostItem
                 item={item}
-                isVisible={true}
+                // ⚡️ FIXED: Use real visibility tracking for performance
+                isVisible={visibleIds.has(item._id)}
                 syncing={!SESSION_STATE.hasFetched || isValidating}
                 mutate={mutate}
                 posts={posts}
             />
         );
-    }, [isValidating, mutate, posts]);
+    }, [isValidating, mutate, posts, visibleIds]);
 
     const ListHeader = useCallback(() => (
         <View className="mb-5 pb-2">
@@ -300,7 +302,7 @@ export default function PostsViewer() {
     return (
         <View className={`flex-1 ${isDark ? "bg-[#050505]" : "bg-white"}`}>
             <LegendList
-                key="main-feed-list" // ⚡️ FIXED: Isolates scroll memory from other pages
+                key="main-feed-list"
                 ref={scrollRef}
                 data={posts}
                 keyExtractor={(item) => item._id}
@@ -314,7 +316,6 @@ export default function PostsViewer() {
                 renderItem={renderItem}
                 estimatedItemSize={630}
                 drawDistance={1500}
-                // ⚡️ FIXED: Removed recycleItems=true to stop weird SWR caching bugs and scroll jumping
                 onViewableItemsChanged={onViewableItemsChanged}
                 viewabilityConfig={viewabilityConfig}
                 onEndReached={loadMore}

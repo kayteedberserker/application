@@ -1571,6 +1571,229 @@ const ComingSoonView = ({ event, isDark }) => {
     );
 };
 
+import { BlurMask, Canvas, Rect, LinearGradient as SkiaGradient, vec } from "@shopify/react-native-skia";
+import { LinearGradient } from 'expo-linear-gradient';
+import { MotiText, MotiView } from 'moti';
+import { useMMKVObject } from 'react-native-mmkv';
+import CoinIcon from "../../components/ClanIcon";
+import { SyncLoading } from "../../components/SyncLoading";
+import TitleTag from "../../components/TitleTag";
+
+const MilestoneReferral = ({ userReferralCode }) => {
+    // 1. MMKV Caching Logic
+    const [cachedStats, setCachedStats] = useMMKVObject('milestone_stats');
+
+    // Initialize with cache or default
+    const [stats, setStats] = useState(cachedStats || { totalUsers: 379, targetGoal: 400, remaining: 21 });
+    const [copied, setCopied] = useState(false);
+
+    const blueNeon = "#00D1FF";
+    const deepVoid = "#050A18";
+    const progress = useSharedValue(stats.totalUsers / stats.targetGoal);
+
+    const referralLink = `https://play.google.com/store/apps/details?id=com.kaytee.oreblogda&referrer=${userReferralCode}`;
+
+    // 2. Background Sync
+    useEffect(() => {
+        const syncStats = async () => {
+            try {
+                const res = await apiFetch(`/events/milestone-stats`);
+                const data = await res.json();
+                if (data.success) {
+                    setStats(data);
+                    setCachedStats(data); // Update MMKV cache
+                    progress.value = withTiming(data.totalUsers / data.targetGoal, { duration: 1500 });
+                }
+            } catch (e) {
+                console.log("Sync failed, using cache.");
+                progress.value = withTiming(stats.totalUsers / stats.targetGoal, { duration: 1000 });
+            }
+        };
+        syncStats();
+    }, []);
+
+    const animatedProgressStyle = useAnimatedStyle(() => ({
+        width: `${progress.value * 100}%`,
+    }));
+
+    const onShare = async () => {
+        try {
+            await Share.share({
+                message: `THE SYSTEM is at ${stats.totalUsers}/${stats.targetGoal}! ⚡ Help us unlock the 400 Milestone Event. Use my Sigil [${userReferralCode}] for +20 Aura and 50 OC: ${referralLink}`,
+            });
+        } catch (error) { console.log(error.message); }
+    };
+
+    const copyToClipboard = () => {
+        Clipboard.setString(userReferralCode);
+        setCopied(true);
+        setTimeout(() => setCopied(false), 2000);
+    };
+
+    return (
+        <MotiView
+            from={{ opacity: 0, translateY: 20 }}
+            animate={{ opacity: 1, translateY: 0 }}
+            style={{ backgroundColor: deepVoid, borderColor: blueNeon }}
+            className="p-6 rounded-[40px] border-2 mb-6 overflow-hidden relative shadow-2xl"
+        >
+            {/* SKIA BACKGROUND: Halftone Pattern & Aura (Ref: ChatGPT Image May 6, 2026, 12_13_39 PM.png) */}
+            <View className="absolute inset-0">
+                <Canvas style={{ flex: 1 }}>
+                    <Rect x={0} y={0} width={width} height={500}>
+                        <SkiaGradient
+                            start={vec(0, 0)}
+                            end={vec(width, 500)}
+                            colors={["rgba(0,209,255,0.1)", "transparent", "rgba(0,209,255,0.05)"]}
+                        />
+                    </Rect>
+                    {/* Glowing Nodes mimic the bottom line in the reference image */}
+                    <BlurMask blur={20} style="normal" />
+                </Canvas>
+            </View>
+
+            {/* ACTION LINES (Decorative) */}
+            <View className="absolute inset-0 opacity-20">
+                <LinearGradient colors={['transparent', blueNeon, 'transparent']} style={{ width: 1, height: '100%', position: 'absolute', left: '20%', transform: [{ rotate: '45deg' }] }} />
+                <LinearGradient colors={['transparent', blueNeon, 'transparent']} style={{ width: 1, height: '100%', position: 'absolute', right: '10%', transform: [{ rotate: '-30deg' }] }} />
+            </View>
+
+            {/* HEADER: Dynamic Event Title */}
+            <View className="flex-row justify-between items-end mb-6 z-10">
+                <View>
+                    <View className="flex-row items-center mb-1">
+                        <MotiView
+                            animate={{ scale: [1, 1.5, 1], opacity: [1, 0.5, 1] }}
+                            transition={{ loop: true, duration: 1000 }}
+                            style={{ backgroundColor: blueNeon }}
+                            className="w-2 h-2 rounded-full mr-2 shadow-lg"
+                        />
+                        <Text style={{ color: blueNeon }} className="text-[9px] font-black uppercase tracking-[0.4em]">System Objective</Text>
+                    </View>
+                    <Text style={{ color: 'white' }} className="text-4xl font-black italic uppercase tracking-tighter leading-none">ROAD TO 400</Text>
+                </View>
+
+                <View className="items-end bg-white/10 p-3 rounded-2xl border border-white/10">
+                    <MotiText
+                        animate={{ opacity: [1, 0.7, 1] }}
+                        transition={{ loop: true, duration: 2000 }}
+                        style={{ color: 'white', textShadowColor: blueNeon, textShadowRadius: 15 }}
+                        className="text-2xl font-black italic"
+                    >
+                        {stats.totalUsers}
+                    </MotiText>
+                    <Text style={{ color: blueNeon }} className="text-[8px] font-black uppercase tracking-widest">Souls Synced</Text>
+                </View>
+            </View>
+
+            {/* BUSTLING PROGRESS ROADMAP */}
+            <View className="mb-10 z-10">
+                <View className="h-2 w-full bg-white/5 rounded-full overflow-hidden border border-white/10 relative">
+                    <Animated.View style={[animatedProgressStyle, { height: '100%', backgroundColor: blueNeon }]}>
+                        <LinearGradient
+                            colors={['rgba(255,255,255,0)', 'rgba(255,255,255,0.6)', 'rgba(255,255,255,0)']}
+                            start={{ x: 0, y: 0 }} end={{ x: 1, y: 0 }}
+                            style={{ flex: 1 }}
+                        />
+                    </Animated.View>
+                </View>
+
+                {/* Milestone Nodes */}
+                <View className="flex-row justify-between absolute -top-1 w-full px-1">
+                    {[0, 0.25, 0.5, 0.75, 1].map((node, i) => (
+                        <MotiView
+                            key={i}
+                            animate={{
+                                scale: (stats.totalUsers / stats.targetGoal) >= node ? 1.2 : 0.8,
+                                backgroundColor: (stats.totalUsers / stats.targetGoal) >= node ? blueNeon : '#1A2235'
+                            }}
+                            className="w-4 h-4 rounded-full border-2 border-deepVoid shadow-sm"
+                        />
+                    ))}
+                </View>
+
+                <View className="flex-row justify-between mt-5">
+                    <View className="flex-row items-center">
+                        <MaterialCommunityIcons name="broadcast" size={14} color="#ff3e3e" />
+                        <Text style={{ color: 'white' }} className="text-[10px] font-black uppercase italic ml-2 tracking-widest">
+                            {stats.remaining} TO UNLOCK MAIN EVENT
+                        </Text>
+                    </View>
+                    <Text style={{ color: blueNeon }} className="text-[10px] font-black uppercase">LVL 400</Text>
+                </View>
+            </View>
+
+            {/* INTERACTIVE RECRUITMENT UNIT */}
+            <LinearGradient
+                colors={['rgba(255,255,255,0.03)', 'rgba(0,209,255,0.08)']}
+                className="p-6 rounded-[30px] border border-white/10 relative overflow-hidden"
+            >
+                {/* Bustling Anime Icons (Floating) */}
+                <MotiView
+                    animate={{ translateY: [0, -5, 0], rotate: ['0deg', '5deg', '0deg'] }}
+                    transition={{ loop: true, duration: 3000 }}
+                    className="absolute -right-2 -top-2 opacity-20"
+                >
+                    <Ionicons name="shield-half" size={80} color={blueNeon} />
+                </MotiView>
+
+                <Text style={{ color: blueNeon }} className="text-[10px] font-black uppercase tracking-[0.3em] mb-4 text-center opacity-60">Recruitment Sigil</Text>
+
+                <View className="flex-row items-center justify-between mb-6">
+                    <View>
+                        <Text style={{ color: 'white' }} className="text-[8px] font-bold uppercase opacity-40 mb-1">User Identifier</Text>
+                        <Text style={{ color: 'white', textShadowColor: blueNeon, textShadowRadius: 8 }} className="text-xl font-black italic tracking-[0.2em]">{userReferralCode}</Text>
+                    </View>
+
+                    <TouchableOpacity
+                        onPress={copyToClipboard}
+                        activeOpacity={0.7}
+                        className="h-14 w-14 rounded-2xl items-center justify-center"
+                        style={{ backgroundColor: copied ? '#22c55e' : blueNeon, transform: [{ rotate: '-5deg' }] }}
+                    >
+                        <Ionicons name={copied ? "checkmark-done" : "copy"} size={24} color={deepVoid} />
+                    </TouchableOpacity>
+                </View>
+
+                <TouchableOpacity onPress={onShare} activeOpacity={0.9}>
+                    <MotiView
+                        from={{ scale: 1 }}
+                        animate={{ scale: [1, 1.02, 1] }}
+                        transition={{ loop: true, duration: 1500 }}
+                    >
+                        <LinearGradient
+                            colors={[blueNeon, '#0057FF']}
+                            start={{ x: 0, y: 0 }} end={{ x: 1, y: 1 }}
+                            className="py-5 rounded-2xl flex-row justify-center items-center shadow-xl"
+                        >
+                            <MaterialCommunityIcons name="lightning-bolt" size={20} color={deepVoid} />
+                            <Text style={{ color: deepVoid }} className="font-black uppercase ml-2 tracking-[0.1em] text-[14px] italic">Summon New Authors</Text>
+                        </LinearGradient>
+                    </MotiView>
+                </TouchableOpacity>
+            </LinearGradient>
+
+            {/* FOOTER STATS */}
+            <View className="flex-col gap-4 items-center justify-center w-full">
+                <View className="mt-6 flex-row items-center justify-center">
+                    <View style={{ backgroundColor: blueNeon }} className="px-3 py-1 rounded-full mr-2">
+                        <Text style={{ color: deepVoid }} className="text-[12px] font-black uppercase">+20 AURA</Text>
+                    </View>
+                    <View style={{ borderColor: blueNeon }} className="px-3 py-1 rounded-full flex-row gap-1 border">
+                        <Text style={{ color: 'white' }} className="text-[12px] font-black uppercase">50</Text><CoinIcon type={"OC"} size={14} />
+                    </View>
+                    <View style={{ backgroundColor: '#ff3e3e' }} className="px-3 py-1 rounded-full ml-2">
+                        <Text style={{ color: 'white' }} className="text-[12px] font-black uppercase italic">X2 STREAK</Text>
+                    </View>
+                </View>
+                <View className="flex-row items-center justify-center">
+                    <TitleTag title={"Alpha Lead"} tier={"legendary"} />
+                </View>
+            </View>
+        </MotiView>
+    );
+}
+
 export default function EventHubScreen() {
     const storage = useMMKV();
     const { user } = useUser();
@@ -1621,7 +1844,7 @@ export default function EventHubScreen() {
     });
 
     const [data, setData] = useState(() => {
-        try { const cached = storage.getString(CACHE_KEY); return cached ? JSON.parse(cached) : { round: 1, roundTotal: 0, leaderboard: [], progress: 0 }; } catch { return { round: 1, roundTotal: 0, leaderboard: [], progress: 0 }; }
+        try { const cached = storage.getString(CACHE_KEY); return cached ? JSON.parse(cached) : { round: 1, roundTotal: 0, leaderboard: [], progress: 0 }; } catch { return { round: 1, roundTotal: 0, leaderboard: [], progress: 0 } }
     });
 
     const [loading, setLoading] = useState(false);
@@ -1727,15 +1950,12 @@ export default function EventHubScreen() {
         storage.set(GACHA_PITY_CACHE_KEY, JSON.stringify(updated));
     };
 
-    const isInitialLoad = (contextLoading && !activeEvents?.length) ||
-        (loading && activeTab !== 'referral' && currentPool.length === 0) ||
-        (loading && activeTab === 'referral' && data.leaderboard.length === 0);
+    const isInitialLoad = (contextLoading && !activeEvents?.length)
 
     if (isInitialLoad) {
         return (
             <SafeAreaView style={{ flex: 1, backgroundColor: isDark ? '#000' : '#fff', justifyContent: 'center', alignItems: 'center' }}>
-                <ActivityIndicator size="large" color={THEME.accent} />
-                <Text style={{ color: THEME.textSecondary, marginTop: 15 }} className="font-black uppercase text-[10px]">Syncing Events...</Text>
+                <SyncLoading message="Syncing Events" />
             </SafeAreaView>
         );
     }
@@ -1791,6 +2011,9 @@ export default function EventHubScreen() {
                     />
                 );
             }
+        }
+        if (currentEvent.type === 'milestone_countdown') {
+            return <MilestoneReferral userReferralCode={referralCode} />
         }
         return <ClaimTab eventData={currentEvent} />;
     };

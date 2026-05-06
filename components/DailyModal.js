@@ -1,7 +1,9 @@
 import { Ionicons, MaterialCommunityIcons } from '@expo/vector-icons';
+import { Image } from 'expo-image';
+import { LinearGradient } from 'expo-linear-gradient';
 import { useRouter } from 'expo-router';
 import LottieView from 'lottie-react-native';
-import React, { useEffect, useMemo, useState } from 'react';
+import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { ActivityIndicator, Dimensions, Modal, TouchableOpacity, View } from 'react-native';
 import { useMMKV } from 'react-native-mmkv';
 import { SvgXml } from 'react-native-svg';
@@ -18,7 +20,6 @@ const GLOBAL_COOLDOWN_KEY = "global_promo_cooldown_timestamp";
 let hasShownThisSession = false;
 
 const RemoteSvgIcon = React.memo(({ xml, lottieUrl, lottieJson, size = 50, color }) => {
-
     if (lottieJson || lottieUrl) {
         return (
             <View style={{ width: size, height: size, alignItems: 'center', justifyContent: 'center' }}>
@@ -132,12 +133,24 @@ export default function DailyModal() {
     const [modalMode, setModalMode] = useState(null);
     const [currentPromo, setCurrentPromo] = useState(null);
 
+    const timeoutRef = useRef(null);
+
+    // Clean up timeouts on unmount to prevent memory leaks
+    useEffect(() => {
+        return () => {
+            if (timeoutRef.current) {
+                clearTimeout(timeoutRef.current);
+            }
+        };
+    }, []);
+
     // ⚡️ HELPER: Check if there's an event waiting
-    const getNextEvent = () => {
+    const getNextEvent = useCallback(() => {
         if (!activeEvents || activeEvents.length === 0) return null;
 
         const now = new Date().getTime();
         const globalCooldown = storage.getNumber(GLOBAL_COOLDOWN_KEY) || 0;
+
         if (now < globalCooldown) return null;
 
         const todayStr = new Date().toDateString();
@@ -148,12 +161,13 @@ export default function DailyModal() {
 
         return eventQueue.find(evt => {
             const dismissedDate = storage.getString(`last_dismissed_${evt.id}`);
-            return dismissedDate !== todayStr;
+
+            return dismissedDate !== todayStr
         });
-    };
+    }, [activeEvents, storage]);
 
     useEffect(() => {
-        if (!user || hasShownThisSession) return;
+        if (!user || hasShownThisSession) return
 
         const todayStr = new Date().toDateString();
         const localClaimedToday = storage.getBoolean(`daily_claimed_${todayStr}`);
@@ -169,6 +183,7 @@ export default function DailyModal() {
 
         // Check if there is an event waiting
         const nextPromo = getNextEvent();
+
         if (nextPromo) setCurrentPromo(nextPromo);
 
         // Logic 1: Show Daily Login First
@@ -184,7 +199,7 @@ export default function DailyModal() {
             const timer = setTimeout(() => setVisible(true), 1500);
             return () => clearTimeout(timer);
         }
-    }, [user, activeEvents, hasClaimed]);
+    }, [user, activeEvents, hasClaimed, getNextEvent, storage]);
 
     const handleClaimDaily = async () => {
         if (isProcessingTransaction) return;
@@ -197,8 +212,8 @@ export default function DailyModal() {
             setHasClaimed(true);
             storage.set(`daily_claimed_${todayStr}`, true);
 
-            // Wait 1 second to show the "Acquired" checkmark
-            setTimeout(() => {
+            // Wait 1 second to show the "Acquired" checkmark safely
+            timeoutRef.current = setTimeout(() => {
                 // ⚡️ IF there is an event waiting, switch to it! Otherwise, close.
                 if (currentPromo) {
                     setModalMode('event');
@@ -258,11 +273,11 @@ export default function DailyModal() {
 
     return (
         <Modal transparent visible={visible} animationType="fade">
-            <View className="flex-1 justify-center items-center bg-black/90 px-6">
+            <View className="flex-1 justify-center items-center bg-black/90 px-3">
 
                 <View
                     style={{ backgroundColor: '#0f172a', borderColor: modalMode === 'daily' ? THEME.accent : eventColor }}
-                    className={`w-full rounded-2xl px-6 py-8 border-2 items-center shadow-2xl relative ${modalMode === 'daily' ? 'shadow-blue-500/40' : 'shadow-purple-500/30'}`}
+                    className={`w-full rounded-2xl px-2 py-8 border-2 items-center shadow-2xl relative ${modalMode === 'daily' ? 'shadow-blue-500/40' : 'shadow-purple-500/30'}`}
                 >
                     {showDismissButton && (
                         <TouchableOpacity
@@ -330,58 +345,103 @@ export default function DailyModal() {
                     {/* ⚡️ MODE 2: DYNAMIC EVENT PROMO (W/ COUNTDOWN) */}
                     {/* ========================================== */}
                     {modalMode === 'event' && currentPromo && (
-                        <View className="w-full items-center mt-2">
+                        <View className="w-full items-center">
+                            {/* 1. CONTAINER WITH AURA GLOW */}
                             <View
-                                style={{ backgroundColor: `${eventColor}20`, borderLeftColor: eventColor, borderRightColor: eventColor }}
-                                className="px-4 py-1.5 rounded-sm border-l-2 border-r-2 mb-6 flex-row items-center"
+                                style={{
+                                    backgroundColor: '#0f172a',
+                                    borderColor: eventColor,
+                                    shadowColor: eventColor,
+                                    shadowOffset: { width: 0, height: 0 },
+                                    shadowOpacity: 0.5,
+                                    shadowRadius: 20,
+                                    elevation: 10 // Android Glow
+                                }}
+                                className="w-full rounded-3xl border-2 overflow-hidden relative"
                             >
-                                <Text style={{ color: eventColor }} className="font-black text-[10px] uppercase tracking-[0.2em]">
-                                    {isComingSoon ? "Incoming Signal" : "Live Event"}
-                                </Text>
-                            </View>
+                                {/* 2. THE POSTER IMAGE (EXPO-IMAGE) */}
+                                {currentPromo.promoImage ? (
+                                    <View className="w-full aspect-[100/101] relative">
+                                        <Image
+                                            source={currentPromo.promoImage}
+                                            contentFit="cover"
+                                            transition={500} // Smooth fade-in
+                                            style={{ width: '100%', height: '100%' }}
+                                        />
 
-                            <View className="items-center mb-6 w-full">
-                                <View className="items-center justify-center mb-6 relative">
-                                    {isComingSoon && (
-                                        <>
-                                            <View style={{ backgroundColor: eventColor, opacity: 0.15 }} className="absolute w-36 h-36 rounded-full" />
-                                            <View style={{ borderColor: eventColor, opacity: 0.5 }} className="w-28 h-28 rounded-full border-2 border-dashed absolute" />
-                                        </>
-                                    )}
-                                    <View
-                                        style={{ backgroundColor: `${eventColor}10`, borderColor: `${eventColor}40`, shadowColor: eventColor }}
-                                        className={`w-24 h-24 rounded-full items-center justify-center border-2 shadow-[0_0_30px_rgba(0,0,0,0.5)] transform ${isComingSoon ? 'rotate-0' : 'rotate-3'}`}
-                                    >
-                                        {isComingSoon && !tokenVisual ? (
-                                            <MaterialCommunityIcons name="weather-night" size={50} color={eventColor} />
-                                        ) : tokenVisual ? (
-                                            <RemoteSvgIcon xml={tokenVisual.svgCode} lottieUrl={tokenVisual.lottieUrl} lottieJson={tokenVisual.lottieJson} size={55} color={eventColor} />
-                                        ) : (
-                                            <MaterialCommunityIcons name={EventIcon} size={50} color={eventColor} />
-                                        )}
+                                        {/* 3. VIGNETTE OVERLAY (Bottom Shadow for text readability) */}
+                                        <LinearGradient
+                                            colors={['transparent', 'rgba(15, 23, 42, 0.5)', '#0f172a']}
+                                            style={{ position: 'absolute', bottom: 0, left: 0, right: 0, height: '60%' }}
+                                        />
+
+                                        {/* 4. TOP BADGE OVERLAY */}
+                                        <View
+                                            style={{ backgroundColor: `${eventColor}CC` }}
+                                            className="absolute top-4 left-4 px-3 py-1 rounded-full flex-row items-center"
+                                        >
+                                            <MaterialCommunityIcons
+                                                name={isComingSoon ? "radar" : "broadcast"}
+                                                size={12}
+                                                color="white"
+                                            />
+                                            <Text className="text-white font-black text-[9px] uppercase tracking-widest ml-1.5">
+                                                {isComingSoon ? "Incoming Signal" : "Live Event"}
+                                            </Text>
+                                        </View>
+
+                                        {/* 5. CONTENT OVERLAY (Title & Timer) */}
+                                        <View className="absolute bottom-0 left-0 right-0 p-6 items-center">
+                                            <Text className="text-white text-3xl font-black italic uppercase text-center tracking-tighter mb-1">
+                                                {currentPromo.title}
+                                            </Text>
+
+                                            {isComingSoon && currentPromo.startsAt && (
+                                                <View className="w-full">
+                                                    <CountdownTimer startsAt={currentPromo.startsAt} color={eventColor} />
+                                                </View>
+                                            )}
+                                        </View>
                                     </View>
-                                </View>
-
-                                <Text className="text-white text-2xl font-black italic uppercase text-center tracking-tighter mb-2">
-                                    {currentPromo.title}
-                                </Text>
-                                <Text className="text-slate-300 text-[10px] font-bold text-center uppercase tracking-widest leading-relaxed px-4">
-                                    {currentPromo.description}
-                                </Text>
-
-                                {isComingSoon && currentPromo.startsAt && (
-                                    <CountdownTimer startsAt={currentPromo.startsAt} color={eventColor} />
+                                ) : (
+                                    /* FALLBACK: YOUR ORIGINAL ICON-BASED UI */
+                                    <View className="w-full items-center py-8 px-6">
+                                        <View
+                                            style={{ backgroundColor: `${eventColor}10`, borderColor: `${eventColor}40` }}
+                                            className="w-24 h-24 rounded-full items-center justify-center border-2 mb-6"
+                                        >
+                                            {tokenVisual ? (
+                                                <RemoteSvgIcon xml={tokenVisual.svgCode} lottieUrl={tokenVisual.lottieUrl} size={55} color={eventColor} />
+                                            ) : (
+                                                <MaterialCommunityIcons name={EventIcon} size={50} color={eventColor} />
+                                            )}
+                                        </View>
+                                        <Text className="text-white text-xl font-black italic uppercase text-center mb-2">
+                                            {currentPromo.title}
+                                        </Text>
+                                        <Text className="text-slate-300 text-[10px] font-bold text-center uppercase tracking-widest px-4">
+                                            {currentPromo.description}
+                                        </Text>
+                                    </View>
                                 )}
                             </View>
 
+                            {/* 6. ACTION BUTTON (Stays outside the card for hierarchy) */}
                             <TouchableOpacity
                                 onPress={handleGoToEvent}
-                                style={{ backgroundColor: eventColor, shadowColor: eventColor }}
-                                className="w-full h-14 rounded-xl flex-row items-center justify-center shadow-[0_0_20px_rgba(0,0,0,0.4)] mt-2"
+                                style={{
+                                    backgroundColor: eventColor,
+                                    shadowColor: eventColor,
+                                    shadowOffset: { width: 0, height: 10 },
+                                    shadowOpacity: 0.4,
+                                    shadowRadius: 15
+                                }}
+                                className="w-full h-14 rounded-2xl flex-row items-center justify-center mt-6"
                             >
                                 <Text className="text-slate-900 font-black text-[13px] uppercase tracking-[0.2em]">
                                     {isComingSoon ? "View Intel" : "Enter Portal"}
                                 </Text>
+                                <Ionicons name="chevron-forward" size={16} color="#0f172a" style={{ marginLeft: 4 }} />
                             </TouchableOpacity>
                         </View>
                     )}
