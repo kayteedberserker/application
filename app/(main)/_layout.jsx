@@ -282,9 +282,10 @@ export default function MainLayout() {
         setIsCoffeeLoading(true);
         try {
             const offerings = await Purchases.getOfferings();
+            CustomAlert(offerings)
             // Assumes your package identifier in RevenueCat is 'coffee_tip'
             const coffeePackage = offerings.current.availablePackages.find(p => p.product.identifier === 'buy_us_a_coffee');
-            CustomAlert(coffeePackage)
+
             if (coffeePackage) {
                 const { customerInfo } = await Purchases.purchasePackage(coffeePackage);
 
