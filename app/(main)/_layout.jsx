@@ -25,6 +25,7 @@ import {
 
 
 
+
     Modal,
     StatusBar,
     StyleSheet,
@@ -301,6 +302,11 @@ export default function MainLayout() {
             }
             // Assumes your package identifier in RevenueCat is 'coffee_tip'
             const coffeePackage = offerings.current.availablePackages.find(p => p.product.identifier === 'buy_us_a_coffee');
+
+            if (!offerings.current || offerings.current.availablePackages.length === 0) {
+                CustomAlert("Error", "coffeePackage not found.");
+                return;
+            }
 
             if (coffeePackage) {
                 const { customerInfo } = await Purchases.purchasePackage(coffeePackage);
