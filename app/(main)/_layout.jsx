@@ -23,6 +23,8 @@ import {
 
 
 
+
+
     Modal,
     StatusBar,
     StyleSheet,
@@ -277,12 +279,26 @@ export default function MainLayout() {
         }
     };
 
+    // ⚡️ REVENUECAT CONFIGURATION CHECK
+    useEffect(() => {
+        const setupPurchases = async () => {
+            if (Platform.OS === 'android') {
+                // Double-check configuration even if handled in root _layout
+                await Purchases.configure({ apiKey: "goog_cypWcXGzLgDujHkFvHTcUoqUNQi" });
+            }
+        };
+        setupPurchases();
+    }, []);
+
     // ⚡️ COFFEE PURCHASE LOGIC
     const handleBuyCoffee = async () => {
         setIsCoffeeLoading(true);
         try {
             const offerings = await Purchases.getOfferings();
-            CustomAlert(offerings)
+            if (!offerings.current || offerings.current.availablePackages.length === 0) {
+                CustomAlert("Error", "No offerings found. Check your Package Name and Store configuration.");
+                return;
+            }
             // Assumes your package identifier in RevenueCat is 'coffee_tip'
             const coffeePackage = offerings.current.availablePackages.find(p => p.product.identifier === 'buy_us_a_coffee');
 
