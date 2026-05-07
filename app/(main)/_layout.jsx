@@ -22,6 +22,7 @@ import {
 
 
 
+
     Modal,
     StatusBar,
     StyleSheet,
@@ -282,8 +283,8 @@ export default function MainLayout() {
         try {
             const offerings = await Purchases.getOfferings();
             // Assumes your package identifier in RevenueCat is 'coffee_tip'
-            const coffeePackage = offerings.current.availablePackages.find(p => p.identifier === 'buy_us_a_coffee');
-
+            const coffeePackage = offerings.current.availablePackages.find(p => p.product.identifier === 'buy_us_a_coffee');
+            CustomAlert(coffeePackage)
             if (coffeePackage) {
                 const { customerInfo } = await Purchases.purchasePackage(coffeePackage);
 
