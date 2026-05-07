@@ -1,6 +1,6 @@
 import { Ionicons, MaterialCommunityIcons } from '@expo/vector-icons';
 import { useNavigation } from '@react-navigation/native';
-import { Canvas, Circle, Fill, Group, LinearGradient, Rect, vec } from "@shopify/react-native-skia";
+import { Canvas, Circle, Group, LinearGradient, Rect, vec } from "@shopify/react-native-skia";
 import { Image } from 'expo-image';
 import React, { useCallback, useEffect, useState } from 'react';
 import {
@@ -297,9 +297,6 @@ const WalletPage = () => {
   const [vaultTab, setVaultTab] = useState('AUTHOR');
   const [packages, setPackages] = useState([]);
 
-  const [authorVaultPacks, setAuthorVaultPacks] = useState([]);
-  const [clanVaultPacks, setClanVaultPacks] = useState([]);
-
   const [userStats, setUserStats] = useState({ postCount: 0, rankLevel: 1 });
   const [isFetchingStore, setIsFetchingStore] = useState(false);
   const [message, setMessage] = useState({ text: '', type: '' });
@@ -326,7 +323,7 @@ const WalletPage = () => {
   const spinValue = useSharedValue(0);
   const pulseValue = useSharedValue(1);
 
-  const TABS = isInClan ? ['OC', 'PEAK', 'CC', 'PACKS'] : ['OC', 'PEAK', 'PACKS'];
+  const TABS = isInClan ? ['OC', 'PEAK', 'CC'] : ['OC', 'PEAK'];
 
   useEffect(() => {
     const t = setTimeout(() => setMinLoadDone(true), 3000);
@@ -402,7 +399,7 @@ const WalletPage = () => {
   }, [user, coins]);
 
   const fetchOfferings = useCallback(async (force = false) => {
-    if (packages.length > 0 && authorVaultPacks.length > 0 && clanVaultPacks.length > 0 && !force) return;
+    if (packages.length > 0 && !force) return;
     setIsFetchingStore(true);
     try {
       const cachedStore = storage.getString(CACHE_KEY);
@@ -411,8 +408,6 @@ const WalletPage = () => {
       const cachedStats = storage.getString(USER_STATS_CACHE_KEY);
 
       if (cachedStore) setPackages(JSON.parse(cachedStore));
-      if (cachedAuthorVault) setAuthorVaultPacks(JSON.parse(cachedAuthorVault));
-      if (cachedClanVault) setClanVaultPacks(JSON.parse(cachedClanVault));
       if (cachedStats) setUserStats(JSON.parse(cachedStats));
 
       const isConfigured = await Purchases.isConfigured();
@@ -420,10 +415,8 @@ const WalletPage = () => {
         await Purchases.configure({ apiKey: Platform.OS === 'ios' ? REVENUE_CAT_API_KEYS.ios : REVENUE_CAT_API_KEYS.android });
       }
 
-      const [offerings, authorPackRes, clanPackRes] = await Promise.all([
+      const [offerings] = await Promise.all([
         Purchases.getOfferings(),
-        apiFetch('/packs?type=author'),
-        apiFetch('/packs?type=clan')
       ]);
 
       if (offerings.current !== null) {
@@ -432,31 +425,12 @@ const WalletPage = () => {
         storage.set(CACHE_KEY, JSON.stringify(availablePkgs));
       }
 
-      if (authorPackRes && authorPackRes.ok) {
-        const packData = await authorPackRes.json();
-        if (packData.success) {
-          setAuthorVaultPacks(packData.packs);
-          const stats = { postCount: packData.meta.postCount, rankLevel: packData.meta.rankLevel };
-          setUserStats(stats);
-          storage.set(VAULT_CACHE_KEY_AUTHOR, JSON.stringify(packData.packs));
-          storage.set(USER_STATS_CACHE_KEY, JSON.stringify(stats));
-        }
-      }
-
-      if (clanPackRes && clanPackRes.ok) {
-        const clanData = await clanPackRes.json();
-        if (clanData.success) {
-          setClanVaultPacks(clanData.packs);
-          storage.set(VAULT_CACHE_KEY_CLAN, JSON.stringify(clanData.packs));
-        }
-      }
-
     } catch (e) {
       console.error("❌ Vault Sync Error", e);
     } finally {
       setIsFetchingStore(false);
     }
-  }, [packages.length, authorVaultPacks.length, clanVaultPacks.length, storage]);
+  }, [packages.length, storage]);
 
   useEffect(() => { fetchOfferings(); }, []);
 
@@ -713,7 +687,6 @@ const WalletPage = () => {
 
   const correctCoin = activeTab === 'CC' ? (clanCoins || 0) : (coins || 0);
   const correctIcon = activeTab === 'CC' ? "CC" : "OC";
-  const currentVaultPacks = vaultTab === 'AUTHOR' ? authorVaultPacks : clanVaultPacks;
 
   const renderRewardPreview = (reward) => {
     const visual = reward.visualConfig || {};
@@ -916,120 +889,6 @@ const WalletPage = () => {
                   </TouchableOpacity>
                 ))}
               </View>
-            </View>
-          )}
-
-          {activeTab === 'PACKS' && (
-            <View>
-              <View className="mb-6 px-1">
-                <View className="flex-row items-center justify-between">
-                  <Text style={{ color: THEME.text }} className="text-2xl font-black uppercase italic">Limited Bundles</Text>
-                  <Text style={{ color: THEME.accent }} className="text-[8px] font-black uppercase tracking-[2px]">Rank-Locked Equipment</Text>
-                </View>
-
-                {!isInClan && (
-                  <View style={{ backgroundColor: THEME.card, borderColor: THEME.border, borderWidth: 1 }} className="mt-6 p-6 rounded-[28px] items-center shadow-lg">
-                    <View className="w-16 h-16 rounded-full items-center justify-center mb-4" style={{ backgroundColor: THEME.bg }}>
-                      <MaterialCommunityIcons name="shield-search" size={32} color={THEME.accent} />
-                    </View>
-                    <Text style={{ color: THEME.text }} className="font-black text-lg uppercase italic text-center">No Syndicate Assigned</Text>
-                    <Text style={{ color: THEME.textSecondary }} className="text-[10px] font-bold uppercase tracking-widest text-center mt-2 mb-6 px-4">
-                      Join a clan to unlock the CC Store and access exclusive tactical Vault equipment.
-                    </Text>
-                    <TouchableOpacity
-                      onPress={() => navigation.navigate('discovery')}
-                      style={{ backgroundColor: THEME.accent }}
-                      className="h-14 rounded-2xl flex-row items-center justify-center w-full shadow-lg"
-                    >
-                      <MaterialCommunityIcons name="radar" size={20} color="white" />
-                      <Text className="text-white font-black uppercase text-[12px] ml-2 tracking-widest">Discover Clans</Text>
-                    </TouchableOpacity>
-                  </View>
-                )}
-
-                {userClan && (
-                  <View className="flex-row mt-4 bg-black/5 dark:bg-white/5 rounded-2xl p-1 border border-black/5 dark:border-white/5">
-                    <TouchableOpacity
-                      onPress={() => setVaultTab('AUTHOR')}
-                      className="flex-1 py-2.5 items-center justify-center rounded-xl"
-                      style={vaultTab === 'AUTHOR' ? { backgroundColor: THEME.accent } : {}}
-                    >
-                      <Text style={{ color: vaultTab === 'AUTHOR' ? 'white' : THEME.textSecondary }} className="font-black uppercase tracking-widest text-[9px]">Author Packs</Text>
-                    </TouchableOpacity>
-                    <TouchableOpacity
-                      onPress={() => setVaultTab('CLAN')}
-                      className="flex-1 py-2.5 items-center justify-center rounded-xl"
-                      style={vaultTab === 'CLAN' ? { backgroundColor: THEME.accent } : {}}
-                    >
-                      <Text style={{ color: vaultTab === 'CLAN' ? 'white' : THEME.textSecondary }} className="font-black uppercase tracking-widest text-[9px]">Clan Packs</Text>
-                    </TouchableOpacity>
-                  </View>
-                )}
-              </View>
-
-              {currentVaultPacks.length === 0 ? (
-                <Text style={{ color: THEME.textSecondary }} className="text-center font-bold uppercase tracking-widest text-[10px] mt-10">No packs available.</Text>
-              ) : currentVaultPacks.map((pack) => {
-                const storePkg = packages.find(p => p.product.identifier === pack.storeId);
-                let isLocked = pack.isLocked;
-                if (vaultTab === 'CLAN') {
-                  const currentClanLvl = typeof clanRank === 'number' ? clanRank : (clanRank?.level || 1);
-                  isLocked = currentClanLvl < pack.requiredRank;
-                }
-                const isOwned = pack.isPurchased;
-                const cardColor = isLocked ? '#444' : (pack.color || THEME.accent);
-
-                return (
-                  <TouchableOpacity
-                    key={pack.id}
-                    onPress={() => openPreview(pack, true)}
-                    className={`mb-8 rounded-[35px] overflow-hidden border-2 ${isLocked ? 'opacity-60' : ''}`}
-                    style={{ borderColor: cardColor, height: 240, backgroundColor: THEME.card }}
-                  >
-                    <Canvas style={{ position: 'absolute', width: '100%', height: '100%' }}>
-                      <Fill color={THEME.isDark ? "#0a0a0a" : "#f8fafc"} />
-                      <Group>
-                        <LinearGradient start={vec(0, 0)} end={vec(width, 240)} colors={[cardColor + "20", cardColor + "40", cardColor + "10"]} />
-                        <Rect x={0} y={0} width={width} height={240} />
-                      </Group>
-                    </Canvas>
-
-                    <View className="flex-1 p-6 justify-between">
-                      <View className="flex-row justify-between items-start">
-                        <View className="flex-1 mr-4">
-                          <View className="flex-row items-center mb-1">
-                            <Text className="font-black text-xl italic uppercase" style={{ color: isLocked ? THEME.textSecondary : THEME.text }}>{pack.name}</Text>
-                            {isLocked && <MaterialCommunityIcons name="lock" size={18} color={THEME.textSecondary} style={{ marginLeft: 8 }} />}
-                            {isOwned && <MaterialCommunityIcons name="check-decagram" size={20} color={THEME.success} style={{ marginLeft: 8 }} />}
-                          </View>
-                          <Text style={{ color: THEME.textSecondary }} className="font-bold text-[10px] uppercase tracking-widest">{pack.description}</Text>
-                          {isLocked && renderPackProgressBar(pack.requiredRank)}
-                          {isOwned && <Text style={{ color: THEME.success }} className="text-[8px] font-black uppercase tracking-widest mt-2">Ownership Verified</Text>}
-                        </View>
-                        <View style={{ backgroundColor: cardColor }} className="p-3 rounded-2xl shadow-lg">
-                          <MaterialCommunityIcons name={isLocked ? "shield-lock" : (pack.visualData?.icon || "flash")} size={24} color="white" />
-                        </View>
-                      </View>
-
-                      <View className="flex-row justify-between items-end">
-                        <View className="flex-1 flex-row flex-wrap gap-2 mr-2">
-                          {pack.rewards && pack.rewards.slice(0, 3).map((reward, idx) => (
-                            <View key={idx} className="bg-white/5 px-2.5 py-1.5 rounded-xl border border-white/10 flex-row items-center gap-1.5">
-                              {renderRewardPreview(reward)}
-                              <Text style={{ color: THEME.text }} className="font-black text-[7.5px] uppercase">{reward.label || reward.name}</Text>
-                            </View>
-                          ))}
-                        </View>
-                        <View style={{ backgroundColor: isLocked ? THEME.border : (isOwned ? THEME.success : THEME.accent) }} className="px-5 py-3 rounded-2xl shadow-xl">
-                          <Text className="text-white font-black text-[10px] uppercase">
-                            {isLocked ? "CLASSIFIED" : (isOwned ? "DEPLOYED" : (storePkg ? storePkg.product.priceString : "LINKING..."))}
-                          </Text>
-                        </View>
-                      </View>
-                    </View>
-                  </TouchableOpacity>
-                );
-              })}
             </View>
           )}
         </View>

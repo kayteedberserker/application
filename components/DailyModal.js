@@ -1,9 +1,10 @@
 import { Ionicons, MaterialCommunityIcons } from '@expo/vector-icons';
+import { Image } from 'expo-image';
 import { LinearGradient } from 'expo-linear-gradient';
 import { useRouter } from 'expo-router';
 import LottieView from 'lottie-react-native';
 import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
-import { ActivityIndicator, Dimensions, Image, Modal, TouchableOpacity, View } from 'react-native';
+import { ActivityIndicator, Dimensions, Modal, TouchableOpacity, View } from 'react-native';
 import { useMMKV } from 'react-native-mmkv';
 import { SvgXml } from 'react-native-svg';
 import { useCoins } from '../context/CoinContext';
@@ -360,7 +361,7 @@ export default function DailyModal() {
                             >
                                 {/* 2. THE POSTER IMAGE (EXPO-IMAGE) */}
                                 {currentPromo.promoImage ? (
-                                    <View className="w-full aspect-[100/101] relative">
+                                    <View className="w-full aspect-[1/1] relative">
                                         <Image
                                             source={currentPromo.promoImage}
                                             contentFit="cover"

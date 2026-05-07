@@ -1,10 +1,28 @@
-import { Ionicons, MaterialCommunityIcons } from "@expo/vector-icons";
+import { Feather, Ionicons, MaterialCommunityIcons } from "@expo/vector-icons";
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { Redirect, Stack, usePathname, useRouter } from "expo-router";
 import { useColorScheme as useNativeWind } from "nativewind";
 import { useEffect, useState } from "react";
 import {
+    ActivityIndicator,
     DeviceEventEmitter,
+    Dimensions // ⚡️ Added for Skia Layout
+    ,
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+    Modal,
     StatusBar,
     StyleSheet,
     Text,
@@ -13,9 +31,13 @@ import {
     View
 } from "react-native";
 import { useMMKV } from "react-native-mmkv";
+import Purchases from 'react-native-purchases'; // ⚡️ RevenueCat
 import { SafeAreaView, useSafeAreaInsets } from "react-native-safe-area-context";
 
-// ⚡️ IMPORT REANIMATED
+// ⚡️ IMPORT REANIMATED & MOTI & SKIA
+import { BlurMask, Canvas, Rect, LinearGradient as SkiaGradient, vec } from '@shopify/react-native-skia'; // ⚡️ Added for Aura
+import { LinearGradient } from 'expo-linear-gradient';
+import { MotiView } from 'moti'; // ⚡️ Added for high-end modal
 import Animated, {
     Easing,
     Extrapolation,
@@ -33,13 +55,17 @@ import AnimeLoading from "../../components/AnimeLoading";
 import DailyModal from '../../components/DailyModal';
 import GlobalMarquee from '../../components/GlobalMarquee';
 import NeuralPinModal from "../../components/NeuralPinModal";
+import TitleTag from "../../components/TitleTag";
 import UpdateHandler from "../../components/UpdateModal";
+import { useAlert } from "../../context/AlertContext";
 import { useClan } from "../../context/ClanContext";
 import { useUser } from "../../context/UserContext";
 import apiFetch from "../../utils/apiFetch";
 import "../globals.css";
 import CategoryNav from "./../../components/CategoryNav";
 import TopBar from "./../../components/Topbar";
+
+const { width } = Dimensions.get('window'); // ⚡️ Get width for Skia
 
 export default function MainLayout() {
     const { colorScheme, setColorScheme } = useNativeWind();
@@ -66,7 +92,12 @@ export default function MainLayout() {
     const [showTop, setShowTop] = useState(false);
     const [showClanMenu, setShowClanMenu] = useState(false);
 
+    // ⚡️ COFFEE SYSTEM STATE
+    const [showCoffeeModal, setShowCoffeeModal] = useState(false);
+    const [isCoffeeLoading, setIsCoffeeLoading] = useState(false);
+
     const { user, setUser, contextLoading, pinModalVisible, setPinModalVisible } = useUser();
+    const CustomAlert = useAlert()
     if (__DEV__) console.log(pinModalVisible);
 
     // ⚡️ CLAN HINT STATE
@@ -95,6 +126,7 @@ export default function MainLayout() {
             setIsFirstPostFlow(true);
         }
     }, []);
+
     const tabs = [
         { id: 'home', label: 'HOME', icon: 'home', route: '/', color: '#3b82f6', match: (p) => p === "/" },
         { id: 'search', label: 'SEARCH', icon: 'search', route: '/Search', color: '#a855f7', match: (p) => p === "/Search" },
@@ -196,7 +228,7 @@ export default function MainLayout() {
         if (user?.deviceId) {
             const updateActivity = async () => {
                 try {
-                    await apiFetch("https://oreblogda.com/api/mobile/app-open", {
+                    await apiFetch("/mobile/app-open", {
                         method: "POST",
                         body: JSON.stringify({ deviceId: user.deviceId }),
                     });
@@ -244,8 +276,40 @@ export default function MainLayout() {
         }
     };
 
-    const NotificationBadge = ({ count, hasUnRead, size = 12 }) => {
+    // ⚡️ COFFEE PURCHASE LOGIC
+    const handleBuyCoffee = async () => {
+        setIsCoffeeLoading(true);
+        try {
+            const offerings = await Purchases.getOfferings();
+            // Assumes your package identifier in RevenueCat is 'coffee_tip'
+            const coffeePackage = offerings.current.availablePackages.find(p => p.identifier === 'buy_us_a_coffee');
 
+            if (coffeePackage) {
+                const { customerInfo } = await Purchases.purchasePackage(coffeePackage);
+
+                // Call your special route to handle database saving
+                await apiFetch("/mobile/coins/coffee", {
+                    method: "POST",
+                    body: JSON.stringify({
+                        uid: user?.uid,
+                        transactionId: customerInfo.originalAppUserId
+                    }),
+                });
+
+                CustomAlert("Success", "Coffee Sent Successful! ☕️ THE SYSTEM thanks you.");
+                setShowCoffeeModal(false);
+            }
+        } catch (e) {
+            if (!e.userCancelled) {
+                console.error("Coffee Error", e);
+                CustomAlert("Error", "Coffee Purchase Failed")
+            }
+        } finally {
+            setIsCoffeeLoading(false);
+        }
+    };
+
+    const NotificationBadge = ({ count, hasUnRead, size = 12 }) => {
         if (!hasUnRead && (!count || count <= 0)) return null;
         if (!hasUnRead && !canManageClan) return null;
         return (
@@ -324,6 +388,9 @@ export default function MainLayout() {
         return <Redirect href="/screens/FirstLaunchScreen" />;
     }
 
+    const goldNeon = "#fcd34d";
+    const deepVoid = "#050A18";
+
     return (
         <View style={{ flex: 1, backgroundColor: isDark ? "#000" : "#fff" }}>
             <StatusBar barStyle={isDark ? "light-content" : "dark-content"} />
@@ -368,41 +435,142 @@ export default function MainLayout() {
                 <Stack.Screen name="categories/[id]" />
             </Stack>
 
-            {/* ⚡️ THE GOLD ROULETTE EVENT BUTTON + TOOLTIP */}
+            {/* ⚡️ THE GOLD ROULETTE EVENT BUTTON + COFFEE BUTTON */}
             <View style={styles.eventButtonContainer} pointerEvents="box-none">
-                {!isFirstPostFlow && (
-                    <Animated.View pointerEvents="none" style={[styles.tooltipContainer, tooltipStyle]}>
-                        <Text style={styles.tooltipText}>NEW EVENT!</Text>
-                        <View style={styles.tooltipArrow} />
+                <View style={{ alignItems: 'center' }}>
+                    {/* ⚡️ BUY ME A COFFEE BUTTON (Above Event Button) */}
+                    <Animated.View style={eventBtnStyle}>
+                        <TouchableOpacity
+                            onPress={() => setShowCoffeeModal(true)}
+                            activeOpacity={0.8}
+                            style={[
+                                styles.coffeeButton,
+                                {
+                                    backgroundColor: isDark ? "#111" : "#fff",
+                                    borderColor: "#fcd34d",
+                                    marginBottom: 20
+                                }
+                            ]}
+                        >
+                            <Feather name="coffee" size={20} color="#fcd34d" />
+                        </TouchableOpacity>
                     </Animated.View>
-                )}
 
-                <Animated.View style={eventBtnStyle}>
-                    <TouchableOpacity
-                        onPress={() => navigateTo("/screens/referralevent")}
-                        activeOpacity={0.8}
-                        style={[
-                            styles.eventButton,
-                            {
-                                backgroundColor: isDark ? "#111111" : "#ffffff",
-                                borderColor: "#f59e0b",
-                                shadowColor: "#f59e0b",
-                            }
-                        ]}
-                    >
-                        <Animated.View style={rouletteSpinStyle}>
-                            <Ionicons name="aperture" size={26} color="#f59e0b" />
-                        </Animated.View>
+                    {/* EVENT BUTTON */}
+                    <Animated.View style={eventBtnStyle}>
+                        <TouchableOpacity
+                            onPress={() => navigateTo("/screens/referralevent")}
+                            activeOpacity={0.8}
+                            style={[
+                                styles.eventButton,
+                                {
+                                    backgroundColor: isDark ? "#111111" : "#ffffff",
+                                    borderColor: "#f59e0b",
+                                    shadowColor: "#f59e0b",
+                                }
+                            ]}
+                        >
+                            <Animated.View style={rouletteSpinStyle}>
+                                <Ionicons name="aperture" size={26} color="#f59e0b" />
+                            </Animated.View>
 
-                        <View style={[
-                            styles.eventBadge,
-                            { backgroundColor: "#f59e0b", borderColor: isDark ? "#111111" : "#ffffff" }
-                        ]}>
-                            <Text style={styles.eventBadgeText}>EVENT</Text>
-                        </View>
-                    </TouchableOpacity>
-                </Animated.View>
+                            <View style={[
+                                styles.eventBadge,
+                                { backgroundColor: "#f59e0b", borderColor: isDark ? "#111111" : "#ffffff" }
+                            ]}>
+                                <Text style={styles.eventBadgeText}>EVENT</Text>
+                            </View>
+                        </TouchableOpacity>
+                    </Animated.View>
+                </View>
             </View>
+
+            {/* ⚡️ CLEAN COFFEE SUPPORT MODAL */}
+            <Modal visible={showCoffeeModal} transparent animationType="fade" statusBarTranslucent>
+                <View style={styles.coffeeOverlay}>
+                    <MotiView
+                        from={{ opacity: 0, scale: 0.9, translateY: 20 }}
+                        animate={{
+                            opacity: showCoffeeModal ? 1 : 0,
+                            scale: showCoffeeModal ? 1 : 0.9,
+                            translateY: showCoffeeModal ? 0 : 20
+                        }}
+                        transition={{ type: 'timing', duration: 400 }}
+                        style={[styles.coffeeModalHighEnd, { backgroundColor: deepVoid, borderColor: goldNeon }]}
+                        className="p-6 rounded-[40px] border-2 overflow-hidden shadow-2xl"
+                    >
+                        {/* SKIA AURA BACKGROUND */}
+                        <View className="absolute inset-0">
+                            <Canvas style={{ flex: 1 }}>
+                                <Rect x={0} y={0} width={width * 0.9} height={600}>
+                                    <SkiaGradient
+                                        start={vec(0, 0)}
+                                        end={vec(width * 0.9, 400)}
+                                        colors={["rgba(252,211,77,0.15)", "transparent", "rgba(252,211,77,0.05)"]}
+                                    />
+                                </Rect>
+                                <BlurMask blur={30} style="normal" />
+                            </Canvas>
+                        </View>
+
+                        {/* ACTION LINES */}
+                        <View className="absolute inset-0 opacity-10">
+                            <LinearGradient colors={['transparent', goldNeon, 'transparent']} style={{ width: 1, height: '100%', position: 'absolute', left: '15%', transform: [{ rotate: '35deg' }] }} />
+                            <LinearGradient colors={['transparent', goldNeon, 'transparent']} style={{ width: 1, height: '100%', position: 'absolute', right: '15%', transform: [{ rotate: '-35deg' }] }} />
+                        </View>
+
+                        <View className="flex-row justify-between items-start z-10 mb-4">
+                            <MotiView from={{ rotate: '0deg' }} animate={{ rotate: '360deg' }} transition={{ loop: true, duration: 10000, type: 'timing' }}>
+                                <MaterialCommunityIcons name="atom" size={24} color={goldNeon} />
+                            </MotiView>
+                            <TouchableOpacity onPress={() => setShowCoffeeModal(false)} className="bg-white/10 p-2 rounded-full border border-white/10">
+                                <Ionicons name="close" size={20} color="white" />
+                            </TouchableOpacity>
+                        </View>
+
+                        <View className="items-center z-10">
+                            <MotiView from={{ scale: 1 }} animate={{ scale: [1, 1.1, 1] }} transition={{ loop: true, duration: 2000 }} className="mb-4">
+                                <Feather name="coffee" size={64} color={goldNeon} />
+                            </MotiView>
+
+                            <Text style={{ color: 'white' }} className="text-3xl font-black italic uppercase tracking-tighter text-center">BUY US A COFFEE</Text>
+
+                            <View className="flex-row items-center mb-6">
+                                <View style={{ backgroundColor: goldNeon }} className="h-[2px] w-8 mr-2" />
+                                <Text style={{ color: goldNeon }} className="text-[10px] font-black uppercase tracking-[0.3em]">Support THE SYSTEM</Text>
+                                <View style={{ backgroundColor: goldNeon }} className="h-[2px] w-8 ml-2" />
+                            </View>
+
+                            {/* ⚡️ THE UPDATED NORMAL WRITEUP */}
+                            <Text className="text-white/60 text-center text-[13px] leading-5 mb-8 px-4">
+                                Buying a coffee for <Text className="text-white font-bold">THE SYSTEM</Text> helps keep the servers running and the experience fast. Your support directly contributes to maintaining and evolving the system for everyone.
+                            </Text>
+
+                            <MotiView className="bg-yellow-500/10 p-4 rounded-2xl border border-yellow-500/20 mb-4 w-full flex-row items-center justify-center">
+                                <MaterialCommunityIcons name="shield-star" size={18} color={goldNeon} className="mr-2" />
+                                <Text style={{ color: goldNeon }} className="text-[11px] font-black uppercase tracking-widest text-center">UNLOCKS 'SYSTEM PATRON' TITLE</Text>
+                            </MotiView>
+
+                            <View className="w-full flex-row items-center justify-center mb-4">
+                                <TitleTag title={"System Patron"} tier={"Rare"} />
+                            </View>
+
+                            <TouchableOpacity onPress={handleBuyCoffee} disabled={isCoffeeLoading} activeOpacity={0.9} className="w-full">
+                                <LinearGradient colors={[goldNeon, '#B45309']} start={{ x: 0, y: 0 }} end={{ x: 1, y: 1 }} className="py-5 rounded-2xl flex-row justify-center items-center shadow-xl border border-white/20">
+                                    {isCoffeeLoading ? <ActivityIndicator color={deepVoid} /> : (
+                                        <>
+                                            <Feather name="coffee" size={20} color={deepVoid} />
+                                            <Text style={{ color: deepVoid }} className="font-black uppercase ml-2 tracking-[0.1em] text-[16px] italic">SEND A COFFEE ($0.99)</Text>
+                                        </>
+                                    )}
+                                </LinearGradient>
+                            </TouchableOpacity>
+
+                            <Text className="text-white/30 text-[9px] mt-4 uppercase font-bold tracking-widest">Secure Transaction via Google Play</Text>
+                        </View>
+                    </MotiView>
+                </View>
+            </Modal>
 
             <View
                 style={{
@@ -601,10 +769,15 @@ const styles = StyleSheet.create({
     overlay: { position: 'absolute', top: 0, bottom: 0, left: 0, right: 0, zIndex: 999 },
     mainFab: { width: 48, height: 48, borderRadius: 18, justifyContent: "center", alignItems: "center", elevation: 8, shadowColor: "#000", shadowOffset: { width: 0, height: 4 }, shadowOpacity: 0.3, shadowRadius: 4.65 },
     subFab: { width: 45, height: 45, borderRadius: 15, justifyContent: "center", alignItems: "center", elevation: 5, shadowColor: "#000", shadowOffset: { width: 0, height: 2 }, shadowOpacity: 0.25, shadowRadius: 3.84 },
-    eventButtonContainer: { position: 'absolute', right: 12, top: '45%', zIndex: 998, flexDirection: 'row', alignItems: 'center' },
+    eventButtonContainer: { position: 'absolute', right: 12, top: '42%', zIndex: 998, flexDirection: 'row', alignItems: 'center' },
     eventButton: { width: 40, height: 40, borderRadius: 25, justifyContent: 'center', alignItems: 'center', elevation: 10, shadowOffset: { width: 0, height: 4 }, shadowOpacity: 0.4, shadowRadius: 5, borderWidth: 2 },
     eventBadge: { position: 'absolute', top: -6, left: -8, borderRadius: 12, paddingHorizontal: 6, paddingVertical: 2, borderWidth: 1.5 },
     eventBadgeText: { fontSize: 6, color: '#ffffff', fontWeight: '900' },
+    coffeeButton: { width: 36, height: 36, borderRadius: 18, justifyContent: 'center', alignItems: 'center', borderWidth: 1, elevation: 4 },
+
+    // ⚡️ Coffee Modal High End
+    coffeeOverlay: { flex: 1, backgroundColor: 'rgba(0,0,0,0.85)', justifyContent: 'center', alignItems: 'center', padding: 20 },
+    coffeeModalHighEnd: { width: '100%', maxWidth: 400, position: 'relative' },
 
     // ⚡️ Tooltip Styles for Event Button
     tooltipContainer: { backgroundColor: '#f59e0b', paddingHorizontal: 10, paddingVertical: 6, borderRadius: 8, marginRight: 10, elevation: 5, shadowColor: '#f59e0b', shadowOpacity: 0.8, shadowRadius: 8, shadowOffset: { width: 0, height: 2 } },
