@@ -51,7 +51,6 @@ import AnimatedReanimated, {
 } from "react-native-reanimated";
 import { SvgXml } from "react-native-svg";
 
-const API_BASE = "https://oreblogda.com/api";
 const { width } = Dimensions.get('window');
 
 const PostSkeleton = memo(() => {

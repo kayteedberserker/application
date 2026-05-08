@@ -59,7 +59,6 @@ Notifications.setNotificationHandler({
 });
 
 const COOLDOWN_NOTIFICATION_KEY = "cooldown_notification_id";
-const API_BASE = "https://oreblogda.com/api";
 const fetcher = (url) => apiFetch(url).then((res) => res.json());
 
 // ===================== ⚡️ NEW RANK SYSTEM HELPERS ===========
@@ -543,7 +542,7 @@ export default function AuthorDiaryDashboard() {
                         continue;
                     }
 
-                    const signRes = await apiFetch(`${API_BASE}/upload/sign`, { method: "POST" });
+                    const signRes = await apiFetch(`/upload/sign`, { method: "POST" });
                     const signData = await signRes.json();
                     if (!signRes.ok) throw new Error("Sync failure: Cloud Satellite unreachable.");
 

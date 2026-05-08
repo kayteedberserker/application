@@ -40,7 +40,7 @@ export default function ReferralDashboard() {
     const fetchLatestData = useCallback(async () => {
         try {
             if (user?.deviceId) {
-                const res = await apiFetch(`https://oreblogda.com/api/users/me?fingerprint=${user.deviceId}`);
+                const res = await apiFetch(`/users/me?fingerprint=${user.deviceId}`);
                 const response = await res.json();
                 if (response) {
                     const newData = {

@@ -15,7 +15,7 @@ import Animated, {
   withTiming
 } from 'react-native-reanimated';
 
-const VERSION_CHECK_URL = 'https://oreblogda.com/api/version';
+const VERSION_CHECK_URL = '/version';
 const INSTALLED_VERSION = Constants.expoConfig?.version || Constants.manifest?.version || '1.0.0';
 const INSTALLED_RUNTIME = Updates.runtimeVersion || 'v1';
 const SNOOZE_KEY = 'OREBLOGDA_UPDATE_SNOOZE';

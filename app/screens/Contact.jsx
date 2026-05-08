@@ -15,9 +15,9 @@ import {
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { Text } from '../../components/Text';
+import TopBar from '../../components/Topbar';
 import THEME from '../../components/useAppTheme';
 import apiFetch from "../../utils/apiFetch";
-import TopBar from '../../components/Topbar';
 
 const { width } = Dimensions.get('window');
 
@@ -39,7 +39,7 @@ export default function Contact() {
     setStatus({ loading: true, success: "", error: "" });
 
     try {
-      const res = await apiFetch("https://oreblogda.com/api/contact", {
+      const res = await apiFetch("/contact", {
         method: "POST",
         body: JSON.stringify(form),
       });
@@ -72,16 +72,16 @@ export default function Contact() {
       <View style={{ position: 'absolute', top: -50, right: -50, width: 300, height: 300, borderRadius: 150, backgroundColor: THEME.glowBlue }} />
       <View style={{ position: 'absolute', bottom: 100, left: -100, width: 350, height: 350, borderRadius: 175, backgroundColor: THEME.glowRed }} />
 
-      <KeyboardAvoidingView 
-        behavior={Platform.OS === "ios" ? "padding" : "height"} 
+      <KeyboardAvoidingView
+        behavior={Platform.OS === "ios" ? "padding" : "height"}
         className="flex-1"
       >
         <ScrollView className="flex-1 px-6" showsVerticalScrollIndicator={false}>
-          
+
           {/* --- Header --- */}
           <View className="flex-row items-center mt-8 mb-8">
-            <TouchableOpacity 
-              onPress={() => router.back()} 
+            <TouchableOpacity
+              onPress={() => router.back()}
               style={{ backgroundColor: THEME.card, borderColor: THEME.border }}
               className="w-12 h-12 items-center justify-center rounded-2xl border-2"
             >
@@ -99,7 +99,7 @@ export default function Contact() {
 
           {/* --- Form Fields --- */}
           <View className="space-y-6">
-            
+
             {/* Name Input */}
             <View>
               <Text style={{ color: THEME.textSecondary || '#475569' }} className="font-black uppercase text-[9px] tracking-[0.2em] mb-2 ml-1">Identity Tag</Text>
@@ -201,7 +201,7 @@ export default function Contact() {
           </View>
 
           <View className="h-24 items-center justify-center">
-              <Text style={{ color: THEME.textSecondary || '#334155' }} className="font-black text-[8px] uppercase tracking-[0.4em]">Secure Transmission Channel v1.2</Text>
+            <Text style={{ color: THEME.textSecondary || '#334155' }} className="font-black text-[8px] uppercase tracking-[0.4em]">Secure Transmission Channel v1.2</Text>
           </View>
         </ScrollView>
       </KeyboardAvoidingView>

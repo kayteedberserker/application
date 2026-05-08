@@ -25,7 +25,6 @@ import TitleTag from '../../components/TitleTag';
 import apiFetch from "../../utils/apiFetch";
 
 const { width } = Dimensions.get('window');
-const API_URL = "https://oreblogda.com";
 
 const fetcher = (url) => apiFetch(url).then((res) => res.json());
 

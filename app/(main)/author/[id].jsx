@@ -46,7 +46,6 @@ import PlayerNameplate from "../../../components/PlayerNameplate";
 import PlayerWatermark from "../../../components/PlayerWatermark";
 import TitleTag from "../../../components/TitleTag";
 
-const API_BASE = "https://oreblogda.com/api";
 const { width } = Dimensions.get('window');
 
 const PostSkeleton = memo(() => {

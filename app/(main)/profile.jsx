@@ -56,7 +56,6 @@ import TitleTag from "../../components/TitleTag";
 import { useClan } from "../../context/ClanContext";
 
 const { width, height } = Dimensions.get("window");
-const API_BASE = "https://oreblogda.com/api";
 const LIMIT = 5;
 
 const fetcher = (url) => apiFetch(url).then((res) => res.json());

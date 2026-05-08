@@ -335,7 +335,7 @@ function RootLayoutContent() {
             }
             const token = await registerForPushNotificationsAsync();
             if (token && user?.deviceId) {
-                apiFetch("https://oreblogda.com/api/users/update-push-token", {
+                apiFetch("/users/update-push-token", {
                     method: 'POST',
                     headers: { 'Content-Type': 'application/json' },
                     body: JSON.stringify({ deviceId: user.deviceId, pushToken: token })

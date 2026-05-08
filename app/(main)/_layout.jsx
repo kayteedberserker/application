@@ -32,6 +32,12 @@ import {
 
 
 
+
+
+
+
+
+
     Modal,
     Platform,
     StatusBar,
@@ -300,7 +306,8 @@ export default function MainLayout() {
 
     // ⚡️ COFFEE PURCHASE LOGIC
     const handleBuyCoffee = async () => {
-        setIsCoffeeLoading(true);
+        setIsCoffeeLoading(true)
+        // Call your special route to handle database saving
         try {
             const offerings = await Purchases.getOfferings();
             if (!offerings.current || offerings.current.availablePackages.length === 0) {
@@ -323,7 +330,7 @@ export default function MainLayout() {
                         uid: user?.uid,
                         transactionId: customerInfo.originalAppUserId
                     }),
-                });
+                })
 
                 CustomAlert("Success", "Coffee Sent Successful! ☕️ THE SYSTEM thanks you.");
                 setShowCoffeeModal(false);
