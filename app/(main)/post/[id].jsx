@@ -75,7 +75,6 @@ export default function PostDetailScreen() {
       if (!res.ok) throw new Error("Network response was not ok");
 
       const data = await res.json();
-      if (__DEV__) console.log(data.authorData);
 
       // Step C: Update State & MMKV Cache
       setPost(data);

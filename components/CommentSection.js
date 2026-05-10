@@ -34,14 +34,13 @@ import useSWR from "swr";
 import { useAlert } from "../context/AlertContext";
 import { useUser } from "../context/UserContext";
 import apiFetch from "../utils/apiFetch";
-import BadgeIcon from "./BadgeIcon";
 import { Text } from "./Text";
 
 
 // Import your new components
+import { Image } from "expo-image";
 import { useMMKV } from "react-native-mmkv";
 import { useCoins } from '../context/CoinContext'; // New Import
-import CoinIcon from "./ClanIcon";
 import PlayerNameplate from "./PlayerNameplate";
 
 const { width: SCREEN_WIDTH, height: SCREEN_HEIGHT } = Dimensions.get("window");
@@ -132,7 +131,7 @@ const SingleComment = ({ comment, isDark, onOpenDiscussion, stickerCache, storag
                     sticker={stickerCache[comment.stickerId] || getStickerFromPersistence(storage, comment.stickerId)}
                     stickerId={comment.stickerId}
                     isDark={isDark}
-                    size="large"
+                    size="medium"
                 />
             ) : (
                 <Text className="text-xs text-gray-600 dark:text-gray-300 font-bold leading-5 mt-1">
@@ -174,6 +173,8 @@ const SingleComment = ({ comment, isDark, onOpenDiscussion, stickerCache, storag
         </View>
     );
 };
+
+import { LegendList } from "@legendapp/list";
 
 const DiscussionDrawer = ({ visible, isDark, comment, onClose, onReply, isPosting, slug, highlightId, stickerCache, storage }) => {
     const [replyText, setReplyText] = useState("")
@@ -318,8 +319,18 @@ const DiscussionDrawer = ({ visible, isDark, comment, onClose, onReply, isPostin
                                         </View>
                                     )} */}
                                 </View>
-
-                                <Text className="text-xs text-gray-600 dark:text-gray-400 font-bold leading-5" numberOfLines={3}>{comment.text}</Text>
+                                {comment.type === "sticker" ? (
+                                    <StickerPreview
+                                        sticker={stickerCache[comment.stickerId] || getStickerFromPersistence(storage, comment.stickerId)}
+                                        stickerId={comment.stickerId}
+                                        isDark={isDark}
+                                        size="small"
+                                    />
+                                ) : (
+                                    <Text className="text-xs text-gray-600 dark:text-gray-400 font-bold leading-5" numberOfLines={3}>
+                                        {comment.text}
+                                    </Text>
+                                )}
                             </View>
 
                             <View className="p-5 flex-row gap-3 items-center">
@@ -375,36 +386,40 @@ const DiscussionDrawer = ({ visible, isDark, comment, onClose, onReply, isPostin
                                     </Pressable>
                                 </Animated.View>
                             )}
-                            <ScrollView
+
+                            {/* REPLACED ScrollView with FlatList */}
+                            <LegendList
                                 ref={scrollViewRef}
                                 className="flex-1"
+                                data={displayComments}
+                                keyExtractor={(item, index) => item._id?.toString() || index.toString()}
                                 onScroll={handleScroll}
                                 scrollEventThrottle={16}
+                                drawDistance={1000}
+                                recycleItems={true}
                                 onLayout={(e) => scrollViewHeight.current = e.nativeEvent.layout.height}
                                 onContentSizeChange={(w, h) => {
                                     contentHeight.current = h;
                                     if (!showJumpToBottom) scrollViewRef.current?.scrollToEnd({ animated: true });
                                 }}
                                 showsVerticalScrollIndicator={false}
-                            >
-                                <View className="px-6 pt-6">
+                                contentContainerStyle={{ paddingHorizontal: 24, paddingTop: 24, paddingBottom: 80 }}
+                                ListHeaderComponent={
                                     <Text className="text-[9px] font-black text-gray-400 uppercase tracking-widest mb-6">Live Feed</Text>
-                                    {displayComments.map((reply, idx) => {
-                                        const isHighlighted = highlightId === reply._id;
-                                        return (
-                                            <HighlightableComment
-                                                isDark={isDark}
-                                                key={reply._id || idx}
-                                                reply={reply}
-                                                isHighlighted={isHighlighted}
-                                                stickerCache={stickerCache}
-                                                storage={storage}
-                                            />
-                                        );
-                                    })}
-                                    <View className="h-20" />
-                                </View>
-                            </ScrollView>
+                                }
+                                renderItem={({ item: reply }) => {
+                                    const isHighlighted = highlightId === reply._id;
+                                    return (
+                                        <HighlightableComment
+                                            isDark={isDark}
+                                            reply={reply}
+                                            isHighlighted={isHighlighted}
+                                            stickerCache={stickerCache}
+                                            storage={storage}
+                                        />
+                                    );
+                                }}
+                            />
                         </View>
                     </Animated.View>
                 </KeyboardAvoidingView>
@@ -421,49 +436,34 @@ const DiscussionDrawer = ({ visible, isDark, comment, onClose, onReply, isPostin
     );
 };
 
-// Helper to determine rent price on frontend
-const getRentPrice = (rarity) => {
-    switch (rarity?.toLowerCase()) {
-        case 'mythic': return 50;
-        case 'legendary': return 30;
-        case 'epic': return 15;
-        case 'rare': return 10;
-        case 'common':
-        default: return 5;
-    }
-};
 
-// Helper for card background based on rarity to complement the BadgeIcon
-const getCardBackground = (rarity, isDark) => {
-    switch (rarity?.toLowerCase()) {
-        case 'mythic': return isDark ? 'bg-red-900/20 border-red-700/30' : 'bg-red-50 border-red-200';
-        case 'legendary': return isDark ? 'bg-amber-900/20 border-amber-700/30' : 'bg-amber-50 border-amber-200';
-        case 'epic': return isDark ? 'bg-purple-900/20 border-purple-700/30' : 'bg-purple-50 border-purple-200';
-        case 'rare': return isDark ? 'bg-blue-900/20 border-blue-700/30' : 'bg-blue-50 border-blue-200';
-        case 'common':
-        default: return isDark ? 'bg-gray-800 border-gray-700' : 'bg-gray-100 border-gray-300';
-    }
-};
+import { Blur, Canvas, Circle, Group } from "@shopify/react-native-skia";
+import { LinearGradient } from 'expo-linear-gradient';
+import { MotiView } from 'moti';
+const { width, height } = Dimensions.get('window');
 
 const getStickerCacheKey = (stickerId) => `sticker_${stickerId}`;
 
+// Updated for new DB structure (using stickerId and url)
+const cacheStickerToPersistence = (storage, sticker) => {
+    if (!storage || !sticker?.stickerId) return;
+    try {
+        storage.set(getStickerCacheKey(sticker.stickerId), JSON.stringify(sticker));
+    } catch (error) {
+        console.error('Sticker cache error', error);
+    }
+};
+
 const getStickerFromPersistence = (storage, stickerId) => {
+
     if (!storage || !stickerId) return null;
     const cached = storage.getString(getStickerCacheKey(stickerId));
+
     if (!cached) return null;
     try {
         return JSON.parse(cached);
     } catch (error) {
         return null;
-    }
-};
-
-const cacheStickerToPersistence = (storage, sticker) => {
-    if (!storage || !sticker?.id) return;
-    try {
-        storage.set(getStickerCacheKey(sticker.id), JSON.stringify(sticker));
-    } catch (error) {
-        console.error('Sticker cache error', error);
     }
 };
 
@@ -485,95 +485,221 @@ const findStickerIds = (comments = []) => {
 };
 
 const getStickerBackgroundStyle = (rarity, isDark) => {
-    const baseClasses = "items-center justify-center rounded-2xl border";
+    const baseClasses = "items-center justify-center rounded-xl border";
+    const r = rarity?.toLowerCase();
 
-    switch (rarity?.toLowerCase()) {
+    switch (r) {
         case 'mythic':
-            return `${baseClasses} ${isDark ? 'bg-red-900/20 border-red-500/60' : 'bg-red-50 border-red-200'}`;
+            return {
+                classes: `${baseClasses} ${isDark ? 'bg-red-500/10 border-red-500/40' : 'bg-red-50 border-red-200'}`,
+                glow: '#ef4444',
+                text: '#f87171'
+            };
         case 'legendary':
-            return `${baseClasses} ${isDark ? 'bg-amber-900/20 border-amber-500/60' : 'bg-amber-50 border-amber-200'}`;
+            return {
+                classes: `${baseClasses} ${isDark ? 'bg-amber-500/10 border-amber-500/40' : 'bg-amber-50 border-amber-200'}`,
+                glow: '#f59e0b',
+                text: '#fbbf24'
+            };
         case 'epic':
-            return `${baseClasses} ${isDark ? 'bg-purple-900/20 border-purple-500/60' : 'bg-purple-50 border-purple-200'}`;
+            return {
+                classes: `${baseClasses} ${isDark ? 'bg-purple-500/10 border-purple-500/40' : 'bg-purple-50 border-purple-200'}`,
+                glow: '#a855f7',
+                text: '#c084fc'
+            };
         case 'rare':
-            return `${baseClasses} ${isDark ? 'bg-blue-900/20 border-blue-500/60' : 'bg-blue-50 border-blue-200'}`;
-        case 'common':
+            return {
+                classes: `${baseClasses} ${isDark ? 'bg-blue-500/10 border-blue-500/40' : 'bg-blue-50 border-blue-200'}`,
+                glow: '#3b82f6',
+                text: '#60a5fa'
+            };
         default:
-            return `${baseClasses} ${isDark ? 'bg-gray-800 border-gray-700' : 'bg-gray-100 border-gray-300'}`;
+            return {
+                classes: `${baseClasses} ${isDark ? 'bg-gray-800/40 border-gray-700' : 'bg-gray-100 border-gray-300'}`,
+                glow: isDark ? '#4b5563' : '#9ca3af',
+                text: isDark ? '#9ca3af' : '#4b5563'
+            };
     }
 };
 
+const StickerPreview = ({ sticker, stickerId, isDark, size = 'medium', onPress }) => { // 🚀 ADDED onPress PROP
+    const [showDetails, setShowDetails] = useState(false);
+    const stickerSize = size === 'large' ? 70 : size === 'small' ? 50 : 60;
+    const containerPadding = size === 'large' ? 'p-1' : size === 'small' ? 'p-0' : 'p-0.5';
 
-const StickerPreview = ({ sticker, stickerId, isDark, size = 'medium' }) => {
-    // 1. Memoize or simplify constants to reduce re-render logic
-    const stickerSize = size === 'large' ? 80 : size === 'small' ? 50 : 60;
-    const containerPadding = size === 'large' ? 'px-6 py-6' : size === 'small' ? 'px-4 py-4' : 'px-5 py-5';
+    const theme = getStickerBackgroundStyle(sticker?.tier || sticker?.rarity, isDark);
 
-    // 2. Get the background style separately
-    const backgroundStyle = sticker ? getStickerBackgroundStyle(sticker.rarity, isDark) : '';
+    const handleLongPress = () => {
+        Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Heavy);
+        setShowDetails(true);
+    };
 
-    if (sticker) {
+    if (!sticker?.url) {
         return (
-            /* 3. Use an array for classes or separate the self-start. 
-               Sometimes 'self-start' combined with dynamic background classes 
-               triggers the interop loop. */
-            <View
-                className={`self-start ${containerPadding} ${backgroundStyle}`}
-                style={{ minHeight: stickerSize, minWidth: stickerSize }} // Physical guard
-            >
-                <BadgeIcon badge={sticker} size={stickerSize} isDark={isDark} />
+            <View className={`self-start rounded-lg border px-2 py-1 ${isDark ? 'bg-gray-900 border-gray-700' : 'bg-gray-100 border-gray-300'}`}>
+                <Text className="text-[8px] text-gray-500 font-mono">#{stickerId}</Text>
             </View>
         );
     }
 
     return (
-        <View className="self-start rounded-2xl border border-gray-300 dark:border-gray-700 bg-gray-100 dark:bg-gray-900 px-4 py-4">
-            <Text className="text-[10px] text-gray-500 dark:text-gray-400">
-                Sticker: {stickerId}
-            </Text>
-        </View>
+        <>
+            <Pressable
+                onPress={onPress} // 🚀 PASS IT HERE
+                onLongPress={handleLongPress}
+                delayLongPress={500}
+                className="self-start"
+            >
+                <MotiView
+                    className={`${containerPadding} ${theme.classes}`}
+                    style={{
+                        minHeight: stickerSize + 8,
+                        minWidth: stickerSize + 8,
+                        shadowColor: theme.glow,
+                        shadowOffset: { width: 0, height: 2 },
+                        shadowOpacity: isDark ? 0.4 : 0.1,
+                        shadowRadius: 4
+                    }}
+                >
+                    <Image
+                        source={{ uri: sticker.url }}
+                        style={{ width: stickerSize, height: stickerSize }}
+                        resizeMode="contain"
+                    />
+                </MotiView>
+            </Pressable>
+
+            {/* --- DETAILS MODAL --- */}
+            <Modal visible={showDetails} transparent animationType="fade" onRequestClose={() => setShowDetails(false)}>
+                <Pressable
+                    className="flex-1 bg-black/90 items-center justify-center p-6"
+                    onPress={() => setShowDetails(false)}
+                >
+                    <MotiView
+                        from={{ opacity: 0, scale: 0.9 }}
+                        animate={{ opacity: 1, scale: 1 }}
+                        className="w-full max-w-sm rounded-[32px] overflow-hidden border-2"
+                        style={{ borderColor: theme.glow }} // Modal border matches Tier color
+                    >
+                        <LinearGradient
+                            // Correct use of isDark for the modal card itself
+                            colors={isDark ? ['#121212', '#000000'] : ['#ffffff', '#f2f2f2']}
+                            className="p-8"
+                        >
+                            {/* Header */}
+                            <View className="flex-row justify-between items-start mb-6">
+                                <View>
+                                    <Text className="text-[9px] font-black text-blue-500 uppercase tracking-widest">STICKER_PROFILE</Text>
+                                    <Text className={`text-md font-bold italic uppercase ${isDark ? 'text-white' : 'text-black'}`}>
+                                        {sticker.stickerId}
+                                    </Text>
+                                </View>
+                                <View className="px-2 py-1 rounded-md border" style={{ borderColor: theme.glow + '50' }}>
+                                    <Text className="text-[8px] font-black" style={{ color: theme.glow }}>{sticker.tier || 'COMMON'}</Text>
+                                </View>
+                            </View>
+
+                            {/* Large Image Preview */}
+                            <View className={`items-center justify-center py-8 rounded-3xl mb-6 border border-white/5 ${isDark ? 'bg-white/5' : 'bg-black/5'}`}>
+                                <Image source={{ uri: sticker.url }} style={{ width: 120, height: 120 }} resizeMode="contain" />
+                            </View>
+
+                            {/* Data Rows with isDark applied */}
+                            <View className="gap-y-3">
+                                <DataRow label="CREATOR" value={sticker.author || "ROOT_USER"} icon="person" isDark={isDark} />
+                                {sticker.type === "free" && <DataRow label="SOURCE" value={sticker.source || "FLATICON"} icon="share-social" isDark={isDark} />}
+                                <DataRow label="PACK" value={sticker.packId || "CORE"} icon="cube" isDark={isDark} />
+                                <DataRow label="TYPE" value={sticker.type || "FREE"} icon="flash" isDark={isDark} />
+                            </View>
+
+                            <Pressable
+                                onPress={() => setShowDetails(false)}
+                                className="mt-8 py-3 rounded-xl items-center border"
+                                style={{ borderColor: theme.glow + '40', backgroundColor: theme.glow + '10' }}
+                            >
+                                <Text className="font-black text-[10px] tracking-widest" style={{ color: theme.glow }}>CLOSE_STATION</Text>
+                            </Pressable>
+                        </LinearGradient>
+                    </MotiView>
+                </Pressable>
+            </Modal>
+        </>
     );
 };
 
+const DataRow = ({ label, value, icon, isDark }) => (
+    <View className="flex-row items-center justify-between border-b border-white/5 pb-1">
+        <View className="flex-row items-center gap-2">
+            <Ionicons name={icon} size={10} color="#3b82f6" />
+            <Text className="text-[8px] font-bold text-gray-500 uppercase">{label}</Text>
+        </View>
+        <Text className={`text-[10px] font-black uppercase ${isDark ? 'text-gray-300' : 'text-gray-800'}`}>
+            {value}
+        </Text>
+    </View>
+);
+
+// Helper for Tier Colors & Glows
+const getTierTheme = (tier, isDark) => {
+    const t = tier?.toLowerCase();
+    switch (t) {
+        case 'mythic': return { color: '#ff4d4d', glow: '#ff0000', label: 'MYTH' };
+        case 'legendary': return { color: '#ffac33', glow: '#ff8800', label: 'LEGD' };
+        case 'epic': return { color: '#bc13fe', glow: '#a000ff', label: 'EPIC' };
+        case 'rare': return { color: '#00d2ff', glow: '#00a2ff', label: 'RARE' };
+        default: return { color: '#9ca3af', glow: '#4b5563', label: 'BASE' };
+    }
+};
+
+// UI Component: The Circular Price Badge (Skia Glow)
+const PriceOrb = ({ price, color, isRent }) => (
+    <View className="absolute -top-2 -right-2 w-8 h-8 items-center justify-center z-20">
+        <Canvas style={{ position: 'absolute', width: 32, height: 32 }}>
+            <Group>
+                <Circle cx={16} cy={16} r={12} color={color}>
+                    <Blur blur={3} />
+                </Circle>
+                <Circle cx={16} cy={16} r={10} color={color} opacity={0.9} />
+            </Group>
+        </Canvas>
+        <Text className="text-[6px] font-black text-white text-center">
+            {price > 0 ? price : '0'}{isRent ? 'OC' : ''}
+        </Text>
+    </View>
+);
+
 const StickerModal = ({ visible, onClose, onSelectSticker, isDark }) => {
     const { user } = useUser();
-    const { coins, setCoins } = useCoins(); // We'll use setCoins to update global UI state
+    const { coins, setCoins } = useCoins();
     const storage = useMMKV();
     const CustomAlert = useAlert();
 
-    const [activeTab, setActiveTab] = useState('owned');
+    const [activeTab, setActiveTab] = useState('free');
+    const [activePackId, setActivePackId] = useState(null); // 🚀 Track current pack
     const [ownedStickers, setOwnedStickers] = useState([]);
-    const [storeStickers, setStoreStickers] = useState([]);
-
-    // Loading states
+    const [storePacks, setStorePacks] = useState([]); // 🚀 Store packs instead of flat list
     const [isInitialLoading, setIsInitialLoading] = useState(false);
     const [processingId, setProcessingId] = useState(null);
 
     useEffect(() => {
-        if (visible) {
-            loadStickerData();
-        }
+        if (visible) loadStickerData();
     }, [visible]);
 
     const loadStickerData = async () => {
-        // 1. Check if we have cached data
-        const cached = storage.getString('user_stickers');
-        const cachedStore = storage.getString('store_stickers');
+        const cachedOwned = storage.getString('user_stickers');
+        const cachedPacks = storage.getString('store_packs');
 
-        if (cached) {
-            setOwnedStickers(JSON.parse(cached));
-        }
-        if (cachedStore) {
-            setStoreStickers(JSON.parse(cachedStore));
+        if (cachedOwned) setOwnedStickers(JSON.parse(cachedOwned));
+        if (cachedPacks) {
+            const parsedPacks = JSON.parse(cachedPacks);
+            setStorePacks(parsedPacks);
+            if (parsedPacks.length > 0 && !activePackId) setActivePackId(parsedPacks[0].packId);
         }
 
-        // 2. Only show loading animation if cache is totally empty
-        if (!cached) {
-            setIsInitialLoading(true);
-        }
+        if (!cachedPacks) setIsInitialLoading(true);
 
         try {
-            // 3. Background sync with Server
-            const response = await apiFetch('/store/sticker', {
+            const response = await apiFetch(`/store/sticker`, {
                 method: 'GET',
                 headers: { 'deviceid': user?.deviceId }
             });
@@ -583,11 +709,14 @@ const StickerModal = ({ visible, onClose, onSelectSticker, isDark }) => {
                 setOwnedStickers(data.owned);
                 storage.set('user_stickers', JSON.stringify(data.owned));
             }
-            if (data.store) {
-                setStoreStickers(data.store);
-                storage.set('store_stickers', JSON.stringify(data.store));
+            if (data.storePacks) {
+                setStorePacks(data.storePacks);
+                storage.set('store_packs', JSON.stringify(data.storePacks));
+                // Default to first pack if none selected
+                if (!activePackId && data.storePacks.length > 0) {
+                    setActivePackId(data.storePacks[0].packId);
+                }
             }
-
         } catch (error) {
             console.error("Error syncing stickers", error);
         } finally {
@@ -597,276 +726,261 @@ const StickerModal = ({ visible, onClose, onSelectSticker, isDark }) => {
 
     const handleTransaction = async (action, sticker) => {
         if (processingId) return;
-
-        setProcessingId(sticker.id);
-        Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
+        setProcessingId(sticker.stickerId);
+        Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
 
         try {
-            // Call the actual sticker route to update DB and User Inventory
-            const response = await apiFetch('/store/sticker', {
+            const response = await apiFetch(`store/sticker`, {
                 method: 'POST',
-                headers: { 'deviceid': user?.deviceId },
-                body: JSON.stringify({
-                    action: action,
-                    stickerId: sticker.id
-                })
+                headers: { 'Content-Type': 'application/json', 'deviceid': user?.deviceId },
+                body: JSON.stringify({ action, stickerId: sticker.stickerId })
             });
-
             const result = await response.json();
 
-            if (!response.ok || !result.success) {
-                CustomAlert(result.error || "Transaction failed", "error");
+            if (!response.ok) {
+                CustomAlert(result.error || "Denied", "error");
                 return;
             }
 
-            // SUCCESS HANDLING
             Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
-
-            // Sync the global coin balance across the app
-            if (result.balance !== undefined) {
-                setCoins(result.balance);
-            }
+            if (result.balance !== undefined) setCoins(result.balance);
 
             if (action === 'buy') {
-                CustomAlert(`Purchased ${sticker.name}!`, "success");
-
-                // Update local list instantly
                 const updatedOwned = [...ownedStickers, result.newSticker || sticker];
                 setOwnedStickers(updatedOwned);
                 storage.set('user_stickers', JSON.stringify(updatedOwned));
                 setActiveTab('owned');
             } else if (action === 'rent') {
-                CustomAlert(`Rented ${sticker.name}!`, "success");
-                onSelectSticker(sticker.id);
-                onClose(); // Close modal after renting for immediate use
+                onSelectSticker(sticker?.stickerId);
+                onClose();
             }
-
         } catch (error) {
-            console.error("Transaction Error:", error);
-            CustomAlert("Network error. Try again.", "error");
+            CustomAlert("Network error", "error");
         } finally {
             setProcessingId(null);
         }
     };
 
-    // UI Renders for Tabs
+    const confirmTransaction = (action, item) => {
+        Haptics.selectionAsync();
+        CustomAlert(
+            "Authorize Protocol",
+            `Deduct ${item.price} OC to ${action === 'rent' ? 'rent for this comment' : 'permanently buy'} this stamp?`,
+            [
+                { text: "Abort", style: "cancel" },
+                {
+                    text: "Execute",
+                    style: "default",
+                    onPress: () => handleTransaction(action, item)
+                }
+            ],
+            { cancelable: true }
+        );
+    };
+
+    // 🚀 Data routing: Get current pack's items based on Active Tab
+    const currentData = useMemo(() => {
+        if (!activePackId) return [];
+
+        // 1. Get all items in the currently selected Pack
+        const activePackItems = storePacks.find(p => p.packId === activePackId)?.items || [];
+
+        // 2. Filter them based on the selected Tab
+        if (activeTab === 'free') return activePackItems.filter(s => s.price === 0);
+        if (activeTab === 'rent') return activePackItems.filter(s => s.price > 0 || s.type === 'rent');
+
+        // If Owned tab, only show owned items THAT BELONG TO THE CURRENT PACK
+        return ownedStickers.filter(s =>
+            (s.packId === activePackId) ||
+            (!s.packId && activePackId === 'SYSTEM_DEFAULT')
+        );
+    }, [activeTab, activePackId, storePacks, ownedStickers]);
+
     const renderTabButton = (tabId, label, icon) => {
         const isActive = activeTab === tabId;
         return (
             <Pressable
-                onPress={() => {
-                    Haptics.selectionAsync();
-                    setActiveTab(tabId);
-                }}
-                className={`flex-1 py-3 items-center flex-row justify-center gap-2 border-b-2 ${isActive
-                    ? 'border-blue-500'
-                    : 'border-transparent'
-                    }`}
+                onPress={() => { Haptics.selectionAsync(); setActiveTab(tabId); }}
+                className="flex-1 items-center justify-center py-4 relative"
             >
-                <Ionicons
-                    name={icon}
-                    size={16}
-                    color={isActive ? "#3b82f6" : (isDark ? "#6b7280" : "#9ca3af")}
-                />
-                <Text className={`text-xs font-black uppercase ${isActive
-                    ? 'text-blue-500'
-                    : 'text-gray-400 dark:text-gray-500'
-                    }`}>
+                <MotiView animate={{ opacity: isActive ? 1 : 0.4, scale: isActive ? 1.1 : 0.9 }}>
+                    <Ionicons name={icon} size={18} color={isActive ? "#3b82f6" : (isDark ? "#fff" : "#000")} />
+                </MotiView>
+                <Text className={`text-[9px] font-black uppercase mt-1 ${isActive ? 'text-blue-500' : 'text-gray-500'}`}>
                     {label}
                 </Text>
+                {isActive && (
+                    <MotiView
+                        className="absolute bottom-0 h-[2px] bg-blue-500 w-1/2"
+                        from={{ width: 0 }} animate={{ width: '50%' }}
+                    />
+                )}
             </Pressable>
         );
     };
 
-    const renderOwnedTab = () => {
-        if (isInitialLoading && ownedStickers.length === 0) {
-            return <View className="flex-1 items-center justify-center"><ActivityIndicator size="large" color="#3b82f6" /></View>;
-        }
-
-        if (ownedStickers.length === 0) {
-            return (
-                <View className="flex-1 items-center justify-center p-8">
-                    <Ionicons name="sad-outline" size={48} color={isDark ? "#374151" : "#d1d5db"} className="mb-4" />
-                    <Text className="text-gray-500 dark:text-gray-400 font-bold text-center mb-6">
-                        You don't own any stamps yet.
-                    </Text>
-                    <Pressable
-                        onPress={() => setActiveTab('explore')}
-                        className="bg-blue-600 px-6 py-3 rounded-full flex-row items-center gap-2"
-                    >
-                        <Ionicons name="compass" size={18} color="white" />
-                        <Text className="text-white font-black uppercase text-xs">Explore Store</Text>
-                    </Pressable>
-                </View>
-            );
-        }
-
-        return (
-            <FlatList
-                data={ownedStickers}
-                numColumns={3}
-                keyExtractor={(item) => item.id}
-                contentContainerStyle={{ padding: 16, gap: 16 }}
-                columnWrapperStyle={{ gap: 16 }}
-                renderItem={({ item }) => (
-                    <Pressable
-                        onPress={() => onSelectSticker(item.id)}
-                        className={`flex-1 aspect-square rounded-2xl border items-center justify-center ${getCardBackground(item.rarity, isDark)}`}
-                    >
-                        <BadgeIcon badge={item} size={60} isDark={isDark} />
-                    </Pressable>
-                )}
-            />
-        );
-    };
-
-    const renderExploreTab = () => {
-        if (isInitialLoading && storeStickers.length === 0) {
-            return <View className="flex-1 items-center justify-center"><ActivityIndicator size="large" color="#3b82f6" /></View>;
-        }
-
-        const availableStickers = storeStickers.filter(
-            storeSticker => !ownedStickers.some(owned => owned.id === storeSticker.id)
-        );
-
-        if (availableStickers.length === 0 && !isInitialLoading) {
-            return (
-                <View className="flex-1 items-center justify-center">
-                    <Ionicons name="checkmark-circle" size={48} color="#10b981" className="mb-4" />
-                    <Text className="text-gray-500 font-bold uppercase text-xs">You own the entire catalog!</Text>
-                </View>
-            );
-        }
-
-        return (
-            <FlatList
-                data={availableStickers}
-                numColumns={3}
-                keyExtractor={(item) => item.id}
-                contentContainerStyle={{ padding: 16, gap: 16 }}
-                columnWrapperStyle={{ gap: 16 }}
-                renderItem={({ item }) => (
-                    <View className={`flex-1 rounded-2xl p-4 border items-center justify-center ${getCardBackground(item.rarity, isDark)}`}>
-                        <View className="mb-4">
-                            <BadgeIcon badge={item} size={50} isDark={isDark} />
-                        </View>
-
-                        <Pressable
-                            onPress={() => handleTransaction('buy', item)}
-                            disabled={processingId !== null}
-                            className={`w-full py-2 rounded-full gap-1 flex-row items-center justify-center ${processingId === item.id ? 'bg-blue-400' : 'bg-blue-600'}`}
-                        >
-                            {processingId === item.id ? (
-                                <ActivityIndicator color="white" size="small" />
-                            ) : (
-                                <>
-                                    <CoinIcon type="OC" size={14} />
-                                    <Text className="text-white font-black text-[10px] uppercase">{item.price} OC</Text>
-                                </>
-                            )}
-                        </Pressable>
-                    </View>
-                )}
-            />
-        );
-    };
-
-    const renderRentTab = () => {
-        if (isInitialLoading && storeStickers.length === 0) {
-            return <View className="flex-1 items-center justify-center"><ActivityIndicator size="large" color="#3b82f6" /></View>;
-        }
-
-        const rentableStickers = storeStickers.filter(s => s.rentable);
-
-        if (rentableStickers.length === 0 && !isInitialLoading) {
-            return (
-                <View className="flex-1 items-center justify-center p-8">
-                    <Ionicons name="timer-outline" size={48} color={isDark ? "#374151" : "#d1d5db"} className="mb-4" />
-                    <Text className="text-gray-500 dark:text-gray-400 font-bold text-center">
-                        No stamps available for rent right now.
-                    </Text>
-                </View>
-            );
-        }
-
-        return (
-            <View className="flex-1">
-                <View className="bg-blue-500/10 p-3 mx-4 mt-4 rounded-xl items-center">
-                    <Text className="text-blue-500 text-xs font-bold text-center">Use your OC to rent premium stickers for a single comment.</Text>
-                </View>
-
-                <FlatList
-                    data={rentableStickers}
-                    numColumns={3}
-                    keyExtractor={(item) => item.id}
-                    contentContainerStyle={{ padding: 16, gap: 16 }}
-                    columnWrapperStyle={{ gap: 16 }}
-                    renderItem={({ item }) => {
-                        const rentPrice = getRentPrice(item.rarity);
-                        return (
-                            <View className={`flex-1 rounded-2xl border p-3 items-center justify-center ${getCardBackground(item.rarity, isDark)}`}>
-                                <View className="mb-4 mt-2">
-                                    <BadgeIcon badge={item} size={50} isDark={isDark} />
-                                </View>
-
-                                <Pressable
-                                    onPress={() => handleTransaction('rent', item)}
-                                    disabled={processingId !== null}
-                                    className={`w-full py-2 rounded-full gap-1 flex-row items-center justify-center ${processingId === item.id ? 'bg-orange-400' : 'bg-orange-500'}`}
-                                >
-                                    {processingId === item.id ? (
-                                        <ActivityIndicator color="white" size="small" />
-                                    ) : (
-                                        <>
-                                            <CoinIcon type="OC" size={14} />
-                                            <Text className="text-white font-black text-[10px] uppercase">Rent {rentPrice}</Text>
-                                        </>
-                                    )}
-                                </Pressable>
-                            </View>
-                        );
-                    }}
-                />
-            </View>
-        );
-    };
-
     return (
-        <Modal visible={visible} animationType="slide" transparent={true} onRequestClose={onClose}>
-            <View className="flex-1 justify-end">
+        <Modal visible={visible} animationType="fade" transparent={true} onRequestClose={onClose}>
+            <View className="flex-1 justify-end bg-black/60">
                 <Pressable className="absolute inset-0" onPress={onClose} />
 
-                <View className="h-2/3 bg-white dark:bg-[#0f0f0f] rounded-t-3xl border-t border-gray-200 dark:border-gray-800 shadow-2xl">
-                    <View className="px-4 pt-4 border-b border-gray-100 dark:border-gray-800">
-                        <View className="flex-row justify-between items-center mb-4">
-                            <Text className="text-lg font-black dark:text-white uppercase">Stamps</Text>
-                            <View className="flex-row items-center gap-3">
-                                <View className="bg-yellow-500/20 px-3 py-1 rounded-full">
-                                    <Text className="text-yellow-600 font-black text-xs">{coins || 0} OC</Text>
+                <MotiView
+                    from={{ translateY: height * 0.5 }}
+                    animate={{ translateY: 0 }}
+                    className="h-[75%] w-full"
+                >
+                    <LinearGradient
+                        colors={isDark ? ['#121212', '#050505'] : ['#ffffff', '#f0f0f0']}
+                        className="flex-1 rounded-t-[40px] border-t border-white/10 overflow-hidden"
+                    >
+                        {/* HEADER */}
+                        <View className="px-6 pt-8 pb-4">
+                            <View className="flex-row justify-between items-center mb-6">
+                                <View>
+                                    <Text className="text-2xl font-black italic tracking-tighter dark:text-white uppercase">SYSTEM_STAMPS</Text>
+                                    <View className="flex-row items-center gap-1 mt-1">
+                                        <View className="w-2 h-2 rounded-full bg-green-500 animate-pulse" />
+                                        <Text className="text-[8px] text-gray-500 font-bold uppercase tracking-widest">
+                                            {activePackId || "Network Secure"}
+                                        </Text>
+                                    </View>
                                 </View>
-                                <Pressable onPress={onClose} className="bg-gray-100 dark:bg-gray-800 p-2 rounded-full">
-                                    <Ionicons name="close" size={20} color={isDark ? "white" : "black"} />
-                                </Pressable>
+
+                                <View className="bg-white/5 border border-white/10 px-4 py-2 rounded-2xl flex-row items-center gap-2 shadow-lg">
+                                    <Text className="text-blue-500 font-black text-xs">{coins || 0} <Text className="text-[10px]">OC</Text></Text>
+                                </View>
+                            </View>
+
+                            <View className="flex-row bg-black/20 dark:bg-white/5 rounded-2xl p-1 border border-white/5">
+                                {renderTabButton('owned', 'Owned', 'briefcase-outline')}
+                                {renderTabButton('free', 'Free', 'gift-outline')}
+                                {renderTabButton('rent', 'Premium', 'flash-outline')}
                             </View>
                         </View>
 
-                        <View className="flex-row">
-                            {renderTabButton('owned', 'Owned', 'briefcase')}
-                            {renderTabButton('rent', 'Rent', 'timer')}
-                            {renderTabButton('explore', 'Explore', 'compass')}
-                        </View>
-                    </View>
+                        {/* STICKER GRID LIST */}
+                        <FlatList
+                            key={`${activeTab}-${activePackId}-grid`}
+                            data={currentData}
+                            numColumns={4} // Tight 4 column layout
+                            keyExtractor={(item) => item.stickerId}
+                            contentContainerStyle={{ paddingHorizontal: 16, paddingBottom: 100 }} // padding bottom to account for the Pack Selector
+                            // Reduced gaps dramatically for a dense tech UI
+                            columnWrapperStyle={{ gap: 4, marginBottom: 4, justifyContent: 'flex-start' }}
+                            renderItem={({ item }) => {
+                                const theme = getTierTheme(item.tier, isDark);
 
-                    <View className="flex-1 bg-gray-50 dark:bg-[#0a0a0a]">
-                        {activeTab === 'owned' && renderOwnedTab()}
-                        {activeTab === 'rent' && renderRentTab()}
-                        {activeTab === 'explore' && renderExploreTab()}
-                    </View>
-                </View>
+                                return (
+                                    <MotiView
+                                        from={{ opacity: 0, scale: 0.8 }}
+                                        animate={{ opacity: 1, scale: 1 }}
+                                        className="items-center"
+                                        style={{ width: `${(100 / 4) - 1}%` }}
+                                    >
+                                        {/* 🚀 Changed to a View! No more nested Pressables */}
+                                        <View className="w-full aspect-square rounded-xl items-center justify-center overflow-hidden">
+                                            <View className="relative w-full h-full items-center justify-center">
+
+                                                <StickerPreview
+                                                    sticker={item}
+                                                    stickerId={item.stickerId}
+                                                    isDark={isDark}
+                                                    size="medium"
+                                                    // 🚀 The logic lives here now!
+                                                    onPress={() => {
+                                                        if (activeTab === 'owned' || activeTab === 'free') {
+                                                            onSelectSticker(item?.stickerId);
+                                                            onClose();
+                                                        } else {
+                                                            confirmTransaction(activeTab === 'rent' ? 'rent' : 'buy', item);
+                                                        }
+                                                    }}
+                                                />
+
+                                                {/* Price Orb - Added pointerEvents="none" so it doesn't block touches */}
+                                                {activeTab === 'rent' && (
+                                                    <View className="absolute bottom-1 right-1" pointerEvents="none">
+                                                        <PriceOrb
+                                                            price={item.price}
+                                                            color={theme.glow}
+                                                            isRent={true}
+                                                        />
+                                                    </View>
+                                                )}
+
+                                                {/* Loading State - Added pointerEvents="none" */}
+                                                {processingId === item.stickerId && (
+                                                    <View className="absolute inset-0 z-30 bg-black/70 items-center justify-center" pointerEvents="none">
+                                                        <ActivityIndicator color={theme.glow || "#3b82f6"} size="small" />
+                                                    </View>
+                                                )}
+                                            </View>
+                                        </View>
+                                    </MotiView>
+                                );
+                            }}
+                            ListEmptyComponent={
+                                <View className="flex-1 items-center justify-center mt-10">
+                                    <Ionicons name="folder-open-outline" size={32} color={isDark ? "#333" : "#ccc"} />
+                                    <Text className="text-gray-500 font-black uppercase tracking-widest text-[10px] mt-2">Sector Empty</Text>
+                                </View>
+                            }
+                        />
+
+                        {/* 🚀 HORIZONTAL PACK SELECTOR AT BOTTOM */}
+                        <View className="absolute bottom-0 left-0 right-0 pt-2 pb-4 bg-black/40 border-t border-white/10" style={{ backdropFilter: 'blur(20px)' }}>
+                            <ScrollView
+                                horizontal
+                                showsHorizontalScrollIndicator={false}
+                                contentContainerStyle={{ paddingHorizontal: 10, gap: 10 }}
+                            >
+                                {storePacks.map((pack) => {
+                                    const isActive = activePackId === pack.packId;
+
+                                    return (
+                                        <Pressable
+                                            key={pack.packId}
+                                            onPress={() => {
+                                                Haptics.selectionAsync();
+                                                setActivePackId(pack.packId);
+                                            }}
+                                            className="items-center"
+                                        >
+                                            <MotiView
+                                                animate={{
+                                                    scale: isActive ? 1 : 0.9,
+                                                    opacity: isActive ? 1 : 0.5
+                                                }}
+                                                className={`w-12 h-12 rounded-2xl border-2 items-center justify-center overflow-hidden bg-black/50 ${isActive ? 'border-blue-500' : 'border-white/10'}`}
+                                            >
+                                                {pack.coverArt ? (
+                                                    <Image
+                                                        source={{ uri: pack.coverArt }}
+                                                        style={{ width: 40, height: 40, opacity: 1 }}
+                                                        contentFit="contain"
+                                                        transition={200}
+                                                    />
+                                                ) : (
+                                                    <Ionicons name="cube-outline" size={24} color={isActive ? "#3b82f6" : "#888"} />
+                                                )}
+                                            </MotiView>
+                                            <Text className={`text-[8px] font-black uppercase mt-2 tracking-widest ${isActive ? 'text-blue-500' : 'text-gray-500'}`}>
+                                                {pack.packId.length > 8 ? `${pack.packId.substring(0, 6)}..` : pack.packId}
+                                            </Text>
+                                        </Pressable>
+                                    )
+                                })}
+                            </ScrollView>
+                        </View>
+
+                    </LinearGradient>
+                </MotiView>
             </View>
         </Modal>
     );
 };
+
+const Transition = { type: 'spring', damping: 20 };
 
 const HighlightableComment = ({ reply, isHighlighted, isDark, stickerCache, storage }) => {
     const scale = useSharedValue(1);
@@ -951,6 +1065,8 @@ export default function CommentSection({ postId, slug, discussionIdfromPage }) {
     const [page, setPage] = useState(1);
     const [isLoadingMore, setIsLoadingMore] = useState(false);
     const [stickerCache, setStickerCache] = useState({});
+    const [stickerModalVisible, setStickerModalVisible] = useState(false); // NEW STATE
+    const isFetching = useRef(false); // Add this at the top of your component
 
     const storage = useMMKV();
     const fetchedStickerIds = useRef(new Set());
@@ -1027,7 +1143,9 @@ export default function CommentSection({ postId, slug, discussionIdfromPage }) {
     }, [pagedComments]);
 
     useEffect(() => {
+
         const stickerIds = findStickerIds(pagedComments);
+
         if (!stickerIds.length) return;
 
         const cachedStickers = {};
@@ -1049,15 +1167,21 @@ export default function CommentSection({ postId, slug, discussionIdfromPage }) {
         if (!missingIds.length) return;
 
         const fetchMissing = async () => {
+            // 🚀 BATCHING GUARD: Prevents multiple simultaneous API calls
+            if (isFetching.current) return;
+            isFetching.current = true;
+
             try {
                 const res = await apiFetch('/store/sticker');
-                if (!res.ok) return;
-                const payload = await res.json();
-                const allStickers = [...(payload.store || []), ...(payload.owned || [])];
-                const found = {};
+                if (!res.ok) throw new Error("Stream denied");
 
+                const payload = await res.json();
+                const storeStickers = (payload.storePacks || []).flatMap(p => p.items || []);
+                const allStickers = [...storeStickers, ...(payload.owned || [])];
+
+                const found = {};
                 missingIds.forEach(id => {
-                    const sticker = allStickers.find(item => item.id === id);
+                    const sticker = allStickers.find(item => item.stickerId === id);
                     if (sticker) {
                         found[id] = sticker;
                         cacheStickerToPersistence(storage, sticker);
@@ -1069,7 +1193,9 @@ export default function CommentSection({ postId, slug, discussionIdfromPage }) {
                     setStickerCache(prev => ({ ...prev, ...found }));
                 }
             } catch (error) {
-                console.error('Failed to load sticker metadata', error);
+                console.error('Vault Sync Error', error);
+            } finally {
+                isFetching.current = false; // 🚀 Unlock for future missing stickers
             }
         };
 
@@ -1078,6 +1204,7 @@ export default function CommentSection({ postId, slug, discussionIdfromPage }) {
 
     const handlePostComment = async (parentId = null, replyContent = null, stickerId = null) => {
         const content = replyContent ?? text;
+
         if ((!content || !content.trim()) && !stickerId) return;
 
         const trimmedText = content?.trim() || "";
@@ -1167,6 +1294,18 @@ export default function CommentSection({ postId, slug, discussionIdfromPage }) {
         }
     };
 
+    // NEW: Function to handle sending a sticker
+    const handleSendSticker = (stickerId) => {
+
+        setStickerModalVisible(false);
+        if (!isPosting) {
+            Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Heavy);
+            // We pass empty text, and the stickerId as the payload. 
+            // Make sure your onReply function accepts a sticker parameter!
+            handlePostComment("", "", stickerId);
+        }
+    };
+
     return (
         <View className="bg-white/80 dark:bg-black/40 rounded-[32px] p-5 border border-gray-100 dark:border-blue-900/30 shadow-2xl mt-4">
             <View className="flex-row items-center justify-between mb-6">
@@ -1187,21 +1326,33 @@ export default function CommentSection({ postId, slug, discussionIdfromPage }) {
                     value={text}
                     onChangeText={setText}
                 />
-                <Pressable
-                    onPress={() => {
-                        Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
-                        handlePostComment();
-                    }}
-                    disabled={isPosting}
-                    className="relative bg-blue-600 h-14 rounded-xl overflow-hidden justify-center items-center shadow-lg"
-                >
-                    {isPosting ? <ActivityIndicator size="small" color="white" /> : <Text className="text-[13px] font-black text-white uppercase tracking-widest">Transmit Signal</Text>}
-                    {(isPosting || isLoadingMore || (isLoading && page === 1)) && (
-                        <View className="absolute bottom-0 left-0 w-full h-1 bg-white/20">
-                            <Animated.View className="h-full w-1/2 bg-white/60" style={loaderStyle} />
-                        </View>
-                    )}
-                </Pressable>
+                <View className="flex-row gap-2 w-full items-center">
+                    {/* NEW: STICKER BUTTON */}
+                    <Pressable
+                        onPress={() => {
+                            Keyboard.dismiss();
+                            setStickerModalVisible(true);
+                        }}
+                        className="bg-gray-100 dark:bg-gray-800/80 border border-gray-200 dark:border-gray-700 w-12 h-12 rounded-2xl items-center justify-center"
+                    >
+                        <Ionicons name="happy" size={22} color={isDark ? "white" : "#374151"} />
+                    </Pressable>
+                    <Pressable
+                        onPress={() => {
+                            Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
+                            handlePostComment();
+                        }}
+                        disabled={isPosting}
+                        className="relative bg-blue-600 w-[80%] h-14 rounded-xl overflow-hidden justify-center items-center shadow-lg"
+                    >
+                        {isPosting ? <ActivityIndicator size="small" color="white" /> : <Text className="text-[13px] font-black text-white uppercase tracking-widest">Transmit Signal</Text>}
+                        {(isPosting || isLoadingMore || (isLoading && page === 1)) && (
+                            <View className="absolute bottom-0 left-0 w-full h-1 bg-white/20">
+                                <Animated.View className="h-full w-1/2 bg-white/60" style={loaderStyle} />
+                            </View>
+                        )}
+                    </Pressable>
+                </View>
             </View>
 
             <View style={{ maxHeight: 600 }}>
@@ -1256,6 +1407,13 @@ export default function CommentSection({ postId, slug, discussionIdfromPage }) {
                 highlightId={activeHighlightId}
                 stickerCache={stickerCache}
                 storage={storage}
+            />
+            {/* NEW: STICKER MODAL COMPONENT */}
+            <StickerModal
+                visible={stickerModalVisible}
+                isDark={isDark}
+                onClose={() => setStickerModalVisible(false)}
+                onSelectSticker={handleSendSticker}
             />
         </View>
     );
