@@ -1588,7 +1588,7 @@ const MilestoneReferral = ({ userReferralCode }) => {
     const progress = useSharedValue(stats.totalUsers / stats.targetGoal);
 
     // Check if goal is reached
-    const isComplete = stats.totalUsers <= stats.targetGoal;
+    const isComplete = stats.totalUsers >= stats.targetGoal;
 
     const referralLink = `https://play.google.com/store/apps/details?id=com.kaytee.oreblogda&referrer=${userReferralCode}`;
 

@@ -57,6 +57,15 @@ const attemptTokenRefresh = async () => {
         throw new Error("SESSION_COMPROMISED");
       }
 
+      if (response.status === 440) {
+        if (__DEV__) console.log("🛑 Session Compromised - Forcing Logout")
+        if (!isLoggingOut && onSessionExpired) {
+          isLoggingOut = true;
+          onSessionExpired();
+        }
+        throw new Error("SESSION_COMPROMISED");
+      }
+
       if (response.status === 200) {
         const data = await response.json();
         await SecureStore.setItemAsync('userToken', data.accessToken);
