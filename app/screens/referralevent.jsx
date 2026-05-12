@@ -1573,19 +1573,24 @@ const ComingSoonView = ({ event, isDark }) => {
 
 import { BlurMask, Canvas, Rect, LinearGradient as SkiaGradient, vec } from "@shopify/react-native-skia";
 import { LinearGradient } from 'expo-linear-gradient';
-import { MotiView } from 'moti';
+import { MotiText, MotiView } from 'moti';
 import { useMMKVObject } from 'react-native-mmkv';
+import CoinIcon from "../../components/ClanIcon";
+import TitleTag from "../../components/TitleTag";
 
 const MilestoneReferral = ({ userReferralCode }) => {
     const [cachedStats, setCachedStats] = useMMKVObject('milestone_stats');
-    const [stats, setStats] = useState(cachedStats || { totalUsers: 379, targetGoal: 400, remaining: 21 });
+    const [stats, setStats] = useState(cachedStats || { totalUsers: 397, targetGoal: 400, remaining: 3 });
     const [copied, setCopied] = useState(false);
 
-    // ⚡️ CONFIG & LOGIC
-    const isComplete = stats.totalUsers >= stats.targetGoal;
-    const blueNeon = isComplete ? "#00FFC2" : "#00D1FF"; // Switch to a "success" emerald-cyan when done
+    const blueNeon = "#00D1FF";
     const deepVoid = "#050A18";
     const progress = useSharedValue(stats.totalUsers / stats.targetGoal);
+
+    // Check if goal is reached
+    const isComplete = stats.totalUsers <= stats.targetGoal;
+
+    const referralLink = `https://play.google.com/store/apps/details?id=com.kaytee.oreblogda&referrer=${userReferralCode}`;
 
     useEffect(() => {
         const syncStats = async () => {
@@ -1606,79 +1611,92 @@ const MilestoneReferral = ({ userReferralCode }) => {
 
     const animatedProgressStyle = useAnimatedStyle(() => ({
         width: `${progress.value * 100}%`,
-        shadowBlur: isComplete ? withRepeat(withTiming(20, { duration: 1000 }), -1, true) : 0,
     }));
+
+    const onShare = async () => {
+        try {
+            await Share.share({
+                message: `THE SYSTEM is at ${stats.totalUsers}/${stats.targetGoal}! ⚡ Help us unlock the 400 Milestone Event. Use my Sigil [${userReferralCode}] for +20 Aura and 50 OC: ${referralLink}`,
+            });
+        } catch (error) { console.log(error.message); }
+    };
+
+    const copyToClipboard = () => {
+        Clipboard.setString(userReferralCode);
+        setCopied(true);
+        setTimeout(() => setCopied(false), 2000);
+    };
 
     return (
         <MotiView
-            from={{ opacity: 0, scale: 0.9 }}
-            animate={{
-                opacity: 1,
-                scale: 1,
-                borderColor: isComplete ? blueNeon : "#00D1FF",
-                shadowColor: blueNeon,
-                shadowOpacity: isComplete ? 0.5 : 0.2
-            }}
-            style={{ backgroundColor: deepVoid, borderWeight: 2 }}
+            from={{ opacity: 0, translateY: 20 }}
+            animate={{ opacity: 1, translateY: 0 }}
+            style={{ backgroundColor: deepVoid, borderColor: isComplete ? "#00FFC2" : blueNeon }}
             className="p-6 rounded-[40px] border-2 mb-6 overflow-hidden relative shadow-2xl"
         >
-            {/* 🌌 SKIA AURA: Intensifies when complete */}
+            {/* SKIA BACKGROUND */}
             <View className="absolute inset-0">
                 <Canvas style={{ flex: 1 }}>
                     <Rect x={0} y={0} width={width} height={500}>
                         <SkiaGradient
                             start={vec(0, 0)}
                             end={vec(width, 500)}
-                            colors={isComplete
-                                ? ["rgba(0,255,194,0.15)", "transparent", "rgba(0,255,194,0.1)"]
-                                : ["rgba(0,209,255,0.1)", "transparent", "rgba(0,209,255,0.05)"]
-                            }
+                            colors={["rgba(0,209,255,0.1)", "transparent", "rgba(0,209,255,0.05)"]}
                         />
                     </Rect>
-                    <BlurMask blur={isComplete ? 40 : 20} style="normal" />
+                    <BlurMask blur={20} style="normal" />
                 </Canvas>
             </View>
 
-            {/* HEADER: Transformation Logic */}
+            {/* ACTION LINES */}
+            <View className="absolute inset-0 opacity-20">
+                <LinearGradient colors={['transparent', blueNeon, 'transparent']} style={{ width: 1, height: '100%', position: 'absolute', left: '20%', transform: [{ rotate: '45deg' }] }} />
+                <LinearGradient colors={['transparent', blueNeon, 'transparent']} style={{ width: 1, height: '100%', position: 'absolute', right: '10%', transform: [{ rotate: '-30deg' }] }} />
+            </View>
+
+            {/* HEADER */}
             <View className="flex-row justify-between items-end mb-6 z-10">
                 <View>
                     <View className="flex-row items-center mb-1">
                         <MotiView
-                            animate={{
-                                scale: isComplete ? [1, 1.2, 1] : [1, 1.5, 1],
-                                backgroundColor: isComplete ? "#FFD700" : blueNeon
-                            }}
-                            transition={{ loop: true, duration: 800 }}
-                            className="w-2.5 h-2.5 rounded-full mr-2 shadow-lg"
+                            animate={{ scale: [1, 1.5, 1], opacity: [1, 0.5, 1] }}
+                            transition={{ loop: true, duration: 1000 }}
+                            style={{ backgroundColor: isComplete ? "#00FFC2" : blueNeon }}
+                            className="w-2 h-2 rounded-full mr-2 shadow-lg"
                         />
-                        <Text style={{ color: isComplete ? "#FFD700" : blueNeon }} className="text-[10px] font-black uppercase tracking-[0.4em]">
-                            {isComplete ? "Objective Finalized" : "System Objective"}
-                        </Text>
+                        <Text style={{ color: isComplete ? "#00FFC2" : blueNeon }} className="text-[9px] font-black uppercase tracking-[0.4em]">{isComplete ? "Objective Complete" : "System Objective"} </Text>
                     </View>
-                    <Text style={{ color: 'white' }} className="text-4xl font-black italic uppercase tracking-tighter leading-none">
-                        {isComplete ? "PHASE 1 MET" : "ROAD TO 400"}
-                    </Text>
+                    <Text style={{ color: 'white' }} className="text-4xl font-black italic uppercase tracking-tighter leading-none">ROAD TO 400</Text>
                 </View>
 
-                <MotiView
-                    animate={{ scale: isComplete ? 1.1 : 1 }}
-                    className="items-end bg-white/10 p-3 rounded-2xl border border-white/20"
-                >
-                    <Text style={{ color: isComplete ? blueNeon : 'white', fontSize: 24 }} className="font-black italic">
+                <View className="items-end bg-white/10 p-3 rounded-2xl border border-white/10">
+                    <MotiText
+                        animate={{ opacity: [1, 0.7, 1] }}
+                        transition={{ loop: true, duration: 2000 }}
+                        style={{ color: 'white', textShadowColor: blueNeon, textShadowRadius: 15 }}
+                        className="text-2xl font-black italic"
+                    >
                         {stats.totalUsers}
-                    </Text>
-                    <Text style={{ color: blueNeon }} className="text-[8px] font-black uppercase tracking-widest text-center">
-                        {isComplete ? "SYSTEM STABLE" : "Souls Synced"}
-                    </Text>
-                </MotiView>
+                    </MotiText>
+                    <Text style={{ color: isComplete ? "#00FFC2" : blueNeon }} className="text-[8px] font-black uppercase tracking-widest">Souls Synced</Text>
+                </View>
             </View>
 
-            {/* PROGRESS ROADMAP: High-Octane Finish */}
+            {/* PROGRESS ROADMAP */}
             <View className="mb-10 z-10">
-                <View className="h-3 w-full bg-white/5 rounded-full overflow-hidden border border-white/10 relative">
-                    <Animated.View style={[animatedProgressStyle, { height: '100%', backgroundColor: blueNeon }]}>
+                <View className="h-2 w-full bg-white/5 rounded-full overflow-hidden border border-white/10 relative">
+                    <Animated.View
+                        style={[
+                            animatedProgressStyle,
+                            {
+                                height: '100%',
+                                // Changes bar to success green if complete
+                                backgroundColor: isComplete ? "#00FFC2" : blueNeon
+                            }
+                        ]}
+                    >
                         <LinearGradient
-                            colors={['rgba(255,255,255,0)', 'rgba(255,255,255,0.8)', 'rgba(255,255,255,0)']}
+                            colors={['rgba(255,255,255,0)', 'rgba(255,255,255,0.6)', 'rgba(255,255,255,0)']}
                             start={{ x: 0, y: 0 }} end={{ x: 1, y: 0 }}
                             style={{ flex: 1 }}
                         />
@@ -1691,75 +1709,119 @@ const MilestoneReferral = ({ userReferralCode }) => {
                         <MotiView
                             key={i}
                             animate={{
-                                scale: (stats.totalUsers / stats.targetGoal) >= node ? 1.4 : 0.8,
-                                backgroundColor: (stats.totalUsers / stats.targetGoal) >= node ? blueNeon : '#1A2235',
-                                shadowOpacity: (stats.totalUsers / stats.targetGoal) >= node ? 1 : 0
+                                scale: (stats.totalUsers / stats.targetGoal) >= node ? 1.2 : 0.8,
+                                // Nodes turn green if complete
+                                backgroundColor: (stats.totalUsers / stats.targetGoal) >= node
+                                    ? (isComplete ? "#00FFC2" : blueNeon)
+                                    : '#1A2235'
                             }}
-                            className="w-5 h-5 rounded-full border-2 border-deepVoid shadow-md"
-                        />
+                            // Added flex items-center justify-center to center the icon
+                            className="w-4 h-4 rounded-full border-2 border-deepVoid shadow-sm items-center justify-center"
+                        >
+                            {/* Show checkmark icon only if complete */}
+                            {isComplete && (
+                                <Ionicons name="checkmark" size={10} color={deepVoid} />
+                            )}
+                        </MotiView>
                     ))}
                 </View>
 
-                <View className="flex-row justify-between mt-6">
+                <View className="flex-row justify-between mt-5">
                     <View className="flex-row items-center">
                         <MaterialCommunityIcons
-                            name={isComplete ? "check-decagram" : "broadcast"}
-                            size={16}
-                            color={isComplete ? blueNeon : "#ff3e3e"}
+                            name={isComplete ? "check-circle" : "broadcast"}
+                            size={14}
+                            color={isComplete ? "#00FFC2" : "#ff3e3e"}
                         />
-                        <Text style={{ color: 'white' }} className="text-[11px] font-black uppercase italic ml-2 tracking-tighter">
-                            {isComplete ? "MAIN EVENT: INITIALIZING DEPLOYMENT..." : `${stats.remaining} TO UNLOCK MAIN EVENT`}
+                        <Text style={{ color: 'white' }} className="text-[10px] font-black uppercase italic ml-2 tracking-widest">
+                            {isComplete
+                                ? "REQUIREMENT REACHED — MAIN EVENT COMING SOON"
+                                : `${stats.remaining} TO UNLOCK MAIN EVENT`
+                            }
                         </Text>
                     </View>
+                    {/* Keeping the LVL 400 tag as it was */}
+                    {!isComplete && <Text style={{ color: blueNeon }} className="text-[10px] font-black uppercase">400</Text>}
                 </View>
             </View>
 
-            {/* RECRUITMENT UNIT: Fades into "Ready" state */}
-            <View style={{ opacity: isComplete ? 0.6 : 1 }}>
-                <LinearGradient
-                    colors={['rgba(255,255,255,0.03)', isComplete ? 'rgba(0,255,194,0.08)' : 'rgba(0,209,255,0.08)']}
-                    className="p-6 rounded-[30px] border border-white/10 relative overflow-hidden"
+            {/* RECRUITMENT UNIT */}
+            <LinearGradient
+                colors={['rgba(255,255,255,0.03)', 'rgba(0,209,255,0.08)']}
+                className="p-6 rounded-[30px] border border-white/10 relative overflow-hidden"
+            >
+                <MotiView
+                    animate={{ translateY: [0, -5, 0], rotate: ['0deg', '5deg', '0deg'] }}
+                    transition={{ loop: true, duration: 3000 }}
+                    className="absolute -right-2 -top-2 opacity-20"
                 >
-                    {isComplete && (
-                        <View className="absolute inset-0 items-center justify-center z-20">
-                            <MotiView
-                                animate={{ opacity: [0.4, 1, 0.4] }}
-                                transition={{ loop: true, duration: 2000 }}
-                                className="bg-black/40 px-4 py-2 rounded-full border border-white/20"
-                            >
-                                <Text className="text-white font-black italic uppercase text-[10px]">Awaiting Phase 2</Text>
-                            </MotiView>
-                        </View>
-                    )}
+                    <Ionicons name="shield-half" size={80} color={isComplete ? "#00FFC2" : blueNeon} />
+                </MotiView>
 
-                    <Text style={{ color: blueNeon }} className="text-[10px] font-black uppercase tracking-[0.3em] mb-4 text-center opacity-60">
-                        {isComplete ? "Requirement Satisfied" : "Recruitment Sigil"}
-                    </Text>
+                <Text style={{ color: isComplete ? "#00FFC2" : blueNeon }} className="text-[10px] font-black uppercase tracking-[0.3em] mb-4 text-center opacity-60">Recruitment Sigil</Text>
 
-                    {/* Copy Unit (Keep functional but muted) */}
-                    <View className="flex-row items-center justify-between mb-6">
-                        <View>
-                            <Text style={{ color: 'white' }} className="text-[8px] font-bold uppercase opacity-40 mb-1">User Identifier</Text>
-                            <Text style={{ color: 'white' }} className="text-xl font-black italic tracking-[0.2em]">{userReferralCode}</Text>
-                        </View>
-                        <TouchableOpacity onPress={copyToClipboard} className="h-12 w-12 rounded-xl items-center justify-center bg-white/10">
-                            <Ionicons name={copied ? "checkmark-done" : "copy"} size={20} color={blueNeon} />
-                        </TouchableOpacity>
+                <View className="flex-row items-center justify-between mb-6">
+                    <View>
+                        <Text style={{ color: 'white' }} className="text-[8px] font-bold uppercase opacity-40 mb-1">User Identifier</Text>
+                        <Text style={{ color: 'white', textShadowColor: blueNeon, textShadowRadius: 8 }} className="text-xl font-black italic tracking-[0.2em]">{userReferralCode}</Text>
                     </View>
 
-                    <TouchableOpacity onPress={onShare} disabled={isComplete}>
+                    <TouchableOpacity
+                        onPress={copyToClipboard}
+                        activeOpacity={0.7}
+                        className="h-14 w-14 rounded-2xl items-center justify-center"
+                        style={{ backgroundColor: copied ? '#22c55e' : isComplete ? "#009688" : blueNeon, transform: [{ rotate: '-5deg' }] }}
+                    >
+                        <Ionicons name={copied ? "checkmark-done" : "copy"} size={24} color={isComplete ? "#00FFC2" : deepVoid} />
+                    </TouchableOpacity>
+                </View>
+
+                <TouchableOpacity onPress={onShare} activeOpacity={0.9}>
+                    <MotiView
+                        from={{ scale: 1 }}
+                        animate={{ scale: [1, 1.02, 1] }}
+                        transition={{ loop: true, duration: 1500 }}
+                    >
                         <LinearGradient
-                            colors={isComplete ? ['#333', '#111'] : [blueNeon, '#0057FF']}
-                            className="py-4 rounded-2xl flex-row justify-center items-center shadow-xl"
+                            // Dynamic Gradient: Green theme for completion, Neon Blue for progress
+                            colors={isComplete ? ['#00FFC2', '#009688'] : [blueNeon, '#0057FF']}
+                            start={{ x: 0, y: 0 }} end={{ x: 1, y: 1 }}
+                            className="py-5 rounded-2xl flex-row justify-center items-center shadow-xl"
                         >
-                            <MaterialCommunityIcons name="star-shooting" size={18} color={isComplete ? '#666' : deepVoid} />
-                            <Text style={{ color: isComplete ? '#666' : deepVoid }} className="font-black uppercase ml-2 tracking-widest text-[12px]">
-                                {isComplete ? "ENROLLMENT CLOSED" : "Summon New Authors"}
+                            <MaterialCommunityIcons
+                                name={isComplete ? "check-decagram" : "lightning-bolt"}
+                                size={20}
+                                color={deepVoid}
+                            />
+                            <Text
+                                style={{ color: deepVoid }}
+                                className="font-black uppercase ml-2 tracking-[0.1em] text-[14px] italic"
+                            >
+                                {isComplete ? "Objective Finalized" : "Summon New Authors"}
                             </Text>
                         </LinearGradient>
-                    </TouchableOpacity>
-                </LinearGradient>
+                    </MotiView>
+                </TouchableOpacity>
+            </LinearGradient>
+
+            {/* FOOTER STATS */}
+            {!isComplete && <View className="flex-col gap-4 items-center justify-center w-full">
+                <View className="mt-6 flex-row items-center justify-center">
+                    <View style={{ backgroundColor: blueNeon }} className="px-3 py-1 rounded-full mr-2">
+                        <Text style={{ color: deepVoid }} className="text-[12px] font-black uppercase">+20 AURA</Text>
+                    </View>
+                    <View style={{ borderColor: blueNeon }} className="px-3 py-1 rounded-full flex-row gap-1 border">
+                        <Text style={{ color: 'white' }} className="text-[12px] font-black uppercase">50</Text><CoinIcon type={"OC"} size={14} />
+                    </View>
+                    <View style={{ backgroundColor: '#ff3e3e' }} className="px-3 py-1 rounded-full ml-2">
+                        <Text style={{ color: 'white' }} className="text-[12px] font-black uppercase italic">X2 STREAK</Text>
+                    </View>
+                </View>
+                <View className="flex-row items-center justify-center">
+                    <TitleTag title={"Alpha Lead"} tier={"epic"} />
+                </View>
             </View>
+            }
         </MotiView>
     );
 }
