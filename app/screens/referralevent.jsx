@@ -1576,8 +1576,6 @@ import { LinearGradient } from 'expo-linear-gradient';
 import { MotiView } from 'moti';
 import { useMMKVObject } from 'react-native-mmkv';
 
-const { width } = Dimensions.get('window');
-
 const MilestoneReferral = ({ userReferralCode }) => {
     const [cachedStats, setCachedStats] = useMMKVObject('milestone_stats');
     const [stats, setStats] = useState(cachedStats || { totalUsers: 379, targetGoal: 400, remaining: 21 });
