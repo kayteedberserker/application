@@ -464,9 +464,9 @@ export default function AuthorDiaryDashboard() {
 
     const [mediaList, setMediaList] = useState([]);
     const pickImage = async () => {
-        const remainingSlots = 15 - mediaList.length;
+        const remainingSlots = 20 - mediaList.length;
         if (remainingSlots <= 0) {
-            CustomAlert("Limit Reached", "You can only upload a maximum of 15 media files.");
+            CustomAlert("Limit Reached", "You can only upload a maximum of 20 media files.");
             return;
         }
 
@@ -1109,7 +1109,7 @@ export default function AuthorDiaryDashboard() {
                                 )}
                             </View>
                         </View>
-                        <Text className="text-3xl font-black italic uppercase text-white">
+                        <Text className="text-3xl font-black italic uppercase"> 
                             Welcome, <Text className="text-blue-600">{user?.username}</Text>
                         </Text>
                     </View>
@@ -1195,7 +1195,7 @@ export default function AuthorDiaryDashboard() {
                         >
                             <View className="flex-row items-center">
                                 <Ionicons name="receipt-outline" size={20} color={THEME.accent} />
-                                <Text className="font-black uppercase italic ml-3 text-xs text-white">Recent Posts</Text>
+                                <Text className="font-black uppercase italic ml-3 text-xs">Recent Posts</Text>
                             </View>
                             <Ionicons name={showMissionLog ? "chevron-up" : "chevron-down"} size={20} color={THEME.accent} />
                         </TouchableOpacity>
@@ -1204,7 +1204,7 @@ export default function AuthorDiaryDashboard() {
 
                         {/* --- FORM SECTION --- */}
                         <View className="flex-row justify-between items-center mb-6 mt-4">
-                            <Text className="text-lg font-black uppercase italic text-white">{showPreview ? "Intel Preview" : "Create New Intel"}</Text>
+                            <Text className="text-lg font-black uppercase italic">{showPreview ? "Intel Preview" : "Create New Intel"}</Text>
 
                             <View className="flex-row gap-2">
                                 <TouchableOpacity onPress={handleClearAll} className="bg-red-600/10 px-4 py-2 rounded-xl border border-red-600/20">
@@ -1370,7 +1370,7 @@ export default function AuthorDiaryDashboard() {
                                                 <View className="items-center">
                                                     <Ionicons name="cloud-upload-outline" size={24} color={pickedImage ? "#22c55e" : "#475569"} />
                                                     <Text className={`text-[10px] font-black uppercase mt-2 ${pickedImage ? 'text-green-500' : 'text-gray-500'}`}>
-                                                        {pickedImage ? "Assets Linked Successfully" : "Sync Local Media Files (Max 15)"}
+                                                        {pickedImage ? "Assets Linked Successfully" : "Sync Local Media Files (Max 20)"}
                                                     </Text>
                                                 </View>
                                             )}
@@ -1380,7 +1380,7 @@ export default function AuthorDiaryDashboard() {
 
                                 <View style={{ backgroundColor: THEME.card, borderColor: hasPoll ? THEME.accent : THEME.border }} className="p-6 rounded-3xl border-2 mt-4">
                                     <View className="flex-row justify-between items-center mb-4">
-                                        <Text className="font-black uppercase tracking-widest text-[11px] text-white">Deploy Poll Module</Text>
+                                        <Text className="font-black uppercase tracking-widest text-[11px]">Deploy Poll Module</Text>
                                         <Switch
                                             value={hasPoll}
                                             onValueChange={setHasPoll}

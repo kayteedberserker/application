@@ -1,9 +1,10 @@
+import { Image } from 'expo-image';
 import LottieView from 'lottie-react-native';
-import React, { useEffect, useMemo, useRef } from 'react'; // ⚡️ ADDED: React, useMemo, useRef
-import { StyleSheet, View } from 'react-native';
+import React, { useEffect, useMemo, useRef } from 'react';
+import { StyleSheet, View } from 'react-native'; // ⚡️ ADDED: Image
 import Animated, {
     Easing,
-    cancelAnimation, // ⚡️ ADDED: For thread cleanup
+    cancelAnimation,
     useAnimatedStyle,
     useSharedValue,
     withRepeat,
@@ -21,6 +22,9 @@ const PlayerBackground = React.memo(({ equippedBg, themeColor, borderRadius = 48
 
     const bgOpacity = bgVisual.opacity !== undefined ? bgVisual.opacity : 0.6;
     const animationType = bgVisual.animationType || 'none';
+
+    // ⚡️ IMAGE SUPPORT: Check for static image/webp URL
+    const imageUrl = equippedBg?.url || bgVisual.imageUrl;
 
     // ⚡️ PERFORMANCE: Memoize Lottie source to prevent re-initialization
     const lottieSource = useMemo(() =>
@@ -66,7 +70,6 @@ const PlayerBackground = React.memo(({ equippedBg, themeColor, borderRadius = 48
             );
         }
 
-        // ⚡️ CLEANUP: Stop all background animations on unmount
         return () => {
             cancelAnimation(pulseAnim);
             cancelAnimation(sweepAnim);
@@ -96,7 +99,16 @@ const PlayerBackground = React.memo(({ equippedBg, themeColor, borderRadius = 48
 
             {/* MAIN BACKGROUND LAYER */}
             <Animated.View style={[StyleSheet.absoluteFillObject, animatedBgStyle]}>
-                {/* 1. LOTTIE ANIMATION */}
+                {/* 1. STATIC IMAGE (WebP/Cloudinary) - Highest Priority */}
+                {imageUrl ? (
+                    <Image
+                        source={{ uri: imageUrl }}
+                        style={[StyleSheet.absoluteFillObject, { opacity: bgOpacity }]}
+                        resizeMode="cover"
+                    />
+                ) : null}
+
+                {/* 2. LOTTIE ANIMATION */}
                 {hasLottie ? (
                     <LottieView
                         ref={lottieRef}
@@ -109,7 +121,7 @@ const PlayerBackground = React.memo(({ equippedBg, themeColor, borderRadius = 48
                         colorFilters={[{ keypath: "**", color: primary }]}
                     />
 
-                    /* 2. CUSTOM SVG DESIGNS */
+                    /* 3. CUSTOM SVG DESIGNS */
                 ) : processedSvg ? (
                     <View style={[StyleSheet.absoluteFillObject, { opacity: bgOpacity }]}>
                         <SvgXml
@@ -120,9 +132,9 @@ const PlayerBackground = React.memo(({ equippedBg, themeColor, borderRadius = 48
                         />
                     </View>
 
-                    /* 3. FALLBACK GRADIENT */
-                ) : (
-                    <Animated.View style={[StyleSheet.absoluteFillObject, { opacity: bgOpacity }]}>
+                    /* 4. FALLBACK GRADIENT (Only if no Image, Lottie, or SVG) */
+                ) : !imageUrl && (
+                    <View style={[StyleSheet.absoluteFillObject, { opacity: bgOpacity }]}>
                         <Svg height="100%" width="100%" style={StyleSheet.absoluteFillObject}>
                             <Defs>
                                 <LinearGradient id="playerCardGrad" x1="0%" y1="0%" x2="100%">
@@ -132,7 +144,7 @@ const PlayerBackground = React.memo(({ equippedBg, themeColor, borderRadius = 48
                             </Defs>
                             <Rect x="0" y="0" width="100%" height="100%" fill="url(#playerCardGrad)" />
                         </Svg>
-                    </Animated.View>
+                    </View>
                 )}
             </Animated.View>
 

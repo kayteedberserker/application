@@ -1,14 +1,11 @@
 import { MaterialCommunityIcons } from "@expo/vector-icons";
+import { Image } from "expo-image";
 import LottieView from 'lottie-react-native';
 import { memo, useEffect, useMemo, useRef } from 'react';
-import { StyleSheet, View } from 'react-native';
+import { StyleSheet, View } from 'react-native'; // ⚡️ ADDED: Image
 import Animated, {
     Easing,
-    cancelAnimation // ⚡️ ADDED: For thread cleanup
-    ,
-
-
-
+    cancelAnimation,
     useAnimatedStyle,
     useSharedValue,
     withTiming
@@ -16,18 +13,17 @@ import Animated, {
 import { SvgXml } from "react-native-svg";
 
 const PlayerWatermark = memo(({ equippedWatermark, isDark, isFeed = false }) => {
+    console.log(equippedWatermark);
+
     const animation = useRef(null);
-    const entranceOpacity = useSharedValue(0); // ⚡️ Entrance animation (Loading state)
+    const entranceOpacity = useSharedValue(0);
 
     useEffect(() => {
-        // ⚡️ Entrance animation serves as our "loading to ready" transition
         entranceOpacity.value = withTiming(1, {
             duration: 1000,
             easing: Easing.out(Easing.exp)
         });
 
-        // ⚡️ CLEANUP: Cancel the entrance animation if the component unmounts
-        // This prevents the UI thread from working on a component that's no longer on screen.
         return () => {
             cancelAnimation(entranceOpacity);
         };
@@ -37,24 +33,27 @@ const PlayerWatermark = memo(({ equippedWatermark, isDark, isFeed = false }) => 
 
     const watermarkVisual = equippedWatermark.visualConfig || {};
 
+    // ⚡️ IMAGE SUPPORT: Check for static image/webp URL
+    const imageUrl = equippedWatermark.url || watermarkVisual.imageUrl;
+    console.log(imageUrl);
+
     const lottieData = watermarkVisual.lottieJson;
     const lottieSource = watermarkVisual.lottieUrl;
     const hasLottie = !!(lottieData || lottieSource);
 
-    if (!hasLottie && !watermarkVisual.svgCode && !watermarkVisual.icon) {
+    // ⚡️ Updated check to include imageUrl
+    if (!imageUrl && !hasLottie && !watermarkVisual.svgCode && !watermarkVisual.icon) {
         return null;
     }
 
     const iconSize = watermarkVisual.size || 220;
     const iconColor = watermarkVisual.color || (isDark ? 'white' : 'black');
 
-    // ⚡️ PERFORMANCE: Memoize Lottie source to prevent heavy re-parsing
     const memoizedLottieSource = useMemo(() =>
         lottieData ? lottieData : { uri: lottieSource },
         [lottieData, lottieSource]
     );
 
-    // ⚡️ PERFORMANCE: Memoize SVG string replacement
     const processedSvg = useMemo(() => {
         if (!watermarkVisual.svgCode) return null;
         return watermarkVisual.svgCode.replace(/currentColor/g, iconColor);
@@ -65,10 +64,7 @@ const PlayerWatermark = memo(({ equippedWatermark, isDark, isFeed = false }) => 
     }));
 
     return (
-        // ⚡️ FIX 1: The outer wrapper strictly fills the card background and hides any overflow
         <View style={[StyleSheet.absoluteFill, { overflow: 'hidden', zIndex: 0 }]} pointerEvents="none">
-
-            {/* ⚡️ FIX 2: The actual watermark sits safely inside without stretching the layout box */}
             <Animated.View
                 className="absolute"
                 style={[
@@ -83,9 +79,18 @@ const PlayerWatermark = memo(({ equippedWatermark, isDark, isFeed = false }) => 
                     }
                 ]}
             >
-                {hasLottie ? (
+                {/* 1. STATIC IMAGE (WebP/Cloudinary) - Prioritize over Lottie/SVG */}
+                {imageUrl ? (
+                    <Image
+                        source={{ uri: imageUrl }}
+                        style={{
+                            width: iconSize,
+                            height: iconSize,
+                        }}
+                        resizeMode="contain"
+                    />
+                ) : hasLottie ? (
                     <LottieView
-                        // ⚡️ Only animate if we aren't in the feed to keep scrolling smooth
                         autoPlay={!isFeed}
                         loop={!isFeed}
                         ref={animation}
@@ -116,6 +121,5 @@ const PlayerWatermark = memo(({ equippedWatermark, isDark, isFeed = false }) => 
         </View>
     );
 });
-
 
 export default PlayerWatermark;

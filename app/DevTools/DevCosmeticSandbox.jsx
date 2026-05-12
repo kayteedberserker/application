@@ -46,9 +46,9 @@ export default function DevCosmeticSandbox({ isDark = true }) {
             parsedData.visualConfig = parsedData.visualConfig || parsedData.visualData || {};
             setInjectedItem(parsedData);
         } catch (err) {
-            setError(err.message);
+            setError(err.message)
         }
-    };
+    }
 
     const mannequinUser = useMemo(() => {
         const baseUser = {
@@ -102,6 +102,8 @@ export default function DevCosmeticSandbox({ isDark = true }) {
                     </View>
                 );
             case 'WATERMARK':
+                console.log(injectedItem);
+                
                 return (
                     <View style={{ width: 320, height: 180, backgroundColor: '#0f172a', borderRadius: 24, overflow: 'hidden', borderWidth: 1, borderColor: '#334155' }}>
                         <PlayerWatermark equippedWatermark={injectedItem} isDark={isDark} />
