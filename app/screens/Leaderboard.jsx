@@ -476,7 +476,7 @@ export default function Leaderboard() {
                         renderItem={renderItem}
                         removeClippedSubviews={true}
                         estimatedItemSize={80}
-                        drawDistance={1000}
+                        drawDistance={800}
                         recycleItems={true}
                         showsVerticalScrollIndicator={false}
                         contentContainerStyle={{ paddingBottom: 40 }}

@@ -182,6 +182,8 @@ export default function PostsViewer() {
     // ⚡️ INSTANT FOCUS SYNC: Solves the "likes not updating" bug
     useFocusEffect(
         useCallback(() => {
+            // console.log("useCallback was called for blobmutate");
+
             // Silently tells SWR to re-verify the active posts in the background
             globalMutate(
                 key => typeof key === 'string' && key.startsWith('/posts/'),

@@ -1578,7 +1578,7 @@ import { useMMKVObject } from 'react-native-mmkv';
 import CoinIcon from "../../components/ClanIcon";
 import TitleTag from "../../components/TitleTag";
 
-const MilestoneReferral = ({ userReferralCode }) => {
+const MilestoneReferral = ({ userReferralCode, isDark }) => {
     const [cachedStats, setCachedStats] = useMMKVObject('milestone_stats');
     const [stats, setStats] = useState(cachedStats || { totalUsers: 397, targetGoal: 400, remaining: 3 });
     const [copied, setCopied] = useState(false);
@@ -1588,7 +1588,10 @@ const MilestoneReferral = ({ userReferralCode }) => {
     const progress = useSharedValue(stats.totalUsers / stats.targetGoal);
 
     // Check if goal is reached
-    const isComplete = stats.totalUsers >= stats.targetGoal;
+    let isComplete = stats.totalUsers >= stats.targetGoal;
+    if (stats) {
+        isComplete = stats.totalUsers >= stats.targetGoal;
+    }
 
     const referralLink = `https://play.google.com/store/apps/details?id=com.kaytee.oreblogda&referrer=${userReferralCode}`;
 
@@ -2045,7 +2048,7 @@ export default function EventHubScreen() {
             }
         }
         if (currentEvent.type === 'milestone_countdown') {
-            return <MilestoneReferral userReferralCode={referralCode} />
+            return <MilestoneReferral userReferralCode={referralCode} isDark={isDark} />
         }
         return <ClaimTab eventData={currentEvent} />;
     };

@@ -117,98 +117,64 @@ const LightboxVideoPlayer = ({ uri }) => {
     const [playbackSpeed, setPlaybackSpeed] = useState(1.0);
 
     // --- CACHE STATES ---
-    const [finalUri, setFinalUri] = useState(null);
-    const [isDownloading, setIsDownloading] = useState(true);
+    // We initialize finalUri with the remote uri so it plays immediately
+    const [finalUri, setFinalUri] = useState(uri);
 
-    // --- CACHE LOGIC ---
+    // --- CACHE LOGIC (Silent Background) ---
     useEffect(() => {
         let isMounted = true;
 
         const prepareVideo = async () => {
             if (!uri) return;
-            setIsDownloading(true);
 
             try {
-                // Create a unique filename hash from the URL
                 const hashed = await Crypto.digestStringAsync(
                     Crypto.CryptoDigestAlgorithm.SHA256,
                     uri
                 );
-                const localUri = `${FileSystem.cacheDirectory}${hashed}.mp4`;
 
-                // Check if we already downloaded it
-                const fileInfo = await FileSystem.getInfoAsync(localUri);
+                const finalLocalUri = `${FileSystem.cacheDirectory}${hashed}.mp4`;
+                const tempLocalUri = `${FileSystem.cacheDirectory}${hashed}.tmp`;
 
-                if (fileInfo.exists && fileInfo.size > 1000) {
-                    // File exists, but validate it's complete by checking Content-Length
-                    try {
-                        const headResponse = await fetch(uri, { method: 'HEAD' });
-                        const expectedSize = parseInt(headResponse.headers.get('content-length') || '0');
+                const fileInfo = await FileSystem.getInfoAsync(finalLocalUri);
 
-                        if (expectedSize > 0 && fileInfo.size === expectedSize) {
-                            if (__DEV__) console.log("Playing from cache (validated):", localUri, "Size:", fileInfo.size);
-                            if (isMounted) setFinalUri(localUri);
-                            return; // ✅ Cache is valid
-                        } else if (expectedSize > 0) {
-                            // Size mismatch - cache is incomplete
-                            if (__DEV__) console.warn(`Cache incomplete: ${fileInfo.size} bytes vs ${expectedSize} bytes expected`);
-                            await FileSystem.deleteAsync(localUri, { idempotent: true });
-                        }
-                    } catch (headErr) {
-                        // HEAD request failed, try to play cached anyway (assume it's ok)
-                        if (__DEV__) console.log("Couldn't validate cache with HEAD, using anyway");
-                        if (isMounted) setFinalUri(localUri);
+                if (fileInfo.exists) {
+                    // LEGACY REPAIR: If existing cache is too small, it's likely corrupt
+                    if (fileInfo.size < 1024 * 350) {
+                        if (__DEV__) console.log("Deleting corrupted legacy file...");
+                        await FileSystem.deleteAsync(finalLocalUri, { idempotent: true });
+                    } else {
+                        if (__DEV__) console.log("Switching to complete cache:", finalLocalUri);
+                        if (isMounted) setFinalUri(finalLocalUri);
                         return;
                     }
-                } else if (fileInfo.exists && fileInfo.size === 0) {
-                    // Empty file - delete and re-download
-                    await FileSystem.deleteAsync(localUri, { idempotent: true });
                 }
 
-                // Download fresh copy
-                if (__DEV__) console.log("Downloading to cache...");
-                const download = await FileSystem.downloadAsync(uri, localUri);
+                // DOWNLOAD IN BACKGROUND
+                if (__DEV__) console.log("Streaming from remote, caching in background...");
 
-                // Validate download completeness by checking Content-Length
-                try {
-                    const headResponse = await fetch(uri, { method: 'HEAD' });
-                    const expectedSize = parseInt(headResponse.headers.get('content-length') || '0');
-                    const downloadedFileInfo = await FileSystem.getInfoAsync(localUri);
+                await FileSystem.downloadAsync(uri, tempLocalUri);
+                await FileSystem.moveAsync({
+                    from: tempLocalUri,
+                    to: finalLocalUri
+                });
 
-                    if (expectedSize > 0 && downloadedFileInfo.size !== expectedSize) {
-                        // Download is incomplete
-                        if (__DEV__) console.warn(`Download incomplete: got ${downloadedFileInfo.size} bytes, expected ${expectedSize} bytes`);
-                        await FileSystem.deleteAsync(localUri, { idempotent: true });
-                        if (isMounted) setFinalUri(uri); // Fall back to remote streaming
-                    } else {
-                        if (isMounted) setFinalUri(download.uri);
-                    }
-                } catch (headErr) {
-                    // Can't validate, but download succeeded - use it anyway
-                    if (__DEV__) console.log("Download complete, couldn't validate size but using it");
-                    if (isMounted) setFinalUri(download.uri);
-                }
+                // Update state silently so next time/loop uses the local file
+                if (isMounted) setFinalUri(finalLocalUri);
+
             } catch (e) {
-                console.error("Cache failed, falling back to remote", e);
-                // Fallback to remote if disk is full or network fails partway
-                if (isMounted) setFinalUri(uri);
-            } finally {
-                if (isMounted) setIsDownloading(false);
+                if (__DEV__) console.log("Cache failed, staying on remote stream", e);
             }
         };
 
         prepareVideo();
-
         return () => { isMounted = false; };
     }, [uri]);
 
     // --- PLAYER INIT ---
-    // Expo video handles null URIs gracefully. It will load when finalUri populates.
     const player = useVideoPlayer(finalUri, (p) => {
-        if (finalUri) {
-            p.loop = true;
-            p.play();
-        }
+        p.loop = true;
+        p.play();
     });
 
     // --- EVENTS & STATUS ---
@@ -217,10 +183,10 @@ const LightboxVideoPlayer = ({ uri }) => {
     const durationEvent = useEvent(player, "durationChange");
     const mutedEvent = useEvent(player, "mutedChange");
 
-    const isPlaying = isPlayingEvent?.isPlaying ?? player.playing;
-    const status = statusEvent?.status ?? player.status;
-    const duration = durationEvent?.duration ?? player.duration ?? 0;
-    const isMuted = mutedEvent?.muted ?? player.muted;
+    const isPlaying = isPlayingEvent?.isPlaying ?? player?.playing ?? false;
+    const status = statusEvent?.status ?? player?.status ?? 'loading';
+    const duration = durationEvent?.duration ?? player?.duration ?? 0;
+    const isMuted = mutedEvent?.muted ?? player?.muted ?? false;
 
     // --- HEARTBEAT FOR REALTIME UI ---
     useEffect(() => {
@@ -274,8 +240,6 @@ const LightboxVideoPlayer = ({ uri }) => {
         onPanResponderGrant: (evt) => {
             setIsScrubbing(true);
             if (hideTimerRef.current) clearTimeout(hideTimerRef.current);
-
-            // Fix for the tap bug: Calculate time immediately on touch down
             const touchX = evt.nativeEvent.pageX;
             const progress = Math.max(0, Math.min(touchX / SCREEN_WIDTH, 1));
             const newTime = progress * duration;
@@ -283,7 +247,6 @@ const LightboxVideoPlayer = ({ uri }) => {
             setLocalTime(newTime);
         },
         onPanResponderMove: (evt, gestureState) => {
-            // Use moveX if dragging, fallback to pageX for quick taps
             const touchX = gestureState.moveX || evt.nativeEvent.pageX;
             const progress = Math.max(0, Math.min(touchX / SCREEN_WIDTH, 1));
             const newTime = progress * duration;
@@ -291,14 +254,14 @@ const LightboxVideoPlayer = ({ uri }) => {
             setLocalTime(newTime);
         },
         onPanResponderRelease: () => {
-            player.currentTime = scrubTimeRef.current;
+            if (player) player.currentTime = scrubTimeRef.current;
             setIsScrubbing(false);
             resetAutoHide();
         },
     }), [duration, player]);
 
     const changeSpeed = (speed) => {
-        player.playbackRate = speed;
+        if (player) player.playbackRate = speed;
         setPlaybackSpeed(speed);
         setShowSpeedMenu(false);
         resetAutoHide();
@@ -306,23 +269,16 @@ const LightboxVideoPlayer = ({ uri }) => {
 
     const progressPercent = duration > 0 ? (localTime / duration) * 100 : 0;
 
-    // --- INITIAL DOWNLOAD LOADING STATE ---
-    if (isDownloading) {
-        return (
-            <View style={{ width: SCREEN_WIDTH, height: SCREEN_HEIGHT, justifyContent: 'center', backgroundColor: theme.bg }}>
-                <SyncLoading message="Preparing Video..." />
-            </View>
-        );
-    }
-
     return (
         <View style={{ width: SCREEN_WIDTH, height: SCREEN_HEIGHT, justifyContent: 'center', backgroundColor: theme.bg }}>
-            <VideoView
-                player={player}
-                style={{ flex: 1 }}
-                contentFit="contain"
-                nativeControls={false}
-            />
+            {player && (
+                <VideoView
+                    player={player}
+                    style={{ flex: 1 }}
+                    contentFit="contain"
+                    nativeControls={false}
+                />
+            )}
 
             {/* TAP ZONES */}
             <View style={StyleSheet.absoluteFillObject} pointerEvents="box-none" flexDirection="row">
@@ -338,7 +294,7 @@ const LightboxVideoPlayer = ({ uri }) => {
                 </View>
             )}
 
-            {/* BUFFERING LOADER */}
+            {/* BUFFERING LOADER (Only shows if stream stalls) */}
             {status === 'loading' && (
                 <View style={styles.loaderContainer}>
                     <SyncLoading message="Buffering..." />
@@ -354,7 +310,7 @@ const LightboxVideoPlayer = ({ uri }) => {
                         <TouchableOpacity
                             activeOpacity={0.8}
                             onPress={() => {
-                                isPlaying ? player.pause() : player.play();
+                                if (player) isPlaying ? player.pause() : player.play();
                                 resetAutoHide();
                             }}
                             style={[styles.playButton, { borderColor: theme.glowBlue || 'transparent', shadowColor: theme.accent || '#000' }]}
@@ -363,7 +319,7 @@ const LightboxVideoPlayer = ({ uri }) => {
                         </TouchableOpacity>
                     </View>
 
-                    {/* SPEED MENU (Now pops up from the bottom) */}
+                    {/* SPEED MENU */}
                     {showSpeedMenu && (
                         <View style={[styles.speedMenu, { backgroundColor: theme.card }]}>
                             {[0.5, 1.0, 1.5, 2.0].map((s) => (
@@ -379,14 +335,12 @@ const LightboxVideoPlayer = ({ uri }) => {
                     {/* BOTTOM HUD */}
                     <View style={styles.bottomHud} pointerEvents="box-none">
                         <View style={styles.timerRow}>
-                            {/* Left Side: Timers */}
                             <View style={{ flexDirection: 'row', alignItems: 'center' }}>
                                 <Text style={[styles.timerText, { color: theme.text }]}>{formatTime(localTime)}</Text>
                                 <Text style={[styles.timerText, { color: theme.textSecondary, marginHorizontal: 5 }]}>/</Text>
                                 <Text style={[styles.timerText, { color: theme.text }]}>{formatTime(duration)}</Text>
                             </View>
 
-                            {/* Right Side: Settings & Mute */}
                             <View style={styles.rightControls}>
                                 <TouchableOpacity
                                     onPress={() => setShowSpeedMenu(!showSpeedMenu)}
@@ -396,7 +350,7 @@ const LightboxVideoPlayer = ({ uri }) => {
                                     <Text style={[styles.speedLabel, { color: theme.text }]}>{playbackSpeed}x</Text>
                                 </TouchableOpacity>
 
-                                <TouchableOpacity onPress={() => player.muted = !isMuted} style={styles.iconButton}>
+                                <TouchableOpacity onPress={() => { if (player) player.muted = !isMuted; }} style={styles.iconButton}>
                                     <Feather name={isMuted ? "volume-x" : "volume-2"} size={20} color={theme.text} />
                                 </TouchableOpacity>
                             </View>
@@ -404,10 +358,7 @@ const LightboxVideoPlayer = ({ uri }) => {
 
                         {/* PROGRESS BAR */}
                         <View {...panResponder.panHandlers} style={styles.progressBarBg}>
-                            {/* The Grey Background Track */}
-                            <View style={styles.progressTrack} />
-
-                            {/* The Blue Active Fill */}
+                            <View style={{ position: 'absolute', width: '100%', height: 6, backgroundColor: isDark ? 'rgba(255,255,255,0.3)' : 'rgba(0,0,0,0.3)' }} />
                             <View style={[styles.progressFill, { width: `${progressPercent}%`, backgroundColor: theme.accent }]}>
                                 <View style={[styles.progressDot, { backgroundColor: theme.text }]} />
                             </View>
@@ -697,18 +648,22 @@ const PostCardComponent = ({ post, authorData, clanData, setPosts, isFeed, hideM
     // ⚡️ WHEN PAGE BECOMES VISIBLE AGAIN, FORCE A FRESH FETCH
     useEffect(() => {
         if (isVisible && typeof mutate === 'function') {
+
             mutate(); // Force revalidate when component becomes visible
         }
     }, [isVisible, mutate]);
 
     // ⚡️ USE SERVER-PROVIDED hasLiked & OTHER FLAGS WHEN PROPS UPDATE
     useEffect(() => {
+        console.log("trying to set hasLiked", post?.title, post.message, post?.hasLiked);
+
         // Priority 1: Use server-provided hasLiked (from API)
         if (post?.hasLiked !== undefined && post?.hasLiked !== null) {
+
             setLiked(post.hasLiked);
             return;
         }
-    }, [post?._id, post?.hasLiked]);
+    }, [post?._id, post?.hasLiked, isVisible]);
 
     const mediaItems = useMemo(() => {
         if (post.media && Array.isArray(post.media) && post.media.length > 0) return post.media;
@@ -834,60 +789,21 @@ const PostCardComponent = ({ post, authorData, clanData, setPosts, isFeed, hideM
 
             let uriToSave;
 
-            if (videoInfo.exists && videoInfo.size > 1000) {
-                // Verify cached file is complete using Content-Length
-                try {
-                    const headResponse = await fetch(item.url, { method: 'HEAD' });
-                    const expectedSize = parseInt(headResponse.headers.get('content-length') || '0');
-
-                    if (expectedSize > 0 && videoInfo.size === expectedSize) {
-                        // Cache is valid and complete!
-                        uriToSave = cachedVideoUri;
-                    } else {
-                        // Cache is incomplete - delete and download fresh
-                        if (__DEV__) console.warn(`Cached file incomplete: ${videoInfo.size} vs ${expectedSize} expected`);
-                        await FileSystem.deleteAsync(cachedVideoUri, { idempotent: true });
-                        throw new Error("Cached file incomplete, re-downloading");
-                    }
-                } catch (headErr) {
-                    // Can't validate cache - assume it's OK
-                    if (__DEV__) console.log("Couldn't verify cache, using anyway");
-                    uriToSave = cachedVideoUri;
-                }
+            if (videoInfo.exists) {
+                // It's already cached! We use this for an instant save.
+                uriToSave = cachedVideoUri;
             } else {
-                // Cache doesn't exist or is empty - download fresh
-                if (videoInfo.exists && videoInfo.size === 0) {
-                    await FileSystem.deleteAsync(cachedVideoUri, { idempotent: true });
-                }
-
+                // 2. Fallback check for standard filename cache (or download it if missing)
                 const fileName = item.url.split('/').pop() || (item.type === "video" ? "video.mp4" : "image.jpg");
                 const fileUri = FileSystem.cacheDirectory + fileName;
                 const fileInfo = await FileSystem.getInfoAsync(fileUri);
 
-                // Delete any incomplete temp file
-                if (fileInfo.exists && fileInfo.size === 0) {
-                    await FileSystem.deleteAsync(fileUri, { idempotent: true });
+                if (fileInfo.exists) {
+                    uriToSave = fileUri;
+                } else {
+                    const downloadRes = await FileSystem.downloadAsync(item.url, fileUri);
+                    uriToSave = downloadRes.uri;
                 }
-
-                // Download with validation
-                const downloadRes = await FileSystem.downloadAsync(item.url, fileUri);
-                const downloadedFileInfo = await FileSystem.getInfoAsync(fileUri);
-
-                // Validate download is complete
-                try {
-                    const headResponse = await fetch(item.url, { method: 'HEAD' });
-                    const expectedSize = parseInt(headResponse.headers.get('content-length') || '0');
-
-                    if (expectedSize > 0 && downloadedFileInfo.size !== expectedSize) {
-                        throw new Error(`Download incomplete: ${downloadedFileInfo.size} vs ${expectedSize} bytes`);
-                    }
-                } catch (validationErr) {
-                    if (validationErr.message.includes("Download incomplete")) throw validationErr;
-                    // HEAD failed but download succeeded - use it
-                    if (__DEV__) console.log("Download validated, couldn't check size but proceeding");
-                }
-
-                uriToSave = downloadRes.uri;
             }
 
             await MediaLibrary.saveToLibraryAsync(uriToSave);
@@ -899,7 +815,7 @@ const PostCardComponent = ({ post, authorData, clanData, setPosts, isFeed, hideM
                 await FileSystem.deleteAsync(uriToSave, { idempotent: true });
             }
         } catch (error) {
-            CustomAlert("System Failure", error.message || "Unable to download media.");
+            CustomAlert("System Failure", "Unable to download media.");
         } finally { setIsDownloading(false); }
     };
 

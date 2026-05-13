@@ -573,6 +573,12 @@ export default function AuthorPage() {
         );
     }, [author, isOffline, isDark, themeColor, activeGlowColor, aura, auraRank, totalPosts, scanAnimatedStyle, auraPulseStyle, skeletonAnimatedStyle]);
 
+    if (isInitialMount) {
+        <View style={{ backgroundColor: isDark ? "#050505" : "#ffffff" }} className="flex-1 items-center justify-center">
+            <SyncLoading message='Decrypting Anime Intel' />
+        </View>
+    }
+
     if (!author && isOffline) {
         return (
             <ScrollView className="flex-1 bg-white dark:bg-[#0a0a0a]" contentContainerStyle={{ paddingBottom: insets.bottom + 100 }}>
@@ -589,6 +595,7 @@ export default function AuthorPage() {
             </ScrollView>
         );
     }
+
 
     return (
         <View className="flex-1 bg-white dark:bg-[#0a0a0a]">
@@ -611,11 +618,6 @@ export default function AuthorPage() {
 
                 ListFooterComponent={
                     <View className="py-10">
-                        {isInitialMount &&
-                            <View style={{ backgroundColor: isDark ? "#050505" : "#ffffff" }} className="flex-1 h-full mt-[70%] items-center justify-center">
-                                <SyncLoading message='Decrypting Anime Intel' />
-                            </View>
-                        }
                         {loading && !isInitialMount && <SyncLoading message="Fetching Author Posts" />}
                         {!hasMore && posts.length > 0 && (
                             <View className="items-center opacity-30">

@@ -166,7 +166,7 @@ export const CinematicClanOnboarding = ({ visible, onClose, isLeader, appBlue })
     if (!visible) return null;
 
     const currentStep = ONBOARDING_STEPS[step];
-    const isLastStep = step === ONBOARDING_STEPS.length - 1;
+    const isLastStep = step === ONBOARDING_STEPS.length - 1
 
     const handleNext = () => {
         Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
@@ -467,7 +467,7 @@ const ClanProfile = () => {
     const { coins, clanCoins, processTransaction, isProcessingTransaction } = useCoins();
 
     const CACHE_KEY = `@clan_data_${userClan?.tag}`;
-    const ONBOARDING_KEY = `@has_seen_clan_onboarding_${userClan?.tag}`;
+    const ONBOARDING_KEY = `@has_seen_clan_onboarding`;
 
     useEffect(() => {
         if (fullData?.messages) {
@@ -2218,6 +2218,8 @@ const ClanInventoryModal = ({ visible, onClose, fetchFullDetails, clan, isDark, 
 // --- Sub Components
 
 const WarHistoryItem = ({ war, clanTag }) => {
+    console.log(war, "is the clan war item?");
+
     const isWinner = war.winner === clanTag;
     const isDraw = war.winner === "DRAW";
     const opponent = war.challengerTag === clanTag ? war.defenderTag : war.challengerTag;
