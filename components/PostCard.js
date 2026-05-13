@@ -140,7 +140,7 @@ const LightboxVideoPlayer = ({ uri }) => {
 
                 if (fileInfo.exists) {
                     // LEGACY REPAIR: If existing cache is too small, it's likely corrupt
-                    if (fileInfo.size < 1024 * 350) {
+                    if (fileInfo.size < 1024 * 500 && fileInfo.uri?.includes(".mp4")) {
                         if (__DEV__) console.log("Deleting corrupted legacy file...");
                         await FileSystem.deleteAsync(finalLocalUri, { idempotent: true });
                     } else {
@@ -291,13 +291,6 @@ const LightboxVideoPlayer = ({ uri }) => {
                 <View style={[styles.seekFeedback, seekIndicator === 'left' ? { left: '15%' } : { right: '15%' }]}>
                     <Feather name={seekIndicator === 'left' ? "rotate-ccw" : "rotate-cw"} size={30} color="white" />
                     <Text style={styles.seekText}>10s</Text>
-                </View>
-            )}
-
-            {/* BUFFERING LOADER (Only shows if stream stalls) */}
-            {status === 'loading' && (
-                <View style={styles.loaderContainer}>
-                    <SyncLoading message="Buffering..." />
                 </View>
             )}
 
