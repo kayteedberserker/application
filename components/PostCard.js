@@ -1204,18 +1204,7 @@ const PostCardComponent = ({ post, authorData, clanData, setPosts, isFeed, hideM
 };
 
 export default memo(PostCardComponent, (prevProps, nextProps) => {
-    // Recompare if ANY of these change: ID, visibility, syncing, OR engagement flags
     return prevProps.post._id === nextProps.post._id &&
         prevProps.isVisible === nextProps.isVisible &&
-        prevProps.syncing === nextProps.syncing &&
-        prevProps.post.hasLiked === nextProps.post.hasLiked &&
-        prevProps.post.hasVoted === nextProps.post.hasVoted &&
-        prevProps.post.hasViewed === nextProps.post.hasViewed &&
-        prevProps.post.likesCount === nextProps.post.likesCount &&
-        prevProps.post.likes?.length === nextProps.post.likes?.length &&
-        prevProps.post.votesCount === nextProps.post.votesCount &&
-        prevProps.post.votes?.length === nextProps.post.votes?.length &&
-        prevProps.post.viewsCount === nextProps.post.viewsCount &&
-        prevProps.post.commentsCount === nextProps.post.commentsCount &&
-        prevProps.post.comments?.length === nextProps.post.comments?.length;
+        prevProps.syncing === nextProps.syncing;
 });
