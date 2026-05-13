@@ -282,7 +282,7 @@ export default function Leaderboard() {
                                 //     <Text style={{ fontSize: 9, fontWeight: 'bold', color: '#000' }}>{weeklyAuraRank.label}</Text>
                                 // </View>
                                 <View className="">
-                                    <TitleTag rank={item.previousRank} key={equippedTitle} size={7} equippedTitle={equippedTitle} auraVisuals={weeklyAuraRank} isTop10={item.previousRank <= 10} />
+                                    <TitleTag isDark={isDark} rank={item.previousRank} key={equippedTitle} size={7} equippedTitle={equippedTitle} auraVisuals={weeklyAuraRank} isTop10={item.previousRank <= 10} />
                                 </View>
                             )}
                             <View style={{ flexDirection: 'row', alignItems: 'center', marginTop: 4 }}>

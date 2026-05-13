@@ -1818,7 +1818,7 @@ const MilestoneReferral = ({ userReferralCode }) => {
                     </View>
                 </View>
                 <View className="flex-row items-center justify-center">
-                    <TitleTag title={"Alpha Lead"} tier={"epic"} />
+                    <TitleTag isDark={isDark} title={"Alpha Lead"} tier={"epic"} />
                 </View>
             </View>
             }

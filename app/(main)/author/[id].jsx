@@ -484,7 +484,7 @@ export default function AuthorPage() {
                         />
 
                         <View className="absolute -bottom-4">
-                            <TitleTag rank={auraRank} size={13} key={equippedTitle} equippedTitle={equippedTitle} isTop10={auraRank > 0 && auraRank <= 10} auraVisuals={aura} />
+                            <TitleTag isDark={isDark} rank={auraRank} size={13} key={equippedTitle} equippedTitle={equippedTitle} isTop10={auraRank > 0 && auraRank <= 10} auraVisuals={aura} />
                         </View>
                     </View>
 

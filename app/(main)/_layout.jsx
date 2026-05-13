@@ -38,6 +38,7 @@ import {
 
 
 
+
     Modal,
     Platform,
     StatusBar,
@@ -588,7 +589,7 @@ export default function MainLayout() {
                             </MotiView>
 
                             <View className="w-full flex-row items-center justify-center mb-4">
-                                <TitleTag title={"System Patron"} tier={"Rare"} />
+                                <TitleTag isDark={isDark} title={"System Patron"} tier={"Rare"} />
                             </View>
 
                             <TouchableOpacity onPress={handleBuyCoffee} disabled={isCoffeeLoading} activeOpacity={0.9} className="w-full">

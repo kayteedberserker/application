@@ -38,6 +38,7 @@ const getPillTheme = (type) => {
         case 'post_comment': return { color: '#3b82f6', icon: 'message-outline' };
         case 'post_discussion': return { color: '#ec4899', icon: 'forum' };
         case 'post_reply': return { color: '#10b981', icon: 'reply' };
+        case 'post_rejection': return { color: '#ef4444', icon: 'alert-outline' };
         case 'clan_post': return { color: '#f59e0b', icon: 'post-outline' };
         case 'clan_message': return { color: '#8b5cf6', icon: 'forum-outline' };
         case 'clan_alert': return { color: '#ef4444', icon: 'shield-alert-outline' };

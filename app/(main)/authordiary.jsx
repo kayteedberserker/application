@@ -113,6 +113,7 @@ export default function AuthorDiaryDashboard() {
     const [pollOptions, setPollOptions] = useState(["", ""]);
     const [uploading, setUploading] = useState(false);
     const [submitting, setSubmitting] = useState(false);
+    const [isSubmissionTakingLong, setIsSubmissionTakingLong] = useState(false);
     const [timeLeft, setTimeLeft] = useState("");
     const [additionalSlot, setAdditionalSlot] = useState(0);
 
@@ -464,9 +465,9 @@ export default function AuthorDiaryDashboard() {
 
     const [mediaList, setMediaList] = useState([]);
     const pickImage = async () => {
-        const remainingSlots = 20 - mediaList.length;
+        const remainingSlots = 15 - mediaList.length;
         if (remainingSlots <= 0) {
-            CustomAlert("Limit Reached", "You can only upload a maximum of 20 media files.");
+            CustomAlert("Limit Reached", "You can only upload a maximum of 15 media files.");
             return;
         }
 
@@ -525,8 +526,13 @@ export default function AuthorDiaryDashboard() {
             return
         }
         setSubmitting(true);
+        setIsSubmissionTakingLong(false);
 
-        // ⚡️ NEURAL UPLINK TIMEOUT: Resolves after 10s so the user doesn't have to wait for server confirmation
+        const slowSubmitTimeout = setTimeout(() => {
+            setIsSubmissionTakingLong(true);
+            CustomAlert("Still transmitting...", "Your post is taking longer than usual. It is still being uploaded and will complete shortly.");
+        }, 10000);
+
         const timeoutPromise = new Promise((resolve) =>
             setTimeout(() => resolve({ isTimeout: true }), 10000)
         );
@@ -603,9 +609,9 @@ export default function AuthorDiaryDashboard() {
                 return { ...data, isTimeout: false };
             };
 
-            const result = await Promise.race([uploadAndSubmit(), timeoutPromise]);
+            const uploadPromise = uploadAndSubmit();
+            const result = await Promise.race([uploadPromise, timeoutPromise]);
 
-            // ⚡️ OPTIMISTIC UPDATE: If server is slow, manually insert a "pending" post into the UI list
             if (result.isTimeout) {
                 const optimisticPost = {
                     _id: `temp-${Date.now()}`,
@@ -615,11 +621,14 @@ export default function AuthorDiaryDashboard() {
                 };
                 mutateTodayPosts({ posts: [optimisticPost, ...todayPosts] }, false);
                 CustomAlert("Success", "Neural transmission initiated. Your post is pending decryption in the archives.");
-            } else {
-                // Handle Actual Success
-                if (result.isFirstPost && result.auraStats) {
+            }
+
+            const finalResult = await uploadPromise;
+
+            if (!finalResult.isTimeout) {
+                if (finalResult.isFirstPost && finalResult.auraStats) {
                     Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
-                    setFirstPostModal({ visible: true, stats: result.auraStats, postData: result.post });
+                    setFirstPostModal({ visible: true, stats: finalResult.auraStats, postData: finalResult.post });
                 } else {
                     CustomAlert("Success", "Your entry has been submitted for approval!");
                 }
@@ -630,16 +639,13 @@ export default function AuthorDiaryDashboard() {
             updateStreak(fingerprint);
             refreshStreak();
 
-            // Reset States
             setMediaList([]);
             setTitle("");
             setMessage("");
             setMediaUrlLink("");
             setPickedImage(false);
 
-            if (!result.isTimeout) {
-                mutateTodayPosts();
-            }
+            mutateTodayPosts();
 
             const baseLimit = isInClan ? userRank.postLimit + 2 : userRank.postLimit;
 
@@ -647,8 +653,14 @@ export default function AuthorDiaryDashboard() {
                 setAdditionalSlot(0);
                 await AsyncStorage.setItem("additionalSlot", "0");
             }
-        } catch (err) { CustomAlert("Error", err.message) }
-        finally { setSubmitting(false); }
+        } catch (err) {
+            CustomAlert("Error", err.message || "Upload or post submission failed.");
+            mutateTodayPosts();
+        } finally {
+            clearTimeout(slowSubmitTimeout);
+            setIsSubmissionTakingLong(false);
+            setSubmitting(false);
+        }
     };
 
     // 6. Preview Logic
@@ -1109,7 +1121,7 @@ export default function AuthorDiaryDashboard() {
                                 )}
                             </View>
                         </View>
-                        <Text className="text-3xl font-black italic uppercase"> 
+                        <Text className="text-3xl font-black italic uppercase">
                             Welcome, <Text className="text-blue-600">{user?.username}</Text>
                         </Text>
                     </View>
@@ -1370,7 +1382,7 @@ export default function AuthorDiaryDashboard() {
                                                 <View className="items-center">
                                                     <Ionicons name="cloud-upload-outline" size={24} color={pickedImage ? "#22c55e" : "#475569"} />
                                                     <Text className={`text-[10px] font-black uppercase mt-2 ${pickedImage ? 'text-green-500' : 'text-gray-500'}`}>
-                                                        {pickedImage ? "Assets Linked Successfully" : "Sync Local Media Files (Max 20)"}
+                                                        {pickedImage ? "Assets Linked Successfully" : "Sync Local Media Files (Max 15)"}
                                                     </Text>
                                                 </View>
                                             )}

@@ -785,7 +785,7 @@ const AuthorInventoryModal = ({ visible, onClose, user, setUser, isDark, theinve
                                                 }`}
                                         >
                                             <View className="flex-1 mr-4">
-                                                <TitleTag key={title.name} title={title.name} size={12} tier={title.tier} />
+                                                <TitleTag isDark={isDark} key={title.name} title={title.name} size={12} tier={title.tier} />
                                             </View>
 
                                             <View className="items-center justify-center min-w-[60px]">
@@ -1657,7 +1657,7 @@ export default function MobileProfilePage() {
                             />
 
                             <View className="mt-2 flex justify-center items-center">
-                                <TitleTag key={user?.equippedTitle} rank={weeklyGloryRank} auraVisuals={weeklyAuraTier} equippedTitle={user?.equippedTitle} isTop10={weeklyGloryRank ? true : false} />
+                                <TitleTag isDark={isDark} key={user?.equippedTitle} rank={weeklyGloryRank} auraVisuals={weeklyAuraTier} equippedTitle={user?.equippedTitle} isTop10={weeklyGloryRank ? true : false} />
                             </View>
                         </Pressable>
 

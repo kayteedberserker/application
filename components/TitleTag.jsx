@@ -32,6 +32,7 @@ const TitleTag = ({
     tier = null,
     size = 10,
     style,
+    isDark = true, // Added isDark prop for theming
     ...props
 }) => {
     const [dimensions, setDimensions] = useState({ width: 0, height: 0 });
@@ -126,8 +127,10 @@ const TitleTag = ({
     }));
 
     const FrameBase = ({ color, children }) => {
-        const bgDark = "rgba(10, 10, 10, 0.92)";
-        const strokeColor = color || '#ffffff';
+        // Theme-aware colors
+        const bgThemeColor = isDark ? "rgba(10, 10, 10, 0.92)" : "rgba(245, 245, 245, 0.95)";
+        const innerStrokeColor = isDark ? "#0a0a0a" : "#ffffff";
+        const strokeColor = color || (isDark ? '#ffffff' : '#000000');
 
         return (
             <View style={styles.frameWrapper}>
@@ -149,17 +152,21 @@ const TitleTag = ({
                                 </LinearGradient>
                             </Defs>
 
+                            {/* Background Layers */}
                             <Path d={isMythic ? paths.hex : paths.main} fill="url(#bgGrad)" mask="url(#shapeMask)" />
-                            <Path d={isMythic ? paths.hex : paths.main} fill={bgDark} mask="url(#shapeMask)" />
+                            <Path d={isMythic ? paths.hex : paths.main} fill={bgThemeColor} mask="url(#shapeMask)" />
 
+                            {/* Hex Border for Mythic */}
                             {isMythic && (
                                 <Path d={paths.hex} fill="none" stroke={strokeColor} strokeWidth={1.5 * scale} opacity={0.8} />
                             )}
 
+                            {/* Main Borders */}
                             <Path d={paths.main} fill="none" stroke={strokeColor} strokeWidth={3 * scale} opacity={0.6} />
-                            <Path d={paths.main} fill="none" stroke="#0a0a0a" strokeWidth={1.8 * scale} />
+                            <Path d={paths.main} fill="none" stroke={innerStrokeColor} strokeWidth={1.8 * scale} />
                             <Path d={paths.main} fill="none" stroke={strokeColor} strokeWidth={0.8 * scale} />
 
+                            {/* Shine Effect */}
                             {animFlags.hasSweep && (
                                 <G mask="url(#shapeMask)">
                                     <AnimatedRect
@@ -177,11 +184,13 @@ const TitleTag = ({
             </View>
         );
     };
+
     if (auraVisuals) {
         if (auraVisuals.label == "PLAYER") {
-            return
+            return null;
         }
     }
+
     if (isTop10 && auraVisuals) {
         const finalColor = activeGlowColor || auraVisuals.color || '#fbbf24';
         return (
@@ -195,7 +204,7 @@ const TitleTag = ({
                         elevation: 8,
                         shadowRadius: 4 * scale
                     },
-                    pulseStyle, // Pass animated style directly
+                    pulseStyle,
                     style
                 ]}
                 {...props}

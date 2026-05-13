@@ -139,7 +139,7 @@ export default function PlayerCard({ author, totalPosts, isDark }) {
             size={150}
           />
           <View className={`absolute bottom-0 ${weeklyGloryRank > 0 && weeklyGloryRank <= 10 ? 'z-20' : 'z-10'}`}>
-            <TitleTag key={equippedTitle} rank={weeklyGloryRank} size={13} auraVisuals={weeklyAuraTier} equippedTitle={equippedTitle} isTop10={weeklyGloryRank > 0 && weeklyGloryRank < 10} />
+            <TitleTag isDark={isDark} key={equippedTitle} rank={weeklyGloryRank} size={13} auraVisuals={weeklyAuraTier} equippedTitle={equippedTitle} isTop10={weeklyGloryRank > 0 && weeklyGloryRank < 10} />
           </View>
         </View>
 

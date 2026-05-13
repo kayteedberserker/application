@@ -91,9 +91,10 @@ const RemoteSvgIcon = React.memo(({ xml, size = 50, color }) => {
 
 // Helper to format seconds into MM:SS
 const formatTime = (timeInSeconds) => {
-    if (!timeInSeconds || isNaN(timeInSeconds)) return "00:00";
-    const mins = Math.floor(timeInSeconds / 60);
-    const secs = Math.floor(timeInSeconds % 60);
+    if (!timeInSeconds || isNaN(timeInSeconds) || !isFinite(timeInSeconds)) return "00:00";
+    const totalSeconds = Math.floor(Math.max(0, timeInSeconds));
+    const mins = Math.floor(totalSeconds / 60);
+    const secs = totalSeconds % 60;
     return `${mins}:${secs < 10 ? '0' : ''}${secs}`;
 };
 
@@ -101,6 +102,8 @@ import * as Crypto from 'expo-crypto';
 import TitleTag from "./TitleTag";
 
 const LightboxVideoPlayer = ({ uri }) => {
+    const isDark = useColorScheme() === "dark";
+    const theme = THEME;
     const hideTimerRef = useRef(null);
     const scrubTimeRef = useRef(0);
     const tapTimeout = useRef(null);
@@ -136,12 +139,53 @@ const LightboxVideoPlayer = ({ uri }) => {
                 // Check if we already downloaded it
                 const fileInfo = await FileSystem.getInfoAsync(localUri);
 
-                if (fileInfo.exists) {
-                    if (__DEV__) console.log("Playing from cache:", localUri);
-                    if (isMounted) setFinalUri(localUri);
-                } else {
-                    if (__DEV__) console.log("Downloading to cache...");
-                    const download = await FileSystem.downloadAsync(uri, localUri);
+                if (fileInfo.exists && fileInfo.size > 1000) {
+                    // File exists, but validate it's complete by checking Content-Length
+                    try {
+                        const headResponse = await fetch(uri, { method: 'HEAD' });
+                        const expectedSize = parseInt(headResponse.headers.get('content-length') || '0');
+
+                        if (expectedSize > 0 && fileInfo.size === expectedSize) {
+                            if (__DEV__) console.log("Playing from cache (validated):", localUri, "Size:", fileInfo.size);
+                            if (isMounted) setFinalUri(localUri);
+                            return; // ✅ Cache is valid
+                        } else if (expectedSize > 0) {
+                            // Size mismatch - cache is incomplete
+                            if (__DEV__) console.warn(`Cache incomplete: ${fileInfo.size} bytes vs ${expectedSize} bytes expected`);
+                            await FileSystem.deleteAsync(localUri, { idempotent: true });
+                        }
+                    } catch (headErr) {
+                        // HEAD request failed, try to play cached anyway (assume it's ok)
+                        if (__DEV__) console.log("Couldn't validate cache with HEAD, using anyway");
+                        if (isMounted) setFinalUri(localUri);
+                        return;
+                    }
+                } else if (fileInfo.exists && fileInfo.size === 0) {
+                    // Empty file - delete and re-download
+                    await FileSystem.deleteAsync(localUri, { idempotent: true });
+                }
+
+                // Download fresh copy
+                if (__DEV__) console.log("Downloading to cache...");
+                const download = await FileSystem.downloadAsync(uri, localUri);
+
+                // Validate download completeness by checking Content-Length
+                try {
+                    const headResponse = await fetch(uri, { method: 'HEAD' });
+                    const expectedSize = parseInt(headResponse.headers.get('content-length') || '0');
+                    const downloadedFileInfo = await FileSystem.getInfoAsync(localUri);
+
+                    if (expectedSize > 0 && downloadedFileInfo.size !== expectedSize) {
+                        // Download is incomplete
+                        if (__DEV__) console.warn(`Download incomplete: got ${downloadedFileInfo.size} bytes, expected ${expectedSize} bytes`);
+                        await FileSystem.deleteAsync(localUri, { idempotent: true });
+                        if (isMounted) setFinalUri(uri); // Fall back to remote streaming
+                    } else {
+                        if (isMounted) setFinalUri(download.uri);
+                    }
+                } catch (headErr) {
+                    // Can't validate, but download succeeded - use it anyway
+                    if (__DEV__) console.log("Download complete, couldn't validate size but using it");
                     if (isMounted) setFinalUri(download.uri);
                 }
             } catch (e) {
@@ -265,14 +309,14 @@ const LightboxVideoPlayer = ({ uri }) => {
     // --- INITIAL DOWNLOAD LOADING STATE ---
     if (isDownloading) {
         return (
-            <View style={styles.container}>
+            <View style={{ width: SCREEN_WIDTH, height: SCREEN_HEIGHT, justifyContent: 'center', backgroundColor: theme.bg }}>
                 <SyncLoading message="Preparing Video..." />
             </View>
         );
     }
 
     return (
-        <View style={styles.container}>
+        <View style={{ width: SCREEN_WIDTH, height: SCREEN_HEIGHT, justifyContent: 'center', backgroundColor: theme.bg }}>
             <VideoView
                 player={player}
                 style={{ flex: 1 }}
@@ -313,18 +357,18 @@ const LightboxVideoPlayer = ({ uri }) => {
                                 isPlaying ? player.pause() : player.play();
                                 resetAutoHide();
                             }}
-                            style={[styles.playButton, { borderColor: THEME?.glowBlue || 'transparent', shadowColor: THEME?.accent || '#000' }]}
+                            style={[styles.playButton, { borderColor: theme.glowBlue || 'transparent', shadowColor: theme.accent || '#000' }]}
                         >
-                            <Feather name={isPlaying ? 'pause' : 'play'} size={36} color={THEME?.text || '#fff'} />
+                            <Feather name={isPlaying ? 'pause' : 'play'} size={36} color="white" />
                         </TouchableOpacity>
                     </View>
 
                     {/* SPEED MENU (Now pops up from the bottom) */}
                     {showSpeedMenu && (
-                        <View style={[styles.speedMenu, { backgroundColor: THEME?.card || '#222' }]}>
+                        <View style={[styles.speedMenu, { backgroundColor: theme.card }]}>
                             {[0.5, 1.0, 1.5, 2.0].map((s) => (
                                 <TouchableOpacity key={s} onPress={() => changeSpeed(s)} style={styles.speedOption}>
-                                    <Text style={[styles.speedText, { color: playbackSpeed === s ? (THEME?.accent || '#00a8ff') : 'white' }]}>
+                                    <Text style={[styles.speedText, { color: playbackSpeed === s ? theme.accent : theme.text }]}>
                                         {s === 1.0 ? 'Normal' : `${s}x`}
                                     </Text>
                                 </TouchableOpacity>
@@ -337,9 +381,9 @@ const LightboxVideoPlayer = ({ uri }) => {
                         <View style={styles.timerRow}>
                             {/* Left Side: Timers */}
                             <View style={{ flexDirection: 'row', alignItems: 'center' }}>
-                                <Text style={[styles.timerText, { color: THEME?.text || '#fff' }]}>{formatTime(localTime)}</Text>
-                                <Text style={[styles.timerText, { color: 'rgba(255,255,255,0.5)', marginHorizontal: 5 }]}>/</Text>
-                                <Text style={[styles.timerText, { color: THEME?.text || '#fff' }]}>{formatTime(duration)}</Text>
+                                <Text style={[styles.timerText, { color: theme.text }]}>{formatTime(localTime)}</Text>
+                                <Text style={[styles.timerText, { color: theme.textSecondary, marginHorizontal: 5 }]}>/</Text>
+                                <Text style={[styles.timerText, { color: theme.text }]}>{formatTime(duration)}</Text>
                             </View>
 
                             {/* Right Side: Settings & Mute */}
@@ -348,12 +392,12 @@ const LightboxVideoPlayer = ({ uri }) => {
                                     onPress={() => setShowSpeedMenu(!showSpeedMenu)}
                                     style={styles.iconButton}
                                 >
-                                    <Feather name="settings" size={20} color="white" />
-                                    <Text style={styles.speedLabel}>{playbackSpeed}x</Text>
+                                    <Feather name="settings" size={20} color={theme.text} />
+                                    <Text style={[styles.speedLabel, { color: theme.text }]}>{playbackSpeed}x</Text>
                                 </TouchableOpacity>
 
                                 <TouchableOpacity onPress={() => player.muted = !isMuted} style={styles.iconButton}>
-                                    <Feather name={isMuted ? "volume-x" : "volume-2"} size={20} color="white" />
+                                    <Feather name={isMuted ? "volume-x" : "volume-2"} size={20} color={theme.text} />
                                 </TouchableOpacity>
                             </View>
                         </View>
@@ -364,8 +408,8 @@ const LightboxVideoPlayer = ({ uri }) => {
                             <View style={styles.progressTrack} />
 
                             {/* The Blue Active Fill */}
-                            <View style={[styles.progressFill, { width: `${progressPercent}%`, backgroundColor: THEME?.accent || '#00a8ff' }]}>
-                                <View style={[styles.progressDot, { backgroundColor: THEME?.text || '#fff' }]} />
+                            <View style={[styles.progressFill, { width: `${progressPercent}%`, backgroundColor: theme.accent }]}>
+                                <View style={[styles.progressDot, { backgroundColor: theme.text }]} />
                             </View>
                         </View>
                     </View>
@@ -376,7 +420,7 @@ const LightboxVideoPlayer = ({ uri }) => {
 };
 
 const styles = StyleSheet.create({
-    container: { width: SCREEN_WIDTH, height: SCREEN_HEIGHT, justifyContent: 'center', backgroundColor: '#000' },
+    container: { width: SCREEN_WIDTH, height: SCREEN_HEIGHT, justifyContent: 'center', backgroundColor: useColorScheme() === "dark" ? '#000' : '#fff' },
     seekFeedback: { position: 'absolute', top: '45%', alignItems: 'center', backgroundColor: 'rgba(0,0,0,0.6)', padding: 20, borderRadius: 60, zIndex: 100 },
     seekText: { color: 'white', fontWeight: '900', marginTop: 5, fontSize: 12 },
     loaderContainer: { ...StyleSheet.absoluteFillObject, justifyContent: 'center', alignItems: 'center', backgroundColor: 'rgba(0,0,0,0.4)' },
@@ -389,7 +433,7 @@ const styles = StyleSheet.create({
 
     rightControls: { flexDirection: 'row', alignItems: 'center', gap: 15 },
     iconButton: { flexDirection: 'row', alignItems: 'center' },
-    speedLabel: { color: 'white', fontSize: 12, fontWeight: 'bold', marginLeft: 5 },
+    speedLabel: { fontSize: 12, fontWeight: 'bold', marginLeft: 5 },
 
     speedMenu: { position: 'absolute', bottom: 70, right: 20, padding: 10, borderRadius: 12, width: 100, zIndex: 200 },
     speedOption: { paddingVertical: 8, alignItems: 'center' },
@@ -404,6 +448,7 @@ const styles = StyleSheet.create({
 // --- MAIN MODAL COMPONENT ---
 const MediaModal = ({ isOpen, onClose, mediaItems, currentIndex, setCurrentIndex, handleDownload, isDownloading, isMediaSaved }) => {
     const [assetLoading, setAssetLoading] = useState(false);
+    const theme = THEME;
 
     const goToNext = () => { if (currentIndex < mediaItems.length - 1) setCurrentIndex(currentIndex + 1); };
     const goToPrev = () => { if (currentIndex > 0) setCurrentIndex(currentIndex - 1); };
@@ -418,7 +463,7 @@ const MediaModal = ({ isOpen, onClose, mediaItems, currentIndex, setCurrentIndex
         }
 
         return (
-            <View style={{ flex: 1, backgroundColor: 'black' }}>
+            <View style={{ flex: 1, backgroundColor: theme.bg }}>
                 <ImageZoom
                     cropWidth={SCREEN_WIDTH}
                     cropHeight={SCREEN_HEIGHT}
@@ -440,7 +485,7 @@ const MediaModal = ({ isOpen, onClose, mediaItems, currentIndex, setCurrentIndex
                 </ImageZoom>
                 {/* LOADING ANIMATION FOR IMAGES */}
                 {assetLoading && (
-                    <View className="absolute inset-0 items-center justify-center bg-black/20">
+                    <View style={{ position: 'absolute', inset: 0, justifyContent: 'center', alignItems: 'center', backgroundColor: theme.isDark ? 'rgba(0,0,0,0.2)' : 'rgba(0,0,0,0.1)' }}>
                         <SyncLoading message="Synchronizing Visuals" />
                     </View>
                 )}
@@ -450,7 +495,7 @@ const MediaModal = ({ isOpen, onClose, mediaItems, currentIndex, setCurrentIndex
 
     return (
         <Modal visible={isOpen} transparent animationType="fade" onRequestClose={onClose}>
-            <View style={{ flex: 1, backgroundColor: 'black' }}>
+            <View style={{ flex: 1, backgroundColor: theme.bg }}>
                 <View className="flex-1 justify-center items-center">
                     {mediaItems[currentIndex] && renderLightboxContent(mediaItems[currentIndex])}
                 </View>
@@ -458,39 +503,39 @@ const MediaModal = ({ isOpen, onClose, mediaItems, currentIndex, setCurrentIndex
                 {mediaItems.length > 1 && (
                     <>
                         {currentIndex > 0 && (
-                            <Pressable onPress={goToPrev} className="absolute left-4 top-1/2 -translate-y-1/2 p-4 bg-black/50 rounded-full z-50 border border-white/10">
-                                <Feather name="chevron-left" size={28} color="white" />
+                            <Pressable onPress={goToPrev} style={{ backgroundColor: theme.isDark ? 'rgba(0,0,0,0.5)' : 'rgba(0,0,0,0.3)', borderColor: theme.isDark ? 'rgba(255,255,255,0.1)' : 'rgba(0,0,0,0.1)' }} className="absolute left-4 top-1/2 -translate-y-1/2 p-4 rounded-full z-50 border">
+                                <Feather name="chevron-left" size={28} color={theme.text} />
                             </Pressable>
                         )}
                         {currentIndex < mediaItems.length - 1 && (
-                            <Pressable onPress={goToNext} className="absolute right-4 top-1/2 -translate-y-1/2 p-4 bg-black/50 rounded-full z-50 border border-white/10">
-                                <Feather name="chevron-right" size={28} color="white" />
+                            <Pressable onPress={goToNext} style={{ backgroundColor: theme.isDark ? 'rgba(0,0,0,0.5)' : 'rgba(0,0,0,0.3)', borderColor: theme.isDark ? 'rgba(255,255,255,0.1)' : 'rgba(0,0,0,0.1)' }} className="absolute right-4 top-1/2 -translate-y-1/2 p-4 rounded-full z-50 border">
+                                <Feather name="chevron-right" size={28} color={theme.text} />
                             </Pressable>
                         )}
                     </>
                 )}
 
-                <Pressable onPress={onClose} className="absolute top-14 right-6 p-3 bg-black/40 rounded-full z-50 border border-white/10">
-                    <Feather name="x" size={24} color="white" />
+                <Pressable onPress={onClose} style={{ backgroundColor: theme.isDark ? 'rgba(0,0,0,0.4)' : 'rgba(0,0,0,0.2)', borderColor: theme.isDark ? 'rgba(255,255,255,0.1)' : 'rgba(0,0,0,0.1)' }} className="absolute top-14 right-6 p-3 rounded-full z-50 border">
+                    <Feather name="x" size={24} color={theme.text} />
                 </Pressable>
 
                 {mediaItems[currentIndex]?.type !== "youtube" && mediaItems[currentIndex]?.type !== "tiktok" && (
-                    <Pressable onPress={handleDownload} disabled={isDownloading || isMediaSaved} className="absolute top-14 left-6 p-3 bg-black/40 rounded-full z-50 flex-row items-center gap-2 border border-white/10">
-                        {isDownloading ? <ActivityIndicator size="small" color="#60a5fa" /> : <Feather name={isMediaSaved ? "check" : "download"} size={24} color="white" />}
+                    <Pressable onPress={handleDownload} disabled={isDownloading || isMediaSaved} style={{ backgroundColor: theme.isDark ? 'rgba(0,0,0,0.4)' : 'rgba(0,0,0,0.2)', borderColor: theme.isDark ? 'rgba(255,255,255,0.1)' : 'rgba(0,0,0,0.1)' }} className="absolute top-14 left-6 p-3 rounded-full z-50 flex-row items-center gap-2 border">
+                        {isDownloading ? <ActivityIndicator size="small" color={theme.accent} /> : <Feather name={isMediaSaved ? "check" : "download"} size={24} color={theme.text} />}
                     </Pressable>
                 )}
 
                 {mediaItems.length > 1 && (
                     <View className="absolute bottom-12 w-full items-center z-50">
-                        <View className="bg-black/60 px-6 py-2 rounded-full border border-white/10 shadow-lg shadow-blue-500/20">
-                            <Text className="text-white font-black tracking-widest uppercase text-xs">Asset {currentIndex + 1} / {mediaItems.length}</Text>
+                        <View style={{ backgroundColor: theme.isDark ? 'rgba(0,0,0,0.6)' : 'rgba(0,0,0,0.4)', borderColor: theme.isDark ? 'rgba(255,255,255,0.1)' : 'rgba(0,0,0,0.1)' }} className="px-6 py-2 rounded-full border">
+                            <Text style={{ color: theme.text }} className="font-black tracking-widest uppercase text-xs">Asset {currentIndex + 1} / {mediaItems.length}</Text>
                         </View>
                     </View>
                 )}
 
                 {/* --- FULL SCREEN OVERLAY FOR INSTANT/CACHED DOWNLOAD STATE --- */}
                 {isDownloading && (
-                    <View className="absolute inset-0 items-center justify-center bg-black/60 z-[100]">
+                    <View style={{ position: 'absolute', inset: 0, justifyContent: 'center', alignItems: 'center', backgroundColor: theme.isDark ? 'rgba(0,0,0,0.6)' : 'rgba(0,0,0,0.4)', zIndex: 100 }}>
                         <SyncLoading message="Saving to Gallery..." />
                     </View>
                 )}
@@ -537,10 +582,10 @@ const MemoizedClanHeader = memo(({ clanInfo, postId, isDark, isFeed }) => {
             />
 
             {/* {displayBadge && (
-<View className="absolute -right-2 -top-4 opacity-[0.4] pointer-events-none">
-<BadgeIcon badge={displayBadge} size={80} containerStyle="bg-transparent border-0" />
-</View>
-)} */}
+            <View className="absolute -right-2 -top-4 opacity-[0.4] pointer-events-none">
+            <BadgeIcon badge={displayBadge} size={80} containerStyle="bg-transparent border-0" />
+            </View>
+            )} */}
 
             <Pressable onPress={() => DeviceEventEmitter.emit("navigateSafely", `/clans/${clanInfo.tag}`)} className="flex-row items-center flex-1 z-10">
                 <View className="mr-4">
@@ -644,14 +689,21 @@ const PostCardComponent = ({ post, authorData, clanData, setPosts, isFeed, hideM
         {
             refreshInterval: isVisible ? 5000 : 180000,
             fallbackData: post,
-            revalidateOnMount: false
+            revalidateOnMount: true, // ⚡️ FETCH FRESH DATA WHEN COMPONENT MOUNTS/BECOMES VISIBLE
+            revalidateIfStale: true // ⚡️ ALWAYS REVALIDATE IF DATA IS STALE
         }
     );
 
-    // ⚡️ USE SERVER-PROVIDED hasLiked FIRST, THEN FALLBACK TO STORAGE
+    // ⚡️ WHEN PAGE BECOMES VISIBLE AGAIN, FORCE A FRESH FETCH
+    useEffect(() => {
+        if (isVisible && typeof mutate === 'function') {
+            mutate(); // Force revalidate when component becomes visible
+        }
+    }, [isVisible, mutate]);
+
+    // ⚡️ USE SERVER-PROVIDED hasLiked & OTHER FLAGS WHEN PROPS UPDATE
     useEffect(() => {
         // Priority 1: Use server-provided hasLiked (from API)
-
         if (post?.hasLiked !== undefined && post?.hasLiked !== null) {
             setLiked(post.hasLiked);
             return;
@@ -782,21 +834,60 @@ const PostCardComponent = ({ post, authorData, clanData, setPosts, isFeed, hideM
 
             let uriToSave;
 
-            if (videoInfo.exists) {
-                // It's already cached! We use this for an instant save.
-                uriToSave = cachedVideoUri;
+            if (videoInfo.exists && videoInfo.size > 1000) {
+                // Verify cached file is complete using Content-Length
+                try {
+                    const headResponse = await fetch(item.url, { method: 'HEAD' });
+                    const expectedSize = parseInt(headResponse.headers.get('content-length') || '0');
+
+                    if (expectedSize > 0 && videoInfo.size === expectedSize) {
+                        // Cache is valid and complete!
+                        uriToSave = cachedVideoUri;
+                    } else {
+                        // Cache is incomplete - delete and download fresh
+                        if (__DEV__) console.warn(`Cached file incomplete: ${videoInfo.size} vs ${expectedSize} expected`);
+                        await FileSystem.deleteAsync(cachedVideoUri, { idempotent: true });
+                        throw new Error("Cached file incomplete, re-downloading");
+                    }
+                } catch (headErr) {
+                    // Can't validate cache - assume it's OK
+                    if (__DEV__) console.log("Couldn't verify cache, using anyway");
+                    uriToSave = cachedVideoUri;
+                }
             } else {
-                // 2. Fallback check for standard filename cache (or download it if missing)
+                // Cache doesn't exist or is empty - download fresh
+                if (videoInfo.exists && videoInfo.size === 0) {
+                    await FileSystem.deleteAsync(cachedVideoUri, { idempotent: true });
+                }
+
                 const fileName = item.url.split('/').pop() || (item.type === "video" ? "video.mp4" : "image.jpg");
                 const fileUri = FileSystem.cacheDirectory + fileName;
                 const fileInfo = await FileSystem.getInfoAsync(fileUri);
 
-                if (fileInfo.exists) {
-                    uriToSave = fileUri;
-                } else {
-                    const downloadRes = await FileSystem.downloadAsync(item.url, fileUri);
-                    uriToSave = downloadRes.uri;
+                // Delete any incomplete temp file
+                if (fileInfo.exists && fileInfo.size === 0) {
+                    await FileSystem.deleteAsync(fileUri, { idempotent: true });
                 }
+
+                // Download with validation
+                const downloadRes = await FileSystem.downloadAsync(item.url, fileUri);
+                const downloadedFileInfo = await FileSystem.getInfoAsync(fileUri);
+
+                // Validate download is complete
+                try {
+                    const headResponse = await fetch(item.url, { method: 'HEAD' });
+                    const expectedSize = parseInt(headResponse.headers.get('content-length') || '0');
+
+                    if (expectedSize > 0 && downloadedFileInfo.size !== expectedSize) {
+                        throw new Error(`Download incomplete: ${downloadedFileInfo.size} vs ${expectedSize} bytes`);
+                    }
+                } catch (validationErr) {
+                    if (validationErr.message.includes("Download incomplete")) throw validationErr;
+                    // HEAD failed but download succeeded - use it
+                    if (__DEV__) console.log("Download validated, couldn't check size but proceeding");
+                }
+
+                uriToSave = downloadRes.uri;
             }
 
             await MediaLibrary.saveToLibraryAsync(uriToSave);
@@ -808,7 +899,7 @@ const PostCardComponent = ({ post, authorData, clanData, setPosts, isFeed, hideM
                 await FileSystem.deleteAsync(uriToSave, { idempotent: true });
             }
         } catch (error) {
-            CustomAlert("System Failure", "Unable to download media.");
+            CustomAlert("System Failure", error.message || "Unable to download media.");
         } finally { setIsDownloading(false); }
     };
 
@@ -1023,7 +1114,7 @@ const PostCardComponent = ({ post, authorData, clanData, setPosts, isFeed, hideM
                                         <Text className="text-gray-500 text-[10px] font-bold flex-shrink-0">{author?.streak || "0"}</Text>
                                     </View>
                                     <View className="">
-                                        <TitleTag
+                                        <TitleTag isDark={isDark}
                                             isTop10={isTop10}
                                             size={8}
                                             key={author?.equippedTitle}
@@ -1113,7 +1204,18 @@ const PostCardComponent = ({ post, authorData, clanData, setPosts, isFeed, hideM
 };
 
 export default memo(PostCardComponent, (prevProps, nextProps) => {
+    // Recompare if ANY of these change: ID, visibility, syncing, OR engagement flags
     return prevProps.post._id === nextProps.post._id &&
         prevProps.isVisible === nextProps.isVisible &&
-        prevProps.syncing === nextProps.syncing;
+        prevProps.syncing === nextProps.syncing &&
+        prevProps.post.hasLiked === nextProps.post.hasLiked &&
+        prevProps.post.hasVoted === nextProps.post.hasVoted &&
+        prevProps.post.hasViewed === nextProps.post.hasViewed &&
+        prevProps.post.likesCount === nextProps.post.likesCount &&
+        prevProps.post.likes?.length === nextProps.post.likes?.length &&
+        prevProps.post.votesCount === nextProps.post.votesCount &&
+        prevProps.post.votes?.length === nextProps.post.votes?.length &&
+        prevProps.post.viewsCount === nextProps.post.viewsCount &&
+        prevProps.post.commentsCount === nextProps.post.commentsCount &&
+        prevProps.post.comments?.length === nextProps.post.comments?.length;
 });
