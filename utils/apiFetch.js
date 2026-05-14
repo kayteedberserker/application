@@ -18,7 +18,7 @@ export const setSessionExpiredHandler = (handler) => { onSessionExpired = handle
  * 🔄 Silent Refresh Logic (With Promise Locking)
  */
 const attemptTokenRefresh = async () => {
-  const baseUrl = !__DEV__ ? "https://oreblogda.com/api" : "http://10.247.127.121:3000/api"
+  const baseUrl = !__DEV__ ? "https://oreblogda.com/api" : "http://192.168.105.121:3000/api"
 
   // 🛡️ LOCK: If a refresh is already happening, return the existing promise 
   if (refreshPromise) {
@@ -91,7 +91,7 @@ const attemptTokenRefresh = async () => {
  * 🛡️ THE SYSTEM - SECURE API UPLINK
  */
 export const apiFetch = async (endpoint, options = {}) => {
-  const baseUrl = !__DEV__ ? "https://oreblogda.com/api" : "http://10.247.127.121:3000/api";
+  const baseUrl = !__DEV__ ? "https://oreblogda.com/api" : "http://192.168.105.121:3000/api"
   const cleanEndpoint = endpoint.startsWith('/') ? endpoint : `/${endpoint}`
   const url = endpoint.startsWith('http') ? endpoint : `${baseUrl}${cleanEndpoint}`
 
@@ -145,8 +145,8 @@ export const apiFetch = async (endpoint, options = {}) => {
     }
 
     // 2. Handle Token Expiry
-    if (response.status === 421 && data.message?.includes("TOKEN_EXPIRED")) {
-      const refreshSuccess = await attemptTokenRefresh();
+    if (response.status === 421 || response.status === 455) {
+      const refreshSuccess = await attemptTokenRefresh()
 
       if (refreshSuccess) {
         const newToken = await SecureStore.getItemAsync('userToken');

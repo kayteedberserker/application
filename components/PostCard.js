@@ -140,7 +140,7 @@ const LightboxVideoPlayer = ({ uri }) => {
 
                 if (fileInfo.exists) {
                     // LEGACY REPAIR: If existing cache is too small, it's likely corrupt
-                    if (fileInfo.size < 1024 * 500 && fileInfo.uri?.includes(".mp4")) {
+                    if (fileInfo.size < 1024 * 500) { // If file is smaller than 500KB, consider it corrupted
                         if (__DEV__) console.log("Deleting corrupted legacy file...");
                         await FileSystem.deleteAsync(finalLocalUri, { idempotent: true });
                     } else {
@@ -159,8 +159,10 @@ const LightboxVideoPlayer = ({ uri }) => {
                     to: finalLocalUri
                 });
 
-                // Update state silently so next time/loop uses the local file
-                if (isMounted) setFinalUri(finalLocalUri);
+                if (__DEV__) console.log("Background cache complete. Ready for next time.");
+                // We DO NOT call setFinalUri here. 
+                // The native player is already buffering the remote stream for seamless looping.
+                // Hot-swapping the URI mid-watch would restart the video.
 
             } catch (e) {
                 if (__DEV__) console.log("Cache failed, staying on remote stream", e);
@@ -308,7 +310,7 @@ const LightboxVideoPlayer = ({ uri }) => {
                             }}
                             style={[styles.playButton, { borderColor: theme.glowBlue || 'transparent', shadowColor: theme.accent || '#000' }]}
                         >
-                            <Feather name={isPlaying ? 'pause' : 'play'} size={36} color="white" />
+                            {status === 'loading' ? <ActivityIndicator color="white" /> : <Feather name={isPlaying ? 'pause' : 'play'} size={36} color="white" />}
                         </TouchableOpacity>
                     </View>
 
@@ -646,17 +648,13 @@ const PostCardComponent = ({ post, authorData, clanData, setPosts, isFeed, hideM
         }
     }, [isVisible, mutate]);
 
-    // ⚡️ USE SERVER-PROVIDED hasLiked & OTHER FLAGS WHEN PROPS UPDATE
+    // ⚡️ SYNC local like state with the freshest server data
     useEffect(() => {
-        console.log("trying to set hasLiked", post?.title, post.message, post?.hasLiked);
-
-        // Priority 1: Use server-provided hasLiked (from API)
-        if (post?.hasLiked !== undefined && post?.hasLiked !== null) {
-
-            setLiked(post.hasLiked);
-            return;
+        const latestHasLiked = postData?.hasLiked ?? post?.hasLiked;
+        if (latestHasLiked !== undefined && latestHasLiked !== null) {
+            setLiked(latestHasLiked);
         }
-    }, [post?._id, post?.hasLiked, isVisible]);
+    }, [post?._id, post?.hasLiked, postData?.hasLiked, isVisible]);
 
     const mediaItems = useMemo(() => {
         if (post.media && Array.isArray(post.media) && post.media.length > 0) return post.media;

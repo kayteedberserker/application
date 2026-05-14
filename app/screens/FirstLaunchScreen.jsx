@@ -428,7 +428,7 @@ export default function FirstLaunchScreen() {
 				// Save onboarding flags individually
 				storage.set("@has_seen_clan_onboarding", onboardingFlags.HAS_SEEN_CLAN_UPDATE || "true");
 				storage.set("has_seen_profile_onboarding", onboardingFlags.has_seen_profile_onboarding ? "true" : "false");
-				storage.set("HAS_SEEN_COINS_V3", onboardingFlags.HAS_SEEN_COINS_V3 || "true");
+				storage.set("HAS_SEEN_COINS_V3", onboardingFlags.HAS_SEEN_COINS_V3 || "true")
 				storage.set("HAS_SEEN_PEAK_V5", onboardingFlags.HAS_SEEN_PEAK_V5 || "true");
 				storage.set("HAS_SEEN_STORE_V4", onboardingFlags.HAS_SEEN_STORE_V4 || "true");
 				storage.set("HAS_SEEN_WELCOME", onboardingFlags.HAS_SEEN_WELCOME || "true");
@@ -500,7 +500,6 @@ export default function FirstLaunchScreen() {
 
 			// if (!res) throw new Error("No response from server.");
 			const data = await res.json();
-			if (__DEV__) console.log("data is", data);
 
 			if (res.status === 401 && data.message?.includes("ENCRYPTION_REQUIRED")) {
 				setIsProcessing(false);

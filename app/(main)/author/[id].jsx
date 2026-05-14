@@ -361,7 +361,7 @@ export default function AuthorPage() {
             // Tells SWR to silently refresh every post currently mounted
             // Without overriding the entire posts array with stale server data
             mutate(
-                key => typeof key === 'string' && key.startsWith('/posts/'),
+                key => typeof key === 'string' && (key.startsWith('/posts?') || key.startsWith('/posts/')),
                 undefined,
                 { revalidate: true }
             );

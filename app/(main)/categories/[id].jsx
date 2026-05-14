@@ -192,7 +192,7 @@ export default function CategoryPage() {
         useCallback(() => {
             // Silently tells SWR to re-verify the active posts in the background
             globalMutate(
-                key => typeof key === 'string' && key.startsWith('/posts/'),
+                key => typeof key === 'string' && (key.startsWith('/posts?') || key.startsWith('/posts/')),
                 undefined,
                 { revalidate: true }
             );

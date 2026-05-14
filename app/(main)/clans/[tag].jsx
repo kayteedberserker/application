@@ -334,7 +334,7 @@ export default function ClanPage() {
   useFocusEffect(
     useCallback(() => {
       globalMutate(
-        key => typeof key === 'string' && key.startsWith('/posts/'),
+        key => typeof key === 'string' && (key.startsWith('/posts?') || key.startsWith('/posts/')),
         undefined,
         { revalidate: true }
       );

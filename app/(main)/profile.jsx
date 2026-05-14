@@ -38,6 +38,7 @@ import { useCoins } from "../../context/CoinContext";
 import { useUser } from "../../context/UserContext";
 import apiFetch from "../../utils/apiFetch";
 // ⚡️ Correct Reanimated Imports
+import * as SecureStore from 'expo-secure-store';
 import LottieView from 'lottie-react-native'; // ⚡️ Added for Inventory Previews
 import { MotiView } from 'moti';
 import Animated, {
@@ -52,6 +53,7 @@ import Animated, {
 } from "react-native-reanimated";
 import AuraAvatar from "../../components/AuraAvatar"; // ⚡️ Needed for the preview
 import ImageEditorModal from "../../components/ImageEditorModal"; // Import the ImageEditorModal
+import NeuralPinModal from "../../components/NeuralPinModal";
 import TitleTag from "../../components/TitleTag";
 import { useClan } from "../../context/ClanContext";
 
@@ -283,6 +285,289 @@ const previewStyles = StyleSheet.create({
     }
 });
 
+
+// 🔹 2.5. SECURITY MODAL
+const SecurityModal = ({ visible, onClose, user, setUser, isDark }) => {
+    const CustomAlert = useAlert();
+    const [pinModalVisible, setPinModalVisible] = useState(false);
+    const [emailModalVisible, setEmailModalVisible] = useState(false);
+    const [email, setEmail] = useState(user?.email || "");
+    const [isSettingEmail, setIsSettingEmail] = useState(false);
+    const [requirePin, setRequirePin] = useState(false);
+    const [isChangePin, setIsChangePin] = useState(false);
+
+    // --- UI HELPERS ---
+    const getSecurityLevelText = (level) => {
+        switch (level) {
+            case 1: return "Device Only";
+            case 2: return "PIN Protected";
+            case 3: return "Email Verified";
+            default: return "Unknown";
+        }
+    };
+
+    const getSecurityLevelColor = (level) => {
+        switch (level) {
+            case 1: return "#ef4444"; // Red
+            case 2: return "#f59e0b"; // Orange
+            case 3: return "#22c55e"; // Green
+            default: return "#6b7280";
+        }
+    };
+
+    // --- LOGIC (UNTOUCHED) ---
+    const handleChangePin = () => {
+        setRequirePin(false);
+        setIsChangePin(user?.securityLevel >= 2);
+        setPinModalVisible(true);
+    };
+
+    const handleSetEmail = async () => {
+        if (!email.trim()) {
+            CustomAlert("Error", "Please enter a valid email address.");
+            return;
+        }
+        console.log("trying to check if user has pin? ");
+
+        if (user?.securityLevel === 2 || user?.securityLevel === 3) {
+            setRequirePin(true);
+            setIsChangePin(false);
+            setPinModalVisible(true);
+        } else {
+            setIsSettingEmail(true);
+            try {
+                const res = await apiFetch('/mobile/secure-uplink', {
+                    method: 'POST',
+                    body: JSON.stringify({ uid: user.uid, email: email.trim() })
+                });
+                const data = await res.json();
+                if (res.ok) {
+                    setUser({ ...user, email: email.trim(), securityLevel: data.securityLevel });
+                    CustomAlert("Success", "Email has been set successfully!");
+                    setEmailModalVisible(false);
+                    setRequirePin(false);
+                    if (data.accessToken && data.refreshToken) {
+                        await SecureStore.setItemAsync('userToken', data.accessToken);
+                        await SecureStore.setItemAsync('refreshToken', data.refreshToken);
+                    }
+                } else {
+                    CustomAlert("Error", data.message || "Failed to set email.");
+                }
+            } catch (err) {
+                console.error("Set email error:", err);
+                CustomAlert("Error", "Failed to set email. Please try again.");
+            } finally {
+                setIsSettingEmail(false);
+            }
+        }
+    };
+
+    const handlePinVerifiedForEmail = async (enteredPin) => {
+        setPinModalVisible(false);
+        setIsSettingEmail(true);
+        try {
+            const res = await apiFetch('/mobile/secure-uplink', {
+                method: 'POST',
+                body: JSON.stringify({ uid: user.uid, pin: enteredPin, email: email.trim() })
+            });
+            const data = await res.json();
+            if (res.ok) {
+                setUser({ ...user, email: email.trim(), securityLevel: data.securityLevel });
+                CustomAlert("Success", "Email has been set successfully!");
+                setEmailModalVisible(false);
+                if (data.accessToken && data.refreshToken) {
+                    await SecureStore.setItemAsync('userToken', data.accessToken);
+                    await SecureStore.setItemAsync('refreshToken', data.refreshToken);
+                }
+            } else {
+                CustomAlert("Error", data.message || "Failed to set email.");
+            }
+        } catch (err) {
+            console.error("Set email error:", err);
+            CustomAlert("Error", "Failed to set email. Please try again.");
+        } finally {
+            setIsSettingEmail(false);
+        }
+    };
+
+    const handleChangePinSubmit = async (oldPinValue, newPinValue) => {
+        setPinModalVisible(false);
+        try {
+            const res = await apiFetch('/mobile/changepin', {
+                method: 'POST',
+                body: JSON.stringify({ uid: user.uid, oldPin: oldPinValue, newPin: newPinValue })
+            });
+            const data = await res.json();
+            if (res.ok) {
+                CustomAlert('Success', 'PIN has been updated successfully!');
+                setUser({ ...user, securityLevel: data.securityLevel || user.securityLevel });
+            } else {
+                CustomAlert('Error', data.message || 'Failed to change PIN.');
+            }
+        } catch (err) {
+            console.error('Change PIN error:', err);
+            CustomAlert('Error', 'Failed to change PIN. Please try again.');
+        }
+    };
+
+    // --- UI COMPONENTS ---
+    const levelColor = getSecurityLevelColor(user?.securityLevel);
+
+    return (
+        <>
+            <Modal visible={visible} animationType="fade" transparent>
+                <View className={`flex-1 items-center justify-center p-6 ${isDark ? 'bg-black/80' : 'bg-black/50'}`}>
+                    <View className={`w-full p-8 rounded-[40px] border-2 shadow-2xl ${isDark ? 'bg-[#0d1117] border-gray-800' : 'bg-white border-gray-100'}`}
+                        style={{ shadowColor: levelColor, shadowOpacity: 0.2 }}>
+
+                        <Text className={`text-2xl font-black uppercase italic mb-8 text-center ${isDark ? 'text-white' : 'text-gray-900'}`}>
+                            Security Settings
+                        </Text>
+
+                        <View className="space-y-8">
+                            {/* Security Level Indicator */}
+                            <View className={`p-5 rounded-3xl border ${isDark ? 'bg-gray-900/50 border-gray-800' : 'bg-gray-50 border-gray-200'}`}>
+                                <Text className="text-[10px] font-black uppercase text-gray-500 tracking-widest mb-4">
+                                    Current Security Level
+                                </Text>
+
+                                {/* 3-Pill Progress Bar */}
+                                <View className="flex-row items-center justify-between mb-4 space-x-2">
+                                    {[1, 2, 3].map((step) => (
+                                        <View
+                                            key={step}
+                                            className="flex-1 h-3 rounded-full"
+                                            style={{
+                                                backgroundColor: user?.securityLevel >= step ? levelColor : (isDark ? '#1f2937' : '#e5e7eb'),
+                                                opacity: user?.securityLevel >= step ? 1 : 0.5
+                                            }}
+                                        />
+                                    ))}
+                                </View>
+
+                                <Text style={{ color: levelColor }} className="text-lg font-black uppercase italic">
+                                    {getSecurityLevelText(user?.securityLevel)}
+                                </Text>
+                            </View>
+
+                            {/* PIN Section */}
+                            <View>
+                                <Text className="text-[10px] font-black uppercase text-gray-500 tracking-widest mb-3 ml-1">PIN Protection</Text>
+                                <View className={`p-5 rounded-3xl border ${isDark ? 'bg-gray-900/50 border-gray-800' : 'bg-gray-50 border-gray-200'}`}>
+                                    <Text className={`text-sm mb-5 font-medium ${isDark ? 'text-gray-400' : 'text-gray-600'}`}>
+                                        {user?.securityLevel > 1 ? "Change your 6-digit PIN for enhanced security." : "Set up a 6-digit PIN to protect your account."}
+                                    </Text>
+                                    <TouchableOpacity
+                                        onPress={handleChangePin}
+                                        className="bg-blue-600 py-4 rounded-2xl items-center active:opacity-80 shadow-lg shadow-blue-600/30"
+                                    >
+                                        <Text className="text-white font-black uppercase tracking-widest text-xs">
+                                            {user?.securityLevel > 1 ? "Change PIN" : "Set PIN"}
+                                        </Text>
+                                    </TouchableOpacity>
+                                </View>
+                            </View>
+
+                            {/* Email Section */}
+                            <View>
+                                <Text className="text-[10px] font-black uppercase text-gray-500 tracking-widest mb-3 ml-1">Email Verification</Text>
+                                <View className={`p-5 rounded-3xl border ${isDark ? 'bg-gray-900/50 border-gray-800' : 'bg-gray-50 border-gray-200'}`}>
+                                    <Text className={`text-sm mb-5 font-medium ${isDark ? 'text-gray-400' : 'text-gray-600'}`}>
+                                        {user?.email ? `Current email: ${user.email}` : "Add an email address for account recovery."}
+                                    </Text>
+                                    {user?.email ? (
+                                        <View className="bg-green-500/10 p-4 rounded-2xl border border-green-500/20 items-center">
+                                            <Text className="text-green-500 text-xs font-black uppercase tracking-widest">
+                                                ✓ Verified Connection
+                                            </Text>
+                                        </View>
+                                    ) : (
+                                        <TouchableOpacity
+                                            onPress={() => setEmailModalVisible(true)}
+                                            className="bg-green-600 py-4 rounded-2xl items-center active:opacity-80 shadow-lg shadow-green-600/30"
+                                        >
+                                            <Text className="text-white font-black uppercase tracking-widest text-xs">Set Email</Text>
+                                        </TouchableOpacity>
+                                    )}
+                                </View>
+                            </View>
+                        </View>
+
+                        <TouchableOpacity onPress={onClose} className="mt-10 p-2 items-center">
+                            <Text className="text-gray-500 text-[11px] font-black uppercase tracking-[3px] underline">Close Terminal</Text>
+                        </TouchableOpacity>
+                    </View>
+                </View>
+            </Modal>
+
+            {/* PIN Modal (Functionality Preserved) */}
+            <NeuralPinModal
+                visible={pinModalVisible}
+                onSuccess={async (result) => {
+                    if (requirePin) {
+                        await handlePinVerifiedForEmail(result);
+                        setRequirePin(false);
+                    } else if (isChangePin) {
+                        if (result?.oldPin && result?.newPin) {
+                            await handleChangePinSubmit(result.oldPin, result.newPin);
+                        }
+                    } else {
+                        setPinModalVisible(false);
+                        CustomAlert("Success", "PIN has been updated!");
+                    }
+                    setIsChangePin(false);
+                }}
+                onClose={() => {
+                    setPinModalVisible(false);
+                    setRequirePin(false);
+                    setIsChangePin(false);
+                }}
+                returnPinOnly={requirePin}
+                changePin={isChangePin}
+            />
+
+            {/* Email Modal */}
+            <Modal visible={emailModalVisible} animationType="fade" transparent>
+                <View className={`flex-1 items-center justify-center p-6 ${isDark ? 'bg-black/90' : 'bg-black/60'}`}>
+                    <View className={`w-full p-8 rounded-[40px] border-2 border-green-500 shadow-2xl shadow-green-500/20 ${isDark ? 'bg-[#0d1117]' : 'bg-white'}`}>
+                        <Text className={`text-xl font-black uppercase italic mb-8 text-center ${isDark ? 'text-white' : 'text-gray-900'}`}>
+                            Set Email Address
+                        </Text>
+
+                        <View className="space-y-4">
+                            <Text className="text-[10px] font-black uppercase text-gray-500 tracking-widest ml-1">Uplink Address</Text>
+                            <TextInput
+                                value={email}
+                                onChangeText={setEmail}
+                                placeholder="Enter your email address"
+                                placeholderTextColor={isDark ? "#4b5563" : "#9ca3af"}
+                                keyboardType="email-address"
+                                autoCapitalize="none"
+                                className={`p-5 rounded-2xl font-bold border ${isDark ? 'bg-gray-900 text-white border-gray-800' : 'bg-gray-50 text-gray-900 border-gray-200'}`}
+                            />
+                        </View>
+
+                        <TouchableOpacity
+                            onPress={handleSetEmail}
+                            disabled={isSettingEmail}
+                            className="bg-green-600 p-5 rounded-2xl items-center mt-8 active:opacity-80 shadow-lg shadow-green-600/30"
+                        >
+                            {isSettingEmail ? (
+                                <ActivityIndicator color="white" />
+                            ) : (
+                                <Text className="text-white font-black uppercase tracking-widest text-sm">Update Email</Text>
+                            )}
+                        </TouchableOpacity>
+
+                        <TouchableOpacity onPress={() => setEmailModalVisible(false)} className="mt-6 p-2 items-center">
+                            <Text className="text-gray-500 text-[11px] font-black uppercase tracking-widest underline">Cancel</Text>
+                        </TouchableOpacity>
+                    </View>
+                </View>
+            </Modal>
+        </>
+    );
+};
 
 // 🔹 2. THE MAIN STORE COMPONENT
 const AuthorStoreModal = ({ visible, onClose, user, isDark, setInventory }) => {
@@ -1090,6 +1375,7 @@ export default function MobileProfilePage() {
     const [inventoryVisible, setInventoryVisible] = useState(false);
     const [prefsVisible, setPrefsVisible] = useState(false);
     const [storeVisible, setStoreVisible] = useState(false);
+    const [securityVisible, setSecurityVisible] = useState(false);
     const [rankModalVisible, setRankModalVisible] = useState(false);
     const [auraModalVisible, setAuraModalVisible] = useState(false);
     const [isEditorVisible, setIsEditorVisible] = useState(false); // State for ImageEditorModal
@@ -1139,7 +1425,7 @@ export default function MobileProfilePage() {
                 const dbUser = await res.json();
 
                 if (res.ok) {
-                    setUser(dbUser);
+                    setUser({ ...user, ...dbUser });
                     setDescription(dbUser.description || "");
                     setUsername(dbUser.username || "");
 
@@ -1221,6 +1507,7 @@ export default function MobileProfilePage() {
         { title: "Inventory", desc: "Check your acquired items and manage your gear here." },
         { title: "Preferences", desc: "Update your neural preferences and favorite anime characters." },
         { title: "Store", desc: "Visit the store to get new upgrades, auras, and cosmetics." },
+        { title: "Security", desc: "Manage your PIN and email security settings." },
         { title: "Player Card", desc: "Preview and broadcast your unique Operator Identity card." },
     ];
 
@@ -1381,44 +1668,6 @@ export default function MobileProfilePage() {
             }]
         )
     }
-    useEffect(() => {
-        const syncUserWithDB = async () => {
-            if (!user?.deviceId) return;
-            try {
-                const res = await apiFetch(`/users/me?fingerprint=${user.deviceId}`);
-                const dbUser = await res.json();
-
-                if (res.ok) {
-                    setUser(dbUser);
-                    setDescription(dbUser.description || "");
-                    setUsername(dbUser.username || "");
-
-                    const dbAnimes = Array.isArray(dbUser.preferences?.favAnimes) ? dbUser.preferences.favAnimes.join(', ') : "";
-                    const dbGenres = Array.isArray(dbUser.preferences?.favGenres) ? dbUser.preferences.favGenres.join(', ') : "";
-                    const dbChar = dbUser.preferences?.favCharacter || "";
-
-                    setFavAnimes(dbAnimes);
-                    setFavGenres(dbGenres);
-                    setFavCharacter(dbChar);
-
-                    const postRes = await apiFetch(`/posts?author=${dbUser._id}&limit=1`);
-                    const postData = await postRes.json();
-                    const newTotal = postData.total || 0;
-                    if (postRes.ok) setTotalPosts(newTotal);
-
-                    storage.set(CACHE_KEY_USER_EXTRAS, JSON.stringify({
-                        username: dbUser.username,
-                        description: dbUser.description,
-                        totalPosts: newTotal,
-                        favAnimes: dbAnimes,
-                        favGenres: dbGenres,
-                        favCharacter: dbChar
-                    }));
-                }
-            } catch (err) { console.error("Sync User Error:", err); }
-        };
-        syncUserWithDB();
-    }, [])
 
     const posts = useMemo(() => {
         return data ? data.flatMap((page) => page.posts || []) : [];
@@ -1595,11 +1844,59 @@ export default function MobileProfilePage() {
 
                         {/* Action Buttons Floating Left */}
                         {/* ⚡️ FIXED: Added zIndex: 200 and elevation: 200 to break out of the FlatList context */}
-                        <View style={{ position: "absolute", left: -10, zIndex: 200, elevation: 200 }} className="flex-col gap-y-3 items-center">
+                        <View style={{ position: "absolute", left: -10, zIndex: 200, elevation: 200 }} className="flex-col gap-y-1 items-center">
                             <ProfileActionButton icon="archive-outline" color="#3b82f6" label="Items" onPress={() => setInventoryVisible(true)} />
                             <ProfileActionButton icon="cog-outline" color="#a855f7" label="Prefs" onPress={() => setPrefsVisible(true)} />
                             <ProfileActionButton icon="cart-outline" color="#22c55e" label="Store" onPress={() => setStoreVisible(true)} />
                             <ProfileActionButton icon="card-account-details-outline" color="#f59e0b" label="Card" onPress={() => setCardPreviewVisible(true)} />
+                        </View>
+
+                        <View
+                            style={{ position: "absolute", right: -10, top: 13, zIndex: 200, elevation: 200 }}
+                            className="items-center"
+                        >
+                            {/* 🔹 Mini 3-Pill Progress Indicator */}
+                            <View className="flex-row mb-1 space-x-0.5 justify-center items-center">
+                                {[1, 2, 3].map((step) => {
+                                    const level = user?.securityLevel || 1;
+                                    const isActive = level >= step;
+
+                                    // Determine pill color based on current level
+                                    let pillColor = isDark ? "#374151" : "#e5e7eb"; // Default empty color
+                                    if (isActive) {
+                                        if (level === 1) pillColor = "#ef4444";      // Red
+                                        else if (level === 2) pillColor = "#f59e0b"; // Orange
+                                        else if (level === 3) pillColor = "#22c55e"; // Green
+                                    }
+
+                                    return (
+                                        <View
+                                            key={step}
+                                            style={{
+                                                width: 10,
+                                                height: 3,
+                                                borderRadius: 4,
+                                                backgroundColor: pillColor,
+                                                opacity: isActive ? 1 : 0.4,
+                                            }}
+                                        />
+                                    );
+                                })}
+                            </View>
+
+                            {/* 🔹 Security Action Button */}
+                            <ProfileActionButton
+                                isIonicon={true}
+                                // Lock remains closed for Level 1 & 2 , opens at Level 3
+                                icon={user?.securityLevel > 2 ? "lock" : "lock-open"}
+                                color={
+                                    user?.securityLevel === 1 ? "#ef4444" :
+                                        user?.securityLevel === 2 ? "#f59e0b" :
+                                            "#22c55e"
+                                }
+                                label="Security"
+                                onPress={() => setSecurityVisible(true)}
+                            />
                         </View>
 
                         {/* Onboarding Tooltip Overlay */}
@@ -1720,7 +2017,7 @@ export default function MobileProfilePage() {
 
                         <View className="space-y-2 mt-2">
                             <Text className="text-[10px] font-black uppercase tracking-widest text-gray-400 ml-1">
-                                User Id(UID) <Text className="text-gray-500 tracking-normal capitalize lowercase">- Used for recovery</Text>
+                                User Id(UID) <Text className="text-gray-500 tracking-normal lowercase">- Used for recovery</Text>
                             </Text>
                             <View className="bg-gray-100 dark:bg-[#121212] border border-gray-200 dark:border-gray-800 p-4 rounded-2xl flex-row justify-between items-center">
                                 <View className="flex-1 mr-4">
@@ -1741,7 +2038,7 @@ export default function MobileProfilePage() {
 
                         <View className="space-y-2 mt-2">
                             <Text className="text-[10px] font-black uppercase tracking-widest text-gray-400 ml-1">
-                                Recruitment Directive <Text className="text-gray-500 tracking-normal capitalize lowercase">- Share to invite friends</Text>
+                                Recruitment Directive <Text className="text-gray-500 tracking-normal lowercase">- Share to invite friends</Text>
                             </Text>
                             <View className="bg-gray-100 dark:bg-[#121212] border border-gray-200 dark:border-gray-800 p-4 rounded-2xl flex-row justify-between items-center">
                                 <View className="flex-1 mr-4">
@@ -2004,6 +2301,14 @@ export default function MobileProfilePage() {
                     </View>
                 </View>
             </Modal>
+
+            <SecurityModal
+                visible={securityVisible}
+                onClose={() => setSecurityVisible(false)}
+                user={user}
+                setUser={setUser}
+                isDark={isDark}
+            />
 
             <AuthorStoreModal
                 setInventory={setInventory}

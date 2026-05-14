@@ -1,7 +1,7 @@
 import { Ionicons } from '@expo/vector-icons';
 import * as Haptics from 'expo-haptics';
 import * as SecureStore from 'expo-secure-store';
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 import { Modal, Text, TouchableOpacity, View } from 'react-native';
 import Animated, { useAnimatedStyle, useSharedValue, withRepeat, withSequence, withTiming } from 'react-native-reanimated';
 import THEME from '../components/useAppTheme';
@@ -11,12 +11,27 @@ import apiFetch from '../utils/apiFetch';
 const PIN_LENGTH = 6;
 const BLACKLIST = ['123456', '654321', '000000', '111111', '222222', '333333', '444444', '555555', '666666', '777777', '888888', '999999'];
 
-const NeuralPinModal = ({ visible, onSuccess, onClose, returnPinOnly = false }) => {
+const NeuralPinModal = ({ visible, onSuccess, onClose, returnPinOnly = false, changePin = false }) => {
     const [pin, setPin] = useState('');
     const [message, setMessage] = useState('');
+    const [step, setStep] = useState('old');
+    const [oldPin, setOldPin] = useState('');
+    const [newPin, setNewPin] = useState('');
+    const [confirmPin, setConfirmPin] = useState('');
     const { user, setUser } = useUser();
 
     const shakeOffset = useSharedValue(0);
+
+    useEffect(() => {
+        if (!visible) {
+            setPin('');
+            setMessage('');
+            setStep('old');
+            setOldPin('');
+            setNewPin('');
+            setConfirmPin('');
+        }
+    }, [visible, changePin]);
 
     const shakeStyle = useAnimatedStyle(() => ({
         transform: [{ translateX: shakeOffset.value }],
@@ -46,13 +61,8 @@ const NeuralPinModal = ({ visible, onSuccess, onClose, returnPinOnly = false }) 
             return;
         }
 
-        if (val === "clear" && returnPinOnly) {
+        if (val === "clear") {
             onClose();
-            return;
-        }
-
-        if (val === 'clear') {
-            setPin('');
             return;
         }
 
@@ -66,26 +76,60 @@ const NeuralPinModal = ({ visible, onSuccess, onClose, returnPinOnly = false }) 
         }
     };
 
+    const handleSuccess = async (payload) => {
+        if (onSuccess) await onSuccess(payload);
+        setPin('');
+        onClose();
+    };
+
     const handleVerify = async (submittedPin) => {
-        if (returnPinOnly) {
-            Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
-            if (onSuccess) onSuccess(submittedPin);
-            setPin('');
-            onClose();
-            return;
+        console.log("changePin is?", changePin);
+
+        if (changePin) {
+            console.log("Current step:", step);
+            if (step === 'old') {
+                setOldPin(submittedPin)
+                setPin('');
+                setStep('new');
+                setMessage('Enter your new 6-digit PIN');
+                return;
+            }
+
+            if (step === 'new') {
+                setNewPin(submittedPin);
+                setPin('');
+                setStep('confirm');
+                setMessage('Confirm your new 6-digit PIN');
+                return;
+            }
+
+            if (step === 'confirm') {
+                if (submittedPin !== newPin) {
+                    triggerError('PINs do not match. Try again.');
+                    setStep('new');
+                    setPin('');
+                    setNewPin('');
+                    return;
+                }
+
+                await handleSuccess({ oldPin, newPin: submittedPin });
+                return;
+            }
         }
 
+        if (returnPinOnly) {
+            Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
+            await handleSuccess(submittedPin);
+            return;
+        }
 
         if (BLACKLIST.includes(submittedPin)) {
             triggerError("Weak Signature");
             return;
         }
 
-        // ⚡️ NEW: If returnPinOnly is true, just return the PIN to parent without API call
-        // This is used for recovery flow where parent handles the API call
         if (__DEV__) console.log(returnPinOnly, "is returnPinOnly");
 
-        // Original behavior: call secure-uplink for logged-in users
         try {
             if (!user?.uid) {
                 triggerError("No Identity")
@@ -104,12 +148,8 @@ const NeuralPinModal = ({ visible, onSuccess, onClose, returnPinOnly = false }) 
                 await SecureStore.setItemAsync('refreshToken', data.refreshToken);
                 setUser({ ...user, securityLevel: data.securityLevel });
 
-                // 📳 Success Haptics
                 Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
-                setPin('');
-
-                // Trigger the callback to parent logic
-                onClose();
+                await handleSuccess(submittedPin);
             } else {
                 triggerError(data.message);
             }
@@ -134,10 +174,10 @@ const NeuralPinModal = ({ visible, onSuccess, onClose, returnPinOnly = false }) 
                             <Ionicons name="finger-print" size={32} color={returnPinOnly ? THEME.success : THEME.accent} />
                         </View>
                         <Text style={{ color: THEME.text }} className="text-xl font-bold tracking-tighter">
-                            {returnPinOnly ? "DATA DECRYPTION" : "DATA ENCRYPTION"}
+                            {changePin ? (step === 'confirm' ? "CONFIRM NEW PIN" : step === 'new' ? "NEW PIN" : "CURRENT PIN") : returnPinOnly ? "DATA DECRYPTION" : "DATA ENCRYPTION"}
                         </Text>
                         <Text style={{ color: message ? THEME.danger : THEME.textSecondary }} className="mt-2 text-center text-sm px-4">
-                            {message ? message : returnPinOnly ? "Your data was encrypted, input PIN to decrypt info" : "Input PIN, to enable data encryption and secure your info."}
+                            {message ? message : changePin ? (step === 'old' ? 'Enter your current PIN first.' : step === 'new' ? 'Now enter your new 6-digit PIN.' : 'Confirm your new PIN to finish.') : returnPinOnly ? "Your data was encrypted, input PIN to decrypt info" : "Input PIN, to enable data encryption and secure your info."}
                         </Text>
                     </View>
 
@@ -168,7 +208,7 @@ const NeuralPinModal = ({ visible, onSuccess, onClose, returnPinOnly = false }) 
                                 {key === 'back' ? (
                                     <Ionicons name="backspace-outline" size={28} color={THEME.textSecondary} />
                                 ) : key === 'clear' ? (
-                                    <Text style={{ color: THEME.danger }} className="text-3xl font-semibold tracking-widest">{returnPinOnly ? "X" : "C"}</Text>
+                                    <Text style={{ color: THEME.danger }} className="text-3xl font-semibold tracking-widest">X</Text>
                                 ) : (
                                     <Text style={{ color: THEME.text }} className="text-3xl font-light">
                                         {key}
