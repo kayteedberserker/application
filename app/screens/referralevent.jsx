@@ -11,6 +11,7 @@ import {
     RefreshControl,
     ScrollView,
     Share,
+    TextInput,
     TouchableOpacity,
     View
 } from "react-native";
@@ -1540,7 +1541,7 @@ const ComingSoonView = ({ event, isDark }) => {
                         INITIALIZING...
                     </Text>
                 ) : event.startsAt && timeLeft ? (
-                    <View className="flex-row items-center justify-center w-full max-w-[250px] justify-between">
+                    <View className="flex-row items-center justify-between w-full max-w-[250px]">
                         <View className="items-center">
                             <Text style={{ color: eventColor }} className="text-2xl font-black font-mono">{formatTime(timeLeft.days)}</Text>
                             <Text className="text-slate-500 text-[8px] font-bold uppercase tracking-widest mt-1">Days</Text>
@@ -1573,7 +1574,7 @@ const ComingSoonView = ({ event, isDark }) => {
 
 import { BlurMask, Canvas, Rect, LinearGradient as SkiaGradient, vec } from "@shopify/react-native-skia";
 import { LinearGradient } from 'expo-linear-gradient';
-import { MotiText, MotiView } from 'moti';
+import { MotiText, MotiView, AnimatePresence } from 'moti';
 import { useMMKVObject } from 'react-native-mmkv';
 import CoinIcon from "../../components/ClanIcon";
 import TitleTag from "../../components/TitleTag";
@@ -1829,6 +1830,501 @@ const MilestoneReferral = ({ userReferralCode, isDark }) => {
     );
 }
 
+// ==========================================
+// ⚡️ COMPONENT 3: QUIZ EVENT TAB
+// ==========================================
+const QuizEventTab = ({ eventData, isDark }) => {
+    const { user } = useUser();
+    const CustomAlert = useAlert();
+    const { fetchCoins } = useCoins();
+    const storage = useMMKV();
+    const QUIZ_CACHE_KEY = `quiz_event_${eventData.id}_completed`;
+
+    const [quizData, setQuizData] = useState(null);
+    const [loading, setLoading] = useState(true);
+    const [answer, setAnswer] = useState('');
+    const [isSubmitting, setIsSubmitting] = useState(false);
+    const [hintsUsed, setHintsUsed] = useState(0);
+    const [attemptsLeft, setAttemptsLeft] = useState(3);
+    const [showHint, setShowHint] = useState(false);
+    const [resultMessage, setResultMessage] = useState('');
+    const [isCorrect, setIsCorrect] = useState(null);
+    const [completedToday, setCompletedToday] = useState(false);
+    const [localCompleted, setLocalCompleted] = useState(false);
+    const [unlockedTitle, setUnlockedTitle] = useState(null);
+
+    const maxHints = 2;
+    const hintCost = 100; // OC per hint deducted from final reward
+    const correctReward = 500;
+    const failReward = 200;
+
+    // Core theme color requested
+    const SYSTEM_COLOR = '#8b5cf6';
+
+    // Calculate actual reward based on hints used
+    const actualReward = isCorrect ? Math.max(correctReward - (hintsUsed * hintCost), 0) : failReward;
+    const potentialReward = Math.max(correctReward - (hintsUsed * hintCost), 0);
+
+    useEffect(() => {
+        const cachedCompleted = storage.getString(QUIZ_CACHE_KEY);
+        if (cachedCompleted === '1') {
+            setLocalCompleted(true);
+            setCompletedToday(true);
+        }
+        fetchQuizQuestion();
+    }, []);
+
+    const fetchQuizQuestion = async () => {
+        setLoading(true);
+        try {
+            const res = await apiFetch(`/mobile/events/quiz?eventId=${encodeURIComponent(eventData.id)}`, {
+                method: 'GET',
+                headers: { 'X-User-ID': user.uid }
+            });
+            const data = await res.json();
+
+            if (data.success) {
+                setQuizData(data.quiz);
+                setHintsUsed(data.hintsUsed || 0);
+                setAttemptsLeft(data.attemptsLeft || 3);
+                const completed = data.completed || false;
+                setCompletedToday(completed);
+                setUnlockedTitle(data.unlockedTitle || null);
+                if (completed) {
+                    storage.set(QUIZ_CACHE_KEY, '1');
+                    setLocalCompleted(true);
+                }
+            } else {
+                CustomAlert('Error', data.error || 'Failed to load quiz');
+            }
+        } catch (err) {
+            CustomAlert('Error', 'Connection failed');
+        } finally {
+            setLoading(false);
+        }
+    };
+
+    const handleUseHint = async () => {
+        if (hintsUsed >= maxHints) {
+            CustomAlert('Limit Reached', 'You can only use 2 hints');
+            return;
+        }
+
+        try {
+            const res = await apiFetch('/mobile/events/quiz', {
+                method: 'POST',
+                body: JSON.stringify({
+                    uid: user.uid,
+                    eventId: eventData.id,
+                    action: 'use_hint'
+                })
+            });
+            const data = await res.json();
+
+            if (data.success) {
+                setHintsUsed(data.hintsUsed);
+                setShowHint(true);
+                Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
+            } else {
+                CustomAlert('Error', data.error || 'Failed to use hint');
+            }
+        } catch (err) {
+            CustomAlert('Error', 'Failed to use hint');
+        }
+    };
+
+    const handleSubmitAnswer = async () => {
+        if (!answer.trim()) {
+            CustomAlert('Empty Answer', 'Please enter an answer');
+            return;
+        }
+
+        setIsSubmitting(true);
+        try {
+            const res = await apiFetch('/mobile/events/quiz', {
+                method: 'POST',
+                body: JSON.stringify({
+                    uid: user.uid,
+                    eventId: eventData.id,
+                    action: 'submit_answer',
+                    answer: answer.trim()
+                })
+            });
+            const data = await res.json();
+
+            if (data.success) {
+                setIsCorrect(data.isCorrect);
+                setResultMessage(data.message);
+                setAttemptsLeft(data.attemptsLeft);
+                setUnlockedTitle(data.unlockedTitle || null)
+
+                Haptics.notificationAsync(
+                    data.isCorrect
+                        ? Haptics.NotificationFeedbackType.Success
+                        : Haptics.NotificationFeedbackType.Warning
+                );
+
+                if (data.isCorrect || data.attemptsLeft === 0) {
+                    setCompletedToday(true);
+                    storage.set(QUIZ_CACHE_KEY, '1');
+                    setLocalCompleted(true);
+                    setTimeout(() => {
+                        CustomAlert(
+                            data.isCorrect ? 'Decryption Successful' : 'Terminal Locked',
+                            `You earned ${data.isCorrect ? potentialReward : failReward} OC!`
+                        );
+                        fetchCoins();
+                    }, 500);
+                } else {
+                    setAnswer('');
+                }
+            } else {
+                CustomAlert('Error', data.error || 'Failed to submit answer');
+            }
+        } catch (err) {
+            CustomAlert('Error', 'Connection failed');
+        } finally {
+            setIsSubmitting(false);
+        }
+    };
+
+    if (loading) {
+        return (
+            <ScrollView className="flex-1 bg-black/40" contentContainerStyle={{ justifyContent: 'center', alignItems: 'center', padding: 40, flexGrow: 1 }}>
+                <MotiView
+                    from={{ rotate: '0deg', scale: 0.9, opacity: 0.5 }}
+                    animate={{ rotate: '360deg', scale: 1.1, opacity: 1 }}
+                    transition={{ loop: true, type: 'timing', duration: 1200 }}
+                >
+                    <Ionicons name="aperture-outline" size={64} color={SYSTEM_COLOR} />
+                </MotiView>
+                <MotiView
+                    from={{ opacity: 0, translateY: 10 }}
+                    animate={{ opacity: 1, translateY: 0 }}
+                    transition={{ type: 'timing', duration: 500, delay: 200 }}
+                    className="items-center"
+                >
+                    <Text style={{ color: SYSTEM_COLOR }} className="mt-6 text-xs font-black uppercase tracking-widest text-center">Establishing Secure Connection...</Text>
+                    <Text className="text-white/30 text-[10px] mt-2 uppercase tracking-widest">Syncing Data Nodes</Text>
+                </MotiView>
+            </ScrollView>
+        );
+    }
+
+    if (!quizData) {
+        return (
+            <ScrollView className="flex-1 bg-black/40 p-6">
+                <MotiView
+                    from={{ opacity: 0, scale: 0.9 }}
+                    animate={{ opacity: 1, scale: 1 }}
+                    transition={{ type: 'spring', damping: 15 }}
+                    className="items-center justify-center py-12"
+                >
+                    <Ionicons name="warning-outline" size={48} color={SYSTEM_COLOR} />
+                    <Text className="text-white text-lg font-bold mt-4 uppercase tracking-widest">Target Data Not Found</Text>
+                    <Text className="text-white/50 text-xs mt-2 uppercase text-center">The quiz event is currently unavailable or has expired.</Text>
+                </MotiView>
+            </ScrollView>
+        );
+    }
+
+    if (completedToday || localCompleted) {
+        return (
+            <ScrollView className="flex-1 bg-black/40 p-6">
+                <MotiView
+                    from={{ opacity: 0, translateY: 20 }}
+                    animate={{ opacity: 1, translateY: 0 }}
+                    transition={{ type: 'spring', damping: 12 }}
+                    className="items-center justify-center py-12"
+                >
+                    <MotiView
+                        from={{ scale: 0 }}
+                        animate={{ scale: 1 }}
+                        transition={{ type: 'spring', damping: 10, delay: 300 }}
+                    >
+                        <Ionicons name="shield-checkmark" size={64} color={SYSTEM_COLOR} />
+                    </MotiView>
+
+                    <Text style={{ color: SYSTEM_COLOR }} className="text-xl font-black mt-6 uppercase tracking-widest">Event Conquered</Text>
+                    <Text className="text-white/60 text-xs mt-2 uppercase text-center mb-8">You have successfully navigated this system node.</Text>
+
+                    {unlockedTitle ? (
+                        <MotiView
+                            from={{ opacity: 0, scale: 0.9 }}
+                            animate={{ opacity: 1, scale: 1 }}
+                            transition={{ type: 'timing', duration: 500, delay: 600 }}
+                            className="w-full rounded-2xl overflow-hidden border border-[#8b5cf6]/40 shadow-lg shadow-[#8b5cf6]/20"
+                        >
+                            <LinearGradient
+                                colors={['rgba(139, 92, 246, 0.2)', 'rgba(139, 92, 246, 0.05)']}
+                                className="p-6 items-center relative"
+                            >
+                                {/* Decorative Grid Background */}
+                                <View className="absolute inset-0 opacity-20 border-t border-[#8b5cf6]" style={{ borderStyle: 'dashed' }} />
+
+                                <Text className="text-white/50 text-[10px] font-black uppercase tracking-[0.2em] mb-2">Title Acquired</Text>
+                                <Text style={{ color: SYSTEM_COLOR }} className="text-2xl font-black uppercase italic tracking-tighter">{unlockedTitle.name}</Text>
+                                <View className="bg-[#8b5cf6]/20 px-3 py-1 rounded mt-3 border border-[#8b5cf6]/30">
+                                    <Text style={{ color: SYSTEM_COLOR }} className="text-[10px] uppercase font-bold tracking-widest">Tier: {unlockedTitle.tier}</Text>
+                                </View>
+                            </LinearGradient>
+                        </MotiView>
+                    ) : null}
+                </MotiView>
+            </ScrollView>
+        );
+    }
+
+    return (
+        <ScrollView className="flex-1 bg-black/40 p-6">
+            <View className="mb-8">
+                {/* HEADER */}
+                <MotiView
+                    from={{ opacity: 0, translateY: -20 }}
+                    animate={{ opacity: 1, translateY: 0 }}
+                    transition={{ type: 'spring', damping: 15 }}
+                    className="mb-6 rounded-2xl overflow-hidden border-l-4 border-r-4 border-t border-b border-[#8b5cf6]/40"
+                >
+                    <LinearGradient
+                        colors={['rgba(139, 92, 246, 0.15)', 'rgba(139, 92, 246, 0.02)']}
+                        className="p-6 relative"
+                    >
+                        <MotiView
+                            from={{ opacity: 0, x: 20 }}
+                            animate={{ opacity: 0.15, x: 0 }}
+                            transition={{ type: 'timing', duration: 1000, delay: 500 }}
+                            className="absolute top-2 right-2"
+                        >
+                            <Ionicons name="terminal" size={80} color={SYSTEM_COLOR} />
+                        </MotiView>
+
+                        <Text style={{ color: SYSTEM_COLOR }} className="text-[10px] font-black uppercase tracking-[0.3em] mb-2">System Protocol: Decrypt</Text>
+                        <Text className="text-white text-xl font-black uppercase tracking-wide leading-7 mb-4">{quizData.question}</Text>
+
+                        <View className="flex-row items-center">
+                            <View className="bg-[#8b5cf6]/20 px-3 py-1.5 rounded border border-[#8b5cf6]/30 flex-row items-center">
+                                <Ionicons name="analytics-outline" size={12} color={SYSTEM_COLOR} />
+                                <Text style={{ color: SYSTEM_COLOR }} className="text-[10px] font-bold uppercase ml-2 tracking-widest">Threat Level: {quizData.difficulty}</Text>
+                            </View>
+                        </View>
+                    </LinearGradient>
+                </MotiView>
+
+                {/* REWARD EXPLANATION PANEL */}
+                <MotiView
+                    from={{ opacity: 0, scale: 0.95 }}
+                    animate={{ opacity: 1, scale: 1 }}
+                    transition={{ type: 'spring', damping: 15, delay: 100 }}
+                    className="border border-[#8b5cf6]/30 rounded-xl mb-6 border-dashed overflow-hidden"
+                >
+                    <LinearGradient
+                        colors={['rgba(139, 92, 246, 0.08)', 'rgba(0, 0, 0, 0)']}
+                        className="p-4"
+                    >
+                        <Text className="text-white text-[12px] font-black uppercase tracking-widest mb-3 text-center">Bounty Information</Text>
+
+                        <View className="flex-row items-center justify-between mb-2 pb-2 border-b border-white/5">
+                            <Text className="text-white/60 text-[10px] uppercase font-bold">Max Potential Reward:</Text>
+                            <View className="flex-row items-center gap-2">
+                                <Text className="text-white text-sm font-black -mr-1">{correctReward} </Text> <CoinIcon type="OC" size="16" /> <TitleTag title="400: Synced" tier="epic" isDark={isDark} />
+                            </View>
+                        </View>
+
+                        <View className="flex-row items-center justify-between mb-2 pb-2 border-b border-white/5">
+                            <Text className="text-white/60 text-[10px] uppercase font-bold">Hint Deduction Cost:</Text>
+                            <View className="flex-row items-center">
+                                <Text className="text-red-400 text-sm font-black">-{hintCost} </Text><CoinIcon type="OC" size="14" />
+                            </View>
+                        </View>
+
+                        <View className="flex-row items-center justify-between mb-3 pb-2 border-b border-white/5">
+                            <Text className="text-white/60 text-[10px] uppercase font-bold">Consolation (Fail 3x):</Text>
+                            <View className="flex-row items-center gap-2">
+                                <Text className="text-white text-sm font-black -mr-1">{failReward} </Text><CoinIcon type="OC" size="16" /><TitleTag title="400: Synced" tier="epic" isDark={isDark} />
+                            </View>
+                        </View>
+
+                        <View className="flex-row items-center justify-center bg-[#8b5cf6]/20 border border-[#8b5cf6]/30 py-2 rounded">
+                            <View className="flex-row items-center gap-2">
+                                <Text style={{ color: SYSTEM_COLOR }} className="text-xs font-black uppercase tracking-widest -mr-1">Current Prize: {potentialReward} </Text><CoinIcon type="OC" size="12" /><TitleTag title="400: Synced" tier="epic" isDark={isDark} />
+                            </View>
+                        </View>
+                    </LinearGradient>
+                </MotiView>
+
+                {/* HINTS SECTION */}
+                <MotiView
+                    from={{ opacity: 0, x: -20 }}
+                    animate={{ opacity: 1, x: 0 }}
+                    transition={{ type: 'spring', damping: 15, delay: 200 }}
+                    className="mb-6"
+                >
+                    <View className="flex-row justify-between items-end mb-3">
+                        <Text className="text-white/40 text-[10px] font-black uppercase tracking-widest">System Decryptions</Text>
+                        <Text className="text-white/40 text-[10px] font-black uppercase">{hintsUsed}/{maxHints} Used</Text>
+                    </View>
+
+                    <TouchableOpacity
+                        disabled={hintsUsed >= maxHints || isSubmitting}
+                        onPress={handleUseHint}
+                        className={`rounded-xl overflow-hidden border ${hintsUsed >= maxHints
+                            ? 'border-white/10'
+                            : 'border-[#8b5cf6]/60'
+                            }`}
+                    >
+                        <LinearGradient
+                            colors={hintsUsed >= maxHints ? ['rgba(255,255,255,0.05)', 'rgba(255,255,255,0.02)'] : ['rgba(139, 92, 246, 0.2)', 'rgba(139, 92, 246, 0.05)']}
+                            className="py-4 items-center flex-row justify-center"
+                        >
+                            <Ionicons
+                                name={hintsUsed >= maxHints ? 'lock-closed' : 'finger-print'}
+                                size={18}
+                                color={hintsUsed >= maxHints ? '#6b7280' : SYSTEM_COLOR}
+                            />
+                            <Text className={`ml-2 font-black uppercase tracking-widest text-xs ${hintsUsed >= maxHints ? 'text-gray-500' : 'text-white'
+                                }`}>
+                                {hintsUsed >= maxHints ? 'No Decryptions Left' : 'Extract Hint (Potential -100 OC)'}
+                            </Text>
+                        </LinearGradient>
+                    </TouchableOpacity>
+
+                    {/* DYNAMIC HINT RENDERING */}
+                    <AnimatePresence>
+                        {hintsUsed > 0 && quizData.hints && Array.isArray(quizData.hints) ? (
+                            quizData.hints.slice(0, hintsUsed).map((hintText, index) => (
+                                <MotiView
+                                    key={`hint-${index}`}
+                                    from={{ opacity: 0, translateY: -10, scale: 0.95 }}
+                                    animate={{ opacity: 1, translateY: 0, scale: 1 }}
+                                    transition={{ type: 'spring', damping: 14 }}
+                                    className="mt-3 bg-[#8b5cf6]/10 p-4 rounded-lg border-l-2 border-[#8b5cf6]"
+                                >
+                                    <Text className="text-white/50 text-[10px] font-bold uppercase mb-1 tracking-widest">Extracted Data Node {index + 1}:</Text>
+                                    <Text className="text-white text-sm leading-5 font-medium">{hintText}</Text>
+                                </MotiView>
+                            ))
+                        ) : showHint && quizData.hint && (
+                            <MotiView
+                                from={{ opacity: 0, translateY: -10, scale: 0.95 }}
+                                animate={{ opacity: 1, translateY: 0, scale: 1 }}
+                                transition={{ type: 'spring', damping: 14 }}
+                                className="mt-3 bg-[#8b5cf6]/10 p-4 rounded-lg border-l-2 border-[#8b5cf6]"
+                            >
+                                <Text className="text-white/50 text-[10px] font-bold uppercase mb-1 tracking-widest">Extracted Data:</Text>
+                                <Text className="text-white text-sm leading-5 font-medium">{quizData.hint}</Text>
+                            </MotiView>
+                        )}
+                    </AnimatePresence>
+                </MotiView>
+
+                {/* ATTEMPTS INDICATOR */}
+                <MotiView
+                    from={{ opacity: 0 }}
+                    animate={{ opacity: 1 }}
+                    transition={{ delay: 300 }}
+                    className="flex-row justify-center items-center gap-4 mb-6"
+                >
+                    <Text className="text-white/40 text-[10px] uppercase font-black tracking-widest">System Integrity:</Text>
+                    <View className="flex-row gap-2">
+                        {[...Array(3)].map((_, i) => (
+                            <MotiView
+                                key={i}
+                                animate={{ scale: i < attemptsLeft ? 1 : 0.8, opacity: i < attemptsLeft ? 1 : 0.4 }}
+                                transition={{ type: 'spring', damping: 10 }}
+                            >
+                                <Ionicons
+                                    name={i < attemptsLeft ? 'cube' : 'cube-outline'}
+                                    size={20}
+                                    color={i < attemptsLeft ? SYSTEM_COLOR : '#4b5563'}
+                                />
+                            </MotiView>
+                        ))}
+                    </View>
+                </MotiView>
+
+                {/* ANSWER INPUT */}
+                <MotiView
+                    from={{ opacity: 0, translateY: 20 }}
+                    animate={{ opacity: 1, translateY: 0 }}
+                    transition={{ type: 'spring', damping: 15, delay: 400 }}
+                    className="mb-4 relative justify-center"
+                >
+                    <Ionicons name="chevron-forward" size={20} color={SYSTEM_COLOR} className="absolute left-4 z-10" style={{ position: 'absolute', left: 16 }} />
+                    <TextInput
+                        value={answer}
+                        onChangeText={setAnswer}
+                        placeholder="Awaiting Input..."
+                        placeholderTextColor="#6b7280"
+                        editable={!completedToday && !isSubmitting}
+                        className="bg-black/60 border border-[#8b5cf6]/40 text-white pl-12 pr-4 py-5 rounded-xl font-medium tracking-widest text-center uppercase shadow-sm shadow-[#8b5cf6]/10"
+                        autoCapitalize="none"
+                    />
+                </MotiView>
+
+                {/* SUBMIT BUTTON */}
+                <MotiView
+                    from={{ opacity: 0, translateY: 20 }}
+                    animate={{ opacity: 1, translateY: 0 }}
+                    transition={{ type: 'spring', damping: 15, delay: 500 }}
+                >
+                    <TouchableOpacity
+                        disabled={isSubmitting || completedToday || !answer.trim()}
+                        onPress={handleSubmitAnswer}
+                        className={`rounded-xl overflow-hidden border-b-4 ${isSubmitting || completedToday || !answer.trim()
+                            ? 'border-white/5'
+                            : 'border-[#6d28d9] active:border-t-4 active:border-b-0 active:mt-1'
+                            }`}
+                    >
+                        <LinearGradient
+                            colors={
+                                isSubmitting || completedToday || !answer.trim()
+                                    ? ['rgba(255,255,255,0.1)', 'rgba(255,255,255,0.05)']
+                                    : ['#a78bfa', '#8b5cf6']
+                            }
+                            className="py-5 items-center justify-center"
+                        >
+                            {isSubmitting ? (
+                                <ActivityIndicator color="white" />
+                            ) : (
+                                <Text className={`font-black uppercase tracking-[0.2em] text-sm ${!answer.trim() ? 'text-white/30' : 'text-white shadow-sm'
+                                    }`}>
+                                    Execute Override
+                                </Text>
+                            )}
+                        </LinearGradient>
+                    </TouchableOpacity>
+                </MotiView>
+
+                {/* RESULT MESSAGE */}
+                <AnimatePresence>
+                    {resultMessage && (
+                        <MotiView
+                            from={{ opacity: 0, scale: 0.9, translateY: 10 }}
+                            animate={{ opacity: 1, scale: 1, translateY: 0 }}
+                            exit={{ opacity: 0, scale: 0.9, translateY: -10 }}
+                            className={`mt-4 p-4 rounded-xl border-l-4 ${isCorrect
+                                ? 'bg-[#8b5cf6]/10 border-[#8b5cf6]'
+                                : attemptsLeft > 0
+                                    ? 'bg-red-500/10 border-red-500'
+                                    : 'bg-gray-800/80 border-gray-500'
+                                }`}
+                        >
+                            <Text className={`text-sm font-bold uppercase tracking-widest ${isCorrect
+                                ? 'text-[#8b5cf6]'
+                                : attemptsLeft > 0
+                                    ? 'text-red-400'
+                                    : 'text-gray-400'
+                                }`}>
+                                {isCorrect ? 'ACCESS GRANTED:' : 'ACCESS DENIED:'} {resultMessage}
+                            </Text>
+                        </MotiView>
+                    )}
+                </AnimatePresence>
+            </View>
+        </ScrollView>
+    );
+}
+
 export default function EventHubScreen() {
     const storage = useMMKV();
     const { user } = useUser();
@@ -2049,6 +2545,9 @@ export default function EventHubScreen() {
         }
         if (currentEvent.type === 'milestone_countdown') {
             return <MilestoneReferral userReferralCode={referralCode} isDark={isDark} />
+        }
+        if (currentEvent.type === 'quiz') {
+            return <QuizEventTab eventData={currentEvent} isDark={isDark} />
         }
         return <ClaimTab eventData={currentEvent} />;
     };

@@ -153,7 +153,7 @@ export const UserProvider = ({ children }) => {
     if (isSystemKick) {
       CustomAlert(
         "Neural Link Severed",
-        "Your session has been terminated.",
+        "Your session has been terminated. Please log in again to re-establish the connection.",
         [{ text: "Understood", onPress: performCleanup }]
       );
     } else {

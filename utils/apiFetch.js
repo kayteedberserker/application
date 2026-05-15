@@ -18,7 +18,7 @@ export const setSessionExpiredHandler = (handler) => { onSessionExpired = handle
  * 🔄 Silent Refresh Logic (With Promise Locking)
  */
 const attemptTokenRefresh = async () => {
-  const baseUrl = !__DEV__ ? "https://oreblogda.com/api" : "http://192.168.105.121:3000/api"
+  const baseUrl = !__DEV__ ? "https://oreblogda.com/api" : "http://192.168.0.2:3000/api"
 
   // 🛡️ LOCK: If a refresh is already happening, return the existing promise 
   if (refreshPromise) {
@@ -34,7 +34,15 @@ const attemptTokenRefresh = async () => {
 
       if (__DEV__) console.log("🚀 Starting Token Refresh...");
 
-      if (!refreshToken) return false;
+      if (!refreshToken) {
+        if (__DEV__) console.log("🛑 Session Compromised - Forcing Logout")
+        if (!isLoggingOut && onSessionExpired) {
+          isLoggingOut = true;
+          onSessionExpired();
+        }
+        throw new Error("You are on a older version of the app. Please relogin to continue.") // This will be caught and trigger logout
+        return
+      };
 
       const response = await fetch(`${baseUrl}/mobile/refresh`, {
         method: 'POST',
@@ -91,7 +99,7 @@ const attemptTokenRefresh = async () => {
  * 🛡️ THE SYSTEM - SECURE API UPLINK
  */
 export const apiFetch = async (endpoint, options = {}) => {
-  const baseUrl = !__DEV__ ? "https://oreblogda.com/api" : "http://192.168.105.121:3000/api"
+  const baseUrl = !__DEV__ ? "https://oreblogda.com/api" : "http://192.168.0.2:3000/api"
   const cleanEndpoint = endpoint.startsWith('/') ? endpoint : `/${endpoint}`
   const url = endpoint.startsWith('http') ? endpoint : `${baseUrl}${cleanEndpoint}`
 
