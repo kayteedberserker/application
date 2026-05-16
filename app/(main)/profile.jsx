@@ -56,6 +56,7 @@ import ImageEditorModal from "../../components/ImageEditorModal"; // Import the 
 import NeuralPinModal from "../../components/NeuralPinModal";
 import TitleTag from "../../components/TitleTag";
 import { useClan } from "../../context/ClanContext";
+import { Image } from "expo-image";
 
 const { width, height } = Dimensions.get("window");
 const LIMIT = 5;
@@ -1105,6 +1106,9 @@ const AuthorInventoryModal = ({ visible, onClose, user, setUser, isDark, theinve
                                     const visual = item.visualConfig || {};
                                     const rowRarityColor = getRarityColor(item.rarity); // ⚡️ Map color
                                     const isLottie = !!(visual.lottieUrl || visual.lottieJson);
+                                    const isImage = !!item.url
+
+                                    const imageUrl = item.url || visual.url;
                                     const PreviewIcon = (
                                         <View
                                             className={`w-16 h-16 bg-black/20 items-center justify-center rounded-2xl overflow-hidden ${isBorder ? '' : 'border relative'}`}
@@ -1121,6 +1125,15 @@ const AuthorInventoryModal = ({ visible, onClose, user, setUser, isDark, theinve
                                                         <Text className="text-[6px] dark:text-white/40 font-black uppercase">Frame</Text>
                                                     </View>
                                                 </ClanBorder>
+                                            ) : isImage ? (
+                                                <Image
+                                                    source={{ uri: imageUrl }}
+                                                    style={{
+                                                        width: "100%",
+                                                        height: "100%",
+                                                    }}
+                                                    resizeMode="contain"
+                                                />
                                             ) : (isVfx || isLottie) ? (
                                                 /* ⚡️ Render Lottie for VFX or Animated Watermarks */
                                                 <LottieView

@@ -13,7 +13,6 @@ import Animated, {
 import { SvgXml } from "react-native-svg";
 
 const PlayerWatermark = memo(({ equippedWatermark, isDark, isFeed = false }) => {
-    console.log(equippedWatermark);
 
     const animation = useRef(null);
     const entranceOpacity = useSharedValue(0);
@@ -29,26 +28,18 @@ const PlayerWatermark = memo(({ equippedWatermark, isDark, isFeed = false }) => 
         };
     }, []);
 
-    if (!equippedWatermark) return null;
-
-    const watermarkVisual = equippedWatermark.visualConfig || {};
-
-    // ⚡️ IMAGE SUPPORT: Check for static image/webp URL
-    const imageUrl = equippedWatermark.url || watermarkVisual.imageUrl;
-    console.log(imageUrl);
+    // ⚡️ Safely extract visual config values up here using optional chaining
+    const watermarkVisual = equippedWatermark?.visualConfig || {};
+    const imageUrl = equippedWatermark?.url || watermarkVisual.imageUrl;
 
     const lottieData = watermarkVisual.lottieJson;
     const lottieSource = watermarkVisual.lottieUrl;
     const hasLottie = !!(lottieData || lottieSource);
 
-    // ⚡️ Updated check to include imageUrl
-    if (!imageUrl && !hasLottie && !watermarkVisual.svgCode && !watermarkVisual.icon) {
-        return null;
-    }
-
     const iconSize = watermarkVisual.size || 220;
     const iconColor = watermarkVisual.color || (isDark ? 'white' : 'black');
 
+    // ⚡️ HOOKS MOVED TO THE TOP (Must run unconditionally on every single render)
     const memoizedLottieSource = useMemo(() =>
         lottieData ? lottieData : { uri: lottieSource },
         [lottieData, lottieSource]
@@ -63,6 +54,13 @@ const PlayerWatermark = memo(({ equippedWatermark, isDark, isFeed = false }) => 
         opacity: entranceOpacity.value * (watermarkVisual.opacity || 0.5)
     }));
 
+    // ⚡️ EARLY RETURNS (Placed strictly AFTER all hook calls)
+    if (!equippedWatermark) return null;
+
+    if (!imageUrl && !hasLottie && !watermarkVisual.svgCode && !watermarkVisual.icon) {
+        return null;
+    }
+
     return (
         <View style={[StyleSheet.absoluteFill, { overflow: 'hidden', zIndex: 0 }]} pointerEvents="none">
             <Animated.View
@@ -74,7 +72,7 @@ const PlayerWatermark = memo(({ equippedWatermark, isDark, isFeed = false }) => 
                         right: -20,
                         transform: [
                             { rotate: watermarkVisual.rotation || '-15deg' },
-                            { scale: watermarkVisual.scale || 1 }
+                            { scale: watermarkVisual.zoom || 1 }
                         ]
                     }
                 ]}

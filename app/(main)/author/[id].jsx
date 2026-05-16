@@ -439,7 +439,7 @@ export default function AuthorPage() {
 
     const ListHeader = useCallback(() => {
         if (!author && isOffline) return <AuthorSkeleton />;
-        if (!author) return null;
+        if (!author) return null
 
         const totalAura = author.aura || 0;
         const rankLevel = author.currentRankLevel || 1;
@@ -451,10 +451,13 @@ export default function AuthorPage() {
         const equippedBg = author.inventory?.find(i => i.category === 'BACKGROUND' && i.isEquipped);
         const equippedBorder = author.inventory?.find(i => i.category === 'BORDER' && i.isEquipped);
         const borderVisual = equippedBorder?.visualConfig || {};
-        const equippedWatermark = author.inventory?.find(i => i.category === 'WATERMARK' && i.isEquipped);
+        const equippedWatermark = author.inventory?.find(i => i.category === 'WATERMARK' && i.isEquipped)
 
         const HeaderCard = (
-            <View className="relative p-6 bg-white dark:bg-[#0a0a0a] shadow-2xl rounded-[25px] overflow-hidden">
+            <View
+                className="relative p-6 bg-white dark:bg-[#0a0a0a] shadow-2xl rounded-[25px]"
+                style={{ width: '100%', borderRadius: 25, overflow: 'hidden' }}
+            >
                 <View className="absolute top-5 right-5 z-50 items-end gap-2">
                     <TouchableOpacity
                         onPress={() => setCardPreviewVisible(true)}

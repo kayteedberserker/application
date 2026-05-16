@@ -56,8 +56,19 @@ const GACHA_POINTS_CACHE_KEY = "gacha_points_cache_v2";
 // ==========================================
 // ⚡️ HELPER: CRASH-SAFE SVG ICON
 // ==========================================
-const RemoteSvgIcon = React.memo(({ xml, lottieUrl, lottieJson, size = 50, color }) => {
-
+const RemoteSvgIcon = React.memo(({ xml, lottieUrl, lottieJson, imageUrl, size = 50, color }) => {
+    if (imageUrl) {
+        return (
+            <Image
+                source={{ uri: imageUrl }}
+                style={{
+                    width: size,
+                    height: size,
+                }}
+                resizeMode="contain"
+            />
+        )
+    }
     // ⚡️ 1. Lottie Animation Check (Stays the same)
     if (lottieJson || lottieUrl) {
         return (
@@ -237,7 +248,7 @@ const EventItemPreviewModal = ({
                                     <PlayerCard author={previewUser} isDark={isDark} />
                                 </View>
                             ) : (
-                                <RemoteSvgIcon lottieUrl={previewItem.visualConfig?.lottieUrl}
+                                <RemoteSvgIcon lottieUrl={previewItem.visualConfig?.lottieUrl} imageUrl={previewItem.url}
                                     lottieJson={previewItem.visualConfig?.lottieJson} xml={previewItem.visualConfig?.svgCode} size={80} color={previewItem.visualConfig?.primaryColor} />
                             )}
                         </View>
@@ -255,7 +266,7 @@ const EventItemPreviewModal = ({
                             )}
                             {previewItem.rewardAmount && (
                                 <View className="px-3 py-1.5 bg-green-500/20 rounded-md border border-green-500/30">
-                                    <Text className="text-green-500 text-[10px] font-black uppercase tracking-widest">Yields: {previewItem.rewardAmount} OC</Text>
+                                    <Text className="text-green-500 text-[10px] font-black uppercase tracking-widest">Yields: {previewItem.rewardAmount} TOKENS</Text>
                                 </View>
                             )}
                         </View>
@@ -281,7 +292,7 @@ const EventItemPreviewModal = ({
 
                                         {/* Shows Token Image on the Exchange Button! */}
                                         {tokenVisual ? (
-                                            <RemoteSvgIcon lottieUrl={tokenVisual.lottieUrl} lottieJson={tokenVisual.lottieJson} xml={tokenVisual.svgCode} size={18} color="#0f172a" />
+                                            <RemoteSvgIcon lottieUrl={tokenVisual.lottieUrl} lottieJson={tokenVisual.lottieJson} imageUrl={tokenVisual.url} xml={tokenVisual.svgCode} size={18} color="#0f172a" />
                                         ) : (
                                             <Text className="text-slate-900 font-black uppercase tracking-[0.1em] text-sm">{tokenName || 'Tokens'}</Text>
                                         )}
@@ -318,7 +329,7 @@ const ExchangeModal = ({ isVisible, onClose, gachaPool, eventPoints, ownedIds, o
 
                                 {/* ⚡️ NEW: Shows Token Image in Header Balance */}
                                 {tokenVisual ? (
-                                    <RemoteSvgIcon lottieUrl={tokenVisual.lottieUrl} lottieJson={tokenVisual.lottieJson} xml={tokenVisual.svgCode} size={14} color={themeColor} />
+                                    <RemoteSvgIcon lottieUrl={tokenVisual.lottieUrl} imageUrl={tokenVisual.url} lottieJson={tokenVisual.lottieJson} xml={tokenVisual.svgCode} size={14} color={themeColor} />
                                 ) : (
                                     <Text style={{ color: themeColor }} className="text-[10px] font-black">{tokenName || 'Tokens'}</Text>
                                 )}
@@ -352,7 +363,7 @@ const ExchangeModal = ({ isVisible, onClose, gachaPool, eventPoints, ownedIds, o
                                                     </View>
                                                 </ClanBorder>
                                             ) : (
-                                                <RemoteSvgIcon lottieUrl={item.visualConfig?.lottieUrl} lottieJson={item.visualConfig?.lottieJson} xml={item.visualConfig?.svgCode} size={45} color={item.visualConfig?.primaryColor} />
+                                                <RemoteSvgIcon lottieUrl={item.visualConfig?.lottieUrl} imageUrl={item.url} lottieJson={item.visualConfig?.lottieJson} xml={item.visualConfig?.svgCode} size={45} color={item.visualConfig?.primaryColor} />
                                             )}
                                         </View>
 
@@ -370,7 +381,7 @@ const ExchangeModal = ({ isVisible, onClose, gachaPool, eventPoints, ownedIds, o
 
                                                 {/* ⚡️ NEW: Shows Token Image on the Item Price Tag */}
                                                 {tokenVisual ? (
-                                                    <RemoteSvgIcon lottieUrl={tokenVisual.lottieUrl} lottieJson={tokenVisual.lottieJson} xml={tokenVisual.svgCode} size={12} color={canAfford ? themeColor : '#ef4444'} />
+                                                    <RemoteSvgIcon lottieUrl={tokenVisual.lottieUrl} imageUrl={tokenVisual.url} lottieJson={tokenVisual.lottieJson} xml={tokenVisual.svgCode} size={12} color={canAfford ? themeColor : '#ef4444'} />
                                                 ) : (
                                                     <Text className="text-slate-500 font-bold text-[8px] uppercase">{tokenName || 'Tokens'}</Text>
                                                 )}
@@ -441,7 +452,7 @@ const GridItem = ({ item, index, activeStep, totalItems, isOwned, themeColor, wo
                                 </View>
                             </ClanBorder>
                         ) : (
-                            <RemoteSvgIcon lottieUrl={visual.lottieUrl}
+                            <RemoteSvgIcon lottieUrl={visual.lottieUrl} imageUrl={item.url}
                                 lottieJson={visual.lottieJson} xml={visual.svgCode} size={20} color={visual.color || visual.primaryColor} />
                         )}
                     </View>
@@ -538,7 +549,7 @@ const GridGachaTab = ({ eventData, pullAmount, gachaPool, ownedIds, setOwnedIds,
             });
             const data = await res.json();
 
-            if (data.success) {
+            if (res.ok) {
                 Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
                 setEventPoints(data.eventPoints);
                 setOwnedIds(data.inventory.map(i => i.itemId));
@@ -700,7 +711,7 @@ const GridGachaTab = ({ eventData, pullAmount, gachaPool, ownedIds, setOwnedIds,
                     <View className="flex-row items-center">
                         {tokenVisual && (
                             <View className="mr-3">
-                                <RemoteSvgIcon lottieUrl={tokenVisual.lottieUrl} lottieJson={tokenVisual.lottieJson} xml={tokenVisual.svgCode} size={28} color={themeColor} />
+                                <RemoteSvgIcon lottieUrl={tokenVisual.lottieUrl} imageUrl={tokenVisual.url} lottieJson={tokenVisual.lottieJson} xml={tokenVisual.svgCode} size={28} color={themeColor} />
                             </View>
                         )}
                         <View>
@@ -780,7 +791,7 @@ const GridGachaTab = ({ eventData, pullAmount, gachaPool, ownedIds, setOwnedIds,
                                                     <View className="w-10 h-10 bg-black/40 rounded-full">
                                                         <Text className="text-xs">FRAME</Text>
                                                     </View>
-                                                </ClanBorder> : <RemoteSvgIcon lottieUrl={visual.lottieUrl}
+                                                </ClanBorder> : <RemoteSvgIcon lottieUrl={visual.lottieUrl} imageUrl={item.url}
                                                     lottieJson={visual.lottieJson} xml={visual.svgCode} size={45} color={visual.primaryColor} />}
                                             </View>
                                             <Text style={{ color: rarityColor }} className="font-black text-[11px] uppercase text-center" numberOfLines={2}>{item.name}</Text>
@@ -1192,7 +1203,7 @@ const GachaTab = ({ eventData, pullAmount, gachaPool, ownedIds, setOwnedIds, pit
                                                             FRAME
                                                         </Text>
                                                     </View>
-                                                </ClanBorder> : <RemoteSvgIcon lottieUrl={item.visualConfig?.lottieUrl}
+                                                </ClanBorder> : <RemoteSvgIcon lottieUrl={item.visualConfig?.lottieUrl} imageUrl={item.url}
                                                     lottieJson={item.visualConfig?.lottieJson} xml={item.visualConfig?.svgCode} size={50} color={item.visualConfig?.primaryColor} />}
                                             </View>
                                         );
@@ -1258,7 +1269,7 @@ const GachaTab = ({ eventData, pullAmount, gachaPool, ownedIds, setOwnedIds, pit
                                                             FRAME
                                                         </Text>
                                                     </View>
-                                                </ClanBorder> : <RemoteSvgIcon lottieUrl={visual.lottieUrl}
+                                                </ClanBorder> : <RemoteSvgIcon lottieUrl={visual.lottieUrl} imageUrl={item.url}
                                                     lottieJson={visual.lottieJson} xml={visual.svgCode} size={45} color={visual.primaryColor} />}
                                             </View>
                                             <Text style={{ color: rarityColor }} className="font-black text-[11px] uppercase text-center" numberOfLines={2}>{item.name}</Text>
@@ -1324,7 +1335,7 @@ const GachaTab = ({ eventData, pullAmount, gachaPool, ownedIds, setOwnedIds, pit
                                                 FRAME
                                             </Text>
                                         </View>
-                                    </ClanBorder> : <RemoteSvgIcon lottieUrl={item.visualConfig?.lottieUrl}
+                                    </ClanBorder> : <RemoteSvgIcon lottieUrl={item.visualConfig?.lottieUrl} imageUrl={item.url}
                                         lottieJson={item.visualConfig?.lottieJson} xml={item.visualConfig?.svgCode} size={28} color={item.visualConfig?.primaryColor} />}
                                 </View>
                                 <Text style={{ color: isOwned ? '#22c55e' : 'white' }} className="font-black text-[9px] uppercase text-center mb-1" numberOfLines={1}>{item.name}</Text>
@@ -1506,7 +1517,7 @@ const ComingSoonView = ({ event, isDark }) => {
                 >
                     {/* ⚡️ Renders the TokenVisual if available, otherwise fallback icon */}
                     {tokenVisual ? (
-                        <RemoteSvgIcon xml={tokenVisual.svgCode} lottieUrl={tokenVisual.lottieUrl} lottieJson={tokenVisual.lottieJson} size={55} color={eventColor} />
+                        <RemoteSvgIcon xml={tokenVisual.svgCode} imageUrl={tokenVisual.url} lottieUrl={tokenVisual.lottieUrl} lottieJson={tokenVisual.lottieJson} size={55} color={eventColor} />
                     ) : (
                         <MaterialCommunityIcons name={event.icon || "lock-clock"} size={40} color={eventColor} />
                     )}
@@ -1578,6 +1589,7 @@ import { MotiText, MotiView, AnimatePresence } from 'moti';
 import { useMMKVObject } from 'react-native-mmkv';
 import CoinIcon from "../../components/ClanIcon";
 import TitleTag from "../../components/TitleTag";
+import { Image } from "expo-image";
 
 const MilestoneReferral = ({ userReferralCode, isDark }) => {
     const [cachedStats, setCachedStats] = useMMKVObject('milestone_stats');

@@ -13,7 +13,7 @@ import Animated, {
 } from 'react-native-reanimated';
 import Svg, { Defs, LinearGradient, Rect, Stop, SvgXml } from "react-native-svg";
 
-const PlayerBackground = React.memo(({ equippedBg, themeColor, borderRadius = 48, isFeed = false }) => {
+const PlayerBackground = React.memo(({ equippedBg, themeColor, borderRadius = 48, isFeed = false, isCover }) => {
     const lottieRef = useRef(null);
     const bgVisual = equippedBg?.visualConfig || equippedBg?.visualData || {};
 

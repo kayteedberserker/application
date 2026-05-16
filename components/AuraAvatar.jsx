@@ -153,6 +153,11 @@ const AuraAvatar = React.memo(function AuraAvatar({
     // 4. Any Y-offsets from the database must also scale relative to the size
     const offsetY = (equippedVfx?.visualConfig?.offsetY || 0) * sizeRatio;
 
+    // --- LOTTIE-ONLY AVATAR ZOOM ---
+    // Apply zoom only for animated (Lottie) avatars. Rank 1 forces a 1.2 zoom.
+    const lottieAvatarZoom = equippedAnimatedAvatar?.visualConfig?.zoom ?? (rank === 1 ? 1.4 : 1);
+
+
     return (
         <Pressable
             onPress={onPress}
@@ -249,11 +254,11 @@ const AuraAvatar = React.memo(function AuraAvatar({
                 {animatedAvatarSource ? (
                     <LottieView
                         source={animatedAvatarSource}
-                        autoPlay={!isFeed}
-                        loop={!isFeed}
+                        autoPlay={true}
+                        loop={true}
                         style={[
                             { width: '100%', height: '100%' },
-                            rank === 1 ? { transform: [{ rotate: '-45deg' }], scale: 1.4 } : {}
+                            { transform: rank === 1 ? [{ rotate: '-45deg' }, { scale: lottieAvatarZoom }] : [{ scale: lottieAvatarZoom }] }
                         ]}
                         resizeMode="cover"
                         renderMode="hardware"
@@ -263,7 +268,7 @@ const AuraAvatar = React.memo(function AuraAvatar({
                     <View
                         style={[
                             { flex: 1, alignItems: 'center', justifyContent: 'center' },
-                            rank === 1 ? { transform: [{ rotate: '-45deg' }], scale: 1.4 } : {}
+                            rank === 1 ? { transform: [{ rotate: '-45deg' }] } : {}
                         ]}
                     >
                         <SvgXml
@@ -279,7 +284,7 @@ const AuraAvatar = React.memo(function AuraAvatar({
                             source={{ uri: author.image }}
                             style={[
                                 { width: '100%', height: '100%' },
-                                rank === 1 ? { transform: [{ rotate: '-45deg' }], scale: 1.4 } : {}
+                                rank === 1 ? { transform: [{ rotate: '-45deg' }, { scale: 1.25 }] } : {}
                             ]}
                             contentFit="cover"
                             onLoadEnd={() => setImageLoading(false)}
