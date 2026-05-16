@@ -1847,6 +1847,7 @@ const QuizEventTab = ({ eventData, isDark }) => {
     const [hintsUsed, setHintsUsed] = useState(0);
     const [attemptsLeft, setAttemptsLeft] = useState(3);
     const [showHint, setShowHint] = useState(false);
+    const [hintText, setHintText] = useState('');
     const [resultMessage, setResultMessage] = useState('');
     const [isCorrect, setIsCorrect] = useState(null);
     const [completedToday, setCompletedToday] = useState(false);
@@ -1884,9 +1885,10 @@ const QuizEventTab = ({ eventData, isDark }) => {
             const data = await res.json();
 
             if (data.success) {
-                setQuizData(data.quiz);
+                setQuizData({ ...data.quiz, hints: data.hints || [] });
                 setHintsUsed(data.hintsUsed || 0);
                 setAttemptsLeft(data.attemptsLeft || 3);
+                setHintText('');
                 const completed = data.completed || false;
                 setCompletedToday(completed);
                 setUnlockedTitle(data.unlockedTitle || null);
@@ -1923,6 +1925,11 @@ const QuizEventTab = ({ eventData, isDark }) => {
 
             if (data.success) {
                 setHintsUsed(data.hintsUsed);
+                setHintText(data.hint || '');
+                setQuizData(prev => ({
+                    ...prev,
+                    hints: [...(prev?.hints || []), data.hint || '']
+                }));
                 setShowHint(true);
                 Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
             } else {
@@ -2203,7 +2210,7 @@ const QuizEventTab = ({ eventData, isDark }) => {
                                     <Text className="text-white text-sm leading-5 font-medium">{hintText}</Text>
                                 </MotiView>
                             ))
-                        ) : showHint && quizData.hint && (
+                        ) : showHint && hintText && (
                             <MotiView
                                 from={{ opacity: 0, translateY: -10, scale: 0.95 }}
                                 animate={{ opacity: 1, translateY: 0, scale: 1 }}
@@ -2211,7 +2218,7 @@ const QuizEventTab = ({ eventData, isDark }) => {
                                 className="mt-3 bg-[#8b5cf6]/10 p-4 rounded-lg border-l-2 border-[#8b5cf6]"
                             >
                                 <Text className="text-white/50 text-[10px] font-bold uppercase mb-1 tracking-widest">Extracted Data:</Text>
-                                <Text className="text-white text-sm leading-5 font-medium">{quizData.hint}</Text>
+                                <Text className="text-white text-sm leading-5 font-medium">{hintText}</Text>
                             </MotiView>
                         )}
                     </AnimatePresence>
