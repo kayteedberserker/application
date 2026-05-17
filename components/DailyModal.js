@@ -549,13 +549,13 @@ export default function DailyModal() {
                                     </Text>
 
                                     <View className="rounded-full bg-white/5 border border-slate-700 px-4 py-2 flex-row items-center justify-center space-x-2 mb-4">
-                                        <Text style={{ color: activeText }} className="text-[11px] font-black uppercase">OREBLOGDA</Text>
+                                        <Text style={{ color: activeText }} className="text-[11px] font-black uppercase">OREBLOGDA </Text>
                                         <Text style={{ color: activeSecondary }} className="text-[11px] font-black uppercase">X</Text>
-                                        <Text style={{ color: activeText }} className="text-[11px] font-black uppercase">MOVIEX</Text>
+                                        <Text style={{ color: activeText }} className="text-[11px] font-black uppercase"> MOVIEX</Text>
                                     </View>
 
                                     <Text style={{ color: activeSecondary }} className="text-[13px] leading-7 text-center mb-6 px-3">
-                                        Discover the OREBLOGDA x MOVIEX launch. Expect exclusive drops, limited-time story beats, and rewards straight into your world.
+                                        Discover the OREBLOGDA x MOVIEX collaboration. MOVIEX is a movie/anime streaming platform, With the shuttingdown of major anime platforms, this can verywell be your next anime site. It also allow downloads incase you'd want to save for later. Check it out.
                                     </Text>
                                 </View>
 
