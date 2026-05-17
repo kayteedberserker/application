@@ -3,8 +3,9 @@ import { Image } from 'expo-image';
 import { LinearGradient } from 'expo-linear-gradient';
 import { useRouter } from 'expo-router';
 import LottieView from 'lottie-react-native';
+import { MotiView } from 'moti';
 import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
-import { ActivityIndicator, Dimensions, Modal, TouchableOpacity, View } from 'react-native';
+import { ActivityIndicator, Dimensions, Linking, Modal, TouchableOpacity, useColorScheme, View } from 'react-native';
 import { useMMKV } from 'react-native-mmkv';
 import { SvgXml } from 'react-native-svg';
 import { useCoins } from '../context/CoinContext';
@@ -16,6 +17,10 @@ import THEME from './useAppTheme';
 
 const { width } = Dimensions.get('window');
 const GLOBAL_COOLDOWN_KEY = "global_promo_cooldown_timestamp";
+const COLLAB_COOLDOWN_KEY = "collab_modal_last_shown";
+const COLLAB_WEB_LINK = "https://www.moviex.name.ng/";
+const COLLAB_IMAGE_URI = "https://res.cloudinary.com/donakg9he/image/upload/v1778998640/WhatsApp_Image_2026-05-17_at_7.14.42_AM_k2llzm.jpg"; // Replace with your own collaboration image
+const MODAL_BG_IMAGE_URI = "https://res.cloudinary.com/donakg9he/image/upload/v1779001079/WhatsApp_Image_2026-05-17_at_7.56.39_AM_bbaxdp.jpg"; // Background image for the modal surface
 
 let hasShownThisSession = false;
 
@@ -95,7 +100,7 @@ const CountdownTimer = ({ startsAt, color }) => {
             <Text className="text-slate-500 font-black uppercase text-[9px] tracking-widest mb-1.5 flex-row items-center">
                 <Ionicons name="time" size={10} color="#64748b" /> ETA TO LAUNCH
             </Text>
-            <View className="flex-row items-center justify-center w-full justify-between px-2">
+            <View className="flex-row items-center justify-between w-full px-2">
                 <View className="items-center">
                     <Text style={{ color }} className="text-xl font-black font-mono">{formatTime(timeLeft.days)}</Text>
                     <Text className="text-slate-500 text-[8px] font-bold uppercase tracking-widest">Days</Text>
@@ -134,6 +139,12 @@ export default function DailyModal() {
     const [currentPromo, setCurrentPromo] = useState(null);
 
     const timeoutRef = useRef(null);
+    const colorScheme = useColorScheme();
+    const isDarkMode = colorScheme === 'dark';
+    const activeBackground = isDarkMode ? '#0f172a' : '#f8fafc';
+    const activeSurface = isDarkMode ? '#111827' : '#ffffff';
+    const activeText = isDarkMode ? '#f8fafc' : '#0f172a';
+    const activeSecondary = isDarkMode ? '#94a3b8' : '#475569';
 
     // Clean up timeouts on unmount to prevent memory leaks
     useEffect(() => {
@@ -165,6 +176,19 @@ export default function DailyModal() {
             return dismissedDate !== todayStr
         });
     }, [activeEvents, storage]);
+
+    const hasCollabCooldown = useCallback(() => {
+        const lastShown = storage.getNumber(COLLAB_COOLDOWN_KEY) || 0;
+        return new Date().getTime() - lastShown < 24 * 60 * 60 * 1000;
+    }, [storage]);
+
+    const canShowCollab = useCallback(() => {
+        return !hasCollabCooldown();
+    }, [hasCollabCooldown]);
+
+    const showCollabAndTrack = useCallback(() => {
+        storage.set(COLLAB_COOLDOWN_KEY, new Date().getTime());
+    }, [storage]);
 
     useEffect(() => {
         if (!user || hasShownThisSession) return
@@ -199,7 +223,14 @@ export default function DailyModal() {
             const timer = setTimeout(() => setVisible(true), 1500);
             return () => clearTimeout(timer);
         }
-    }, [user, activeEvents, hasClaimed, getNextEvent, storage]);
+
+        // Logic 3: Show one static collaboration view, once every 24 hours.
+        if (canShowCollab()) {
+            setModalMode('collab');
+            const timer = setTimeout(() => setVisible(true), 1500);
+            return () => clearTimeout(timer);
+        }
+    }, [user, activeEvents, hasClaimed, canShowCollab, getNextEvent, storage]);
 
     const handleClaimDaily = async () => {
         if (isProcessingTransaction) return;
@@ -214,9 +245,12 @@ export default function DailyModal() {
 
             // Wait 1 second to show the "Acquired" checkmark safely
             timeoutRef.current = setTimeout(() => {
-                // ⚡️ IF there is an event waiting, switch to it! Otherwise, close.
+                // ⚡️ IF there is an event waiting, switch to it! Otherwise, show collab if available.
                 if (currentPromo) {
                     setModalMode('event');
+                } else if (canShowCollab()) {
+                    showCollabAndTrack();
+                    setModalMode('collab');
                 } else {
                     hasShownThisSession = true;
                     setVisible(false);
@@ -229,6 +263,9 @@ export default function DailyModal() {
 
             if (currentPromo) {
                 setModalMode('event');
+            } else if (canShowCollab()) {
+                showCollabAndTrack();
+                setModalMode('collab');
             } else {
                 hasShownThisSession = true;
                 setVisible(false);
@@ -247,6 +284,14 @@ export default function DailyModal() {
                 setModalMode('event');
                 return; // Stop here, don't close the modal yet
             }
+
+            if (canShowCollab()) {
+                showCollabAndTrack();
+                setModalMode('collab');
+                return;
+            }
+        } else if (modalMode === 'collab') {
+            showCollabAndTrack();
         }
 
         hasShownThisSession = true;
@@ -257,6 +302,21 @@ export default function DailyModal() {
         handleDismissEvent();
         const targetTab = currentPromo?.id || 'referral';
         router.push(`/screens/referralevent?tab=${targetTab}`);
+    };
+
+    const handleOpenCollab = async () => {
+        try {
+            const supported = await Linking.canOpenURL(COLLAB_WEB_LINK);
+            if (supported) {
+                await Linking.openURL(COLLAB_WEB_LINK);
+            }
+        } catch (error) {
+            console.warn('Unable to open collaboration link', error);
+        }
+
+        showCollabAndTrack();
+        hasShownThisSession = true;
+        setVisible(false);
     };
 
     if (!visible || !modalMode) return null;
@@ -273,11 +333,20 @@ export default function DailyModal() {
 
     return (
         <Modal transparent visible={visible} animationType="fade">
-            <View className="flex-1 justify-center items-center bg-black/90 px-3">
+            <View className="flex-1 justify-center items-center px-3" style={{ backgroundColor: isDarkMode ? 'rgba(0,0,0,0.92)' : 'rgba(15,23,42,0.75)' }}>
+                {modalMode === 'collab' && (
+                    <View className="absolute inset-0 opacity-10">
+                        <Image
+                            source={{ uri: MODAL_BG_IMAGE_URI }}
+                            contentFit="cover"
+                            style={{ width: '100%', height: '100%', opacity: 0.4 }}
+                        />
+                    </View>
+                )}
 
                 <View
-                    style={{ backgroundColor: '#0f172a', borderColor: modalMode === 'daily' ? THEME.accent : eventColor }}
-                    className={`w-full rounded-2xl px-2 py-8 border-2 items-center shadow-2xl relative ${modalMode === 'daily' ? 'shadow-blue-500/40' : 'shadow-purple-500/30'}`}
+                    style={{ backgroundColor: activeSurface, borderColor: modalMode === 'daily' ? THEME.accent : eventColor }}
+                    className={`w-full rounded-2xl px-3 py-8 border-2 items-center shadow-2xl relative ${modalMode === 'daily' ? 'shadow-blue-500/40' : 'shadow-purple-500/30'}`}
                 >
                     {showDismissButton && (
                         <TouchableOpacity
@@ -291,12 +360,18 @@ export default function DailyModal() {
 
                     {modalMode === 'daily' && (
                         <View className="w-full items-center">
-                            <View className="bg-blue-500/20 px-4 py-1.5 rounded-sm border-l-2 border-r-2 border-blue-500 mb-6 flex-row items-center">
-                                <Ionicons name="flame" size={14} color={THEME.accent} />
-                                <Text style={{ color: THEME.accent }} className="font-black text-[10px] uppercase tracking-[0.2em] ml-1.5">
+                            <View className="bg-blue-500/15 px-4 py-2 rounded-3xl border border-blue-500/20 mb-6">
+                                <Text style={{ color: THEME.accent }} className="font-black text-[11px] uppercase tracking-[0.25em] text-center">
                                     Day {targetDay} Login
                                 </Text>
                             </View>
+
+                            <Text style={{ color: activeText }} className="text-2xl font-black uppercase tracking-[0.18em] text-center mb-3">
+                                Daily Recharge
+                            </Text>
+                            <Text style={{ color: activeSecondary }} className="text-[13px] leading-6 text-center mb-6 px-2">
+                                Claim your daily OC burst, keep your streak alive, and power up today’s grind with a fast boost.
+                            </Text>
 
                             {hasClaimed ? (
                                 <View className="items-center mb-8 mt-4 w-full">
@@ -307,14 +382,14 @@ export default function DailyModal() {
                                 </View>
                             ) : (
                                 <View className="items-center mb-8 mt-4 w-full">
-                                    <Text className="text-slate-400 font-bold text-[10px] uppercase tracking-widest mb-2">
+                                    <Text className="text-slate-400 font-semibold text-[11px] uppercase tracking-[0.25em] mb-2">
                                         Energy Payload Ready
                                     </Text>
-                                    <View className="flex-row items-center gap-2">
+                                    <View className="flex-row items-center gap-3">
                                         <Text className="text-white text-6xl font-black italic tracking-tighter">
                                             +{rewardAmount}
                                         </Text>
-                                        <CoinIcon size={40} type="OC" />
+                                        <CoinIcon size={44} type="OC" />
                                     </View>
                                 </View>
                             )}
@@ -332,7 +407,7 @@ export default function DailyModal() {
                                         <>
                                             <MaterialCommunityIcons name="lightning-bolt" size={20} color="white" />
                                             <Text className="text-white font-black text-[12px] uppercase tracking-[0.2em] ml-2">
-                                                Extract
+                                                Claim Boost
                                             </Text>
                                         </>
                                     )}
@@ -416,10 +491,10 @@ export default function DailyModal() {
                                                 <MaterialCommunityIcons name={EventIcon} size={50} color={eventColor} />
                                             )}
                                         </View>
-                                        <Text className="text-white text-xl font-black italic uppercase text-center mb-2">
+                                        <Text style={{ color: activeText }} className="text-white text-xl font-black italic uppercase text-center mb-2">
                                             {currentPromo.title}
                                         </Text>
-                                        <Text className="text-slate-300 text-[10px] font-bold text-center uppercase tracking-widest px-4">
+                                        <Text style={{ color: activeSecondary }} className="text-[10px] font-bold text-center uppercase tracking-widest px-4">
                                             {currentPromo.description}
                                         </Text>
                                     </View>
@@ -446,8 +521,74 @@ export default function DailyModal() {
                         </View>
                     )}
 
+                    {modalMode === 'collab' && (
+                        <View className="w-full items-center">
+                            <MotiView
+                                from={{ opacity: 0, translateY: 18 }}
+                                animate={{ opacity: 1, translateY: 0 }}
+                                transition={{ type: 'timing', duration: 350 }}
+                                className="w-full rounded-3xl border p-6"
+                                style={{ backgroundColor: activeSurface, borderColor: activeSecondary, shadowColor: THEME.accent, shadowOpacity: 0.22, shadowRadius: 24, shadowOffset: { width: 0, height: 8 }, elevation: 12 }}
+                            >
+                                <View className="relative mb-5 rounded-3xl overflow-hidden bg-slate-950/10 border border-white/5">
+                                    <Image
+                                        source={{ uri: COLLAB_IMAGE_URI }}
+                                        contentFit="cover"
+                                        transition={500}
+                                        style={{ width: '100%', height: 160 }}
+                                    />
+                                    <LinearGradient
+                                        colors={['transparent', 'rgba(15, 23, 42, 0.8)']}
+                                        style={{ position: 'absolute', left: 0, right: 0, bottom: 0, height: 80 }}
+                                    />
+                                </View>
+
+                                <View className="items-center px-1">
+                                    <Text style={{ color: activeText }} className="text-slate-300 uppercase tracking-[0.35em] text-[10px] font-black mb-3">
+                                        Exclusive Collaboration
+                                    </Text>
+
+                                    <View className="rounded-full bg-white/5 border border-slate-700 px-4 py-2 flex-row items-center justify-center space-x-2 mb-4">
+                                        <Text style={{ color: activeText }} className="text-[11px] font-black uppercase">OREBLOGDA</Text>
+                                        <Text style={{ color: activeSecondary }} className="text-[11px] font-black uppercase">X</Text>
+                                        <Text style={{ color: activeText }} className="text-[11px] font-black uppercase">MOVIEX</Text>
+                                    </View>
+
+                                    <Text style={{ color: activeSecondary }} className="text-[13px] leading-7 text-center mb-6 px-3">
+                                        Discover the OREBLOGDA x MOVIEX launch. Expect exclusive drops, limited-time story beats, and rewards straight into your world.
+                                    </Text>
+                                </View>
+
+                                <LinearGradient
+                                    colors={[THEME.accent, '#7c3aed']}
+                                    start={[0, 0]}
+                                    end={[1, 1]}
+                                    className="w-full rounded-2xl overflow-hidden mb-3"
+                                >
+                                    <TouchableOpacity
+                                        onPress={handleOpenCollab}
+                                        className="w-full h-14 items-center justify-center"
+                                    >
+                                        <Text className="text-slate-900 font-black text-[13px] uppercase tracking-[0.2em]">
+                                            Open MOVIEX
+                                        </Text>
+                                    </TouchableOpacity>
+                                </LinearGradient>
+
+                                <TouchableOpacity
+                                    onPress={handleDismissEvent}
+                                    className="w-full h-14 rounded-2xl border border-slate-300/20 bg-white/5 items-center justify-center"
+                                >
+                                    <Text style={{ color: activeText }} className="font-black text-[12px] uppercase tracking-[0.2em]">
+                                        Maybe later
+                                    </Text>
+                                </TouchableOpacity>
+                            </MotiView>
+                        </View>
+                    )}
+
                     {/* ⚡️ FIXED: The bottom dismiss text is always available when appropriate */}
-                    {showDismissButton && (
+                    {showDismissButton && modalMode !== 'collab' && (
                         <TouchableOpacity
                             onPress={handleDismissEvent}
                             activeOpacity={0.5}
