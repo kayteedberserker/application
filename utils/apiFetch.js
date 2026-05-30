@@ -2,22 +2,14 @@ import * as SecureStore from 'expo-secure-store';
 
 const APP_SECRET = process.env.EXPO_PUBLIC_APP_SECRET || "thisismyrandomsuperlongsecretkey";
 
-let activeUser = null;
-let requestPinCallback = null;
-let onSessionExpired = null;
-
-// --- FAILOVER INFRASTRUCTURE VARIABLES ---
-// Array of fallback domains for production tier (Add as many domains as you want here)
-const PRODUCTION_SERVERS = [
-  "https://oreblogda.vercel.app/api",
-  "https://oreblogda.com/api"
-];
-
-// Tracks the current index of the working server configuration (persisted to storage)
-let currentServerIndex = 0;
-
-// Immediately check storage on runtime initialization to use the last known working server
-const initializeServerIndex = async () => {
+export const apiFetch = async (endpoint, options = {}) => {
+  // 1. Fix URL construction
+  const baseUrl = "https://oreblogda.com/api"; // Updated to your production URL
+  const cleanEndpoint = endpoint.startsWith('/') ? endpoint : `/${endpoint}`;
+  const url = endpoint.startsWith('http') ? endpoint : `${baseUrl}${cleanEndpoint}`;
+  
+  // 2. 🔹 GET USER DATA FROM STORAGE
+  let userCountry = "Unknown";
   try {
     const savedIndex = await SecureStore.getItemAsync('activeServerIndex');
     if (savedIndex !== null) {

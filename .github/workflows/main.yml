@@ -1,0 +1,37 @@
+name: Android Production (Build + Update)
+
+on:
+  workflow_dispatch:
+    inputs:
+      action:
+        description: "Choose what to run"
+        required: true
+        default: "both"
+        type: choice
+        options:
+          - update
+          - build
+          - both
+
+jobs:
+  android:
+    runs-on: ubuntu-latest
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: expo/expo-github-action@v8
+        with:
+          eas-version: latest
+          token: ${{ secrets.EXPO_TOKEN }}
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Run EAS Update (production)
+        if: ${{ github.event.inputs.action == 'update' || github.event.inputs.action == 'both' }}
+        run: eas update --branch production --platform android --message "Manual production update"
+        
+      - name: Run EAS Build (Android production)
+        if: ${{ github.event.inputs.action == 'build' || github.event.inputs.action == 'both' }}
+        run: eas build --platform android --profile production --non-interactive
