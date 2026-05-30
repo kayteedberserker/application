@@ -16,7 +16,6 @@ const CoffeeSupport = ({ userUid }) => {
             // 1. Fetch the 'Coffee' package from your RevenueCat Offering
             const offerings = await Purchases.getOfferings();
             const coffeePackage = offerings.current.availablePackages.find(p => p.identifier === 'buy_us_a_coffee');
-            console.log(coffeePackage);
 
             if (coffeePackage) {
                 // 2. Execute Purchase

@@ -14,15 +14,17 @@ const STREAK_NOTIF_IDS = ["streak-24h", "streak-2h", "streak-lost"];
 // Set the handler so notifications show when the app is open
 Notifications.setNotificationHandler({
   handleNotification: async () => ({
-    shouldShowAlert: true,
+    shouldShowBanner: true,
+    shouldShowList: true,
     shouldPlaySound: true,
     shouldSetBadge: false,
   }),
 });
 
 // --- UPDATED FUNCTION ---
-const scheduleStreakReminders = async (expiresAt, setScheduledList = null) => {
-  if (!expiresAt) return;
+// Modified to return scheduled list directly instead of modifying state externally
+const scheduleStreakReminders = async (expiresAt) => {
+  if (!expiresAt) return [];
   try {
     // Permission Check (Critical for Android)
     const { status: existingStatus } = await Notifications.getPermissionsAsync();
@@ -32,7 +34,7 @@ const scheduleStreakReminders = async (expiresAt, setScheduledList = null) => {
       finalStatus = status;
     }
     if (finalStatus !== 'granted') {
-      return;
+      return [];
     }
 
     // Create Channel for Android
@@ -114,13 +116,11 @@ const scheduleStreakReminders = async (expiresAt, setScheduledList = null) => {
       });
     }
 
-    if (setScheduledList) {
-      const scheduled = await Notifications.getAllScheduledNotificationsAsync();
-      setScheduledList(scheduled);
-    }
+    return await Notifications.getAllScheduledNotificationsAsync();
 
   } catch (e) {
     console.error("Notif Error:", e);
+    return [];
   }
 };
 
@@ -190,7 +190,8 @@ export function StreakProvider({ children }) {
 
         if (data.expiresAt && !isScheduling.current) {
           isScheduling.current = true;
-          await scheduleStreakReminders(data.expiresAt, setScheduledList);
+          const scheduled = await scheduleStreakReminders(data.expiresAt);
+          setScheduledList(scheduled);
           isScheduling.current = false;
         }
       }
@@ -201,19 +202,26 @@ export function StreakProvider({ children }) {
     }
   }, [storage]);
 
-  // Handle Initial Background Sync & Notifications
+  // Handle Initial Background Sync & Notifications cleanly without racing the cache load state
   useEffect(() => {
-    // If cache loaded valid expiry, schedule notifications right away
-    if (streakData.expiresAt && !isScheduling.current) {
-      isScheduling.current = true;
-      scheduleStreakReminders(streakData.expiresAt, setScheduledList).finally(() => {
-        isScheduling.current = false;
-      });
-    }
+    let active = true;
 
-    // Refresh fresh data silently
-    fetchStreak();
-  }, [fetchStreak]); // Removed `storage` and `streakData` to prevent infinite loops, `fetchStreak` handles it.
+    const initSchedulingAndFetch = async () => {
+      if (streakData.expiresAt && !isScheduling.current) {
+        isScheduling.current = true;
+        const scheduled = await scheduleStreakReminders(streakData.expiresAt);
+        if (active) setScheduledList(scheduled);
+        isScheduling.current = false;
+      }
+      fetchStreak();
+    };
+
+    initSchedulingAndFetch();
+
+    return () => {
+      active = false;
+    };
+  }, [fetchStreak]); // Clean, minimal execution hook
 
   const value = useMemo(() => ({
     streak: streakData,

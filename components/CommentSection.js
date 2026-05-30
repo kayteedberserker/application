@@ -114,6 +114,7 @@ const SingleComment = ({ comment, isDark, onOpenDiscussion, stickerCache, storag
                         auraRank={comment.author?.auraRank}
                         isDark={isDark}
                         fontSize={14}
+                        isVisible={true}
                     />
                 </View>
 
@@ -309,15 +310,9 @@ const DiscussionDrawer = ({ visible, isDark, comment, onClose, onReply, isPostin
                                             auraRank={comment.author?.auraRank}
                                             isDark={isDark}
                                             fontSize={16}
+                                            isVisible={true}
                                         />
                                     </View>
-                                    {/* {comment.author?.badges && comment.author.badges.length > 0 && (
-                                        <View className="flex-row items-center gap-1 overflow-hidden flex-shrink-0">
-                                            {comment.author.badges.slice(0, 3).map((badge, idx) => (
-                                                <BadgeIcon key={idx} badge={badge} size={20} isDark={true} />
-                                            ))}
-                                        </View>
-                                    )} */}
                                 </View>
                                 {comment.type === "sticker" ? (
                                     <StickerPreview
@@ -395,7 +390,7 @@ const DiscussionDrawer = ({ visible, isDark, comment, onClose, onReply, isPostin
                                 keyExtractor={(item, index) => item._id?.toString() || index.toString()}
                                 onScroll={handleScroll}
                                 scrollEventThrottle={16}
-                                drawDistance={1000}
+                                drawDistance={500}
                                 recycleItems={true}
                                 onLayout={(e) => scrollViewHeight.current = e.nativeEvent.layout.height}
                                 onContentSizeChange={(w, h) => {
@@ -564,7 +559,7 @@ const StickerPreview = ({ sticker, stickerId, isDark, size = 'medium', onPress }
                     <Image
                         source={{ uri: sticker.url }}
                         style={{ width: stickerSize, height: stickerSize }}
-                        resizeMode="contain"
+                        contentFit="contain"
                     />
                 </MotiView>
             </Pressable>
@@ -584,7 +579,7 @@ const StickerPreview = ({ sticker, stickerId, isDark, size = 'medium', onPress }
                         <LinearGradient
                             // Correct use of isDark for the modal card itself
                             colors={isDark ? ['#121212', '#000000'] : ['#ffffff', '#f2f2f2']}
-                            className="p-8"
+                            style={{ padding: 32 }}
                         >
                             {/* Header */}
                             <View className="flex-row justify-between items-start mb-6">
@@ -601,7 +596,7 @@ const StickerPreview = ({ sticker, stickerId, isDark, size = 'medium', onPress }
 
                             {/* Large Image Preview */}
                             <View className={`items-center justify-center py-8 rounded-3xl mb-6 border border-white/5 ${isDark ? 'bg-white/5' : 'bg-black/5'}`}>
-                                <Image source={{ uri: sticker.url }} style={{ width: 120, height: 120 }} resizeMode="contain" />
+                                <Image source={{ uri: sticker.url }} style={{ width: 120, height: 120 }} contentFit="contain" />
                             </View>
 
                             {/* Data Rows with isDark applied */}
@@ -831,7 +826,14 @@ const StickerModal = ({ visible, onClose, onSelectSticker, isDark }) => {
                 >
                     <LinearGradient
                         colors={isDark ? ['#121212', '#050505'] : ['#ffffff', '#f0f0f0']}
-                        className="flex-1 rounded-t-[40px] border-t border-white/10 overflow-hidden"
+                        style={{
+                            flex: 1,
+                            borderTopLeftRadius: 40,
+                            borderTopRightRadius: 40,
+                            borderTopWidth: 1,
+                            borderColor: 'rgba(255, 255, 255, 0.1)',
+                            overflow: 'hidden',
+                        }}
                     >
                         {/* HEADER */}
                         <View className="px-6 pt-8 pb-4">
@@ -1022,6 +1024,7 @@ const HighlightableComment = ({ reply, isHighlighted, isDark, stickerCache, stor
                         auraRank={reply.author?.auraRank}
                         isDark={isDark}
                         fontSize={14}
+                        isVisible={true}
                     />
                 </View>
                 {/* {reply.author?.badges && reply.author.badges.length > 0 && (

@@ -12,12 +12,22 @@ import Animated, {
 } from 'react-native-reanimated';
 import { SvgXml } from "react-native-svg";
 
-const PlayerWatermark = memo(({ equippedWatermark, isDark, isFeed = false }) => {
+const PlayerWatermark = memo(({ equippedWatermark, isDark, isFeed = false, isVisible = false }) => {
 
     const animation = useRef(null);
     const entranceOpacity = useSharedValue(0);
 
+    // Determine animation and execution rule: only kill execution when it IS in the feed AND NOT visible.
+    const shouldAnimate = !isFeed || isVisible;
+
     useEffect(() => {
+        cancelAnimation(entranceOpacity);
+
+        if (!shouldAnimate) {
+            entranceOpacity.value = 0;
+            return;
+        }
+
         entranceOpacity.value = withTiming(1, {
             duration: 1000,
             easing: Easing.out(Easing.exp)
@@ -26,7 +36,7 @@ const PlayerWatermark = memo(({ equippedWatermark, isDark, isFeed = false }) => 
         return () => {
             cancelAnimation(entranceOpacity);
         };
-    }, []);
+    }, [shouldAnimate]);
 
     // ⚡️ Safely extract visual config values up here using optional chaining
     const watermarkVisual = equippedWatermark?.visualConfig || {};
@@ -61,6 +71,10 @@ const PlayerWatermark = memo(({ equippedWatermark, isDark, isFeed = false }) => 
         return null;
     }
 
+    // ⚡️ PERFORMANCE OPTIMIZATION: If flagged inside a feed list and scrolled off-screen, 
+    // unmount all child elements entirely to free up RAM, rendering, and thread processes.
+    if (!shouldAnimate) return null;
+
     return (
         <View style={[StyleSheet.absoluteFill, { overflow: 'hidden', zIndex: 0 }]} pointerEvents="none">
             <Animated.View
@@ -85,12 +99,12 @@ const PlayerWatermark = memo(({ equippedWatermark, isDark, isFeed = false }) => 
                             width: iconSize,
                             height: iconSize,
                         }}
-                        resizeMode="contain"
+                        contentFit="contain"
                     />
                 ) : hasLottie ? (
                     <LottieView
-                        autoPlay={!isFeed}
-                        loop={!isFeed}
+                        autoPlay={shouldAnimate}
+                        loop={shouldAnimate}
                         ref={animation}
                         renderMode="hardware"
                         style={{

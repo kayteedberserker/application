@@ -4,7 +4,7 @@ import { Image } from 'expo-image';
 import * as MediaLibrary from 'expo-media-library';
 import { useRouter } from 'expo-router';
 import * as Sharing from 'expo-sharing';
-import React, { useEffect, useMemo, useRef, useState } from 'react';
+import React, { memo, useEffect, useMemo, useRef, useState } from 'react';
 import {
     ActivityIndicator,
     Dimensions,
@@ -57,7 +57,7 @@ const { width, height: SCREEN_HEIGHT } = Dimensions.get("window");
 // ============================================================================
 // ✍️ PREMIUM CINEMATIC WORD REVEAL (REFINED FOR ALIGNMENT)
 // ============================================================================
-const AnimatedWord = ({ word, index, style, isLast }) => {
+const AnimatedWord = memo(({ word, index, style, isLast }) => {
     const opacity = useSharedValue(0);
     const translateY = useSharedValue(8);
 
@@ -92,9 +92,9 @@ const AnimatedWord = ({ word, index, style, isLast }) => {
             {word}{isLast ? "" : " "}
         </Animated.Text>
     );
-};
+});
 
-const PremiumTextReveal = ({ text, style }) => {
+const PremiumTextReveal = memo(({ text, style }) => {
     // Split by space and handle line breaks as actual characters or spaces
     const words = useMemo(() => text.split(/\s+/), [text]);
 
@@ -117,12 +117,12 @@ const PremiumTextReveal = ({ text, style }) => {
             </Text>
         </View>
     );
-};
+});
 
 // ============================================================================
 // ⚡️ FULL-SCREEN CINEMATIC ONBOARDING MODAL
 // ============================================================================
-export const CinematicClanOnboarding = ({ visible, onClose, isLeader, appBlue }) => {
+export const CinematicClanOnboarding = memo(({ visible, onClose, isLeader, appBlue }) => {
     const [step, setStep] = useState(0);
 
     const ONBOARDING_STEPS = useMemo(() => {
@@ -130,21 +130,21 @@ export const CinematicClanOnboarding = ({ visible, onClose, isLeader, appBlue })
             {
                 title: "THE_SYNDICATE_DOJO",
                 intel: "SYS: COMMAND_CENTER",
-                desc: "Welcome to your Clan's hub. Track World Rank and Clan Funds in the Dojo, and inspect your fellow operatives in the Shinobi tab. Your alliance's strength is measured here.",
+                desc: "Welcome to your Clan hub. Track Clan Rank, Clan Funds, and view your members from the Shinobi tab.",
                 icon: "shield",
                 color: appBlue
             },
             {
                 title: "INTEL_&_COMMS",
                 intel: "SYS: NETWORK_SYNC",
-                desc: "Read clan-exclusive Transmissions in the Scrolls tab. Coordinate real-time attack strategies with your allies in the Great Hall. Silence is defeat.",
+                desc: "Read Clan Transmissions in the Scrolls tab and coordinate with members in the Great Hall chat.",
                 icon: "chatbubbles",
                 color: "#a855f7"
             },
             {
                 title: "WARS_&_BLACK_MARKET",
                 intel: "SYS: COMBAT_&_ASSETS",
-                desc: "Review past combat history in the Wars tab. Tap the top-right icons to access the Black Market and Inventory, burning Clan Coins (CC) to unlock and equip legendary visual aesthetics.",
+                desc: "Review Clan Wars history, manage your Inventory, and spend Clan Coins (CC) on cosmetics and upgrades.",
                 icon: "flame",
                 color: "#f59e0b"
             }
@@ -154,7 +154,7 @@ export const CinematicClanOnboarding = ({ visible, onClose, isLeader, appBlue })
             baseSteps.push({
                 title: "THE_KAGE_DESK",
                 intel: "SYS: ADMIN_AUTHORITY",
-                desc: "As village brass, you control the gates. Manage recruitment, approve seekers, and banish rogues from the Kage Desk.",
+                desc: "Manage Clan recruitment, approve members, and moderate your Clan from the Kage Desk.",
                 icon: "key",
                 color: "#ef4444"
             });
@@ -162,6 +162,7 @@ export const CinematicClanOnboarding = ({ visible, onClose, isLeader, appBlue })
 
         return baseSteps;
     }, [isLeader, appBlue]);
+
 
     if (!visible) return null;
 
@@ -269,7 +270,7 @@ export const CinematicClanOnboarding = ({ visible, onClose, isLeader, appBlue })
             </View>
         </Modal>
     );
-};
+});
 
 const styles = StyleSheet.create({
     modalContainer: {
@@ -502,9 +503,40 @@ const ClanProfile = () => {
     const scanAnim = useSharedValue(0);
     const pulseAnim = useSharedValue(1);
 
-    const progressToNextRank = useMemo(() => {
-        if (!fullData || !fullData.nextThreshold) return 0;
-        return (fullData.totalPoints / fullData.nextThreshold) * 100;
+    // Add your thresholds at the top of your file or inside the component
+    const rankThresholds = [0, 5000, 20000, 50000, 100000, 300000];
+    const decayAmounts = [200, 500, 1000, 2000, 5000, 30000];
+
+    // Replace your existing progressToNextRank useMemo with this:
+    const { safeProgress, decayProgress, decayAmount } = useMemo(() => {
+        if (!fullData || !fullData.nextThreshold) return { safeProgress: 0, decayProgress: 0, decayAmount: 0 };
+
+        const points = fullData.totalPoints || 0;
+        const nextThreshold = fullData.nextThreshold;
+
+        // 1. Find the current rank tier to apply the right decay
+        let currentTierIndex = 0;
+        for (let i = rankThresholds.length - 1; i >= 0; i--) {
+            if (points >= rankThresholds[i]) {
+                currentTierIndex = i;
+                break;
+            }
+        }
+
+        const decay = decayAmounts[currentTierIndex];
+
+        // 2. Cap points at the next threshold so the progress bar doesn't break if it goes over 100%
+        const cappedPoints = Math.min(points, nextThreshold);
+
+        // 3. Calculate safe points vs decay points
+        const safePoints = Math.max(0, cappedPoints - decay);
+        const actualDecay = cappedPoints - safePoints; // Prevents decay from being larger than total points
+
+        return {
+            safeProgress: (safePoints / nextThreshold) * 100,
+            decayProgress: (actualDecay / nextThreshold) * 100,
+            decayAmount: decay
+        };
     }, [fullData]);
 
     useEffect(() => {
@@ -514,7 +546,7 @@ const ClanProfile = () => {
             -1, false
         );
     }, []);
-
+    const isVerified = fullData?.verifiedUntil && new Date(fullData?.verifiedUntil) > new Date();
     const spinStyle = useAnimatedStyle(() => ({ transform: [{ rotate: `${scanAnim.value * 360}deg` }] }));
     const pulseStyle = useAnimatedStyle(() => ({ transform: [{ scale: pulseAnim.value }] }));
 
@@ -556,8 +588,9 @@ const ClanProfile = () => {
         verifiedTier = fullData.activeCustomizations?.verifiedTier;
     }
     const verifiedColor = verifiedTier === "premium" ? "#facc15" : verifiedTier === "standard" ? "#ef4444" : verifiedTier === "basic" ? "#3b82f6" : "";
+    const highlightColor = isVerified ? verifiedColor : null;
     const activeGlowColor = equippedGlow?.visualConfig?.primaryColor || equippedGlow?.visualData?.glowColor || null;
-    const APP_BLUE = activeGlowColor || verifiedColor || "#3b82f6";
+    const APP_BLUE = activeGlowColor || highlightColor || "#3b82f6";
 
     const fetchFullDetails = async () => {
         const shouldShowHeavyLoader = !fullData && !HAS_SHOWN_SESSION_LOADER;
@@ -806,7 +839,7 @@ const ClanProfile = () => {
                             ]}
                             className="absolute -inset-5 border border-dashed rounded-full"
                         />
-                        <ClanCrest glowColor={activeGlowColor || verifiedColor} rank={fullData?.rank || 1} size={120} />
+                        <ClanCrest glowColor={activeGlowColor || highlightColor} rank={fullData?.rank || 1} size={120} />
                     </View>
 
                     <View className="absolute right-0 flex flex-col justify-between items-center gap-2">
@@ -856,7 +889,7 @@ const ClanProfile = () => {
                                 <Text className="text-2xl font-black text-black dark:text-white uppercase italic tracking-tighter text-center">
                                     {fullData?.name}
                                 </Text>
-                                <RemoteSvgIcon size={30} xml={fullData?.activeCustomizations?.verifiedBadgeXml} />
+                                {isVerified && <RemoteSvgIcon size={30} xml={fullData?.activeCustomizations?.verifiedBadgeXml} />}
                             </View>
                             <Text className="text-gray-500 dark:text-gray-400 text-xs italic mt-2 text-center px-6 leading-4">
                                 "{fullData?.description || "No village motto defined."}"
@@ -886,9 +919,9 @@ const ClanProfile = () => {
                     <Text className="text-[14px] font-black text-gray-400 uppercase tracking-widest mb-4 text-center">Clan Achievements</Text>
                     {/* Earned Medals Container */}
                     <View className="w-full">
-                        {fullData.badges?.length > 0 ? (
+                        {fullData && fullData.badges?.length > 0 ? (
                             <View className="flex-row flex-wrap justify-center gap-2 w-full px-4">
-                                {fullData.badges.map((badge, idx) => (
+                                {fullData && fullData.badges.map((badge, idx) => (
                                     <ClanBadge key={`${badge}-${idx}`} isClanPage={true} badgeName={badge} size={50} />
                                 ))}
                             </View>
@@ -908,13 +941,39 @@ const ClanProfile = () => {
 
             <View className="px-6 py-6">
                 <View className="flex-row justify-between items-end mb-2">
-                    <Text className="text-gray-400 font-black text-[9px] uppercase tracking-widest">Clan Points</Text>
+                    <View>
+                        <Text className="text-gray-400 font-black text-[9px] uppercase tracking-widest">Clan Points</Text>
+                        {decayAmount > 0 && (
+                            <Text className="text-red-500 font-black text-[8px] uppercase tracking-widest mt-1">
+                                -{decayAmount.toLocaleString()} Weekly Decay
+                            </Text>
+                        )}
+                    </View>
                     <Text className="text-black dark:text-white font-mono font-bold text-[10px]">
                         {fullData?.totalPoints?.toLocaleString()} / {fullData?.nextThreshold?.toLocaleString()}
                     </Text>
                 </View>
-                <View className="w-full h-2 bg-gray-100 dark:bg-zinc-900 rounded-full overflow-hidden">
-                    <View className="h-full" style={{ width: `${Math.min(progressToNextRank, 100)}%`, backgroundColor: activeGlowColor || APP_BLUE }} />
+
+                {/* Changed to flex-row so the bars stack side-by-side */}
+                <View className="w-full h-[6px] flex-row bg-gray-100 dark:bg-zinc-900 rounded-full overflow-hidden">
+
+                    {/* 1. Safe Points (Normal Color) */}
+                    <View
+                        className="h-full"
+                        style={{
+                            width: `${safeProgress}%`,
+                            backgroundColor: activeGlowColor || APP_BLUE
+                        }}
+                    />
+
+                    {/* 2. Decay Points (Red indicator at the end) */}
+                    {decayProgress > 0 && (
+                        <View
+                            className="h-full bg-red-500"
+                            style={{ width: `${decayProgress * 1.5}%` }}
+                        />
+                    )}
+
                 </View>
             </View>
 
@@ -946,7 +1005,13 @@ const ClanProfile = () => {
 
             <Modal visible={cardPreviewVisible} transparent animationType="slide">
                 <View className="flex-1 bg-black/95">
-                    <Pressable style={StyleSheet.absoluteFill} onPress={() => setCardPreviewVisible(false)} />
+                    <Pressable style={{
+                        position: 'absolute',
+                        left: 0,
+                        right: 0,
+                        top: 0,
+                        bottom: 0
+                    }} onPress={() => setCardPreviewVisible(false)} />
                     <ScrollView contentContainerStyle={{ flexGrow: 1, justifyContent: 'center', alignItems: 'center', padding: 20 }}>
                         <View className="w-full items-center">
                             <View className="w-full flex-row justify-between items-center pt-10">
@@ -1004,7 +1069,7 @@ const ClanProfile = () => {
                 ref={flatListRef}
                 onScroll={handleScroll}
                 scrollEventThrottle={16}
-                drawDistance={1000}
+                drawDistance={300}
                 style={{ flex: 1, backgroundColor: isDark ? "#0a0a0a" : "#fff" }}
                 data={
                     activeTab === 'Scrolls' ? posts :
@@ -1302,7 +1367,7 @@ const ClanProfile = () => {
 };
 
 
-const ClanChatInput = ({ onSend, isDark, appBlue, copyText }) => {
+const ClanChatInput = memo(({ onSend, isDark, appBlue, copyText }) => {
     const [text, setText] = useState('');
     const [isFocused, setIsFocused] = useState(false);
 
@@ -1390,10 +1455,10 @@ const ClanChatInput = ({ onSend, isDark, appBlue, copyText }) => {
             </View>
         </View>
     );
-}
+})
 
 
-const ClanMessageItem = ({ message, isMe, isDark, appBlue, onSelectMessage }) => {
+const ClanMessageItem = memo(({ message, isMe, isDark, appBlue, onSelectMessage }) => {
 
 
     const handleLongPress = async () => {
@@ -1464,7 +1529,7 @@ const ClanMessageItem = ({ message, isMe, isDark, appBlue, onSelectMessage }) =>
             </Pressable>
         </View>
     );
-}
+})
 
 // 🎨 --- RENDERER FOR BACKEND SVGS ---
 const RemoteSvgIcon = React.memo(({ xml, size = 150, color }) => {
@@ -1483,7 +1548,7 @@ const getRarityColor = (rarity) => {
 };
 
 // 🔹 1. CLAN ITEM PREVIEW MODAL
-const ClanItemPreviewModal = ({
+const ClanItemPreviewModal = memo(({
     isVisible,
     onClose,
     currentClan,
@@ -1540,7 +1605,13 @@ const ClanItemPreviewModal = ({
 
     return (
         <View style={previewStyles.overlay}>
-            <Pressable style={StyleSheet.absoluteFill} onPress={onClose} disabled={isProcessing} />
+            <Pressable style={{
+                position: 'absolute',
+                left: 0,
+                right: 0,
+                top: 0,
+                bottom: 0
+            }} onPress={onClose} disabled={isProcessing} />
 
             <MotiView
                 from={{ opacity: 0, translateY: 100, scale: 0.9 }}
@@ -1634,11 +1705,15 @@ const ClanItemPreviewModal = ({
             </MotiView>
         </View>
     );
-};
+});
 
 const previewStyles = StyleSheet.create({
     overlay: {
-        ...StyleSheet.absoluteFillObject,
+        position: 'absolute',
+        left: 0,
+        right: 0,
+        top: 0,
+        bottom: 0,
         backgroundColor: 'rgba(0,0,0,0.85)',
         justifyContent: 'center',
         alignItems: 'center',
@@ -1695,7 +1770,7 @@ const previewStyles = StyleSheet.create({
 
 
 // 🔹 2. CLAN STORE MODAL
-const ClanStoreModal = ({ visible, fetchFullDetails, onClose, isDark, clan }) => {
+const ClanStoreModal = memo(({ visible, fetchFullDetails, onClose, isDark, clan }) => {
     const storage = useMMKV();
     const { coins, clanCoins, processTransaction, isProcessingTransaction } = useCoins();
 
@@ -1994,10 +2069,10 @@ const ClanStoreModal = ({ visible, fetchFullDetails, onClose, isDark, clan }) =>
             />
         </Modal>
     );
-};
+});
 
 // 🔹 3. CLAN INVENTORY MODAL
-const ClanInventoryModal = ({ visible, onClose, fetchFullDetails, clan, isDark, user }) => {
+const ClanInventoryModal = memo(({ visible, onClose, fetchFullDetails, clan, isDark, user }) => {
     const [filter, setFilter] = useState('ALL');
     const [isUpdating, setIsUpdating] = useState(false);
     const [itemToPreview, setItemToPreview] = useState(null);
@@ -2027,7 +2102,7 @@ const ClanInventoryModal = ({ visible, onClose, fetchFullDetails, clan, isDark, 
             name: `${clan.activeCustomizations?.verifiedTier || 'Clan'} Verification`,
             category: 'VERIFIED',
             isEquipped: true,
-            expiresAt: clan.verifiedUntil,
+            expiresAt: clan?.verifiedUntil,
             visualConfig: {
                 svgCode: clan.activeCustomizations?.verifiedBadgeXml,
                 primaryColor: clan.activeCustomizations?.verifiedTier === 'premium' ? '#facc15' :
@@ -2213,12 +2288,11 @@ const ClanInventoryModal = ({ visible, onClose, fetchFullDetails, clan, isDark, 
             />
         </Modal>
     );
-};
+});
 
 // --- Sub Components
 
-const WarHistoryItem = ({ war, clanTag }) => {
-    console.log(war, "is the clan war item?");
+const WarHistoryItem = memo(({ war, clanTag }) => {
 
     const isWinner = war.winner === clanTag;
     const isDraw = war.winner === "DRAW";
@@ -2276,9 +2350,9 @@ const WarHistoryItem = ({ war, clanTag }) => {
             </View>
         </View>
     );
-};
+});
 
-const ExpansionRow = ({ icon, glowColor, label, subLabel, onPress }) => (
+const ExpansionRow = memo(({ icon, glowColor, label, subLabel, onPress }) => (
     <TouchableOpacity
         onPress={onPress}
         className="flex-row items-center p-4 bg-gray-50 dark:bg-zinc-900/40 rounded-2xl border border-gray-100 dark:border-zinc-800"
@@ -2292,9 +2366,9 @@ const ExpansionRow = ({ icon, glowColor, label, subLabel, onPress }) => (
         </View>
         <Feather name="chevron-right" size={16} color="#9ca3af" />
     </TouchableOpacity>
-);
+));
 
-const StatCard = ({ label, value, icon, isCoin, glowColor }) => (
+const StatCard = memo(({ label, value, icon, isCoin, glowColor }) => (
     <View className="w-[48%] bg-white dark:bg-zinc-900/50 p-5 rounded-[30px] mb-4 border border-gray-100 dark:border-zinc-800 shadow-sm">
         <MaterialCommunityIcons name={icon} size={20} color={glowColor || "#3b82f6"} />
         <Text className="text-gray-400 dark:text-gray-500 text-[9px] font-black uppercase tracking-widest mt-2">{label}</Text>
@@ -2303,18 +2377,18 @@ const StatCard = ({ label, value, icon, isCoin, glowColor }) => (
             {isCoin && <CoinIcon size={20} type="CC" />}
         </View>
     </View>
-);
+));
 
-const StatRow = ({ label, value, highlight, color }) => (
+const StatRow = memo(({ label, value, highlight, color }) => (
     <View className="flex-row justify-between px-4 py-4 border-b border-gray-100 dark:border-zinc-900/50 last:border-0">
         <Text className="text-gray-500 dark:text-gray-400 font-bold text-[11px] uppercase">{label}</Text>
         <Text className={`font-black text-xs ${highlight ? '' : 'text-black dark:text-white'}`} style={highlight ? { color: color } : {}}>
             {value || 0}
         </Text>
     </View>
-);
+));
 
-const MemberItem = ({
+const MemberItem = memo(({
     member,
     roleLabel,
     canManage,
@@ -2425,9 +2499,9 @@ const MemberItem = ({
             </View>
         </Pressable>
     );
-};
+});
 
-const AdminToggle = ({ label, status, onPress, appBlue, isDark }) => {
+const AdminToggle = memo(({ label, status, onPress, appBlue, isDark }) => {
     const isOpen = status === 'OPEN';
 
     return (
@@ -2472,9 +2546,9 @@ const AdminToggle = ({ label, status, onPress, appBlue, isDark }) => {
             </View>
         </Pressable>
     );
-};
+});
 
-const RequestItem = ({ user, onApprove, onDecline, appBlue, isDark, isProcessingAction }) => {
+const RequestItem = memo(({ user, onApprove, onDecline, appBlue, isDark, isProcessingAction }) => {
     // Both buttons disable if either is processing
     const isDisabled = !!isProcessingAction;
     const [currentProcess, setCurrentProcess] = useState("")
@@ -2551,6 +2625,6 @@ const RequestItem = ({ user, onApprove, onDecline, appBlue, isDark, isProcessing
             </View>
         </View>
     );
-};
+});
 
-export default ClanProfile;
+export default React.memo(ClanProfile)

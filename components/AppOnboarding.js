@@ -74,43 +74,45 @@ export default function AppOnboarding() {
     const [step, setStep] = useState(0);
     const [isUpdateOnly, setIsUpdateOnly] = useState(false);
 
+
     const allFeatures = [
         {
             title: "THE_NINJA_CODE",
-            desc: "Welcome to Oreblogda! Keep your Spirit Streak burning by posting every 48 hours. Beware the Judgment Gate: Cursed Spirits (spam) will have their streaks sealed by THE SYSTEM.",
+            desc: "Post, interact, and stay active to keep your Streak alive. Low-quality or spam entries are rejected by THE SYSTEM.",
             icon: "shield-checkmark",
             color: "#f87171",
-            intel: "MANA: CONSISTENCY_CHECK"
+            intel: "SYSTEM: ENTRY_VALIDATION"
         },
         {
             title: "AURA_&_PRESTIGE",
-            desc: "Earn Aura Points through high engagement to rank up. The top 200 legends are etched into the Hall of Fame. Stay consistent to keep your glowing badges of prestige.",
+            desc: "Earn Aura through posts, likes, comments, hypes and activity. Rank up and climb the Hall of Fame.",
             icon: "auto-fix",
             color: "#a78bfa",
-            intel: "AURA: SOUL_VIBRATION"
+            intel: "AURA: RANK_PROTOCOL"
         },
         {
             title: "CLAN_ALLIANCES",
-            desc: "Don't wander alone. Join or create a Clan to pool your power. Higher-ranked clans like the Akatsuki or Gotei 13 receive massive daily point allocations.",
+            desc: "Create or join Clans, compete in Clan Wars, and grow your influence together.",
             icon: "people",
             color: "#10b981",
-            intel: "GUILD: CLAN_SYSTEM_ACTIVE"
+            intel: "CLAN: ALLIANCE_SYSTEM"
         },
         {
             title: "THE_BLACK_MARKET",
-            desc: "The marketplace is open. Spend your CC/OC on Phantom-class themes, limited-edition watermarks, and tactical clan boosts to dominate the leaderboards. There are different categories of products in the store...",
+            desc: "Use OC/CC to unlock cosmetics, effects, themes, boosts, and limited event rewards.",
             icon: "cart",
             color: "#22d3ee",
-            intel: "STORE: MARKET_ACCESS_GRANTED"
+            intel: "STORE: MARKET_ACCESS"
         },
         {
             title: "ADVENTURE_AWAITS",
-            desc: "Your Mana is full. Your connection is established. The world is waiting for your story, Hero. Go beyond, Plus Ultra!",
+            desc: "Your connection is established. Enter the network and leave your mark on Oreblogda.",
             icon: "checkmark-done-circle",
             color: "#10b981",
-            intel: "FINAL_INIT: GO_BEYOND"
+            intel: "FINAL_INIT: CONNECTION_READY"
         }
     ];
+
 
     // ⚡️ Show ONLY the new Peak System and Adventure Awaits for returning users
     const updateOnlyFeatures = allFeatures.slice(7, 9);

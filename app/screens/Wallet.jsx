@@ -1,5 +1,4 @@
 import { Ionicons, MaterialCommunityIcons } from '@expo/vector-icons';
-import { useNavigation } from '@react-navigation/native';
 import { Canvas, Circle, Group, LinearGradient, Rect, vec } from "@shopify/react-native-skia";
 import { Image } from 'expo-image';
 import React, { useCallback, useEffect, useState } from 'react';
@@ -88,43 +87,38 @@ const WalletOnboarding = () => {
   const [isVisible, setIsVisible] = useState(false);
   const [step, setStep] = useState(0);
 
+
   const allFeatures = [
     {
       title: "ENERGY_RESERVES",
-      desc: "Welcome to the Vault. Here you manage your Ore Coins (OC) and Clan Coins (CC). OC is the universal currency, while CC is earned and spent exclusively within Clan Alliances.",
+      desc: "Manage your Ore Coins (OC) and Clan Coins (CC). OC is used across Oreblogda, while CC is tied to Clan activities and upgrades.",
       icon: "wallet",
       color: "#3b82f6",
       intel: "SYSTEM: WALLET_INITIALIZED"
     },
     {
       title: "CLAIM_&_DISPATCH",
-      desc: "Don't forget to claim your daily OC allowance! Feeling generous? Use the Dispatch feature to transfer OC directly to allied operatives.",
+      desc: "Claim your daily OC rewards and transfer coins to friends or Clan members using Dispatch.",
       icon: "send",
       color: "#10b981",
-      intel: "ACTION: PEER_TO_PEER"
+      intel: "ACTION: PEER_TRANSFER"
     },
     {
       title: "THE_PEAK_SYSTEM",
-      desc: "Your Ascension begins here. Purchasing OC increases your Peak Level. Reach higher tiers to unlock exclusive permanent rewards and a glowing Peak Badge on your profile.",
+      desc: "Purchasing OC increases your Peak Level. Unlock exclusive cosmetics, permanent rewards, and special Peak Badges.",
       icon: "rocket",
       color: "#ec4899",
       intel: "STATUS: ASCENSION_PROTOCOL"
     },
     {
-      title: "THE_VAULT",
-      desc: "Access the Vault to purchase Limited Bundles. These packs contain exclusive skins, borders, and OC. Join a Clan to unlock the highly classified Clan Vault.",
-      icon: "lock-closed",
-      color: "#f59e0b",
-      intel: "STORE: VAULT_ACCESS"
-    },
-    {
       title: "READY_FOR_DEPLOYMENT",
-      desc: "Your wallet is fully synced. Secure your assets and upgrade your arsenal, Operator.",
+      desc: "Your wallet is synced and ready. Upgrade your profile, support your Clan, and power your journey.",
       icon: "checkmark-done-circle",
       color: "#22c55e",
-      intel: "FINAL_INIT: SECURE"
+      intel: "FINAL_INIT: SYSTEM_READY"
     }
   ];
+
 
   useEffect(() => {
     const hasSeen = storage.getBoolean('HAS_SEEN_WALLET_ONBOARDING');
@@ -284,7 +278,6 @@ const WalletPage = () => {
   const CustomAlert = useAlert();
   const storage = useMMKV();
   const insets = useSafeAreaInsets();
-  const navigation = useNavigation();
   const { user } = useUser();
 
   const { coins, clanCoins, totalPurchasedCoins = 0, peakLevel = 0, processTransaction, isProcessingTransaction } = useCoins();
@@ -324,6 +317,7 @@ const WalletPage = () => {
   const pulseValue = useSharedValue(1);
 
   const TABS = isInClan ? ['OC', 'PEAK', 'CC'] : ['OC', 'PEAK'];
+
 
   useEffect(() => {
     const t = setTimeout(() => setMinLoadDone(true), 3000);
@@ -781,7 +775,7 @@ const WalletPage = () => {
               style={activeTab === tab ? { backgroundColor: THEME.accent } : {}}
             >
               <Text style={{ color: activeTab === tab ? 'white' : THEME.textSecondary }} className="font-black uppercase text-[9px] tracking-[1.5px]">
-                {tab === 'OC' ? "Ore" : tab === 'CC' ? "Clan" : tab === 'PACKS' ? "Vault" : "Peak"}
+                {tab === 'OC' ? "Ore" : tab === 'CC' ? "Clan" : "Peak"}
               </Text>
             </TouchableOpacity>
           ))}
@@ -804,7 +798,7 @@ const WalletPage = () => {
               <View style={{ backgroundColor: THEME.card, borderColor: THEME.border, borderWidth: 1 }} className="p-8 rounded-[35px] items-center mb-8 shadow-sm">
                 <View className="mb-4">
                   {peakLevel > 0 ? (
-                    <PeakBadge level={peakLevel} size={90} />
+                    <PeakBadge isVisible={true} level={peakLevel} size={90} />
                   ) : (
                     <View style={{ width: 90, height: 90, justifyContent: 'center', alignItems: 'center', backgroundColor: THEME.border, borderRadius: 20 }}>
                       <MaterialCommunityIcons name="lock" size={40} color={THEME.textSecondary} />
@@ -871,6 +865,8 @@ const WalletPage = () => {
 
           {(activeTab === 'OC' || activeTab === 'CC') && (
             <View>
+
+
               <View className="mb-6 px-1 flex-row items-end justify-between">
                 <Text style={{ color: THEME.text }} className="text-2xl font-black uppercase italic">{activeTab === 'OC' ? "OC STORE" : "CC STORE"}</Text>
                 <Text style={{ color: THEME.accent }} className="text-[8px] font-black uppercase tracking-[2px]">Encrypted</Text>

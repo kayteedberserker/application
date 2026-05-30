@@ -34,6 +34,7 @@ const { width } = Dimensions.get('window');
 
 const WAR_METRICS = [
     { id: 'POINTS', label: 'Points', icon: 'star-circle' },
+    { id: 'HYPES', label: 'Hypes', icon: 'lightning-bolt' },
     { id: 'LIKES', label: 'Likes', icon: 'heart' },
     { id: 'COMMENTS', label: 'Comments', icon: 'chat' },
 ];
@@ -552,7 +553,7 @@ const ClanWarPage = () => {
 
                     // ⚡️ LegendList Performance Props
                     estimatedItemSize={250}
-                    drawDistance={2000} // Pre-renders further ahead
+                    drawDistance={600} // Pre-renders further ahead
                     recycleItems={true} // Essential for dynamic layout lists
 
                     onRefresh={handleRefresh}

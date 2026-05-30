@@ -217,7 +217,7 @@ export default function FirstLaunchScreen() {
 	const CustomAlert = useAlert();
 	const router = useRouter();
 	const isMounted = useRef(true);
-	const { setUser } = useUser();
+	const { setUser, syncProfile } = useUser();
 	const { refreshStreak } = useStreak();
 	const { refreshClanStatus } = useClan();
 	const isDark = useColorScheme() === "dark";
@@ -437,7 +437,7 @@ export default function FirstLaunchScreen() {
 			// 7. 🔄 REFRESH APP STATE
 			if (refreshStreak) refreshStreak();
 			if (refreshClanStatus) refreshClanStatus();
-
+			if(syncProfile) syncProfile(); // Ensure we have the freshest profile data, including inventory and clan status
 			setRecoveredUid(data.user?.uid);
 			setShowAwakeningModal(true);
 			setTimeout(() => {
@@ -561,7 +561,7 @@ export default function FirstLaunchScreen() {
 				storage.set("HAS_SEEN_WELCOME", onboardingFlags.HAS_SEEN_WELCOME || "true");
 			}
 			if (refreshStreak) refreshStreak();
-
+			if(syncProfile) syncProfile(); // Ensure we have the freshest profile data, including inventory and clan status
 			Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
 			if (isRecoveryMode) {
 				setRecoveredUid(data.user?.uid);

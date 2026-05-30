@@ -1,6 +1,6 @@
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { router } from "expo-router";
-import { createContext, useContext, useEffect, useRef, useState } from "react";
+import { createContext, useCallback, useContext, useEffect, useMemo, useRef, useState } from "react";
 import { useMMKV } from "react-native-mmkv";
 import apiFetch, { setSessionExpiredHandler, syncApiUser } from "../utils/apiFetch";
 import { getFingerprint } from "../utils/device";
@@ -29,6 +29,12 @@ export const UserProvider = ({ children }) => {
     return null;
   });
 
+  // Keep a mutable reference track of user data to eliminate callback reference mutations safely
+  const userRef = useRef(user);
+  useEffect(() => {
+    userRef.current = user;
+  }, [user]);
+
   const [loading, setLoading] = useState(() => {
     try {
       const stored = storage.getString("mobileUser");
@@ -46,7 +52,7 @@ export const UserProvider = ({ children }) => {
    * 🛠️ DEFENSIVE STORAGE UPDATE
    * This handles standard data updates while the user is active.
    */
-  const updateUserData = (newData) => {
+  const updateUserData = useCallback((newData) => {
     setInternalUser(newData);
 
     // Defensive check: Only touch storage if the instance and methods exist
@@ -64,13 +70,46 @@ export const UserProvider = ({ children }) => {
     }
 
     syncApiUser(newData);
-  };
+  }, [storage]);
+
+  /**
+   * 🔄 REUSABLE PROFILE PROFILE & INVENTORY SYNC PROTOCOL
+   * Pulls the absolute freshest state down from backend DB manually or automatically.
+   * Locked cleanly with a user tracking ref to guarantee maximum reference stability.
+   */
+  const syncProfile = useCallback(async () => {
+    const currentUser = userRef.current;
+    if (!currentUser?.deviceId) return null;
+    try {
+      const res = await apiFetch(`/users/me?fingerprint=${currentUser.deviceId}`);
+      if (res.status === 200) {
+        const dbUser = await res.json();
+        const updatedUser = {
+          ...currentUser,
+          country: dbUser.country || "Unknown",
+          username: dbUser.username || currentUser.username,
+          referralCode: dbUser.referralCode || currentUser.referralCode,
+          invitedUsers: dbUser.invitedUsers || currentUser.invitedUsers || [],
+          inventory: dbUser.inventory || currentUser.inventory || [], // Sync inventory changes seamlessly
+          securityLevel: dbUser.securityLevel || 0
+        };
+        updateUserData(updatedUser);
+
+        if (updatedUser.securityLevel < 2 && !pinSuccess) {
+          setPinModalVisible(true);
+        }
+        return updatedUser;
+      }
+    } catch (fetchErr) {
+      console.error("Failed to sync fresh user profile values:", fetchErr);
+    }
+    return null;
+  }, [pinSuccess, updateUserData]);
 
   /**
    * 🛡️ THE SESSION TERMINATION PROTOCOL
    */
-  const handleInternalLogout = async (isSystemKick = false) => {
-    // ❌ const CustomAlert = useAlert() <- This was the cause of the error
+  const handleInternalLogout = useCallback(async (isSystemKick = false) => {
     if (isLoggingOut) return;
 
     const performCleanup = async () => {
@@ -78,11 +117,12 @@ export const UserProvider = ({ children }) => {
         setIsLoggingOut(true);
 
         // ⚡️ 0. NOTIFY BACKEND
-        if (!isSystemKick && user?.deviceId) {
+        const currentUser = userRef.current;
+        if (!isSystemKick && currentUser?.deviceId) {
           try {
             await apiFetch('/mobile/logout', {
               method: 'POST',
-              body: { deviceId: user.deviceId }
+              body: { deviceId: currentUser.deviceId }
             });
           } catch (apiErr) {
             if (__DEV__) console.log("Server unreachable. Proceeding with local hibernation.");
@@ -95,12 +135,12 @@ export const UserProvider = ({ children }) => {
           const rawHistory = storage.getString("session_history");
           const sessionHistory = rawHistory ? JSON.parse(rawHistory) : [];
 
-          if (user) {
+          if (currentUser) {
             const currentSession = {
-              uid: user.uid,
-              deviceId: user.deviceId,
-              username: user.username,
-              pfp: user.profilePic?.url || user.image,
+              uid: currentUser.uid,
+              deviceId: currentUser.deviceId,
+              username: currentUser.username,
+              pfp: currentUser.profilePic?.url || currentUser.image,
             };
 
             updatedHistory = [
@@ -113,7 +153,6 @@ export const UserProvider = ({ children }) => {
         }
 
         // ⚡️ 2. THE SAFE SWAP
-        // We purge storage first
         try {
           if (storage && typeof storage.clearAll === 'function') {
             storage.clearAll();
@@ -122,7 +161,6 @@ export const UserProvider = ({ children }) => {
             storage.delete("auth_token");
           }
 
-          // Re-inject history if we have it
           if (updatedHistory.length > 0 && storage && typeof storage.set === 'function') {
             storage.set("session_history", JSON.stringify(updatedHistory));
           }
@@ -133,16 +171,13 @@ export const UserProvider = ({ children }) => {
         // ⚡️ 3. CLEANUP & REDIRECT
         await AsyncStorage.clear().catch(() => { });
 
-        // IMPORTANT: We call setInternalUser directly to avoid updateUserData
         setInternalUser(null);
         hasSyncedIdentity.current = false;
 
-        // Force transition to entry point
         router.replace("/screens/FirstLaunchScreen");
 
       } catch (error) {
         console.error("Critical Hibernation Error:", error);
-        // Fallback: Clear state and force redirect even if storage exploded
         setInternalUser(null);
         router.replace("/screens/FirstLaunchScreen");
       } finally {
@@ -159,37 +194,43 @@ export const UserProvider = ({ children }) => {
     } else {
       performCleanup();
     }
-  };
+  }, [isLoggingOut, storage, CustomAlert]);
 
   // 📡 ATTACH API LISTENER FOR SESSION KICKS
   useEffect(() => {
     setSessionExpiredHandler(() => {
       handleInternalLogout(true);
     });
-  }, [user?.deviceId]);
+  }, [handleInternalLogout]);
 
   // Wrapper for external consumers
-  const updateUserDataWrapper = (newData) => {
+  const updateUserDataWrapper = useCallback((newData) => {
     updateUserData(newData);
-  };
+  }, [updateUserData]);
+
+  // Handle standard app logout triggering
+  const handleLogoutExternal = useCallback(() => {
+    handleInternalLogout(false);
+  }, [handleInternalLogout]);
 
   // ⚡️ IDENTITY & DATA SYNC
   useEffect(() => {
     const backgroundSyncUser = async () => {
-      if (!user?.deviceId) {
+      const currentUser = userRef.current;
+      if (!currentUser?.deviceId) {
         setLoading(false);
         return;
       }
 
       // Identity Sync Protocol
-      if ((!user.uid || !user.hardwareId) && !hasSyncedIdentity.current) {
+      if ((!currentUser.uid || !currentUser.hardwareId) && !hasSyncedIdentity.current) {
         hasSyncedIdentity.current = true;
         try {
           const fingerprint = await getFingerprint();
           const res = await apiFetch('/mobile/sync-identity', {
             method: 'POST',
             body: {
-              deviceId: user.deviceId,
+              deviceId: currentUser.deviceId,
               hardwareId: fingerprint.hardwareId
             }
           });
@@ -198,7 +239,7 @@ export const UserProvider = ({ children }) => {
             const data = await res.json();
             if (data.uid) {
               const updatedUser = {
-                ...user,
+                ...currentUser,
                 uid: data.uid,
                 hardwareId: fingerprint.hardwareId,
                 securityLevel: data.securityLevel || 0
@@ -216,52 +257,43 @@ export const UserProvider = ({ children }) => {
         }
       }
 
-      // Stats Sync
-      if (!user.referralCode) {
-        try {
-          const res = await apiFetch(`/users/me?fingerprint=${user.deviceId}`);
-          if (res.status === 200) {
-            const dbUser = await res.json();
-            const updatedUser = {
-              ...user,
-              country: dbUser.country || "Unknown",
-              username: dbUser.username || user.username,
-              referralCode: dbUser.referralCode || user.referralCode,
-              invitedUsers: dbUser.invitedUsers || user.invitedUsers || [],
-              securityLevel: dbUser.securityLevel || 0
-            };
-            updateUserData(updatedUser);
-
-            if (updatedUser.securityLevel < 2 && !pinSuccess) {
-              setPinModalVisible(true);
-            }
-          }
-        } catch (fetchErr) {
-          console.error("Failed to sync user stats:", fetchErr);
-        } finally {
-          setLoading(false);
-        }
+      // Initial Stats Sync fallback if incomplete
+      if (!currentUser.referralCode) {
+        await syncProfile();
+        setLoading(false);
       } else {
         setLoading(false);
       }
     };
 
     backgroundSyncUser();
-  }, [user?.deviceId, user?.uid, user?.hardwareId]);
+  }, [syncProfile, pinSuccess, updateUserData]);
+
+  // 🧠 MEMOIZED CONTEXT VALUE TO PREVENT UNNECESSARY CONSUMER RERENDERS
+  const contextValue = useMemo(() => ({
+    user,
+    setUser: updateUserDataWrapper,
+    syncProfile, 
+    loading,
+    pinModalVisible,
+    setPinModalVisible,
+    pinSuccess,
+    setPinSuccess,
+    isLoggingOut,
+    handleLogout: handleLogoutExternal
+  }), [
+    user,
+    updateUserDataWrapper,
+    syncProfile,
+    loading,
+    pinModalVisible,
+    pinSuccess,
+    isLoggingOut,
+    handleLogoutExternal
+  ]);
 
   return (
-    <UserContext.Provider
-      value={{
-        user,
-        setUser: updateUserDataWrapper,
-        loading,
-        pinModalVisible,
-        setPinModalVisible,
-        pinSuccess,
-        setPinSuccess,
-        isLoggingOut,
-        handleLogout: () => handleInternalLogout(false)
-      }}>
+    <UserContext.Provider value={contextValue}>
       {children}
     </UserContext.Provider>
   )

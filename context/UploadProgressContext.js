@@ -1,45 +1,44 @@
-import { createContext, useContext, useState, useCallback } from 'react';
+import {
+    createUploadTask,
+    FileSystemSessionType,
+    FileSystemUploadType,
+    SessionType,
+    UploadType
+} from 'expo-file-system/legacy';
+import { createContext, useCallback, useContext, useMemo, useState } from 'react';
 
 const UploadProgressContext = createContext();
 
 export const UploadProgressProvider = ({ children }) => {
     const [uploadProgress, setUploadProgress] = useState({
         isVisible: false,
-        currentFile: 0,
         totalFiles: 0,
-        fileProgress: 0,
-        fileName: '',
-        status: 'uploading', // 'uploading', 'processing', 'completed', 'error'
+        filesProgress: {}, // 📊 Dictionary tracking: { [fileUri]: progressPercentage }
+        status: 'uploading',
         errorMessage: null,
     });
 
-    const startUpload = useCallback((totalFiles, fileName = '') => {
+    const startUpload = useCallback((totalFiles) => {
         setUploadProgress({
             isVisible: true,
-            currentFile: 1,
             totalFiles,
-            fileProgress: 0,
-            fileName,
+            filesProgress: {}, // Flush progress mapping tracking
             status: 'uploading',
             errorMessage: null,
         });
     }, []);
 
-    const updateProgress = useCallback((fileProgress, currentFile = null, fileName = '') => {
-        setUploadProgress((prev) => ({
-            ...prev,
-            fileProgress: Math.min(100, Math.max(0, fileProgress)),
-            currentFile: currentFile !== null ? currentFile : prev.currentFile,
-            fileName: fileName || prev.fileName,
-        }));
-    }, []);
+    const updateProgress = useCallback((fileId, fileProgress) => {
+        const safeProgress = isNaN(fileProgress) || !isFinite(fileProgress)
+            ? 0
+            : Math.min(100, Math.max(0, fileProgress));
 
-    const nextFile = useCallback((fileName = '') => {
         setUploadProgress((prev) => ({
             ...prev,
-            currentFile: prev.currentFile + 1,
-            fileProgress: 0,
-            fileName,
+            filesProgress: {
+                ...prev.filesProgress,
+                [fileId]: safeProgress
+            }
         }));
     }, []);
 
@@ -52,50 +51,123 @@ export const UploadProgressProvider = ({ children }) => {
     }, []);
 
     const completeUpload = useCallback(() => {
-        setUploadProgress((prev) => ({
-            ...prev,
-            status: 'completed',
-            fileProgress: 100,
-        }));
-
-        // Auto hide after 1 second
-        setTimeout(() => {
-            setUploadProgress({
-                isVisible: false,
-                currentFile: 0,
-                totalFiles: 0,
-                fileProgress: 0,
-                fileName: '',
-                status: 'uploading',
-                errorMessage: null,
-            });
-        }, 1000);
+        setUploadProgress((prev) => {
+            // Force-fill all files to 100 on complete
+            const completedMap = { ...prev.filesProgress };
+            Object.keys(completedMap).forEach(key => { completedMap[key] = 100; });
+            return {
+                ...prev,
+                status: 'completed',
+                filesProgress: completedMap,
+            };
+        });
     }, []);
 
     const hideProgress = useCallback(() => {
         setUploadProgress({
             isVisible: false,
-            currentFile: 0,
             totalFiles: 0,
-            fileProgress: 0,
-            fileName: '',
+            filesProgress: {},
             status: 'uploading',
             errorMessage: null,
         });
     }, []);
 
-    const value = {
+    /**
+    * 🚀 NATIVE BACKGROUND UPLOAD ENGINE
+    */
+    const uploadWithNativeEngine = useCallback(async (
+        endpointUrl,
+        fileUri,
+        headers = {},
+        parameters = {},
+        fieldName = 'file',
+        httpMethod = 'POST',
+        onCustomProgress = null
+    ) => {
+        try {
+            const extractedFileName = fileUri.split('/').pop() || 'upload_file';
+
+            if (!onCustomProgress) {
+                startUpload(1);
+            }
+
+            const MULTIPART_TYPE = UploadType?.MULTIPART ?? FileSystemUploadType?.MULTIPART ?? 1;
+            const BACKGROUND_SESSION = SessionType?.BACKGROUND ?? FileSystemSessionType?.BACKGROUND ?? 0;
+
+            const sanitizedParameters = {};
+            if (parameters && typeof parameters === 'object') {
+                Object.keys(parameters).forEach((key) => {
+                    if (parameters[key] !== undefined && parameters[key] !== null) {
+                        sanitizedParameters[key] = String(parameters[key]);
+                    }
+                });
+            }
+
+            const uploadTask = createUploadTask(
+                endpointUrl,
+                fileUri,
+                {
+                    uploadType: MULTIPART_TYPE,
+                    fieldName: fieldName,
+                    httpMethod: httpMethod,
+                    headers: headers,
+                    parameters: sanitizedParameters,
+                    sessionType: BACKGROUND_SESSION,
+                },
+                (data) => {
+                    const progress = (data.totalBytesSent / data.totalBytesExpectedToSend) * 100;
+                    if (onCustomProgress) {
+                        onCustomProgress(progress, fileUri);
+                    } else {
+                        updateProgress(fileUri, progress);
+                    }
+                }
+            );
+
+            const response = await uploadTask.uploadAsync();
+
+            if (response.status >= 200 && response.status < 300) {
+                if (!onCustomProgress) {
+                    completeUpload();
+                }
+                try {
+                    return response.body ? JSON.parse(response.body) : {};
+                } catch (e) {
+                    return { rawBody: response.body };
+                }
+            } else {
+                throw new Error(`Server rejected upload with status: ${response.status}`);
+            }
+        } catch (error) {
+            if (!onCustomProgress) {
+                setStatus('error', error.message);
+            }
+            console.error("Native Upload Failed:", error);
+            throw error;
+        }
+    }, [startUpload, updateProgress, completeUpload, setStatus]);
+
+    const contextValue = useMemo(() => ({
         uploadProgress,
         startUpload,
         updateProgress,
-        nextFile,
         setStatus,
         completeUpload,
         hideProgress,
-    };
+        uploadWithNativeEngine,
+    }), [
+        uploadProgress,
+        startUpload,
+        updateProgress,
+        setStatus,
+        completeUpload,
+        hideProgress,
+        uploadWithNativeEngine,
+    ]);
 
     return (
-        <UploadProgressContext.Provider value={value}>
+        <UploadProgressContext.Provider value={contextValue}>
             {children}
         </UploadProgressContext.Provider>
     );

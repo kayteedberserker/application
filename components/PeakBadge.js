@@ -2,13 +2,12 @@ import {
     Canvas,
     Group,
     LinearGradient,
-    Mask,
     Path,
     Rect,
     Shadow,
     Skia, // ⚡️ NEW IMPORT: For pre-compiling paths
     vec
-} from '@shopify/react-native-skia';
+} from '@shopify/react-native-skia'; // ⚡️ Note: Removed 'Mask' import as it is no longer needed
 import { memo, useEffect, useMemo } from 'react';
 import { View } from 'react-native';
 import {
@@ -40,7 +39,7 @@ const createDiamondPath = (x, y, r) => {
 };
 
 // Define the core component as a standard function first
-function PeakBadgeComponent({ level = 1, size = 32, isFeed = false }) {
+function PeakBadgeComponent({ level = 1, size = 32, isFeed = false, isVisible = false }) {
     const safeLevel = Math.max(1, level);
 
     // Memoize the theme selection
@@ -48,9 +47,17 @@ function PeakBadgeComponent({ level = 1, size = 32, isFeed = false }) {
 
     const progress = useSharedValue(-0.5);
 
+    // Determine lifecycle execution rule: only freeze animation when it IS in a feed list AND NOT visible.
+    const shouldAnimate = !isFeed || isVisible;
+
     useEffect(() => {
         // ⚡️ CLEANUP: Cancel existing animation to prevent overlap
         cancelAnimation(progress);
+
+        if (!shouldAnimate) {
+            progress.value = -0.5;
+            return;
+        }
 
         // if (isFeed) {
         //     progress.value = 0.5; // Freeze the light sweep in the center
@@ -65,7 +72,7 @@ function PeakBadgeComponent({ level = 1, size = 32, isFeed = false }) {
 
         // ⚡️ CLEANUP: Stop animation on unmount
         return () => cancelAnimation(progress);
-    }, [progress, isFeed]);
+    }, [progress, shouldAnimate]);
 
     // ⚡️ DYNAMIC DIMENSION MATH & PATH GENERATION (MEMOIZED)
     const layout = useMemo(() => {
@@ -207,22 +214,31 @@ function PeakBadgeComponent({ level = 1, size = 32, isFeed = false }) {
                     <Shadow dx={0} dy={1} blur={2} color="rgba(0,0,0,0.5)" />
                 </Path>
 
-                {/* Mask for the sweeping light effect */}
-                <Mask mode="luminance" mask={
-                    <Group>
-                        {safeLevel >= 3 && <Path path={wingsPath} color="white" opacity={0.6} />}
-                        <Path path={hexPath} color="white" />
-                        <Path path={indicatorPaths} color="white" />
+                {/* ⚡️ UI REFACTOR: Swapped heavy luminance Mask for ultra-fast GPU hardware clipping paths */}
+                {shouldAnimate && (
+                    <Group clip={hexPath}>
+                        <Rect x={0} y={0} width={cw} height={h}>
+                            <LinearGradient
+                                start={startPos}
+                                end={endPos}
+                                colors={['transparent', 'rgba(255,255,255,0.45)', 'transparent']}
+                            />
+                        </Rect>
                     </Group>
-                }>
-                    <Rect x={0} y={0} width={cw} height={h}>
-                        <LinearGradient
-                            start={startPos}
-                            end={endPos}
-                            colors={['transparent', 'rgba(255,255,255,0.7)', 'transparent']}
-                        />
-                    </Rect>
-                </Mask>
+                )}
+
+                {/* Apply shine across the custom wings on higher tiers using native clip matching */}
+                {shouldAnimate && safeLevel >= 3 && (
+                    <Group clip={wingsPath}>
+                        <Rect x={0} y={0} width={cw} height={h}>
+                            <LinearGradient
+                                start={startPos}
+                                end={endPos}
+                                colors={['transparent', 'rgba(255,255,255,0.3)', 'transparent']}
+                            />
+                        </Rect>
+                    </Group>
+                )}
 
                 {/* Soft highlight */}
                 <Path path={innerHexPath} opacity={0.3}>

@@ -1,5 +1,5 @@
 import { MaterialCommunityIcons } from "@expo/vector-icons";
-import React, { useEffect } from 'react'; // Added React for memo
+import React, { useEffect, useMemo } from 'react'; // ⚡️ Added useMemo
 import { View } from 'react-native';
 import Animated, {
     cancelAnimation, // ⚡️ ADDED: For cleanup
@@ -21,19 +21,45 @@ const CLAN_TIERS = {
 };
 
 // ⚡️ PERFORMANCE: Wrap in memo to prevent unnecessary re-renders in feeds
-const ClanCrest = React.memo(({ rank = 1, size = 120, isFeed = false, glowColor = null }) => {
+const ClanCrest = React.memo(({ rank = 1, size = 120, isFeed = false, glowColor = null, isVisible = true }) => {
     const config = CLAN_TIERS[rank] || CLAN_TIERS[1];
     const displayColor = glowColor || config.color;
     const pulseValue = useSharedValue(0);
+
+    // Determine animation rule: only kill animation when it IS in the feed AND NOT visible.
+    const shouldAnimate = !isFeed || isVisible;
+
+    // ⚡️ PERFORMANCE OPTIMIZATION: Memoize structural styles to prevent re-allocation on list scroll
+    const containerStyle = useMemo(() => ({ width: size, height: size }), [size]);
+    const iconSize = useMemo(() => size * 0.7, [size]);
+
+    const pulseContainerStyle = useMemo(() => ({
+        position: 'absolute',
+        width: size,
+        height: size,
+        borderRadius: size / 2,
+        borderColor: displayColor,
+        borderWidth: 2, // ⚡️ FIX: Kept static to keep calculations completely off the layout thread
+    }), [size, displayColor]);
+
+    const numeralStyle = useMemo(() => ({
+        fontSize: size * 0.35,
+        color: displayColor,
+        textShadowColor: 'rgba(0,0,0,0.5)',
+        textShadowOffset: { width: 2, height: 2 },
+        textShadowRadius: 4
+    }), [size, displayColor]);
+
+    const titleStyle = useMemo(() => ({ color: displayColor }), [displayColor]);
 
     useEffect(() => {
         // Clear any existing animation before starting or stopping
         cancelAnimation(pulseValue);
 
-        // if (isFeed) {
-        //     pulseValue.value = 0.5;
-        //     return;
-        // }
+        if (!shouldAnimate) {
+            pulseValue.value = 0;
+            return;
+        }
 
         pulseValue.value = withRepeat(
             withTiming(1, { duration: 3000 }),
@@ -43,8 +69,9 @@ const ClanCrest = React.memo(({ rank = 1, size = 120, isFeed = false, glowColor 
 
         // ⚡️ CLEANUP: Stop the UI thread animation when component unmounts
         return () => cancelAnimation(pulseValue);
-    }, [isFeed, rank]);
+    }, [shouldAnimate, rank]);
 
+    // ⚡️ PERFORMANCE OPTIMIZATION: Stripped out layout recalculations (borderWidth)
     const pulseStyle = useAnimatedStyle(() => {
         const scale = interpolate(pulseValue.value, [0, 1], [0.6, 1.4]);
         const opacity = interpolate(pulseValue.value, [0, 0.5, 1], [0, 0.6, 0]);
@@ -52,45 +79,23 @@ const ClanCrest = React.memo(({ rank = 1, size = 120, isFeed = false, glowColor 
         return {
             transform: [{ scale }],
             opacity,
-            borderWidth: interpolate(pulseValue.value, [0, 1], [4, 1]),
         };
     });
 
     return (
-        <View style={{ width: size, height: size }} className="items-center justify-center relative">
+        <View style={containerStyle} className="items-center justify-center relative">
             {/* Background Symbol Icon */}
             <View className="absolute opacity-20" pointerEvents="none">
-                <MaterialCommunityIcons name={config.icon} size={size * 0.7} color={displayColor} />
+                <MaterialCommunityIcons name={config.icon} size={iconSize} color={displayColor} />
             </View>
 
             {/* Energy Wave Pulse */}
-            <Animated.View
-                style={[
-                    pulseStyle,
-                    {
-                        position: 'absolute',
-                        width: size,
-                        height: size,
-                        borderRadius: size / 2,
-                        borderColor: displayColor,
-                        shadowColor: displayColor,
-                        shadowOffset: { width: 0, height: 0 },
-                        shadowOpacity: 0.8,
-                        shadowRadius: 15,
-                    }
-                ]}
-            />
+            <Animated.View style={[pulseStyle, pulseContainerStyle]} />
 
             {/* Roman Numeral Figure */}
             <Text
                 className="font-black italic tracking-tighter z-10"
-                style={{
-                    fontSize: size * 0.35,
-                    color: displayColor,
-                    textShadowColor: 'rgba(0,0,0,0.5)',
-                    textShadowOffset: { width: 2, height: 2 },
-                    textShadowRadius: 4
-                }}
+                style={numeralStyle}
             >
                 {config.label}
             </Text>
@@ -100,7 +105,7 @@ const ClanCrest = React.memo(({ rank = 1, size = 120, isFeed = false, glowColor 
                 <View className="absolute -bottom-2">
                     <Text
                         className="font-black uppercase tracking-[0.2em] text-[8px]"
-                        style={{ color: displayColor }}
+                        style={titleStyle}
                     >
                         {config.title}
                     </Text>

@@ -299,7 +299,7 @@ const PostSearchCard = ({ item, isDark }) => {
                 className={`mb-5 rounded-[2.5rem] border overflow-hidden ${isDark ? "bg-zinc-900/40 border-zinc-800" : "bg-white border-zinc-100 shadow-sm"}`}
             >
                 {item.mediaUrl ? (
-                    <Image source={{ uri: item.mediaUrl }} className="w-full h-48 bg-zinc-800" resizeMode="cover" />
+                    <Image source={{ uri: item.mediaUrl }} className="w-full h-48 bg-zinc-800" contentFit="cover" />
                 ) : (
                     <View className="w-full h-2 bg-blue-600" />
                 )}
@@ -557,7 +557,7 @@ const SearchScreen = () => {
                                     renderItem={renderItem}
                                     estimatedItemSize={180}
                                     removeClippedSubviews={true}
-                                    drawDistance={2000}
+                                    drawDistance={500}
                                     recycleItems={true}
                                     keyboardShouldPersistTaps="handled"
                                     onEndReached={handleLoadMore}

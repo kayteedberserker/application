@@ -6,9 +6,10 @@ import * as MediaLibrary from 'expo-media-library';
 import { useRouter } from "expo-router";
 import * as Sharing from "expo-sharing";
 import { useColorScheme as useNativeWind } from "nativewind";
-import React, { useEffect, useMemo, useRef, useState } from "react";
+import React, { memo, useEffect, useMemo, useRef, useState } from "react";
 import {
     ActivityIndicator,
+    DeviceEventEmitter,
     Dimensions,
     FlatList,
     Modal,
@@ -38,6 +39,7 @@ import { useCoins } from "../../context/CoinContext";
 import { useUser } from "../../context/UserContext";
 import apiFetch from "../../utils/apiFetch";
 // ⚡️ Correct Reanimated Imports
+import { Image } from "expo-image";
 import * as SecureStore from 'expo-secure-store';
 import LottieView from 'lottie-react-native'; // ⚡️ Added for Inventory Previews
 import { MotiView } from 'moti';
@@ -56,7 +58,6 @@ import ImageEditorModal from "../../components/ImageEditorModal"; // Import the 
 import NeuralPinModal from "../../components/NeuralPinModal";
 import TitleTag from "../../components/TitleTag";
 import { useClan } from "../../context/ClanContext";
-import { Image } from "expo-image";
 
 const { width, height } = Dimensions.get("window");
 const LIMIT = 5;
@@ -82,7 +83,7 @@ const getRarityColor = (rarity) => {
 // ==========================================
 // 🔹 1. UNIFIED ITEM PREVIEW MODAL (Store & Inventory)
 // ==========================================
-const ItemPreviewModal = ({
+const ItemPreviewModal = memo(({
     isVisible,
     onClose,
     currentUser,
@@ -227,11 +228,11 @@ const ItemPreviewModal = ({
             </Pressable>
         </Modal>
     );
-};
+});
 
 const previewStyles = StyleSheet.create({
     overlay: {
-        ...StyleSheet.absoluteFillObject,
+        ...StyleSheet.absoluteFill,
         backgroundColor: 'rgba(0,0,0,0.85)',
         justifyContent: 'center',
         alignItems: 'center',
@@ -288,7 +289,7 @@ const previewStyles = StyleSheet.create({
 
 
 // 🔹 2.5. SECURITY MODAL
-const SecurityModal = ({ visible, onClose, user, setUser, isDark }) => {
+const SecurityModal = memo(({ visible, onClose, user, setUser, isDark }) => {
     const CustomAlert = useAlert();
     const [pinModalVisible, setPinModalVisible] = useState(false);
     const [emailModalVisible, setEmailModalVisible] = useState(false);
@@ -328,7 +329,6 @@ const SecurityModal = ({ visible, onClose, user, setUser, isDark }) => {
             CustomAlert("Error", "Please enter a valid email address.");
             return;
         }
-        console.log("trying to check if user has pin? ");
 
         if (user?.securityLevel === 2 || user?.securityLevel === 3) {
             setRequirePin(true);
@@ -568,10 +568,10 @@ const SecurityModal = ({ visible, onClose, user, setUser, isDark }) => {
             </Modal>
         </>
     );
-};
+});
 
 // 🔹 2. THE MAIN STORE COMPONENT
-const AuthorStoreModal = ({ visible, onClose, user, isDark, setInventory }) => {
+const AuthorStoreModal = memo(({ visible, onClose, user, isDark, setInventory }) => {
     const { coins, clanCoins, processTransaction, isProcessingTransaction } = useCoins();
     const storage = useMMKV();
     const CustomAlert = useAlert();
@@ -613,34 +613,31 @@ const AuthorStoreModal = ({ visible, onClose, user, isDark, setInventory }) => {
         }
     }, [visible]);
 
+    const isFetching = useRef(false);
+
     const loadStoreData = async () => {
-        // We already loaded the cache synchronously in useState!
-        // Now, we just check if we need to fetch fresh data in the background.
-        if (!hasFetchedThisSession.current) {
-            try {
-                // Failsafe: just in case the catalog is empty
-                if (catalog.themes.length === 0 && catalog.standaloneItems.length === 0) {
-                    setLoading(true);
-                }
+        if (isFetching.current) return;
 
-                const res = await apiFetch(`/store?type=author`);
-                const data = await res.json();
+        isFetching.current = true;
 
-                if (data.success && data.catalog) {
-                    const newCatalog = {
-                        themes: data.catalog.themes || [],
-                        standaloneItems: data.catalog.standaloneItems || []
-                    };
+        try {
+            const res = await apiFetch('/store?type=author');
+            const data = await res.json();
 
-                    setCatalog(newCatalog);
-                    storage.set(CACHE_KEY, JSON.stringify(newCatalog));
-                    hasFetchedThisSession.current = true;
-                }
-            } catch (e) {
-                console.error("Store fetch error:", e);
-            } finally {
-                setLoading(false);
+            if (data.success && data.catalog) {
+                const newCatalog = {
+                    themes: data.catalog.themes || [],
+                    standaloneItems: data.catalog.standaloneItems || [],
+                };
+
+                setCatalog(newCatalog);
+                storage.set(CACHE_KEY, JSON.stringify(newCatalog));
             }
+        } catch (err) {
+            console.error(err);
+        } finally {
+            setLoading(false);
+            isFetching.current = false;
         }
     };
 
@@ -870,10 +867,129 @@ const AuthorStoreModal = ({ visible, onClose, user, isDark, setInventory }) => {
             />
         </Modal>
     );
+});
+
+import {
+    Canvas,
+    Group,
+    LinearGradient, Mask,
+    Path,
+    Rect,
+    Skia, vec
+} from '@shopify/react-native-skia';
+import {
+    cancelAnimation,
+    useDerivedValue
+} from 'react-native-reanimated';
+
+// ⚡️ RARITY CONFIG WITH ABBREVIATIONS
+const HYPE_TIERS = {
+    FREE: {
+        cost: 0, points: 50,
+        label: 'FREE HYPE', rarity: 'COMMON', abbr: 'FH',
+        colors: ['#475569', '#1e293b', '#0f172a'],
+        glow: '#94a3b8'
+    },
+    STANDARD: {
+        cost: 20, points: 100,
+        label: 'STANDARD', rarity: 'RARE', abbr: 'SH',
+        colors: ['#0284c7', '#0369a1', '#082f49'],
+        glow: '#38bdf8'
+    },
+    SUPER: {
+        cost: 100, points: 600,
+        label: 'SUPER HYPE', rarity: 'EPIC', abbr: 'SP',
+        colors: ['#9333ea', '#6b21a8', '#3b0764'],
+        glow: '#c084fc'
+    },
+    MEGA: {
+        cost: 400, points: 3000,
+        label: 'MEGA BLAST', rarity: 'LEGENDARY', abbr: 'ME',
+        colors: ['#d97706', '#92400e', '#451a03'],
+        glow: '#fbbf24'
+    }
 };
 
+// ⚡️ CLEAN SKIA CARD FRAME - TEXT ONLY (FILLS ~70% AREA)
+const MiniSkiaCard = memo(({ colors, glow, abbr, width = 36, height = 48, isDark }) => {
+    const progress = useSharedValue(-0.5)
+
+    useEffect(() => {
+        cancelAnimation(progress);
+        progress.value = withRepeat(
+            withTiming(1.5, { duration: 2400, easing: Easing.inOut(Easing.ease) }),
+            -1,
+            false
+        );
+        return () => cancelAnimation(progress);
+    }, [progress]);
+
+    const layout = useMemo(() => {
+        const cut = 6;
+        const inset = 2;
+
+        const outerStr = `M ${cut} 0 L ${width} 0 L ${width} ${height - cut} L ${width - cut} ${height} L 0 ${height} L 0 ${cut} Z`;
+        const innerStr = `M ${cut + inset / 2} ${inset} L ${width - inset} ${inset} L ${width - inset} ${height - cut - inset / 2} L ${width - cut - inset / 2} ${height - inset} L ${inset} ${height - inset} L ${inset} ${cut + inset / 2} Z`;
+
+        return {
+            outerPath: Skia.Path.MakeFromSVGString(outerStr),
+            innerPath: Skia.Path.MakeFromSVGString(innerStr)
+        };
+    }, [width, height]);
+
+    const startPos = useDerivedValue(() => ({ x: progress.value * width, y: 0 }));
+    const endPos = useDerivedValue(() => ({ x: (progress.value + 0.5) * width, y: height }));
+
+    return (
+        <View style={{ width, height, justifyContent: 'center', alignItems: 'center' }}>
+            <Canvas style={{
+                position: 'absolute',
+                left: 0,
+                right: 0,
+                top: 0,
+                bottom: 0
+            }}>
+                {/* Background Gradient */}
+                <Path path={layout.outerPath}>
+                    <LinearGradient start={vec(0, 0)} end={vec(width, height)} colors={colors} />
+                </Path>
+
+                {/* Inner Border Constraint */}
+                <Path path={layout.innerPath} color={glow} style="stroke" strokeWidth={0.5} opacity={0.3} />
+
+                {/* Animated Scanner Sweep */}
+                <Mask mode="luminance" mask={<Group><Path path={layout.outerPath} color="white" /></Group>}>
+                    <Rect x={0} y={0} width={width} height={height}>
+                        <LinearGradient
+                            start={startPos}
+                            end={endPos}
+                            colors={['transparent', 'rgba(255,255,255,0.4)', 'transparent']}
+                        />
+                    </Rect>
+                </Mask>
+            </Canvas>
+
+            {/* HIGH-IMPACT MAXI-TEXT (Fills approx 70% of the 36x48 container) */}
+            <Text style={{
+                position: 'absolute',
+                fontSize: 18,
+                fontWeight: '900',
+                color: '#ffffff',
+                letterSpacing: 0.5,
+                textAlign: 'center',
+                textShadowColor: 'rgba(0,0,0,0.75)',
+                textShadowOffset: { width: 0, height: 1.5 },
+                textShadowRadius: 2.5,
+            }}>
+                {abbr}
+            </Text>
+        </View>
+    );
+});
+
+
 // 🔹 3. THE INVENTORY COMPONENT
-const AuthorInventoryModal = ({ visible, onClose, user, setUser, isDark, theinventory }) => {
+const AuthorInventoryModal = memo(({ visible, onClose, user, setUser, isDark, theinventory }) => {
     const [filter, setFilter] = useState('ALL');
     const [isUpdating, setIsUpdating] = useState(false);
     const [updatingTitle, setUpdatingTitle] = useState(null); // ⚡️ Track specific title loading
@@ -881,7 +997,8 @@ const AuthorInventoryModal = ({ visible, onClose, user, setUser, isDark, theinve
     const CustomAlert = useAlert();
 
     const inventory = theinventory || user?.inventory || [];
-    const categories = ['ALL', 'TITLE', 'GLOW', 'BORDER', 'WATERMARK', "AVATAR", 'AVATAR_VFX'];
+    // ⚡️ Added 'HYPE' to the categories array
+    const categories = ['ALL', 'TITLE', 'GLOW', 'BORDER', 'WATERMARK', "AVATAR", 'AVATAR_VFX', 'HYPE'];
 
     const handleEquipToggle = async (selectedItem) => {
         if (isUpdating) return;
@@ -1071,7 +1188,7 @@ const AuthorInventoryModal = ({ visible, onClose, user, setUser, isDark, theinve
                                                 }`}
                                         >
                                             <View className="flex-1 mr-4">
-                                                <TitleTag isDark={isDark} key={title.name} title={title.name} size={12} tier={title.tier} />
+                                                <TitleTag isDark={isDark} isVisible={true} key={title.name} title={title.name} size={12} tier={title.tier} />
                                             </View>
 
                                             <View className="items-center justify-center min-w-[60px]">
@@ -1103,18 +1220,34 @@ const AuthorInventoryModal = ({ visible, onClose, user, setUser, isDark, theinve
                                     const isExpired = expiration === "Expired";
                                     const isBorder = item.category === 'BORDER';
                                     const isVfx = item.category === 'AVATAR_VFX';
+                                    const isHype = item.category === 'HYPE'; // ⚡️ Extracted Hype Boolean
+
                                     const visual = item.visualConfig || {};
                                     const rowRarityColor = getRarityColor(item.rarity); // ⚡️ Map color
                                     const isLottie = !!(visual.lottieUrl || visual.lottieJson);
                                     const isImage = !!item.url
 
                                     const imageUrl = item.url || visual.url;
+
+                                    // ⚡️ Map specific HYPE config based on rarity
+                                    // ⚡️ Map specific HYPE config based directly on the hypeType key
+                                    const hypeConfig = isHype ? (HYPE_TIERS[item.hypeType] || HYPE_TIERS.FREE) : null;
+
                                     const PreviewIcon = (
                                         <View
-                                            className={`w-16 h-16 bg-black/20 items-center justify-center rounded-2xl overflow-hidden ${isBorder ? '' : 'border relative'}`}
+                                            className={`w-16 h-16 bg-black/20 items-center justify-center rounded-2xl overflow-hidden ${(isBorder || isHype) ? '' : 'border relative'}`}
                                             style={{ borderColor: `${rowRarityColor}40` }}
                                         >
-                                            {isBorder ? (
+                                            {isHype ? (
+                                                <MiniSkiaCard
+                                                    colors={hypeConfig.colors}
+                                                    glow={hypeConfig.glow}
+                                                    abbr={hypeConfig.abbr}
+                                                    width={36}
+                                                    height={48}
+                                                    isDark={isDark}
+                                                />
+                                            ) : isBorder ? (
                                                 <ClanBorder
                                                     color={visual.primaryColor || visual.color || "#ff0000"}
                                                     secondaryColor={visual.secondaryColor}
@@ -1132,7 +1265,7 @@ const AuthorInventoryModal = ({ visible, onClose, user, setUser, isDark, theinve
                                                         width: "100%",
                                                         height: "100%",
                                                     }}
-                                                    resizeMode="contain"
+                                                    contentFit="contain"
                                                 />
                                             ) : (isVfx || isLottie) ? (
                                                 /* ⚡️ Render Lottie for VFX or Animated Watermarks */
@@ -1180,27 +1313,50 @@ const AuthorInventoryModal = ({ visible, onClose, user, setUser, isDark, theinve
                                                 : 'bg-gray-50 dark:bg-[#161b22]'
                                                 } ${isExpired ? 'opacity-50 border-red-500/30' : 'border-gray-100 dark:border-gray-800'}`}
                                         >
-                                            {/* ⚡️ Tap the Icon to Preview */}
-                                            <TouchableOpacity onPress={() => setItemToPreview(item)} className="mr-4">
-                                                {isBorder ? (
-                                                    <ClanBorder
-                                                        color={visual.primaryColor || visual.color || "#ff0000"}
-                                                        secondaryColor={visual.secondaryColor}
-                                                        animationType={visual.animationType}
-                                                        duration={visual.duration}
-                                                    >
-                                                        <View className="h-10 flex justify-center items-center rounded-sm">
-                                                            <Text>Clan Banner</Text>
-                                                        </View>
-                                                    </ClanBorder>
-                                                ) : (
-                                                    PreviewIcon
-                                                )}
-                                            </TouchableOpacity>
+                                            {/* ⚡️ BUG FIX: Disable preview click for consumable items */}
+                                            {item.isConsumable ? (
+                                                <View className="mr-4">
+                                                    {isBorder ? (
+                                                        <ClanBorder
+                                                            color={visual.primaryColor || visual.color || "#ff0000"}
+                                                            secondaryColor={visual.secondaryColor}
+                                                            animationType={visual.animationType}
+                                                            duration={visual.duration}
+                                                        >
+                                                            <View className="h-10 flex justify-center items-center rounded-sm">
+                                                                <Text>Clan Banner</Text>
+                                                            </View>
+                                                        </ClanBorder>
+                                                    ) : (
+                                                        PreviewIcon
+                                                    )}
+                                                </View>
+                                            ) : (
+                                                <TouchableOpacity onPress={() => setItemToPreview(item)} className="mr-4">
+                                                    {isBorder ? (
+                                                        <ClanBorder
+                                                            color={visual.primaryColor || visual.color || "#ff0000"}
+                                                            secondaryColor={visual.secondaryColor}
+                                                            animationType={visual.animationType}
+                                                            duration={visual.duration}
+                                                        >
+                                                            <View className="h-10 flex justify-center items-center rounded-sm">
+                                                                <Text>Clan Banner</Text>
+                                                            </View>
+                                                        </ClanBorder>
+                                                    ) : (
+                                                        PreviewIcon
+                                                    )}
+                                                </TouchableOpacity>
+                                            )}
 
                                             <View className="flex-1">
                                                 <Text className="font-black dark:text-white text-sm uppercase italic">
                                                     {item.name}
+                                                    {/* ⚡️ Item Count Indicator for stackable quantities */}
+                                                    {item.isConsumable && (item.itemCount || 1) > 1 && (
+                                                        <Text className="text-blue-500 font-extrabold text-xs normal-case not-italic"> (x{item.itemCount})</Text>
+                                                    )}
                                                 </Text>
 
                                                 <View className="flex-row mt-2 items-center">
@@ -1226,8 +1382,8 @@ const AuthorInventoryModal = ({ visible, onClose, user, setUser, isDark, theinve
                                                 </View>
                                             </View>
 
-                                            {/* ⚡️ BUG FIX: Only show Equip button if it's NOT EXPIRED */}
-                                            {!isExpired && item.category !== "VERIFIED" && (
+                                            {/* ⚡️ BUG FIX: Only show Equip button if it's NOT EXPIRED and NOT CONSUMABLE */}
+                                            {!isExpired && item.category !== "VERIFIED" && !item.isConsumable && (
                                                 <TouchableOpacity
                                                     disabled={isUpdating}
                                                     onPress={() => handleEquipToggle(item)}
@@ -1242,6 +1398,15 @@ const AuthorInventoryModal = ({ visible, onClose, user, setUser, isDark, theinve
                                                         </Text>
                                                     )}
                                                 </TouchableOpacity>
+                                            )}
+
+                                            {/* ⚡️ Show Stock/Quantity Badge for valid non-equipable items instead of the Equip action */}
+                                            {!isExpired && item.isConsumable && (
+                                                <View className="px-4 py-2 bg-blue-500/10 rounded-xl border border-blue-500/20">
+                                                    <Text className="text-blue-500 text-[10px] font-black uppercase">
+                                                        Stock: {item.itemCount || 1}
+                                                    </Text>
+                                                </View>
                                             )}
 
                                             {/* ⚡️ Only show VOID if expired */}
@@ -1266,7 +1431,7 @@ const AuthorInventoryModal = ({ visible, onClose, user, setUser, isDark, theinve
                 </View>
             </View>
 
-            {/* ⚡️ Render Universal Preview Modal for Inventory */}
+/* ⚡️ Render Universal Preview Modal for Inventory */
             <ItemPreviewModal
                 isVisible={!!itemToPreview}
                 onClose={() => setItemToPreview(null)}
@@ -1278,7 +1443,7 @@ const AuthorInventoryModal = ({ visible, onClose, user, setUser, isDark, theinve
             />
         </Modal>
     );
-};
+});
 
 const getAuraTier = (rank) => {
     // 🎨 Global Constants
@@ -1327,7 +1492,7 @@ const getAuraTier = (rank) => {
         default:
             return { color: '#1e293b', label: 'VANGUARD', icon: 'shield-check' };
     }
-};
+}
 
 
 export const AURA_TIERS = [
@@ -1359,11 +1524,11 @@ const resolveUserRank = (level, currentAura) => {
         req: currentTier.req,
         nextReq: nextTier.req
     };
-};
+}
 
 export default function MobileProfilePage() {
     const storage = useMMKV();
-    const CustomAlert = useAlert();
+    const CustomAlert = useAlert()
     const [theinventory, setInventory] = useState([])
     const { user, setUser, contextLoading, handleLogout, isLoggingOut } = useUser();
 
@@ -1421,6 +1586,8 @@ export default function MobileProfilePage() {
 
     // ⚡️ EXTRACT WEEKLY GLORY DATA
     const weeklyGloryRank = user?.previousRank || 0;
+    const totalHypes = user?.totalHypePointsGiven || 0;
+    const totalHyped = user?.totalHypePointsReceived || 0;
     const weeklyAuraTier = useMemo(() => getAuraTier(weeklyGloryRank), [weeklyGloryRank]);
     const weeklyGloryPoints = user?.weeklyAura || 0;
 
@@ -1693,7 +1860,8 @@ export default function MobileProfilePage() {
     // ⚡️ NEW: Function to handle image picking and opening the editor
     const pickImage = async () => {
         const result = await ImagePicker.launchImageLibraryAsync({
-            mediaTypes: ImagePicker.MediaTypeOptions.Images,
+            // Uses the modern array syntax to remove the deprecation warning safely
+            mediaTypes: ['images'],
             allowsEditing: false,
             quality: 1,
         });
@@ -1701,7 +1869,14 @@ export default function MobileProfilePage() {
         if (!result.canceled) {
             const selected = result.assets[0];
             setPreview(selected.uri);
-            setImageFile({ uri: selected.uri, name: "profile.jpg", type: "image/jpeg" });
+
+            // Match your working schema structure exactly using localUri
+            setImageFile({
+                localUri: selected.uri,
+                type: "image",
+                fileSize: selected.fileSize
+            });
+
             setImageToEditUri(selected.uri); // Store URI for editor
             setIsEditorVisible(true); // Open the editor modal
         }
@@ -1709,7 +1884,13 @@ export default function MobileProfilePage() {
 
     const handleSaveEditedImage = async (editedUri) => {
         setPreview(editedUri);
-        setImageFile({ uri: editedUri, name: "profile.jpg", type: "image/jpeg" });
+
+        // Maintain identical formatting when saving from the editor modal
+        setImageFile(prev => ({
+            ...prev,
+            localUri: editedUri
+        }));
+
         setIsEditorVisible(false);
         setImageToEditUri(null);
         CustomAlert("Success", "Profile image updated locally. Save changes to sync.");
@@ -1736,11 +1917,29 @@ export default function MobileProfilePage() {
             }));
 
             if (imageFile) {
+                const targetUri = imageFile.localUri || imageFile.uri;
+                if (!targetUri) {
+                    throw new Error("Invalid image file path reference.");
+                }
+
+                // Extract extensions and calculate properties dynamically
+                const fileExtension = targetUri.split('.').pop()?.toLowerCase() || 'jpg';
+                const mimeType = fileExtension === 'png' ? 'image/png' : 'image/jpeg';
+                const fileName = `profile_${Date.now()}.${fileExtension}`;
+
                 if (Platform.OS === "web") {
-                    const blob = await (await fetch(imageFile.uri)).blob();
-                    formData.append("file", blob, "profile.jpg");
+                    const blob = await (await fetch(targetUri)).blob();
+                    formData.append("file", blob, fileName);
                 } else {
-                    formData.append("file", imageFile);
+                    // ⚡️ THE WINTER/FETCH SAFE COMPLIANT UPLOAD APPARATUS:
+                    // Type casting via an object proxy bypasses Expo's strict runtime type check
+                    const nativeFilePayload = {
+                        uri: targetUri,
+                        name: fileName,
+                        type: mimeType
+                    };
+
+                    formData.append("file", nativeFilePayload);
                 }
             }
 
@@ -1772,7 +1971,8 @@ export default function MobileProfilePage() {
                 CustomAlert("Error", result.message || "Failed to update.");
             }
         } catch (err) {
-            CustomAlert("Error", "Failed to sync changes.")
+            console.error("[UPLOAD_FATAL_ERROR]:", err);
+            CustomAlert("Error", "Failed to sync changes.");
         } finally {
             setIsUpdating(false);
         }
@@ -1805,7 +2005,7 @@ export default function MobileProfilePage() {
                 },
             },
         ]);
-    };
+    }
 
     const listHeader = useMemo(() => {
         return (
@@ -1834,6 +2034,7 @@ export default function MobileProfilePage() {
                                 isDark={isDark}
                                 size={160}
                                 glowColor={dynamicAuraColor}
+                                isVisible={true}
                                 onPress={pickImage}
                             />
 
@@ -1962,12 +2163,15 @@ export default function MobileProfilePage() {
                                 themeColor={dynamicAuraColor}
                                 equippedGlow={equippedGlow}
                                 auraRank={weeklyGloryRank}
+                                showPeakBadge={false}
+                                showFlame={false}
                                 isDark={isDark}
                                 fontSize={24}
+                                isVisible={true}
                             />
 
                             <View className="mt-2 flex justify-center items-center">
-                                <TitleTag isDark={isDark} key={user?.equippedTitle} rank={weeklyGloryRank} auraVisuals={weeklyAuraTier} equippedTitle={user?.equippedTitle} isTop10={weeklyGloryRank ? true : false} />
+                                <TitleTag isDark={isDark} key={user?.equippedTitle} isVisible={true} rank={weeklyGloryRank} auraVisuals={weeklyAuraTier} equippedTitle={user?.equippedTitle} isTop10={weeklyGloryRank ? true : false} />
                             </View>
                         </Pressable>
 
@@ -1977,22 +2181,40 @@ export default function MobileProfilePage() {
                     </View>
 
                     {/* 4-COLUMN STATS */}
-                    <View className="flex-row justify-between mt-2 border-y border-gray-200 dark:border-gray-800 w-full py-5 px-2">
-                        <View className="items-center flex-1">
-                            <Text className="text-[10px] font-black text-gray-400 uppercase tracking-widest mb-1">Aura</Text>
-                            <Text className="text-lg font-black" style={{ color: writerRank.color }}>{totalAura.toLocaleString()}</Text>
+                    <View className="mt-4 border-y border-gray-200 dark:border-gray-800 w-full py-1">
+                        {/* TOP ROW: CORE INFRASTRUCTURE STATS */}
+                        <View className="flex-row justify-between w-full py-3 px-2">
+                            <View className="items-center flex-1">
+                                <Text className="text-[10px] font-black text-gray-400 dark:text-gray-500 uppercase tracking-widest mb-1">Aura</Text>
+                                <Text className="text-lg font-black" style={{ color: writerRank.color }}>{totalAura.toLocaleString()}</Text>
+                            </View>
+                            <View className="items-center flex-1 border-l border-gray-200 dark:border-gray-800">
+                                <Text className="text-[10px] font-black text-gray-400 dark:text-gray-500 uppercase tracking-widest mb-1">Weekly Aura</Text>
+                                <Text className="text-lg font-black" style={{ color: '#ec4899' }}>+{weeklyGloryPoints.toLocaleString()}</Text>
+                            </View>
+                            <View className="items-center flex-1 border-l border-gray-200 dark:border-gray-800">
+                                <Text className="text-[10px] font-black text-gray-400 dark:text-gray-500 uppercase tracking-widest mb-1">Docs</Text>
+                                <Text className="text-lg font-black text-gray-900 dark:text-white">{totalPosts.toLocaleString()}</Text>
+                            </View>
                         </View>
-                        <View className="items-center flex-1 border-l border-gray-200 dark:border-gray-800">
-                            <Text className="text-[10px] font-black text-gray-400 uppercase tracking-widest mb-1">Glory</Text>
-                            <Text className="text-lg font-black" style={{ color: '#ec4899' }}>+{weeklyGloryPoints.toLocaleString()}</Text>
-                        </View>
-                        <View className="items-center flex-1 border-l border-gray-200 dark:border-gray-800">
-                            <Text className="text-[10px] font-black text-gray-400 uppercase tracking-widest mb-1">Docs</Text>
-                            <Text className="text-lg font-black dark:text-white">{totalPosts.toLocaleString()}</Text>
-                        </View>
-                        <View className="items-center flex-1 border-l border-gray-200 dark:border-gray-800">
-                            <Text className="text-[10px] font-black text-gray-400 uppercase tracking-widest mb-1">Rank</Text>
-                            <Text className="text-lg font-black dark:text-white" style={{ color: dynamicAuraColor }}>#{weeklyGloryRank || '??'}</Text>
+
+                        {/* MATRIX GRID ROW INTERSECT */}
+                        <View className="border-t border-gray-200 dark:border-gray-800 mx-4" />
+
+                        {/* BOTTOM ROW: NETWORK & HYPE ENGAGEMENT */}
+                        <View className="flex-row justify-between w-full py-3 px-2">
+                            <View className="items-center flex-1">
+                                <Text className="text-[10px] font-black text-gray-400 dark:text-gray-500 uppercase tracking-widest mb-1">Rank</Text>
+                                <Text className="text-lg font-black" style={{ color: dynamicAuraColor }}>#{weeklyGloryRank || '??'}</Text>
+                            </View>
+                            <View className="items-center flex-1 border-l border-gray-200 dark:border-gray-800">
+                                <Text className="text-[10px] font-black text-gray-400 dark:text-gray-500 uppercase tracking-widest mb-1">TOTAL HYPES</Text>
+                                <Text className="text-lg font-black" style={{ color: '#fbbf24' }}>#{totalHyped || '??'}</Text>
+                            </View>
+                            <View className="items-center flex-1 border-l border-gray-200 dark:border-gray-800">
+                                <Text className="text-[10px] font-black text-gray-400 dark:text-gray-500 uppercase tracking-widest mb-1">TOTAL HP</Text>
+                                <Text className="text-lg font-black" style={{ color: '#d946ef' }}>#{totalHypes || '??'}</Text>
+                            </View>
                         </View>
                     </View>
 
@@ -2125,6 +2347,11 @@ export default function MobileProfilePage() {
                 keyExtractor={(item) => item._id}
                 ListHeaderComponent={listHeader}
                 scrollEnabled={!isOnboarding}
+                onScroll={(e) => {
+                    // ⚡️ Natively stream layout shifts directly to layout context threads without React lifecycle updates
+                    DeviceEventEmitter.emit("onScroll", e.nativeEvent.contentOffset.y);
+                }}
+                scrollEventThrottle={16} // Keep rendering execution snappy at 60fps/120fps ticks
                 showsVerticalScrollIndicator={false}
                 onEndReached={() => { if (!isReachingEnd && !isValidating) setSize(size + 1); }}
                 onEndReachedThreshold={0.5}
@@ -2188,6 +2415,14 @@ export default function MobileProfilePage() {
                                         <Ionicons name="chatbox-ellipses" size={14} color="#f59e0b" />
                                         <Text className="text-gray-600 dark:text-gray-400 text-[11px] font-bold">
                                             {item.discussionCount || 0}
+                                        </Text>
+                                    </View>
+
+                                    {/* Hype Points - Deep engagement */}
+                                    <View className="items-center flex-row gap-1">
+                                        <Ionicons name="flash" size={14} color="#00ff00" />
+                                        <Text className="text-gray-600 dark:text-gray-400 text-[11px] font-bold">
+                                            {item.hypePointsCount || 0}
                                         </Text>
                                     </View>
                                 </View>
@@ -2263,7 +2498,7 @@ export default function MobileProfilePage() {
                             {weeklyAuraTier?.label || 'NOVICE'} STATUS
                         </Text>
                         <Text className="text-gray-500 text-center font-bold text-[10px] uppercase tracking-[0.3em] mb-5">
-                            Total Weekly Glory: {weeklyGloryPoints.toLocaleString()}
+                            Total Weekly Aura: {weeklyGloryPoints.toLocaleString()}
                         </Text>
                         <Text className="text-gray-600 dark:text-gray-400 text-center leading-6 mb-8 font-medium px-2">
                             This is your competitive ranking for the week. Dominate the leaderboards to earn higher statuses and seasonal rewards!
@@ -2412,9 +2647,9 @@ export default function MobileProfilePage() {
     );
 }
 
-const ProfileActionButton = ({ icon, color, onPress, label }) => (
+const ProfileActionButton = memo(({ icon, color, onPress, label }) => (
     <TouchableOpacity onPress={onPress} style={{ backgroundColor: `${color}15`, borderColor: `${color}40` }} className="w-12 h-12 rounded-2xl items-center justify-center border mb-3 shadow-sm active:scale-90">
         <MaterialCommunityIcons name={icon} size={22} color={color} />
         <Text style={{ color, fontSize: 6 }} className="font-black uppercase mt-1">{label}</Text>
     </TouchableOpacity>
-);
+))

@@ -2,15 +2,12 @@ import { Feather, Ionicons, MaterialCommunityIcons } from "@expo/vector-icons";
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { Redirect, Stack, usePathname, useRouter } from "expo-router";
 import { useColorScheme as useNativeWind } from "nativewind";
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react"; // ⚡️ Added useRef
 import {
     ActivityIndicator,
     DeviceEventEmitter,
-    Dimensions // ⚡️ Added for Skia Layout
-    ,
-
+    Dimensions, // ⚡️ Added for Skia Layout
     Modal,
-    Platform,
     StatusBar,
     StyleSheet,
     Text,
@@ -55,6 +52,26 @@ import TopBar from "./../../components/Topbar";
 
 const { width } = Dimensions.get('window'); // ⚡️ Get width for Skia
 
+const tabs = [
+    { id: 'home', label: 'HOME', icon: 'home', route: '/', color: '#3b82f6', match: (p) => p === "/" },
+    { id: 'search', label: 'SEARCH', icon: 'search', route: '/Search', color: '#a855f7', match: (p) => p === "/Search" },
+    { id: 'diary', label: 'DIARY', icon: 'add-circle', route: '/authordiary', color: '#10b981', match: (p) => p === "/authordiary" },
+    { id: 'profile', label: 'PROFILE', icon: 'person', route: '/profile', color: '#f59e0b', match: (p) => p === "/profile" },
+];
+
+const NotificationBadge = ({ count, hasUnRead, size = 12, canManageClan }) => {
+    if (!hasUnRead && (!count || count <= 0)) return null;
+    if (!hasUnRead && !canManageClan) return null;
+    return (
+        <View
+            className="absolute -top-1 -right-1 bg-red-500 rounded-full items-center justify-center border-2 border-white dark:border-slate-900"
+            style={{ minWidth: size, height: size, paddingHorizontal: 2 }}
+        >
+            {count > 9 && <View className="w-1 h-1 bg-white rounded-full" />}
+        </View>
+    )
+};
+
 export default function MainLayout() {
     const { colorScheme, setColorScheme } = useNativeWind();
     const systemScheme = useSystemScheme();
@@ -74,10 +91,9 @@ export default function MainLayout() {
     }, [pathname]);
 
     const { warActionsCount, canManageClan, fullData, hasUnreadChat } = useClan();
-
-    const [lastOffset, setLastOffset] = useState(0);
-    const [isNavVisible, setIsNavVisible] = useState(true);
-    const [showTop, setShowTop] = useState(false);
+    // ⚡️ PERFORMANCE OPTIMIZATION: Converted scrolling states into high-performance references
+    const lastOffsetRef = useRef(0);
+    const isNavVisibleRef = useRef(true);
     const [showClanMenu, setShowClanMenu] = useState(false);
 
     // ⚡️ COFFEE SYSTEM STATE
@@ -86,7 +102,6 @@ export default function MainLayout() {
 
     const { user, setUser, contextLoading, pinModalVisible, setPinModalVisible } = useUser();
     const CustomAlert = useAlert()
-    if (__DEV__) console.log(pinModalVisible);
 
     // ⚡️ CLAN HINT STATE
     const [showClanHint, setShowClanHint] = useState(false);
@@ -98,6 +113,7 @@ export default function MainLayout() {
     const eventSpin = useSharedValue(0);
     const tooltipAnim = useSharedValue(0);
     const clanHintBounce = useSharedValue(0); // ⚡️ For the Gold clan hint
+    const showTopAnim = useSharedValue(0); // ⚡️ High performance shared value for Back-To-Top visibility
 
     const [isUserAuthenticated, setIsUserAuthenticated] = useState(() => {
         return storage.getString("mobileUser") !== "null" && storage.getString("mobileUser") ? true : null;
@@ -105,6 +121,7 @@ export default function MainLayout() {
 
     const [userInClan, setUserInClan] = useState(false);
     const [isFirstPostFlow, setIsFirstPostFlow] = useState(false);
+
     // =================================================================
     // 1. INTERCEPT: CHECK FOR FIRST POST FLAG
     // =================================================================
@@ -115,12 +132,7 @@ export default function MainLayout() {
         }
     }, []);
 
-    const tabs = [
-        { id: 'home', label: 'HOME', icon: 'home', route: '/', color: '#3b82f6', match: (p) => p === "/" },
-        { id: 'search', label: 'SEARCH', icon: 'search', route: '/Search', color: '#a855f7', match: (p) => p === "/Search" },
-        { id: 'diary', label: 'DIARY', icon: 'add-circle', route: '/authordiary', color: '#10b981', match: (p) => p === "/authordiary" },
-        { id: 'profile', label: 'PROFILE', icon: 'person', route: '/profile', color: '#f59e0b', match: (p) => p === "/profile" },
-    ];
+
 
     // ⚡️ CLAN HINT LOGIC (2s Delay, 10x Max)
     useEffect(() => {
@@ -152,7 +164,7 @@ export default function MainLayout() {
 
     // ⚡️ REANIMATED EFFECTS
     useEffect(() => {
-        setIsNavVisible(true);
+        isNavVisibleRef.current = true;
         navY.value = withTiming(0, { duration: 300 });
     }, [pathname]);
 
@@ -232,24 +244,34 @@ export default function MainLayout() {
         }
     }, [systemScheme, setColorScheme]);
 
+    // ⚡️ OPTIMIZED EVENT LISTENER: Bypasses React state management entirely during scroll loops
     useEffect(() => {
         const subscription = DeviceEventEmitter.addListener("onScroll", (offsetY) => {
-            setShowTop(offsetY > 400);
+            // Manage Show Top button natively via Shared Value
+            if (offsetY > 400 && showTopAnim.value === 0) {
+                showTopAnim.value = withTiming(1, { duration: 200 });
+            } else if (offsetY <= 400 && showTopAnim.value === 1) {
+                showTopAnim.value = withTiming(0, { duration: 200 });
+            }
+
+            const lastOffset = lastOffsetRef.current;
+            const isNavVisible = isNavVisibleRef.current;
+
             if (offsetY < lastOffset || offsetY < 50) {
                 if (!isNavVisible) {
-                    setIsNavVisible(true);
+                    isNavVisibleRef.current = true;
                     navY.value = withTiming(0, { duration: 200 });
                 }
             } else if (offsetY > lastOffset && offsetY > 100) {
                 if (isNavVisible) {
-                    setIsNavVisible(false);
+                    isNavVisibleRef.current = false;
                     navY.value = withTiming(-80, { duration: 200 });
                 }
             }
-            setLastOffset(offsetY);
+            lastOffsetRef.current = offsetY;
         });
         return () => subscription.remove();
-    }, [lastOffset, isNavVisible]);
+    }, []);
 
     const handleClanPress = () => {
         setShowClanHint(false); // ⚡️ Instantly hide the hint if they click it!
@@ -264,17 +286,6 @@ export default function MainLayout() {
         }
     };
 
-    // ⚡️ REVENUECAT CONFIGURATION CHECK
-    useEffect(() => {
-        const setupPurchases = async () => {
-            if (Platform.OS === 'android') {
-                // Double-check configuration even if handled in root _layout
-                await Purchases.configure({ apiKey: "goog_cypWcXGzLgDujHkFvHTcUoqUNQi" });
-            }
-        };
-        setupPurchases();
-    }, []);
-
     // ⚡️ COFFEE PURCHASE LOGIC
     const handleBuyCoffee = async () => {
         setIsCoffeeLoading(true)
@@ -287,7 +298,7 @@ export default function MainLayout() {
             }
             // Assumes your package identifier in RevenueCat is 'coffee_tip'
             const coffeePackage = offerings.current.availablePackages.find(p => p.product.identifier === 'buy_us_a_coffee');
-            if (!offerings.current || offerings.current.availablePackages.length === 0) {
+            if (!coffeePackage) {
                 CustomAlert("Error", "coffeePackage not found.");
                 return;
             }
@@ -316,34 +327,11 @@ export default function MainLayout() {
         }
     };
 
-    const NotificationBadge = ({ count, hasUnRead, size = 12 }) => {
-        if (!hasUnRead && (!count || count <= 0)) return null;
-        if (!hasUnRead && !canManageClan) return null;
-        return (
-            <View
-                className="absolute -top-1 -right-1 bg-red-500 rounded-full items-center justify-center border-2 border-white dark:border-slate-900"
-                style={{ minWidth: size, height: size, paddingHorizontal: 2 }}
-            >
-                {count > 9 && <View className="w-1 h-1 bg-white rounded-full" />}
-            </View>
-        )
-    };
-
     // ⚡️ REANIMATED STYLES
     const navStyle = useAnimatedStyle(() => ({
         transform: [{ translateY: navY.value }],
         opacity: interpolate(navY.value, [-70, -20, 0], [0, 0.5, 1], Extrapolation.CLAMP),
     }));
-
-    const eventBtnStyle = useAnimatedStyle(() => ({
-        transform: [{ scale: eventPulse.value }],
-    }));
-
-    const rouletteSpinStyle = useAnimatedStyle(() => {
-        return {
-            transform: [{ rotate: `${eventSpin.value * 360}deg` }],
-        };
-    });
 
     const tooltipStyle = useAnimatedStyle(() => ({
         opacity: tooltipAnim.value,
@@ -369,6 +357,16 @@ export default function MainLayout() {
     const clanHintAnimatedStyle = useAnimatedStyle(() => ({
         transform: [{ translateY: clanHintBounce.value }]
     }));
+
+    // ⚡️ High Performance Back-To-Top Style
+    const showTopButtonStyle = useAnimatedStyle(() => {
+        return {
+            opacity: showTopAnim.value,
+            transform: [{ scale: showTopAnim.value }],
+            // Hide completely when scaled down to avoid blocking touches
+            display: showTopAnim.value === 0 ? 'none' : 'flex'
+        };
+    });
 
     const fab1Style = getSubFabStyle(20);
     const fab2Style = getSubFabStyle(40);
@@ -412,7 +410,7 @@ export default function MainLayout() {
             </SafeAreaView>
 
             <Animated.View
-                pointerEvents={isNavVisible ? "auto" : "none"}
+                pointerEvents={isNavVisibleRef.current ? "auto" : "none"}
                 style={[
                     {
                         position: 'absolute',
@@ -446,7 +444,7 @@ export default function MainLayout() {
             <View style={styles.eventButtonContainer} pointerEvents="box-none">
                 <View style={{ alignItems: 'center' }}>
                     {/* ⚡️ BUY ME A COFFEE BUTTON (Above Event Button) */}
-                    <Animated.View style={eventBtnStyle}>
+                    <Animated.View>
                         <TouchableOpacity
                             onPress={() => setShowCoffeeModal(true)}
                             activeOpacity={0.8}
@@ -464,7 +462,7 @@ export default function MainLayout() {
                     </Animated.View>
 
                     {/* EVENT BUTTON */}
-                    <Animated.View style={eventBtnStyle}>
+                    <Animated.View>
                         <TouchableOpacity
                             onPress={() => navigateTo("/screens/referralevent")}
                             activeOpacity={0.8}
@@ -477,9 +475,9 @@ export default function MainLayout() {
                                 }
                             ]}
                         >
-                            <Animated.View style={rouletteSpinStyle}>
-                                <Ionicons name="aperture" size={26} color="#f59e0b" />
-                            </Animated.View>
+                            <View>
+                                <Ionicons name="aperture" size={28} color="#f59e0b" />
+                            </View>
 
                             <View style={[
                                 styles.eventBadge,
@@ -563,7 +561,25 @@ export default function MainLayout() {
                             </View>
 
                             <TouchableOpacity onPress={handleBuyCoffee} disabled={isCoffeeLoading} activeOpacity={0.9} className="w-full">
-                                <LinearGradient colors={[goldNeon, '#B45309']} start={{ x: 0, y: 0 }} end={{ x: 1, y: 1 }} className="py-5 rounded-2xl flex-row justify-center items-center shadow-xl border border-white/20">
+                                <LinearGradient
+                                    colors={[goldNeon, '#B45309']}
+                                    start={{ x: 0, y: 0 }}
+                                    end={{ x: 1, y: 1 }}
+                                    style={{
+                                        paddingVertical: 20,
+                                        borderRadius: 16,
+                                        flexDirection: 'row',
+                                        justifyContent: 'center',
+                                        alignItems: 'center',
+                                        borderWidth: 1,
+                                        borderColor: 'rgba(255, 255, 255, 0.2)',
+                                        shadowColor: '#000',
+                                        shadowOffset: { width: 0, height: 10 },
+                                        shadowOpacity: 0.1,
+                                        shadowRadius: 20,
+                                        elevation: 10,
+                                    }}
+                                >
                                     {isCoffeeLoading ? <ActivityIndicator color={deepVoid} /> : (
                                         <>
                                             <Feather name="coffee" size={20} color={deepVoid} />
@@ -656,7 +672,7 @@ export default function MainLayout() {
                         style={[styles.subFab, { backgroundColor: "#ef4444" }]}
                     >
                         <MaterialCommunityIcons name="sword-cross" size={20} color="#fff" />
-                        <NotificationBadge count={warActionsCount} />
+                        <NotificationBadge count={warActionsCount} canManageClan={canManageClan} />
                     </TouchableOpacity>
                 </Animated.View>
 
@@ -668,7 +684,7 @@ export default function MainLayout() {
                             style={[styles.subFab, { backgroundColor: "#3b82f6" }]}
                         >
                             <Ionicons name="shield" size={20} color="#fff" />
-                            <NotificationBadge hasUnRead={hasUnreadChat} count={fullData} />
+                            <NotificationBadge hasUnRead={hasUnreadChat} count={fullData} canManageClan={canManageClan} />
                         </TouchableOpacity>
                     </Animated.View>
                 )}
@@ -683,15 +699,23 @@ export default function MainLayout() {
                     </TouchableOpacity>
                 </Animated.View>
 
-                {showTop && (
+                {/* ⚡️ PERFORMANCE FIX: "Back To Top" Button is now natively animated via useAnimatedStyle */}
+                <Animated.View style={showTopButtonStyle}>
                     <TouchableOpacity
                         onPress={handleBackToTop}
                         activeOpacity={0.7}
-                        style={[styles.mainFab, { marginBottom: 12, backgroundColor: isDark ? "#111111" : "#f8fafc", borderColor: isDark ? "#1e293b" : "#e2e8f0" }]}
+                        style={[
+                            styles.mainFab,
+                            {
+                                marginBottom: 12,
+                                backgroundColor: isDark ? "#111111" : "#f8fafc",
+                                borderColor: isDark ? "#1e293b" : "#e2e8f0"
+                            }
+                        ]}
                     >
                         <Ionicons name="chevron-up" size={24} color="#3b82f6" />
                     </TouchableOpacity>
-                )}
+                </Animated.View>
 
                 {/* ⚡️ WRAPPER FOR MAIN FAB + VERTICAL FLOATING HINT */}
                 <View className="relative items-center justify-center z-50">

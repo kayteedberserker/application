@@ -1,12 +1,14 @@
 import { Ionicons, MaterialCommunityIcons } from '@expo/vector-icons';
+import { Canvas, Group, Mask, Path, Rect, Skia, LinearGradient as SkiaLinearGradient, vec } from '@shopify/react-native-skia';
 import { Image } from 'expo-image';
 import { LinearGradient } from 'expo-linear-gradient';
 import { useRouter } from 'expo-router';
 import LottieView from 'lottie-react-native';
 import { MotiView } from 'moti';
-import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import React, { memo, useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { ActivityIndicator, Dimensions, Linking, Modal, TouchableOpacity, useColorScheme, View } from 'react-native';
 import { useMMKV } from 'react-native-mmkv';
+import { cancelAnimation, Easing, useDerivedValue, useSharedValue, withRepeat, withTiming } from 'react-native-reanimated';
 import { SvgXml } from 'react-native-svg';
 import { useCoins } from '../context/CoinContext';
 import { useEvent } from '../context/EventContext';
@@ -19,10 +21,115 @@ const { width } = Dimensions.get('window');
 const GLOBAL_COOLDOWN_KEY = "global_promo_cooldown_timestamp";
 const COLLAB_COOLDOWN_KEY = "collab_modal_last_shown";
 const COLLAB_WEB_LINK = "https://www.moviex.name.ng/";
-const COLLAB_IMAGE_URI = "https://res.cloudinary.com/donakg9he/image/upload/v1778998640/WhatsApp_Image_2026-05-17_at_7.14.42_AM_k2llzm.jpg"; // Replace with your own collaboration image
-const MODAL_BG_IMAGE_URI = "https://res.cloudinary.com/donakg9he/image/upload/v1779001079/WhatsApp_Image_2026-05-17_at_7.56.39_AM_bbaxdp.jpg"; // Background image for the modal surface
+const COLLAB_IMAGE_URI = "https://res.cloudinary.com/donakg9he/image/upload/v1778998640/WhatsApp_Image_2026-05-17_at_7.14.42_AM_k2llzm.jpg";
+const MODAL_BG_IMAGE_URI = "https://res.cloudinary.com/donakg9he/image/upload/v1779001079/WhatsApp_Image_2026-05-17_at_7.56.39_AM_bbaxdp.jpg";
 
 let hasShownThisSession = false;
+
+// ⚡️ RARITY CONFIG WITH ABBREVIATIONS
+const HYPE_TIERS = {
+    FREE: {
+        cost: 0, points: 50,
+        label: 'FREE HYPE', rarity: 'COMMON', abbr: 'FH',
+        colors: ['#475569', '#1e293b', '#0f172a'],
+        glow: '#94a3b8'
+    },
+    STANDARD: {
+        cost: 20, points: 100,
+        label: 'STANDARD', rarity: 'RARE', abbr: 'SH',
+        colors: ['#0284c7', '#0369a1', '#082f49'],
+        glow: '#38bdf8'
+    },
+    SUPER: {
+        cost: 100, points: 600,
+        label: 'SUPER HYPE', rarity: 'EPIC', abbr: 'SP',
+        colors: ['#9333ea', '#6b21a8', '#3b0764'],
+        glow: '#c084fc'
+    },
+    MEGA: {
+        cost: 400, points: 3000,
+        label: 'MEGA BLAST', rarity: 'LEGENDARY', abbr: 'ME',
+        colors: ['#d97706', '#92400e', '#451a03'],
+        glow: '#fbbf24'
+    }
+};
+
+// ⚡️ CLEAN SKIA CARD FRAME - TEXT ONLY
+const MiniSkiaCard = memo(({ colors, glow, abbr, width = 36, height = 48, isDark }) => {
+    const progress = useSharedValue(-0.5);
+
+    useEffect(() => {
+        cancelAnimation(progress);
+        progress.value = withRepeat(
+            withTiming(1.5, { duration: 2400, easing: Easing.inOut(Easing.ease) }),
+            -1,
+            false
+        );
+        return () => cancelAnimation(progress);
+    }, [progress]);
+
+    const layout = useMemo(() => {
+        const cut = 6;
+        const inset = 2;
+
+        const outerStr = `M ${cut} 0 L ${width} 0 L ${width} ${height - cut} L ${width - cut} ${height} L 0 ${height} L 0 ${cut} Z`;
+        const innerStr = `M ${cut + inset / 2} ${inset} L ${width - inset} ${inset} L ${width - inset} ${height - cut - inset / 2} L ${width - cut - inset / 2} ${height - inset} L ${inset} ${height - inset} L ${inset} ${cut + inset / 2} Z`;
+
+        return {
+            outerPath: Skia.Path.MakeFromSVGString(outerStr),
+            innerPath: Skia.Path.MakeFromSVGString(innerStr)
+        };
+    }, [width, height]);
+
+    const startPos = useDerivedValue(() => ({ x: progress.value * width, y: 0 }));
+    const endPos = useDerivedValue(() => ({ x: (progress.value + 0.5) * width, y: height }));
+
+    return (
+        <View style={{ width, height, justifyContent: 'center', alignItems: 'center' }}>
+            <Canvas style={{
+                position: 'absolute',
+                left: 0,
+                right: 0,
+                top: 0,
+                bottom: 0
+            }}>
+                {/* Background Gradient */}
+                <Path path={layout.outerPath}>
+                    <SkiaLinearGradient start={vec(0, 0)} end={vec(width, height)} colors={colors} />
+                </Path>
+
+                {/* Inner Border Constraint */}
+                <Path path={layout.innerPath} color={glow} style="stroke" strokeWidth={0.5} opacity={0.3} />
+
+                {/* Animated Scanner Sweep */}
+                <Mask mode="luminance" mask={<Group><Path path={layout.outerPath} color="white" /></Group>}>
+                    <Rect x={0} y={0} width={width} height={height}>
+                        <SkiaLinearGradient
+                            start={startPos}
+                            end={endPos}
+                            colors={['transparent', 'rgba(255,255,255,0.4)', 'transparent']}
+                        />
+                    </Rect>
+                </Mask>
+            </Canvas>
+
+            {/* HIGH-IMPACT MAXI-TEXT */}
+            <Text style={{
+                position: 'absolute',
+                fontSize: 18,
+                fontWeight: '900',
+                color: '#ffffff',
+                letterSpacing: 0.5,
+                textAlign: 'center',
+                textShadowColor: 'rgba(0,0,0,0.75)',
+                textShadowOffset: { width: 0, height: 1.5 },
+                textShadowRadius: 2.5,
+            }}>
+                {abbr}
+            </Text>
+        </View>
+    );
+});
 
 const RemoteSvgIcon = React.memo(({ xml, lottieUrl, lottieJson, size = 50, color }) => {
     if (lottieJson || lottieUrl) {
@@ -34,28 +141,23 @@ const RemoteSvgIcon = React.memo(({ xml, lottieUrl, lottieJson, size = 50, color
                     loop
                     style={{ width: size * 1.2, height: size * 1.2 }}
                     resizeMode="contain"
-                    renderMode="hardware" // 🔥 Good choice for performance
+                    renderMode="hardware"
                 />
             </View>
         );
     }
 
-    // ⚡️ 2. SVG Validation & Color Injection
-    // We use useMemo so the string replacement ONLY happens when inputs change
     const processedXml = useMemo(() => {
         if (!xml || typeof xml !== 'string' || !xml.includes('<svg')) {
             return null;
         }
-        // Injects the color into the XML string
         return xml.replace(/currentColor/g, color || 'white');
     }, [xml, color]);
 
-    // ⚡️ 3. Strict SVG Check (Prevents 'push of null' crashes)
     if (!processedXml) {
         return <MaterialCommunityIcons name="help-circle-outline" size={size} color={color || "gray"} />;
     }
 
-    // ⚡️ 4. Render Valid SVG
     return <SvgXml xml={processedXml} width={size} height={size} />;
 });
 
@@ -125,6 +227,13 @@ const CountdownTimer = ({ startsAt, color }) => {
     );
 };
 
+const CLAN_REFERRAL_MAP = {
+    "SYSTEM777": { name: "THE SYSTEM FLT", tag: "SYSTEM", color: "#3b82f6", description: "The core architecture crew. Optimized for maximum processing grind." },
+    "STRAWHAT": { name: "Straw Hat Fleet", tag: "SHF", color: "#EF4444", description: "For the dreamers, pioneers, and those hunting the ultimate digital treasure." },
+    "AKATSUKI": { name: "Akatsuki Crimson", tag: "AKATSUKI", color: "#DC2626", description: "Operate from the shadows. High performance, zero visibility execution." },
+    // Add new custom collaborated clans here easily matching user.referredBy
+};
+
 export default function DailyModal() {
     const storage = useMMKV();
     const router = useRouter();
@@ -146,7 +255,6 @@ export default function DailyModal() {
     const activeText = isDarkMode ? '#f8fafc' : '#0f172a';
     const activeSecondary = isDarkMode ? '#94a3b8' : '#475569';
 
-    // Clean up timeouts on unmount to prevent memory leaks
     useEffect(() => {
         return () => {
             if (timeoutRef.current) {
@@ -155,7 +263,20 @@ export default function DailyModal() {
         };
     }, []);
 
-    // ⚡️ HELPER: Check if there's an event waiting
+    // 7-Day Reward Configurations Look-up Matrix matching your layout logic perfectly
+    const currentReward = useMemo(() => {
+        const schedule = {
+            1: { type: 'OC', amount: 5 },
+            2: { type: 'OC', amount: 5 },
+            3: { type: 'OC', amount: 5 },
+            4: { type: 'OC', amount: 5 },
+            5: { type: 'OC', amount: 5 },
+            6: { type: 'OC', amount: 5 },
+            7: { type: 'BOTH', amountOC: 5, amountHype: 1 }
+        };
+        return schedule[targetDay] || { type: 'OC', amount: 5 };
+    }, [targetDay]);
+
     const getNextEvent = useCallback(() => {
         if (!activeEvents || activeEvents.length === 0) return null;
 
@@ -172,8 +293,7 @@ export default function DailyModal() {
 
         return eventQueue.find(evt => {
             const dismissedDate = storage.getString(`last_dismissed_${evt.id}`);
-
-            return dismissedDate !== todayStr
+            return dismissedDate !== todayStr;
         });
     }, [activeEvents, storage]);
 
@@ -190,52 +310,89 @@ export default function DailyModal() {
         storage.set(COLLAB_COOLDOWN_KEY, new Date().getTime());
     }, [storage]);
 
+    // Check if user is referred by an active partner clan blueprint
+    const targetClan = useMemo(() => {
+        if (!user?.referredBy) return null;
+        return CLAN_REFERRAL_MAP[user.referredBy] || null;
+    }, [user?.referredBy]);
+
+    const canShowClanInvite = useCallback(() => {
+        if (!targetClan || !user?.referredBy) return false;
+
+        // Check if the user has already joined this clan via followed_clans key
+        const followedClansStr = storage.getString("followed_clans");
+        let followedClans = [];
+        try {
+            followedClans = followedClansStr ? JSON.parse(followedClansStr) : [];
+        } catch (e) {
+            followedClans = [];
+        }
+
+        const hasJoinedClan = followedClans.some(c => {
+            if (typeof c === 'string') return c === targetClan?.tag;
+            if (c && typeof c === 'object') return c.tag === targetClan?.tag;
+            return false;
+        });
+
+        if (hasJoinedClan) {
+            storage.set(`clan_invite_show_count_${user.referredBy}`, 3);
+            storage.set(`clan_invite_shown_${user.referredBy}`, true);
+            return false;
+        }
+
+        const showCount = storage.getNumber(`clan_invite_show_count_${user.referredBy}`) || 0;
+        return showCount < 3;
+    }, [targetClan, user?.referredBy, storage]);
+
     useEffect(() => {
-        if (!user || hasShownThisSession) return
+        if (!user || hasShownThisSession) return;
 
         const todayStr = new Date().toDateString();
         const localClaimedToday = storage.getBoolean(`daily_claimed_${todayStr}`);
         const serverClaimedToday = user.lastClaimedDate ? new Date(user.lastClaimedDate).toDateString() === todayStr : false;
         const canClaimToday = !localClaimedToday && !serverClaimedToday;
-        const currentStreak = user.consecutiveStreak || 0;
+        const currentStreak = user.consecutiveStreak || 0
 
-        if (!canClaimToday) {
-            setTargetDay(currentStreak);
+        if (canClaimToday) {
+            setTargetDay(currentStreak)
         } else {
             setTargetDay((currentStreak % 7) + 1);
         }
 
-        // Check if there is an event waiting
         const nextPromo = getNextEvent();
-
         if (nextPromo) setCurrentPromo(nextPromo);
 
-        // Logic 1: Show Daily Login First
         if (canClaimToday && !hasClaimed) {
             setModalMode('daily');
             const timer = setTimeout(() => setVisible(true), 1500);
             return () => clearTimeout(timer);
         }
 
-        // Logic 2: Show Event (if daily login was already claimed previously)
         if (nextPromo) {
             setModalMode('event');
             const timer = setTimeout(() => setVisible(true), 1500);
             return () => clearTimeout(timer);
         }
 
-        // Logic 3: Show one static collaboration view, once every 24 hours.
+        if (canShowClanInvite()) {
+            setModalMode('clan');
+            const currentCount = storage.getNumber(`clan_invite_show_count_${user.referredBy}`) || 0;
+            storage.set(`clan_invite_show_count_${user.referredBy}`, currentCount + 1);
+            const timer = setTimeout(() => setVisible(true), 1500);
+            return () => clearTimeout(timer);
+        }
+
         if (canShowCollab()) {
             setModalMode('collab');
             const timer = setTimeout(() => setVisible(true), 1500);
             return () => clearTimeout(timer);
         }
-    }, [user, activeEvents, hasClaimed, canShowCollab, getNextEvent, storage]);
+    }, [user, activeEvents, hasClaimed, canShowCollab, canShowClanInvite, getNextEvent, storage]);
 
     const handleClaimDaily = async () => {
         if (isProcessingTransaction) return;
 
-        const type = targetDay === 7 ? 'daily_login_7' : 'daily_login';
+        const type = `daily_login`;
         const result = await processTransaction('claim', type, null, null);
 
         if (result.success) {
@@ -243,11 +400,13 @@ export default function DailyModal() {
             setHasClaimed(true);
             storage.set(`daily_claimed_${todayStr}`, true);
 
-            // Wait 1 second to show the "Acquired" checkmark safely
             timeoutRef.current = setTimeout(() => {
-                // ⚡️ IF there is an event waiting, switch to it! Otherwise, show collab if available.
                 if (currentPromo) {
                     setModalMode('event');
+                } else if (canShowClanInvite()) {
+                    setModalMode('clan');
+                    const currentCount = storage.getNumber(`clan_invite_show_count_${user.referredBy}`) || 0;
+                    storage.set(`clan_invite_show_count_${user.referredBy}`, currentCount + 1);
                 } else if (canShowCollab()) {
                     showCollabAndTrack();
                     setModalMode('collab');
@@ -257,12 +416,15 @@ export default function DailyModal() {
                 }
             }, 1000);
         } else {
-            // Transaction failed (likely a server desync)
             const todayStr = new Date().toDateString();
             storage.set(`daily_claimed_${todayStr}`, true);
 
             if (currentPromo) {
                 setModalMode('event');
+            } else if (canShowClanInvite()) {
+                setModalMode('clan');
+                const currentCount = storage.getNumber(`clan_invite_show_count_${user.referredBy}`) || 0;
+                storage.set(`clan_invite_show_count_${user.referredBy}`, currentCount + 1);
             } else if (canShowCollab()) {
                 showCollabAndTrack();
                 setModalMode('collab');
@@ -278,13 +440,41 @@ export default function DailyModal() {
             storage.set(`last_dismissed_${currentPromo.id}`, new Date().toDateString());
             const thirtyMinsFromNow = new Date().getTime() + (30 * 60 * 1000);
             storage.set(GLOBAL_COOLDOWN_KEY, thirtyMinsFromNow);
+
+            if (canShowClanInvite()) {
+                setModalMode('clan');
+                const currentCount = storage.getNumber(`clan_invite_show_count_${user.referredBy}`) || 0;
+                storage.set(`clan_invite_show_count_${user.referredBy}`, currentCount + 1);
+                return;
+            }
+            if (canShowCollab()) {
+                showCollabAndTrack();
+                setModalMode('collab');
+                return;
+            }
         } else if (modalMode === 'daily') {
-            // ⚡️ If they dismiss the daily login without claiming, still check for events!
             if (currentPromo) {
                 setModalMode('event');
-                return; // Stop here, don't close the modal yet
+                return;
             }
-
+            if (canShowClanInvite()) {
+                setModalMode('clan');
+                const currentCount = storage.getNumber(`clan_invite_show_count_${user.referredBy}`) || 0;
+                storage.set(`clan_invite_show_count_${user.referredBy}`, currentCount + 1);
+                return;
+            }
+            if (canShowCollab()) {
+                showCollabAndTrack();
+                setModalMode('collab');
+                return;
+            }
+        } else if (modalMode === 'clan') {
+            if (user?.referredBy) {
+                const currentCount = storage.getNumber(`clan_invite_show_count_${user.referredBy}`) || 0;
+                if (currentCount >= 3) {
+                    storage.set(`clan_invite_shown_${user.referredBy}`, true);
+                }
+            }
             if (canShowCollab()) {
                 showCollabAndTrack();
                 setModalMode('collab');
@@ -319,22 +509,29 @@ export default function DailyModal() {
         setVisible(false);
     };
 
+    // ⚔️ ROUTE DIRECTLY TO CLANS/TAG AND TRACK COMPLETION
+    const handleJoinClan = () => {
+        if (user?.referredBy) {
+            storage.set(`clan_invite_show_count_${user.referredBy}`, 3);
+            storage.set(`clan_invite_shown_${user.referredBy}`, true);
+        }
+        hasShownThisSession = true;
+        setVisible(false);
+        router.push(`/clans/${targetClan?.tag}`);
+    };
+
     if (!visible || !modalMode) return null;
 
-    const rewardAmount = targetDay === 7 ? 50 : 10;
     const eventColor = currentPromo?.themeColor || '#a855f7';
     const EventIcon = currentPromo?.icon || 'party-popper';
     const tokenVisual = currentPromo?.tokenVisual || null;
-
     const isComingSoon = currentPromo?.isComing || currentPromo?.status === 'coming_soon';
-
-    // ⚡️ FIXED: The dismiss button ONLY hides when a transaction is actively spinning
     const showDismissButton = !isProcessingTransaction;
 
     return (
         <Modal transparent visible={visible} animationType="fade">
             <View className="flex-1 justify-center items-center px-3" style={{ backgroundColor: isDarkMode ? 'rgba(0,0,0,0.92)' : 'rgba(15,23,42,0.75)' }}>
-                {modalMode === 'collab' && (
+                {(modalMode === 'collab' || modalMode === 'clan') && (
                     <View className="absolute inset-0 opacity-10">
                         <Image
                             source={{ uri: MODAL_BG_IMAGE_URI }}
@@ -345,8 +542,12 @@ export default function DailyModal() {
                 )}
 
                 <View
-                    style={{ backgroundColor: activeSurface, borderColor: modalMode === 'daily' ? THEME.accent : eventColor }}
-                    className={`w-full rounded-2xl px-3 py-8 border-2 items-center shadow-2xl relative ${modalMode === 'daily' ? 'shadow-blue-500/40' : 'shadow-purple-500/30'}`}
+                    style={{
+                        backgroundColor: activeSurface,
+                        borderColor: modalMode === 'daily' ? THEME.accent : modalMode === 'clan' ? targetClan?.color : eventColor
+                    }}
+                    className={`w-full rounded-2xl px-3 py-8 border-2 items-center shadow-2xl relative ${modalMode === 'daily' ? 'shadow-blue-500/40' : modalMode === 'clan' ? 'shadow-emerald-500/30' : 'shadow-purple-500/30'
+                        }`}
                 >
                     {showDismissButton && (
                         <TouchableOpacity
@@ -370,7 +571,7 @@ export default function DailyModal() {
                                 Daily Recharge
                             </Text>
                             <Text style={{ color: activeSecondary }} className="text-[13px] leading-6 text-center mb-6 px-2">
-                                Claim your daily OC burst, keep your streak alive, and power up today’s grind with a fast boost.
+                                Claim your daily rewards, keep your streak alive, and power up today's grind with a fast boost.
                             </Text>
 
                             {hasClaimed ? (
@@ -382,15 +583,59 @@ export default function DailyModal() {
                                 </View>
                             ) : (
                                 <View className="items-center mb-8 mt-4 w-full">
-                                    <Text className="text-slate-400 font-semibold text-[11px] uppercase tracking-[0.25em] mb-2">
+                                    <Text className="text-slate-400 font-semibold text-[11px] uppercase tracking-[0.25em] mb-4">
                                         Energy Payload Ready
                                     </Text>
-                                    <View className="flex-row items-center gap-3">
-                                        <Text className="text-white text-6xl font-black italic tracking-tighter">
-                                            +{rewardAmount}
-                                        </Text>
-                                        <CoinIcon size={44} type="OC" />
-                                    </View>
+
+                                    {currentReward.type === 'OC' && (
+                                        <View className="flex-row items-center gap-3">
+                                            <Text style={{ color: activeText }} className="text-6xl font-black italic tracking-tighter">
+                                                +{currentReward.amount}
+                                            </Text>
+                                            <CoinIcon size={44} type="OC" />
+                                        </View>
+                                    )}
+
+                                    {currentReward.type === 'HYPE' && (
+                                        <View className="flex-row items-center gap-4 bg-slate-950/20 px-6 py-4 rounded-2xl border border-slate-800">
+                                            <Text className="text-5xl font-black italic tracking-tighter" style={{ color: HYPE_TIERS.FREE.glow }}>
+                                                +{currentReward.amount}
+                                            </Text>
+                                            <MiniSkiaCard
+                                                colors={HYPE_TIERS.FREE.colors}
+                                                glow={HYPE_TIERS.FREE.glow}
+                                                abbr={HYPE_TIERS.FREE.abbr}
+                                                width={42}
+                                                height={56}
+                                                isDark={isDarkMode}
+                                            />
+                                        </View>
+                                    )}
+
+                                    {currentReward.type === 'BOTH' && (
+                                        <View className="flex-row items-center justify-center gap-5 w-full px-4 bg-slate-950/20 py-4 rounded-2xl border border-slate-800">
+                                            <View className="flex-row items-center gap-2">
+                                                <Text style={{ color: activeText }} className="text-4xl font-black italic tracking-tighter">
+                                                    +{currentReward.amountOC}
+                                                </Text>
+                                                <CoinIcon size={32} type="OC" />
+                                            </View>
+                                            <Text className="text-xl font-black text-slate-400 dark:text-slate-600">&</Text>
+                                            <View className="flex-row items-center gap-3">
+                                                <Text className="text-4xl font-black italic tracking-tighter" style={{ color: HYPE_TIERS.FREE.glow }}>
+                                                    +{currentReward.amountHype}
+                                                </Text>
+                                                <MiniSkiaCard
+                                                    colors={HYPE_TIERS.FREE.colors}
+                                                    glow={HYPE_TIERS.FREE.glow}
+                                                    abbr={HYPE_TIERS.FREE.abbr}
+                                                    width={36}
+                                                    height={48}
+                                                    isDark={isDarkMode}
+                                                />
+                                            </View>
+                                        </View>
+                                    )}
                                 </View>
                             )}
 
@@ -416,12 +661,8 @@ export default function DailyModal() {
                         </View>
                     )}
 
-                    {/* ========================================== */}
-                    {/* ⚡️ MODE 2: DYNAMIC EVENT PROMO (W/ COUNTDOWN) */}
-                    {/* ========================================== */}
                     {modalMode === 'event' && currentPromo && (
                         <View className="w-full items-center">
-                            {/* 1. CONTAINER WITH AURA GLOW */}
                             <View
                                 style={{
                                     backgroundColor: '#0f172a',
@@ -430,27 +671,22 @@ export default function DailyModal() {
                                     shadowOffset: { width: 0, height: 0 },
                                     shadowOpacity: 0.5,
                                     shadowRadius: 20,
-                                    elevation: 10 // Android Glow
+                                    elevation: 10
                                 }}
                                 className="w-full rounded-3xl border-2 overflow-hidden relative"
                             >
-                                {/* 2. THE POSTER IMAGE (EXPO-IMAGE) */}
                                 {currentPromo.promoImage ? (
                                     <View className="w-full aspect-[1/1] relative">
                                         <Image
                                             source={currentPromo.promoImage}
                                             contentFit="cover"
-                                            transition={500} // Smooth fade-in
+                                            transition={500}
                                             style={{ width: '100%', height: '100%' }}
                                         />
-
-                                        {/* 3. VIGNETTE OVERLAY (Bottom Shadow for text readability) */}
                                         <LinearGradient
                                             colors={['transparent', 'rgba(15, 23, 42, 0.5)', '#0f172a']}
                                             style={{ position: 'absolute', bottom: 0, left: 0, right: 0, height: '60%' }}
                                         />
-
-                                        {/* 4. TOP BADGE OVERLAY */}
                                         <View
                                             style={{ backgroundColor: `${eventColor}CC` }}
                                             className="absolute top-4 left-4 px-3 py-1 rounded-full flex-row items-center"
@@ -464,13 +700,10 @@ export default function DailyModal() {
                                                 {isComingSoon ? "Incoming Signal" : "Live Event"}
                                             </Text>
                                         </View>
-
-                                        {/* 5. CONTENT OVERLAY (Title & Timer) */}
                                         <View className="absolute bottom-0 left-0 right-0 p-6 items-center">
                                             <Text className="text-white text-3xl font-black italic uppercase text-center tracking-tighter mb-1">
                                                 {currentPromo.title}
                                             </Text>
-
                                             {isComingSoon && currentPromo.startsAt && (
                                                 <View className="w-full">
                                                     <CountdownTimer startsAt={currentPromo.startsAt} color={eventColor} />
@@ -479,7 +712,6 @@ export default function DailyModal() {
                                         </View>
                                     </View>
                                 ) : (
-                                    /* FALLBACK: YOUR ORIGINAL ICON-BASED UI */
                                     <View className="w-full items-center py-8 px-6">
                                         <View
                                             style={{ backgroundColor: `${eventColor}10`, borderColor: `${eventColor}40` }}
@@ -501,7 +733,6 @@ export default function DailyModal() {
                                 )}
                             </View>
 
-                            {/* 6. ACTION BUTTON (Stays outside the card for hierarchy) */}
                             <TouchableOpacity
                                 onPress={handleGoToEvent}
                                 style={{
@@ -518,6 +749,77 @@ export default function DailyModal() {
                                 </Text>
                                 <Ionicons name="chevron-forward" size={16} color="#0f172a" style={{ marginLeft: 4 }} />
                             </TouchableOpacity>
+                        </View>
+                    )}
+
+                    {/* ⚔️ BRAND NEW CLAN INVITATION PANEL MODAL MODE */}
+                    {modalMode === 'clan' && targetClan && (
+                        <View className="w-full items-center">
+                            <MotiView
+                                from={{ opacity: 0, scale: 0.95, translateY: 10 }}
+                                animate={{ opacity: 1, scale: 1, translateY: 0 }}
+                                transition={{ type: 'timing', duration: 400 }}
+                                className="w-full rounded-3xl border p-6 items-center"
+                                style={{
+                                    backgroundColor: activeSurface,
+                                    borderColor: targetClan.color,
+                                    shadowColor: targetClan.color,
+                                    shadowOpacity: 0.25,
+                                    shadowRadius: 20,
+                                    elevation: 8
+                                }}
+                            >
+                                <View
+                                    style={{ backgroundColor: `${targetClan.color}15`, borderColor: `${targetClan.color}30` }}
+                                    className="w-20 h-20 rounded-2xl items-center justify-center border mechanical-box mb-4"
+                                >
+                                    <MaterialCommunityIcons name="shield" size={44} color={targetClan.color} />
+                                </View>
+
+                                <Text style={{ color: targetClan.color }} className="uppercase tracking-[0.3em] text-[10px] font-black text-center mb-1">
+                                    Clan Connection Found
+                                </Text>
+
+                                <Text style={{ color: activeText }} className="text-2xl font-black italic uppercase text-center tracking-tight mb-3">
+                                    Join {targetClan.name}
+                                </Text>
+
+                                <View className="px-3 py-1.5 rounded-md bg-slate-800/40 border border-slate-700/50 mb-5">
+                                    <Text style={{ color: targetClan.color }} className="text-[12px] font-black tracking-widest">
+                                        TAG: [{targetClan.tag}]
+                                    </Text>
+                                </View>
+
+                                <Text style={{ color: activeSecondary }} className="text-[13px] leading-6 text-center mb-6 px-2">
+                                    {targetClan.description} You've been linked via a direct alliance referral. Sync immediately to access dedicated pools and shared clan multipliers.
+                                </Text>
+
+                                <TouchableOpacity
+                                    onPress={handleJoinClan}
+                                    style={{
+                                        backgroundColor: targetClan.color,
+                                        shadowColor: targetClan.color,
+                                        shadowOffset: { width: 0, height: 6 },
+                                        shadowOpacity: 0.3,
+                                        shadowRadius: 10
+                                    }}
+                                    className="w-full h-14 rounded-xl flex-row items-center justify-center mb-3"
+                                >
+                                    <Text className="text-slate-950 font-black text-[12px] uppercase tracking-[0.2em]">
+                                        Join Clan Immediately
+                                    </Text>
+                                    <Ionicons name="flash" size={15} color="#0f172a" style={{ marginLeft: 6 }} />
+                                </TouchableOpacity>
+
+                                <TouchableOpacity
+                                    onPress={handleDismissEvent}
+                                    className="w-full h-12 rounded-xl border border-slate-300/10 bg-white/5 items-center justify-center"
+                                >
+                                    <Text style={{ color: activeSecondary }} className="font-bold text-[11px] uppercase tracking-[0.15em]">
+                                        Ignore Invitation
+                                    </Text>
+                                </TouchableOpacity>
+                            </MotiView>
                         </View>
                     )}
 
@@ -561,9 +863,14 @@ export default function DailyModal() {
 
                                 <LinearGradient
                                     colors={[THEME.accent, '#7c3aed']}
-                                    start={[0, 0]}
-                                    end={[1, 1]}
-                                    className="w-full rounded-2xl overflow-hidden mb-3"
+                                    start={{ x: 0, y: 0 }}
+                                    end={{ x: 1, y: 1 }}
+                                    style={{
+                                        width: '100%',
+                                        borderRadius: 16,
+                                        overflow: 'hidden',
+                                        marginBottom: 12,
+                                    }}
                                 >
                                     <TouchableOpacity
                                         onPress={handleOpenCollab}
@@ -587,8 +894,7 @@ export default function DailyModal() {
                         </View>
                     )}
 
-                    {/* ⚡️ FIXED: The bottom dismiss text is always available when appropriate */}
-                    {showDismissButton && modalMode !== 'collab' && (
+                    {showDismissButton && modalMode !== 'collab' && modalMode !== 'clan' && (
                         <TouchableOpacity
                             onPress={handleDismissEvent}
                             activeOpacity={0.5}

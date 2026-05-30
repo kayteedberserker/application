@@ -24,7 +24,8 @@ const PlayerNameplate = memo(({
     fontSize = 36,
     isFeed = false,
     showPeakBadge = true,
-    showFlame = true
+    showFlame = true,
+    isVisible = false
 }) => {
     const username = author?.username || author?.name || "GUEST";
     const peakLevel = author?.peakLevel || 0;
@@ -50,6 +51,11 @@ const PlayerNameplate = memo(({
     const badgeSize = useMemo(() => Math.max(16, fontSize * 0.77), [fontSize]);
     const flameIconSize = useMemo(() => Math.max(12, fontSize * 0.5), [fontSize]);
 
+    // ⚡️ PERFORMANCE OPTIMIZATION: Memoize style overrides to prevent object recreation on re-renders
+    const glitchCyanStyleOverride = useMemo(() => ({ color: '#0ff', opacity: 0.6, textShadowRadius: 0 }), []);
+    const glitchRedStyleOverride = useMemo(() => ({ color: '#f00', opacity: 0.6, textShadowRadius: 0 }), []);
+    const sweepMaskStyleOverride = useMemo(() => ({ color: 'white', textShadowRadius: 0 }), []);
+
     const progress = useSharedValue(0);
     const glitchX = useSharedValue(0);
     const glitchY = useSharedValue(0);
@@ -59,6 +65,9 @@ const PlayerNameplate = memo(({
 
     const [textDimensions, setTextDimensions] = useState({ width: 0, height: 0 });
     const [isReadyToAnimate, setIsReadyToAnimate] = useState(false);
+
+    // Determine animation rule: only kill animation when it IS in the feed AND NOT visible.
+    const shouldAnimate = !isFeed || isVisible;
 
     useEffect(() => {
         // Start a subtle loading animation while waiting for measurement
@@ -73,15 +82,14 @@ const PlayerNameplate = memo(({
             loadingOpacity.value = 1;
         }
 
-        if (!isAnimated) return;
-
-        // if (isFeed) {
-        //     progress.value = 0.5;
-        //     glitchX.value = 0;
-        //     glitchY.value = 0;
-        //     pulseAnim.value = 1;
-        //     return;
-        // }
+        if (!isAnimated || !shouldAnimate) {
+            progress.value = 0;
+            glitchX.value = 0;
+            glitchY.value = 0;
+            glitchOpacity.value = 1;
+            pulseAnim.value = 0;
+            return;
+        }
 
         const timer = setTimeout(() => {
             setIsReadyToAnimate(true);
@@ -145,7 +153,7 @@ const PlayerNameplate = memo(({
             cancelAnimation(pulseAnim);
             cancelAnimation(loadingOpacity);
         };
-    }, [isAnimated, animationType, isFeed, textDimensions.width]);
+    }, [isAnimated, animationType, shouldAnimate, textDimensions.width]);
 
     const sweepStyle = useAnimatedStyle(() => {
         const translationRange = textDimensions.width > 0 ? textDimensions.width * 1.5 : 300;
@@ -170,9 +178,11 @@ const PlayerNameplate = memo(({
         ]
     }));
 
+    // ⚡️ PERFORMANCE OPTIMIZATION: Pulses opacity and hardware scale instead of textShadowRadius.
+    // This removes the text re-rasterization bottleneck completely while maintaining a stunning look.
     const pulseStyle = useAnimatedStyle(() => ({
-        opacity: interpolate(pulseAnim.value, [0, 1], [0.65, 1]),
-        textShadowRadius: interpolate(pulseAnim.value, [0, 1], [3, 12])
+        opacity: interpolate(pulseAnim.value, [0, 1], [0.75, 1]),
+        transform: [{ scale: interpolate(pulseAnim.value, [0, 1], [1, 1.03]) }]
     }));
 
     const loadingStyle = useAnimatedStyle(() => ({
@@ -200,92 +210,82 @@ const PlayerNameplate = memo(({
         </Text>
     );
 
-    const shouldAnimateNow = isAnimated && hasGlow && isReadyToAnimate && textDimensions.width > 0;
-
-    if (!shouldAnimateNow) {
-        return (
-            <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8, alignSelf: 'flex-start' }}>
-                <Animated.View style={loadingStyle}>
-                    <BaseText
-                        forceNoShadow={!hasGlow}
-                        onLayout={(e) => {
-                            if (textDimensions.width === 0) {
-                                setTextDimensions({
-                                    width: Math.ceil(e.nativeEvent.layout.width) + 10,
-                                    height: Math.ceil(e.nativeEvent.layout.height) + 4
-                                });
-                            }
-                        }}
-                    />
-                </Animated.View>
-
-                {(showPeakBadge && peakLevel > 0) && (
-                    <View className="ml-1">
-                        <PeakBadge level={peakLevel} size={badgeSize} />
-                    </View>
-                )}
-                {(showFlame && lastStreak > 0) && (
-                    <View className="flex-row items-center bg-orange-500/10 px-2.5 py-1 rounded-lg">
-                        <Ionicons name="flame" size={flameIconSize} color="#f97316" />
-                        <Text className="text-orange-500 font-black ml-1" style={{ fontSize: flameIconSize - 4 }}>{lastStreak}</Text>
-                    </View>
-                )}
-            </View>
-        );
-    }
+    const shouldAnimateNow = isAnimated && hasGlow && isReadyToAnimate && textDimensions.width > 0 && shouldAnimate;
 
     return (
-        <View style={{ flexDirection: 'row', alignItems: 'center', gap: 10, alignSelf: 'flex-start' }}>
+        <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8, alignSelf: 'flex-start' }}>
 
-            {/* ⚡️ ANIMATION: SWEEP */}
-            {animationType === 'sweep' && (
-                <MaskedView
-                    style={{ height: textDimensions.height, width: textDimensions.width }}
-                    maskElement={
-                        <View style={{ flex: 1, backgroundColor: 'transparent', justifyContent: 'center', alignItems: 'flex-start' }}>
-                            <BaseText styleOverride={{ color: 'white', textShadowRadius: 0 }} />
-                        </View>
-                    }
-                >
-                    <View style={[StyleSheet.absoluteFill, { justifyContent: 'center', alignItems: 'flex-start' }]}>
-                        <BaseText />
-                    </View>
-
-                    <Animated.View style={[StyleSheet.absoluteFill, sweepStyle, { width: '200%' }]}>
-                        <LinearGradient
-                            colors={['rgba(255,255,255,0)', 'rgba(255,255,255,0.8)', 'rgba(255,255,255,0)']}
-                            start={{ x: 0, y: 0 }}
-                            end={{ x: 1, y: 0 }}
-                            style={{ flex: 1 }}
+            {/* ⚡️ UNIFIED STRUCTURAL LAYOUT AREA */}
+            <View>
+                {!shouldAnimateNow ? (
+                    <Animated.View style={loadingStyle}>
+                        <BaseText
+                            forceNoShadow={!hasGlow}
+                            onLayout={(e) => {
+                                if (textDimensions.width === 0) {
+                                    setTextDimensions({
+                                        width: Math.ceil(e.nativeEvent.layout.width) + 10,
+                                        height: Math.ceil(e.nativeEvent.layout.height) + 4
+                                    });
+                                }
+                            }}
                         />
                     </Animated.View>
-                </MaskedView>
-            )}
+                ) : (
+                    <>
+                        {/* ⚡️ ANIMATION MODE: SWEEP */}
+                        {animationType === 'sweep' && (
+                            <MaskedView
+                                style={{ height: textDimensions.height, width: textDimensions.width }}
+                                maskElement={
+                                    <View style={{ flex: 1, backgroundColor: 'transparent', justifyContent: 'center', alignItems: 'flex-start' }}>
+                                        <BaseText styleOverride={sweepMaskStyleOverride} />
+                                    </View>
+                                }
+                            >
+                                <View style={[StyleSheet.absoluteFill, { justifyContent: 'center', alignItems: 'flex-start' }]}>
+                                    <BaseText />
+                                </View>
 
-            {/* ⚡️ ANIMATION: GLITCH */}
-            {animationType === 'glitch' && (
-                <View style={{ position: 'relative', height: textDimensions.height, width: textDimensions.width }}>
-                    <Animated.View style={[{ position: 'absolute', top: 0, bottom: 0, left: 0, zIndex: 1, justifyContent: 'center' }, glitchStyleCyan]}>
-                        <BaseText styleOverride={{ color: '#0ff', opacity: 0.6, textShadowRadius: 0 }} />
-                    </Animated.View>
+                                <Animated.View style={[StyleSheet.absoluteFill, sweepStyle, { width: '200%' }]}>
+                                    <LinearGradient
+                                        colors={['rgba(255,255,255,0)', 'rgba(255,255,255,0.8)', 'rgba(255,255,255,0)']}
+                                        start={{ x: 0, y: 0 }}
+                                        end={{ x: 1, y: 0 }}
+                                        style={{ flex: 1 }}
+                                    />
+                                </Animated.View>
+                            </MaskedView>
+                        )}
 
-                    <Animated.View style={[{ position: 'absolute', top: 0, bottom: 0, left: 0, zIndex: 2, justifyContent: 'center' }, glitchStyleRed]}>
-                        <BaseText styleOverride={{ color: '#f00', opacity: 0.6, textShadowRadius: 0 }} />
-                    </Animated.View>
+                        {/* ⚡️ ANIMATION MODE: GLITCH */}
+                        {animationType === 'glitch' && (
+                            <View style={{ position: 'relative', height: textDimensions.height, width: textDimensions.width }}>
+                                <Animated.View style={[{ position: 'absolute', top: 0, bottom: 0, left: 0, zIndex: 1, justifyContent: 'center' }, glitchStyleCyan]}>
+                                    <BaseText styleOverride={glitchCyanStyleOverride} />
+                                </Animated.View>
 
-                    <View style={{ position: 'absolute', top: 0, bottom: 0, left: 0, zIndex: 3, justifyContent: 'center' }}>
-                        <BaseText />
-                    </View>
-                </View>
-            )}
+                                <Animated.View style={[{ position: 'absolute', top: 0, bottom: 0, left: 0, zIndex: 2, justifyContent: 'center' }, glitchStyleRed]}>
+                                    <BaseText styleOverride={glitchRedStyleOverride} />
+                                </Animated.View>
 
-            {/* ⚡️ ANIMATION: PULSE */}
-            {animationType === 'pulse' && (
-                <Animated.View style={[pulseStyle, { height: textDimensions.height, width: textDimensions.width, justifyContent: 'center' }]}>
-                    <BaseText />
-                </Animated.View>
-            )}
+                                <View style={{ position: 'absolute', top: 0, bottom: 0, left: 0, zIndex: 3, justifyContent: 'center' }}>
+                                    <BaseText />
+                                </View>
+                            </View>
+                        )}
 
+                        {/* ⚡️ ANIMATION MODE: PULSE */}
+                        {animationType === 'pulse' && (
+                            <Animated.View style={[pulseStyle, { height: textDimensions.height, width: textDimensions.width, justifyContent: 'center' }]}>
+                                <BaseText />
+                            </Animated.View>
+                        )}
+                    </>
+                )}
+            </View>
+
+            {/* Badges and streaks now maintain absolute tree positioning stability */}
             {(showPeakBadge && peakLevel > 0) && (
                 <View className="ml-1">
                     <PeakBadge level={peakLevel} size={badgeSize} />
@@ -293,12 +293,11 @@ const PlayerNameplate = memo(({
             )}
 
             {(showFlame && lastStreak > 0) && (
-                <View className="flex-row items-center bg-orange-500/10 px-2.5 py-1 rounded-lg mt-1">
+                <View className="flex-row items-center bg-orange-500/10 px-2.5 py-1 rounded-lg">
                     <Ionicons name="flame" size={flameIconSize} color="#f97316" />
                     <Text className="text-orange-500 font-black ml-1" style={{ fontSize: flameIconSize - 4 }}>{lastStreak}</Text>
                 </View>
             )}
-
         </View>
     );
 });

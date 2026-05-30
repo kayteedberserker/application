@@ -65,7 +65,7 @@ const RemoteSvgIcon = React.memo(({ xml, lottieUrl, lottieJson, imageUrl, size =
                     width: size,
                     height: size,
                 }}
-                resizeMode="contain"
+                contentFit="contain"
             />
         )
     }
@@ -1584,12 +1584,12 @@ const ComingSoonView = ({ event, isDark }) => {
 };
 
 import { BlurMask, Canvas, Rect, LinearGradient as SkiaGradient, vec } from "@shopify/react-native-skia";
+import { Image } from "expo-image";
 import { LinearGradient } from 'expo-linear-gradient';
-import { MotiText, MotiView, AnimatePresence } from 'moti';
+import { AnimatePresence, MotiText, MotiView } from 'moti';
 import { useMMKVObject } from 'react-native-mmkv';
 import CoinIcon from "../../components/ClanIcon";
 import TitleTag from "../../components/TitleTag";
-import { Image } from "expo-image";
 
 const MilestoneReferral = ({ userReferralCode, isDark }) => {
     const [cachedStats, setCachedStats] = useMMKVObject('milestone_stats');
@@ -1764,7 +1764,14 @@ const MilestoneReferral = ({ userReferralCode, isDark }) => {
             {/* RECRUITMENT UNIT */}
             <LinearGradient
                 colors={['rgba(255,255,255,0.03)', 'rgba(0,209,255,0.08)']}
-                className="p-6 rounded-[30px] border border-white/10 relative overflow-hidden"
+                style={{
+                    padding: 24,
+                    borderRadius: 30,
+                    borderWidth: 1,
+                    borderColor: 'rgba(255, 255, 255, 0.1)',
+                    position: 'relative',
+                    overflow: 'hidden',
+                }}
             >
                 <MotiView
                     animate={{ translateY: [0, -5, 0], rotate: ['0deg', '5deg', '0deg'] }}
@@ -1801,8 +1808,20 @@ const MilestoneReferral = ({ userReferralCode, isDark }) => {
                         <LinearGradient
                             // Dynamic Gradient: Green theme for completion, Neon Blue for progress
                             colors={isComplete ? ['#00FFC2', '#009688'] : [blueNeon, '#0057FF']}
-                            start={{ x: 0, y: 0 }} end={{ x: 1, y: 1 }}
-                            className="py-5 rounded-2xl flex-row justify-center items-center shadow-xl"
+                            start={{ x: 0, y: 0 }}
+                            end={{ x: 1, y: 1 }}
+                            style={{
+                                paddingVertical: 20,
+                                borderRadius: 16,
+                                flexDirection: 'row',
+                                justifyContent: 'center',
+                                alignItems: 'center',
+                                shadowColor: '#000',
+                                shadowOffset: { width: 0, height: 10 },
+                                shadowOpacity: 0.25,
+                                shadowRadius: 10,
+                                elevation: 8,
+                            }}
                         >
                             <MaterialCommunityIcons
                                 name={isComplete ? "check-decagram" : "lightning-bolt"}
@@ -1834,7 +1853,7 @@ const MilestoneReferral = ({ userReferralCode, isDark }) => {
                     </View>
                 </View>
                 <View className="flex-row items-center justify-center">
-                    <TitleTag isDark={isDark} title={"Alpha Lead"} tier={"epic"} />
+                    <TitleTag isVisible={true} isDark={isDark} title={"Alpha Lead"} tier={"epic"} />
                 </View>
             </View>
             }
@@ -2076,7 +2095,11 @@ const QuizEventTab = ({ eventData, isDark }) => {
                         >
                             <LinearGradient
                                 colors={['rgba(139, 92, 246, 0.2)', 'rgba(139, 92, 246, 0.05)']}
-                                className="p-6 items-center relative"
+                                style={{
+                                    padding: 24,
+                                    alignItems: 'center',
+                                    position: 'relative',
+                                }}
                             >
                                 {/* Decorative Grid Background */}
                                 <View className="absolute inset-0 opacity-20 border-t border-[#8b5cf6]" style={{ borderStyle: 'dashed' }} />
@@ -2106,7 +2129,7 @@ const QuizEventTab = ({ eventData, isDark }) => {
                 >
                     <LinearGradient
                         colors={['rgba(139, 92, 246, 0.15)', 'rgba(139, 92, 246, 0.02)']}
-                        className="p-6 relative"
+                        style={{ padding: 24, position: "relative" }}
                     >
                         <MotiView
                             from={{ opacity: 0, x: 20 }}
@@ -2139,6 +2162,7 @@ const QuizEventTab = ({ eventData, isDark }) => {
                     <LinearGradient
                         colors={['rgba(139, 92, 246, 0.08)', 'rgba(0, 0, 0, 0)']}
                         className="p-4"
+                        style={{ padding: 16 }}
                     >
                         <Text className="text-white text-[12px] font-black uppercase tracking-widest mb-3 text-center">Bounty Information</Text>
 
@@ -2193,7 +2217,12 @@ const QuizEventTab = ({ eventData, isDark }) => {
                     >
                         <LinearGradient
                             colors={hintsUsed >= maxHints ? ['rgba(255,255,255,0.05)', 'rgba(255,255,255,0.02)'] : ['rgba(139, 92, 246, 0.2)', 'rgba(139, 92, 246, 0.05)']}
-                            className="py-4 items-center flex-row justify-center"
+                            style={{
+                                paddingVertical: 16,
+                                alignItems: 'center',
+                                flexDirection: 'row',
+                                justifyContent: 'center',
+                            }}
                         >
                             <Ionicons
                                 name={hintsUsed >= maxHints ? 'lock-closed' : 'finger-print'}
@@ -2300,7 +2329,11 @@ const QuizEventTab = ({ eventData, isDark }) => {
                                     ? ['rgba(255,255,255,0.1)', 'rgba(255,255,255,0.05)']
                                     : ['#a78bfa', '#8b5cf6']
                             }
-                            className="py-5 items-center justify-center"
+                            style={{
+                                paddingVertical: 20,
+                                alignItems: 'center',
+                                justifyContent: 'center',
+                            }}
                         >
                             {isSubmitting ? (
                                 <ActivityIndicator color="white" />

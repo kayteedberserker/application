@@ -290,7 +290,13 @@ const ImageEditorModal = ({ isVisible, onClose, imageUri, onSave }) => {
                             </View>
 
                             {tool === 'crop' && (
-                                <View style={StyleSheet.absoluteFill} pointerEvents="none">
+                                <View style={{
+                                    position: 'absolute',
+                                    left: 0,
+                                    right: 0,
+                                    top: 0,
+                                    bottom: 0
+                                }} pointerEvents="none">
                                     <View style={styles.cropDim} />
                                     <Animated.View style={cropBoxStyle}>
                                         <View style={styles.cropGrid}>
@@ -375,7 +381,7 @@ const styles = StyleSheet.create({
         alignItems: 'center'
     },
     colorCircle: { width: 30, height: 30, borderRadius: 17, marginHorizontal: 6, borderWidth: 2 },
-    cropDim: { ...StyleSheet.absoluteFillObject, backgroundColor: 'rgba(0,0,0,0.6)' },
+    cropDim: { ...StyleSheet.absoluteFill, backgroundColor: 'rgba(0,0,0,0.6)' },
     cropGrid: { flex: 1, position: 'relative' },
     gridLineH: { position: 'absolute', top: '33.3%', width: '100%', height: 0.5, backgroundColor: 'rgba(255,255,255,0.3)' },
     gridLineH2: { position: 'absolute', top: '66.6%', width: '100%', height: 0.5, backgroundColor: 'rgba(255,255,255,0.3)' },

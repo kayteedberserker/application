@@ -255,7 +255,7 @@ export default function PostDetailScreen() {
             authorData={post.authorData}
             clanData={post.clanData}
             isFeed={false}
-            posts={[post]}
+            isVisible={true}
             setPosts={() => { }}
             hideComments={true}
             isDark={isDark}

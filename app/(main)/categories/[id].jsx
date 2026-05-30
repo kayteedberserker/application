@@ -35,6 +35,9 @@ const LIMIT = 10;
 
 const fetcher = (url) => apiFetch(url).then(res => res.json());
 
+// ⚡️ GLOBAL EVENT CONSTANT
+export const FEED_VISIBILITY_EVENT = "feed_item_visibility_changed";
+
 const PostSkeleton = memo(() => {
     const isDark = useColorScheme() === "dark";
     return (
@@ -63,8 +66,10 @@ const PostSkeleton = memo(() => {
 const CATEGORY_MEMORY_CACHE = {};
 const CATEGORIES_SYNCED_THIS_SESSION = new Set();
 
-const MemoizedPostItem = memo(({ item, isVisible, mutate, posts }) => {
+// ⚡️ FIX 1: List items subscribe to the global listener instead of receiving parent state
+const MemoizedPostItem = memo(({ item, mutate, posts }) => {
     const [isReady, setIsReady] = useState(false);
+    const [isVisible, setIsVisible] = useState(false); // Default true for initial view
 
     useEffect(() => {
         setIsReady(false);
@@ -72,6 +77,28 @@ const MemoizedPostItem = memo(({ item, isVisible, mutate, posts }) => {
             setIsReady(true);
         });
         return () => task.cancel();
+    }, [item._id]);
+    const visibilityTimeout = useRef(null);
+
+    // ⚡️ Subscribes to visibility changes directly to avoid parent rendering loops
+    useEffect(() => {
+        const subscription = DeviceEventEmitter.addListener(
+            FEED_VISIBILITY_EVENT,
+            (visibleSet) => {
+                const currentVisibility = visibleSet.has(item._id);
+                if (visibilityTimeout.current) {
+                    clearTimeout(visibilityTimeout.current);
+                }
+                if (currentVisibility) {
+                    setIsVisible(true);
+                } else if (isVisible) {
+                    visibilityTimeout.current = setTimeout(() => {
+                        setIsVisible(false);
+                    }, 500);
+                }
+            }
+        );
+        return () => subscription.remove();
     }, [item._id]);
 
     if (!isReady) return <View className="px-3"><PostSkeleton /></View>;
@@ -83,7 +110,6 @@ const MemoizedPostItem = memo(({ item, isVisible, mutate, posts }) => {
                 authorData={item.authorData}
                 clanData={item.clanData}
                 isFeed
-                posts={posts}
                 setPosts={mutate}
                 isVisible={isVisible}
             />
@@ -91,8 +117,9 @@ const MemoizedPostItem = memo(({ item, isVisible, mutate, posts }) => {
     );
 }, (prevProps, nextProps) => {
     return (
-        prevProps.isVisible === nextProps.isVisible &&
-        prevProps.item === nextProps.item
+        prevProps.item === nextProps.item &&
+        prevProps.posts === nextProps.posts &&
+        prevProps.mutate === nextProps.mutate
     );
 });
 
@@ -133,7 +160,6 @@ export default function CategoryPage() {
 
     const [isOfflineMode, setIsOfflineMode] = useState(false);
     const [refreshing, setRefreshing] = useState(false);
-    const [visibleIds, setVisibleIds] = useState(new Set());
     const scrollRef = useRef(null);
 
     const saveHeavyCache = useCallback((key, data) => {
@@ -223,12 +249,28 @@ export default function CategoryPage() {
 
     const hasMore = data ? data[data.length - 1]?.posts?.length === LIMIT : false;
 
+    // ⚡️ FIX 2: Emits an event with sorted IDs instead of saving to state. 0 parent re-renders!
+    const lastVisibleIds = useRef("");
+
     const onViewableItemsChanged = useRef(({ viewableItems }) => {
-        const newVisible = new Set(viewableItems.map(v => v.item._id));
-        setVisibleIds(newVisible);
+        const ids = viewableItems
+            .map(v => v.item._id)
+            .sort();
+
+        const key = ids.join(",");
+
+        if (key === lastVisibleIds.current) return;
+
+        lastVisibleIds.current = key;
+
+        DeviceEventEmitter.emit(
+            FEED_VISIBILITY_EVENT,
+            new Set(ids)
+        );
     }).current;
 
-    const viewabilityConfig = useRef({ itemVisiblePercentThreshold: 50 }).current;
+    // ⚡️ FIX 3: Lowered to 20% so big cards trigger visibility instantly when entering screen edge
+    const viewabilityConfig = useRef({ itemVisiblePercentThreshold: 20 }).current;
 
     const lastScrollY = useRef(0);
     const handleScroll = useCallback((e) => {
@@ -249,9 +291,7 @@ export default function CategoryPage() {
     const renderItem = useCallback(({ item }) => (
         <MemoizedPostItem
             item={item}
-            isVisible={true} // ⚡️ FIXED: Forcing true guarantees SWR key never goes null so it can receive likes
             mutate={mutate}
-            posts={posts}
         />
     ), [posts, mutate]);
 
@@ -300,9 +340,8 @@ export default function CategoryPage() {
                 removeClippedSubviews={true}
                 ListHeaderComponent={ListHeader}
                 estimatedItemSize={630}
+                drawDistance={800}
                 recycleItems={true}
-                drawDistance={1000}
-                // ⚡️ FIXED: Removed recycleItems=true to stop weird SWR caching bugs and scroll jumping
                 onViewableItemsChanged={onViewableItemsChanged}
                 viewabilityConfig={viewabilityConfig}
                 contentContainerStyle={{

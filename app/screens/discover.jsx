@@ -2,14 +2,13 @@ import { Ionicons } from '@expo/vector-icons';
 import { LegendList } from "@legendapp/list";
 import { useRouter } from 'expo-router';
 import { useColorScheme } from "nativewind";
-import { useCallback, useEffect, useRef, useState } from 'react';
+import { memo, useCallback, useEffect, useRef, useState } from 'react';
 import { ActivityIndicator, Clipboard, DeviceEventEmitter, Modal, ScrollView, Text, TextInput, TouchableOpacity, View } from 'react-native';
 import { useMMKV } from 'react-native-mmkv';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import ClanCrest from '../../components/ClanCrest';
 import CoinIcon from '../../components/ClanIcon';
 import { SyncLoading } from "../../components/SyncLoading";
-import { useCoins } from '../../context/CoinContext';
 import { useStreak } from "../../context/StreakContext";
 import { useUser } from "../../context/UserContext";
 import apiFetch from '../../utils/apiFetch';
@@ -229,7 +228,7 @@ export default function ClanDiscover() {
                         removeClippedSubviews={true}
 
                         estimatedItemSize={450}
-                        drawDistance={1500}
+                        drawDistance={600}
                         recycleItems={true}
 
                         contentContainerStyle={{ paddingHorizontal: 24, paddingBottom: 120, paddingTop: 10 }}
@@ -276,7 +275,7 @@ export default function ClanDiscover() {
 }
 
 // ⚡️ UPDATED: Requirement Modal explicitly stating the Target Level and Rank Name
-const RequirementModal = ({ visible, onClose, stats, isDark }) => {
+const RequirementModal = memo(({ visible, onClose, stats, isDark }) => {
 
     // ⚡️ Added flex-1 and text wrapping so long rank titles don't break the layout
     const RequirementRow = ({ label, currentStr, targetStr, progress, icon, activeColor }) => (
@@ -353,11 +352,11 @@ const RequirementModal = ({ visible, onClose, stats, isDark }) => {
             </View>
         </Modal>
     );
-};
+});
 
 // ... CustomAlert, RequirementModal, ClanCard components remain unchanged
 
-const CustomAlert = ({ config, onClose, isDark }) => {
+const CustomAlert = memo(({ config, onClose, isDark }) => {
     if (!config.visible) return null;
     return (
         <Modal transparent animationType="fade" visible={config.visible}>
@@ -377,10 +376,10 @@ const CustomAlert = ({ config, onClose, isDark }) => {
             </View>
         </Modal>
     );
-};
+});
 
 
-const ClanCard = ({ clan, lbRank, isDark, refreshClans, showAlert }) => {
+const ClanCard = memo(({ clan, lbRank, isDark, refreshClans, showAlert }) => {
     const storage = useMMKV();
     const { user } = useUser();
 
@@ -569,30 +568,18 @@ const ClanCard = ({ clan, lbRank, isDark, refreshClans, showAlert }) => {
             </View>
         </TouchableOpacity>
     );
-};
+});
 
-const CreateClanModal = ({ visible, onClose, onSuccess, isDark, showAlert }) => {
+const CreateClanModal = memo(({ visible, onClose, onSuccess, isDark, showAlert }) => {
     const { user } = useUser();
     const [name, setName] = useState('');
     const [desc, setDesc] = useState('');
     const [isCreating, setIsCreating] = useState(false);
-    const { coins, processTransaction } = useCoins();
 
     const handleCreate = async () => {
         if (!name || !user) return;
         setIsCreating(true);
-        if (coins < 250) {
-            showAlert("Insufficient OC", "You need 250 OC 🪙 to create a clan. Visit Store to purchase OC!");
-            setIsCreating(false);
-            return;
-        }
         try {
-            const result = await processTransaction('spend', 'create_clan');
-
-            if (!result.success) {
-                showAlert("System Notification", result.error || "Unable to create clan.");
-                return;
-            }
             const res = await apiFetch("/clans/create", {
                 method: "POST",
                 body: JSON.stringify({ name, description: desc, deviceId: user.deviceId })
@@ -603,8 +590,7 @@ const CreateClanModal = ({ visible, onClose, onSuccess, isDark, showAlert }) => 
                 onSuccess(data.clan);
                 setName(''); setDesc('');
             } else {
-                showAlert("CREATION DENIED", `${data.message}, OC refunded` || "This clan name might be taken, OC refunded.");
-                processTransaction('refund', 'create_clan'); // Refund OC on failure
+                showAlert("CREATION DENIED", `${data.message}` || "This clan name might be taken.");
             }
         } catch (err) {
             showAlert("NETWORK ERROR", "Failed to reach the Archives. Check your connection.");
@@ -664,7 +650,7 @@ const CreateClanModal = ({ visible, onClose, onSuccess, isDark, showAlert }) => 
                                 <ActivityIndicator color="#fff" />
                             ) : (
                                 <View className="flex-row items-center">
-                                    <Text className="text-white font-black text-[18px] uppercase tracking-tighter mr-2">Confirm Foundation 250</Text>
+                                    <Text className="text-white font-black text-[18px] uppercase tracking-tighter mr-2">Confirm Foundation</Text>
                                     <CoinIcon size={22} type='OC' />
                                     <Ionicons name="chevron-forward" size={20} color="white" />
                                 </View>
@@ -675,4 +661,4 @@ const CreateClanModal = ({ visible, onClose, onSuccess, isDark, showAlert }) => 
             </View>
         </Modal>
     );
-};
+});

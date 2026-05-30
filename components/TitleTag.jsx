@@ -1,8 +1,9 @@
 import { MaterialCommunityIcons } from '@expo/vector-icons';
-import { useEffect, useMemo, useState } from 'react';
+import React, { useEffect, useMemo, useState } from 'react';
 import { StyleSheet, Text, View } from 'react-native';
 import Animated, {
     Easing,
+    cancelAnimation,
     interpolate,
     useAnimatedProps,
     useAnimatedStyle,
@@ -10,7 +11,7 @@ import Animated, {
     withRepeat,
     withTiming
 } from 'react-native-reanimated';
-import Svg, { Defs, G, LinearGradient, Mask, Path, Rect, Stop } from 'react-native-svg';
+import Svg, { Defs, G, LinearGradient, Path, Rect, Stop } from 'react-native-svg'; // ⚡️ Removed Mask import
 
 const AnimatedRect = Animated.createAnimatedComponent(Rect);
 
@@ -22,7 +23,7 @@ const TITLE_TIERS = {
     COMMON: { colors: ['#1f2937', '#111827'], border: '#9ca3af', text: '#9ca3af', glow: 'transparent' }
 };
 
-const TitleTag = ({
+const TitleTag = React.memo(({
     rank = 11,
     isTop10 = false,
     auraVisuals = null,
@@ -33,6 +34,8 @@ const TitleTag = ({
     size = 10,
     style,
     isDark = true, // Added isDark prop for theming
+    isVisible = false, // Added isVisible prop to control animation and rendering in feeds
+    isFeed = false,
     ...props
 }) => {
     const [dimensions, setDimensions] = useState({ width: 0, height: 0 });
@@ -48,6 +51,9 @@ const TitleTag = ({
     const isEpic = finalTier === 'EPIC';
     const isRare = finalTier === 'RARE';
 
+    // ⚡️ WIN 5: Restrict heavy effects exclusively to top premium tiers
+    const hasHighGlow = isMythic || isLegendary;
+
     // Animation Flag Logic - Memoized for optimization
     const animFlags = useMemo(() => ({
         hasSweep: isMythic || isLegendary || (isTop10 && rank <= 5),
@@ -61,8 +67,21 @@ const TitleTag = ({
     const iconSize = size + 2;
     const letterSpacing = isMythic ? 1.2 * scale : 0.5 * scale;
 
+    // ⚡️ PERFORMANCE OPTIMIZATION: Stop background ticker loops inside the feed entirely
+    const shouldSweep = animFlags.hasSweep && isVisible && !isFeed;
+
     useEffect(() => {
-        if (animFlags.hasSweep) {
+        cancelAnimation(sweepAnim);
+        cancelAnimation(pulseAnim);
+
+        if (!isVisible) {
+            sweepAnim.value = 0;
+            pulseAnim.value = 0;
+            return;
+        }
+
+        // ⚡️ PERF FIX: Only activate UI thread ticker if it's explicitly allowed to sweep
+        if (shouldSweep) {
             sweepAnim.value = withRepeat(
                 withTiming(1, { duration: isMythic ? 2000 : 3000, easing: Easing.bezier(0.42, 0, 0.58, 1) }),
                 -1,
@@ -81,7 +100,12 @@ const TitleTag = ({
         } else {
             pulseAnim.value = 0;
         }
-    }, [animFlags, isMythic]);
+
+        return () => {
+            cancelAnimation(sweepAnim);
+            cancelAnimation(pulseAnim);
+        };
+    }, [animFlags, isMythic, isVisible, shouldSweep]);
 
     const paths = useMemo(() => {
         if (dimensions.width === 0) return { main: '', hex: '' };
@@ -115,7 +139,7 @@ const TitleTag = ({
     }, [dimensions, isMythic, isLegendary, isEpic, isRare, isTop10, scale]);
 
     const pulseStyle = useAnimatedStyle(() => {
-        if (!animFlags.hasPulse) return {};
+        if (!animFlags.hasPulse || !isVisible) return {};
         return {
             transform: [{ scale: interpolate(pulseAnim.value, [0, 1], [1, 1.04]) }],
             opacity: interpolate(pulseAnim.value, [0, 1], [0.9, 1]),
@@ -126,73 +150,47 @@ const TitleTag = ({
         x: interpolate(sweepAnim.value, [0, 1], [-dimensions.width, dimensions.width])
     }));
 
-    const FrameBase = ({ color, children }) => {
-        // Theme-aware colors
-        const bgThemeColor = isDark ? "rgba(10, 10, 10, 0.92)" : "rgba(245, 245, 245, 0.95)";
-        const innerStrokeColor = isDark ? "#0a0a0a" : "#ffffff";
-        const strokeColor = color || (isDark ? '#ffffff' : '#000000');
+    // ⚡️ PERFORMANCE OPTIMIZATION: Memoize Theme Colors & Static Structural Settings
+    const bgThemeColor = isDark ? "rgba(10, 10, 10, 0.92)" : "rgba(245, 245, 245, 0.95)";
+    const innerStrokeColor = isDark ? "#0a0a0a" : "#ffffff";
 
-        return (
-            <View style={styles.frameWrapper}>
-                <View style={[StyleSheet.absoluteFill, { zIndex: -1 }]}>
-                    {dimensions.width > 0 && (
-                        <Svg width={dimensions.width} height={dimensions.height}>
-                            <Defs>
-                                <Mask id="shapeMask">
-                                    <Path d={isMythic ? paths.hex : paths.main} fill="white" />
-                                </Mask>
-                                <LinearGradient id="shineGrad" x1="0" y1="0" x2="1" y2="0">
-                                    <Stop offset="0" stopColor="white" stopOpacity="0" />
-                                    <Stop offset="0.5" stopColor="white" stopOpacity={isMythic ? 0.6 : 0.4} />
-                                    <Stop offset="1" stopColor="white" stopOpacity="0" />
-                                </LinearGradient>
-                                <LinearGradient id="bgGrad" x1="0" y1="0" x2="1" y2="1">
-                                    <Stop offset="0" stopColor={config.colors[0]} />
-                                    <Stop offset="1" stopColor={config.colors[1]} />
-                                </LinearGradient>
-                            </Defs>
+    const contentPaddingStyle = useMemo(() => ({
+        flexDirection: 'row',
+        alignItems: 'center',
+        paddingHorizontal: paddingX,
+        paddingVertical: paddingY,
+        minHeight: minContainerHeight
+    }), [paddingX, paddingY, minContainerHeight]);
 
-                            {/* Background Layers */}
-                            <Path d={isMythic ? paths.hex : paths.main} fill="url(#bgGrad)" mask="url(#shapeMask)" />
-                            <Path d={isMythic ? paths.hex : paths.main} fill={bgThemeColor} mask="url(#shapeMask)" />
+    const textStyleTop10 = useMemo(() => {
+        const finalColor = activeGlowColor || auraVisuals?.color || '#fbbf24';
+        return [
+            styles.textBase,
+            { color: finalColor, fontSize: size, lineHeight: size * 1.3, letterSpacing, textShadowColor: finalColor, textShadowRadius: 2 }
+        ];
+    }, [activeGlowColor, auraVisuals?.color, size, letterSpacing]);
 
-                            {/* Hex Border for Mythic */}
-                            {isMythic && (
-                                <Path d={paths.hex} fill="none" stroke={strokeColor} strokeWidth={1.5 * scale} opacity={0.8} />
-                            )}
-
-                            {/* Main Borders */}
-                            <Path d={paths.main} fill="none" stroke={strokeColor} strokeWidth={3 * scale} opacity={0.6} />
-                            <Path d={paths.main} fill="none" stroke={innerStrokeColor} strokeWidth={1.8 * scale} />
-                            <Path d={paths.main} fill="none" stroke={strokeColor} strokeWidth={0.8 * scale} />
-
-                            {/* Shine Effect */}
-                            {animFlags.hasSweep && (
-                                <G mask="url(#shapeMask)">
-                                    <AnimatedRect
-                                        width={dimensions.width / 2}
-                                        height={dimensions.height}
-                                        fill="url(#shineGrad)"
-                                        animatedProps={animatedShineProps}
-                                    />
-                                </G>
-                            )}
-                        </Svg>
-                    )}
-                </View>
-                {children}
-            </View>
-        );
-    };
-
-    if (auraVisuals) {
-        if (auraVisuals.label == "PLAYER") {
-            return null;
+    // ⚡️ WIN 4: Cut down heavy text shadow rendering tasks for non-premium tiers completely
+    const textStyleTitle = useMemo(() => [
+        styles.textBase,
+        {
+            color: config.text,
+            fontSize: size,
+            lineHeight: size * 1.3,
+            letterSpacing,
+            textShadowColor: hasHighGlow ? (config.glow || 'transparent') : 'transparent',
+            textShadowRadius: hasHighGlow ? 8 : 0
         }
+    ], [config.text, config.glow, size, letterSpacing, hasHighGlow]);
+
+    if (auraVisuals?.label === "PLAYER") {
+        return null;
     }
 
     if (isTop10 && auraVisuals) {
         const finalColor = activeGlowColor || auraVisuals.color || '#fbbf24';
+        const strokeColor = finalColor || (isDark ? '#ffffff' : '#000000');
+
         return (
             <Animated.View
                 onLayout={(e) => setDimensions({ width: e.nativeEvent.layout.width, height: e.nativeEvent.layout.height })}
@@ -209,19 +207,63 @@ const TitleTag = ({
                 ]}
                 {...props}
             >
-                <FrameBase color={finalColor}>
-                    <View style={{ flexDirection: 'row', alignItems: 'center', paddingHorizontal: paddingX, paddingVertical: paddingY, minHeight: minContainerHeight }}>
+                {/* ⚡️ PERFORMANCE FIX: Inlined FrameBase Layout Blueprint to stop node tree thrashing */}
+                <View style={styles.frameWrapper}>
+                    <View style={[StyleSheet.absoluteFill, { zIndex: -1 }]}>
+                        {dimensions.width > 0 && (
+                            <Svg width={dimensions.width} height={dimensions.height} style={styles.svgOverflowHidden}>
+                                <Defs>
+                                    <LinearGradient id="shineGradTop10" x1="0" y1="0" x2="1" y2="0">
+                                        <Stop offset="0" stopColor="white" stopOpacity="0" />
+                                        <Stop offset="0.5" stopColor="white" stopOpacity={isMythic ? 0.6 : 0.4} />
+                                        <Stop offset="1" stopColor="white" stopOpacity="0" />
+                                    </LinearGradient>
+                                    <LinearGradient id="bgGradTop10" x1="0" y1="0" x2="1" y2="1">
+                                        <Stop offset="0" stopColor={config.colors[0]} />
+                                        <Stop offset="1" stopColor={config.colors[1]} />
+                                    </LinearGradient>
+                                </Defs>
+
+                                {/* ⚡️ WIN 2: Mask elements safely stripped completely from drawing layers */}
+                                <Path d={isMythic ? paths.hex : paths.main} fill="url(#bgGradTop10)" />
+                                <Path d={isMythic ? paths.hex : paths.main} fill={bgThemeColor} />
+
+                                {isMythic && (
+                                    <Path d={paths.hex} fill="none" stroke={strokeColor} strokeWidth={1.5 * scale} opacity={0.8} />
+                                )}
+
+                                {/* ⚡️ WIN 3: Border paths streamlined from 3 lines to 2 super crisp strokes */}
+                                <Path d={paths.main} fill="none" stroke={strokeColor} strokeWidth={2.5 * scale} opacity={0.6} />
+                                <Path d={paths.main} fill="none" stroke={innerStrokeColor} strokeWidth={1.2 * scale} />
+
+                                {shouldSweep && (
+                                    <G>
+                                        <AnimatedRect
+                                            width={dimensions.width / 2}
+                                            height={dimensions.height}
+                                            fill="url(#shineGradTop10)"
+                                            animatedProps={animatedShineProps}
+                                        />
+                                    </G>
+                                )}
+                            </Svg>
+                        )}
+                    </View>
+
+                    <View style={contentPaddingStyle}>
                         {auraVisuals.icon && <MaterialCommunityIcons name={auraVisuals.icon} size={iconSize} color={finalColor} style={{ marginRight: 4 }} />}
-                        <Text style={[styles.textBase, { color: finalColor, fontSize: size, lineHeight: size * 1.3, letterSpacing, textShadowColor: finalColor, textShadowRadius: 2 }]}>
+                        <Text style={textStyleTop10}>
                             {auraVisuals.label.toUpperCase()}
                         </Text>
                     </View>
-                </FrameBase>
+                </View>
             </Animated.View>
         );
     }
 
     if (finalTitle) {
+        const strokeColor = config.border || (isDark ? '#ffffff' : '#000000');
+
         return (
             <Animated.View
                 onLayout={(e) => setDimensions({ width: e.nativeEvent.layout.width, height: e.nativeEvent.layout.height })}
@@ -229,44 +271,77 @@ const TitleTag = ({
                     styles.outerContainer,
                     pulseStyle,
                     {
-                        shadowColor: config.glow || 'transparent',
-                        shadowOpacity: (isMythic || isLegendary || isEpic) ? 0.8 : 0,
-                        elevation: (isMythic || isLegendary || isEpic) ? 12 : 0,
-                        shadowRadius: isMythic ? 8 * scale : 3 * scale
+                        // ⚡️ WIN 5: Dynamically strip container shadows from non-premium elements
+                        shadowColor: hasHighGlow ? (config.glow || 'transparent') : 'transparent',
+                        shadowOpacity: hasHighGlow ? 0.8 : 0,
+                        elevation: hasHighGlow ? 12 : 0,
+                        shadowRadius: isMythic ? 8 * scale : (isLegendary ? 3 * scale : 0)
                     },
                     style
                 ]}
                 {...props}
             >
-                <FrameBase color={config.border}>
-                    <View style={[styles.tagContainer, { paddingHorizontal: paddingX, paddingVertical: paddingY, minHeight: minContainerHeight }]}>
-                        <Text style={[
-                            styles.textBase,
-                            {
-                                color: config.text,
-                                fontSize: size,
-                                lineHeight: size * 1.3,
-                                letterSpacing,
-                                textShadowColor: config.glow || 'transparent',
-                                textShadowRadius: (isMythic || isLegendary || isEpic) ? 8 : 2
-                            }
-                        ]}>
+                {/* ⚡️ PERFORMANCE FIX: Inlined FrameBase Layout Blueprint to stop node tree thrashing */}
+                <View style={styles.frameWrapper}>
+                    <View style={[StyleSheet.absoluteFill, { zIndex: -1 }]}>
+                        {dimensions.width > 0 && (
+                            <Svg width={dimensions.width} height={dimensions.height} style={styles.svgOverflowHidden}>
+                                <Defs>
+                                    <LinearGradient id="shineGradTitle" x1="0" y1="0" x2="1" y2="0">
+                                        <Stop offset="0" stopColor="white" stopOpacity="0" />
+                                        <Stop offset="0.5" stopColor="white" stopOpacity={isMythic ? 0.6 : 0.4} />
+                                        <Stop offset="1" stopColor="white" stopOpacity="0" />
+                                    </LinearGradient>
+                                    <LinearGradient id="bgGradTitle" x1="0" y1="0" x2="1" y2="1">
+                                        <Stop offset="0" stopColor={config.colors[0]} />
+                                        <Stop offset="1" stopColor={config.colors[1]} />
+                                    </LinearGradient>
+                                </Defs>
+
+                                {/* ⚡️ WIN 2: Mask elements safely stripped completely from drawing layers */}
+                                <Path d={isMythic ? paths.hex : paths.main} fill="url(#bgGradTitle)" />
+                                <Path d={isMythic ? paths.hex : paths.main} fill={bgThemeColor} />
+
+                                {isMythic && (
+                                    <Path d={paths.hex} fill="none" stroke={strokeColor} strokeWidth={1.5 * scale} opacity={0.8} />
+                                )}
+
+                                {/* ⚡️ WIN 3: Border paths streamlined from 3 lines to 2 super crisp strokes */}
+                                <Path d={paths.main} fill="none" stroke={strokeColor} strokeWidth={2.5 * scale} opacity={0.6} />
+                                <Path d={paths.main} fill="none" stroke={innerStrokeColor} strokeWidth={1.2 * scale} />
+
+                                {shouldSweep && (
+                                    <G>
+                                        <AnimatedRect
+                                            width={dimensions.width / 2}
+                                            height={dimensions.height}
+                                            fill="url(#shineGradTitle)"
+                                            animatedProps={animatedShineProps}
+                                        />
+                                    </G>
+                                )}
+                            </Svg>
+                        )}
+                    </View>
+
+                    <View style={contentPaddingStyle}>
+                        <Text style={textStyleTitle}>
                             {finalTitle.toUpperCase()}
                         </Text>
                     </View>
-                </FrameBase>
+                </View>
             </Animated.View>
         );
     }
 
     return null;
-};
+});
 
 const styles = StyleSheet.create({
     outerContainer: { alignSelf: 'flex-start', overflow: 'visible' },
     frameWrapper: { alignItems: 'center', justifyContent: 'center' },
-    tagContainer: { justifyContent: 'center', alignItems: 'center', backgroundColor: 'transparent' },
-    textBase: { fontWeight: '900' }
+    textBase: { fontWeight: '900' },
+    svgOverflowHidden: { overflow: 'hidden' } // Keeps the layout tidy across view layers
 });
 
 export default TitleTag;

@@ -2,7 +2,7 @@ import { Ionicons, MaterialCommunityIcons } from '@expo/vector-icons';
 // ⚡️ Removed expo-blur import
 import { LinearGradient } from 'expo-linear-gradient';
 import { useGlobalSearchParams, usePathname, useRouter } from "expo-router";
-import { memo, useCallback, useEffect, useRef, useState } from "react";
+import { memo, useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { DeviceEventEmitter, FlatList, Modal, Pressable, TouchableOpacity, View } from "react-native";
 import { useMMKV } from 'react-native-mmkv';
 import Animated, { Easing, cancelAnimation, useAnimatedStyle, useSharedValue, withRepeat, withTiming } from 'react-native-reanimated';
@@ -85,13 +85,16 @@ const NavPill = memo(({ item, isActive, isDark, onPress }) => {
     );
 }, (prevProps, nextProps) => prevProps.isActive === nextProps.isActive && prevProps.isDark === nextProps.isDark);
 
-export default function CategoryNav({ isDark }) {
+import React from "react";
+
+const notificationTabs = ['All', 'Player', 'Clan', 'System'];
+
+function CategoryNav({ isDark }) {
     const { user } = useUser();
     const { userClan } = useClan();
     const CustomAlert = useAlert();
     const storage = useMMKV();
     const pathname = usePathname();
-    const router = useRouter();
     const { id } = useGlobalSearchParams();
 
     const [showModal, setShowModal] = useState(false);
@@ -102,11 +105,12 @@ export default function CategoryNav({ isDark }) {
     // Reanimated shared value for the sync icon
     const spinValue = useSharedValue(0);
 
-    const notificationTabs = ['All', 'Player', 'Clan', 'System'];
-
     const userId = user?._id || '';
     const clanId = userClan?.tag || '';
-    const endpoint = `/message-pills?userId=${userId}&clanId=${clanId}`;
+    const endpoint = useMemo(
+        () => `/message-pills?userId=${userId}&clanId=${clanId}`,
+        [userId, clanId]
+    );
 
     // Updated SWR config: 2 minutes interval (120000ms), refocus revalidation true, and grabbed mutate to allow manual fetching
     const { data, isValidating, mutate } = useSWR(endpoint, fetcher, {
@@ -144,14 +148,27 @@ export default function CategoryNav({ isDark }) {
         };
     });
 
-    const rawPills = data?.pills || [];
+    const rawPills = useMemo(
+        () => data?.pills || [],
+        [data]
+    );
 
-    const activeCount = rawPills.filter(pill => (viewCounts[pill._id] || 0) < MAX_VIEWS_MARQUEE).length;
+    const activeCount = useMemo(
+        () =>
+            rawPills.filter(
+                pill => (viewCounts[pill._id] || 0) < MAX_VIEWS_MARQUEE
+            ).length,
+        [rawPills, viewCounts]
+    );
 
-    const filteredPills = rawPills.filter(pill => {
-        if (activeTab === 'All') return true;
-        return getTypeCategory(pill.type) === activeTab;
-    });
+    const filteredPills = useMemo(
+        () =>
+            rawPills.filter(pill => {
+                if (activeTab === "All") return true;
+                return getTypeCategory(pill.type) === activeTab;
+            }),
+        [rawPills, activeTab]
+    );
 
     const markSeen = (pillId) => {
         setViewCounts(prev => {
@@ -189,14 +206,14 @@ export default function CategoryNav({ isDark }) {
     const handleCategoryPress = useCallback((categoryId) => {
         if (id === categoryId) return;
         DeviceEventEmitter.emit("navigateSafely", `/categories/${categoryId}`)
-    }, [id, router]);
+    }, [id]);
 
     const renderItem = useCallback(({ item }) => {
         const isActive = id === item.id;
         return <NavPill item={item} isActive={isActive} isDark={isDark} onPress={handleCategoryPress} />;
     }, [id, isDark, handleCategoryPress]);
 
-    const renderPillItem = ({ item }) => {
+    const renderPillItem = useCallback(({ item }) => {
         const themePill = getPillTheme(item.type);
         const views = viewCounts[item._id] || 0;
         const isActive = views < MAX_VIEWS_MARQUEE;
@@ -222,9 +239,19 @@ export default function CategoryNav({ isDark }) {
                         onPress={() => { DeviceEventEmitter.emit("navigateSafely", item.link); markSeen(item._id); setShowModal(false); }}
                         activeOpacity={0.7}
                     >
+                        {/* ⚡️ FIXED: Replaced className with reliable inline styles to retain paddings, borders, and shadows perfectly */}
                         <LinearGradient
                             colors={[themePill.color, `${themePill.color}80`]}
-                            className="px-4 py-2 rounded-xl shadow-md"
+                            style={{
+                                paddingHorizontal: 16,
+                                paddingVertical: 8,
+                                borderRadius: 12,
+                                shadowColor: '#000',
+                                shadowOffset: { width: 0, height: 2 },
+                                shadowOpacity: 0.15,
+                                shadowRadius: 3.84,
+                                elevation: 5,
+                            }}
                             start={{ x: 0, y: 0 }} end={{ x: 1, y: 1 }}
                         >
                             <Text className="text-white font-bold text-xs">GO</Text>
@@ -233,7 +260,7 @@ export default function CategoryNav({ isDark }) {
                 )}
             </View>
         );
-    };
+    }, [viewCounts, isDark]);
 
     if (pathname === "/Search") return null;
 
@@ -280,7 +307,7 @@ export default function CategoryNav({ isDark }) {
 
                 <View style={{ position: 'absolute', bottom: 0, left: 0, right: 0, height: '85%' }}>
                     {/* ⚡️ Replaced BlurView with standard View. 
-                         Used rgba backgrounds to simulate glassmorphism without native blur dependence. */}
+          Used rgba backgrounds to simulate glassmorphism without native blur dependence. */}
                     <View
                         style={{
                             flex: 1,
@@ -349,9 +376,21 @@ export default function CategoryNav({ isDark }) {
 
                             {activeCount > 0 && (
                                 <TouchableOpacity onPress={markAllSeen} activeOpacity={0.8} className="mt-2 mb-2">
+                                    {/* ⚡️ FIXED: Replaced className with reliable inline styles to retain high padding, alignments, and custom blue shadows perfectly */}
                                     <LinearGradient
                                         colors={['#3b82f6', '#2563eb']}
-                                        className="py-4 px-6 rounded-2xl items-center shadow-lg shadow-blue-500/30"
+                                        style={{
+                                            paddingVertical: 16,
+                                            paddingHorizontal: 24,
+                                            borderRadius: 16,
+                                            alignItems: 'center',
+                                            justifyContent: 'center',
+                                            shadowColor: '#3b82f6',
+                                            shadowOffset: { width: 0, height: 10 },
+                                            shadowOpacity: 0.3,
+                                            shadowRadius: 20,
+                                            elevation: 8,
+                                        }}
                                         start={{ x: 0, y: 0 }} end={{ x: 1, y: 0 }}
                                     >
                                         <Text className="text-white font-black tracking-widest text-sm uppercase">Mark All as Synchronized</Text>
@@ -365,3 +404,5 @@ export default function CategoryNav({ isDark }) {
         </View>
     );
 }
+
+export default memo(CategoryNav);

@@ -83,10 +83,8 @@ const NeuralPinModal = ({ visible, onSuccess, onClose, returnPinOnly = false, ch
     };
 
     const handleVerify = async (submittedPin) => {
-        console.log("changePin is?", changePin);
 
         if (changePin) {
-            console.log("Current step:", step);
             if (step === 'old') {
                 setOldPin(submittedPin)
                 setPin('');

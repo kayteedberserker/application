@@ -116,7 +116,7 @@ export default function PlayerCard({ author, totalPosts, isDark }) {
       style={{ borderRadius: 27, width: 372 }}
     >
       <PlayerBackground equippedBg={equippedBg} themeColor={themeColor} borderRadius={27} />
-      <PlayerWatermark equippedWatermark={equippedWatermark} isDark={isDark} />
+      <PlayerWatermark isVisible={true} equippedWatermark={equippedWatermark} isDark={isDark} />
 
       <View className="flex-row justify-between items-center mb-6 opacity-40 relative z-10">
         <Text className="text-[15px] font-black tracking-[0.6em] text-gray-500 dark:text-gray-400">PLAYER CARD</Text>
@@ -137,9 +137,10 @@ export default function PlayerCard({ author, totalPosts, isDark }) {
             isTop10={weeklyGloryRank > 0 && weeklyGloryRank <= 10}
             isDark={isDark}
             size={150}
+            isVisible={true}
           />
           <View className={`absolute bottom-0 ${weeklyGloryRank > 0 && weeklyGloryRank <= 10 ? 'z-20' : 'z-10'}`}>
-            <TitleTag isDark={isDark} key={equippedTitle} rank={weeklyGloryRank} size={13} auraVisuals={weeklyAuraTier} equippedTitle={equippedTitle} isTop10={weeklyGloryRank > 0 && weeklyGloryRank < 10} />
+            <TitleTag isDark={isDark} isVisible={true} key={equippedTitle} rank={weeklyGloryRank} size={13} auraVisuals={weeklyAuraTier} equippedTitle={equippedTitle} isTop10={weeklyGloryRank > 0 && weeklyGloryRank < 10} />
           </View>
         </View>
 
@@ -154,6 +155,7 @@ export default function PlayerCard({ author, totalPosts, isDark }) {
               showFlame={true}
               showPeakBadge={true}
               fontSize={28}
+              isVisible={true}
             />
           </View>
 

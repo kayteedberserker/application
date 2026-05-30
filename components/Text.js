@@ -13,13 +13,13 @@ export function Text({ className = "", selectable, children, style, ...props }) 
   const hasColor = hasColorInClassName || hasColorInStyle;
 
   // 3. Only apply default theme colors if NO other color is provided
-  const defaultClasses = hasColor ? "" : "text-gray-600 dark:text-gray-100";
-  
+  const defaultClasses = hasColor ? "" : "text-gray-600 dark:text-gray-100"
+
   return (
     <RNText
       selectable={selectable || false}
       style={[
-        { 
+        {
           includeFontPadding: false, // Kills the top gap
         },
         // Only apply the THEME.text fallback if no color is detected

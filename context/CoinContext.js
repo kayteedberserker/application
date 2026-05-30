@@ -1,4 +1,4 @@
-import { createContext, useCallback, useContext, useEffect, useState } from 'react';
+import { createContext, useCallback, useContext, useEffect, useMemo, useState } from 'react';
 import { useMMKV } from 'react-native-mmkv';
 import apiFetch from '../utils/apiFetch';
 import { useClan } from './ClanContext';
@@ -8,6 +8,7 @@ const CoinContext = createContext();
 
 const STORAGE_KEYS = {
     COINS: 'cached_user_coins',
+    TOKENS: 'cached_user_tokens',
     CLAN_COINS: 'cached_clan_coins',
     TOTAL_PURCHASED: 'cached_total_purchased',
     PEAK_LEVEL: 'cached_peak_level'
@@ -35,6 +36,7 @@ export const CoinProvider = ({ children }) => {
 
     const [clanCoins, setClanCoins] = useState(0);
     const [coins, setCoins] = useState(0);
+    const [tokens, setTokens] = useState(0);
     const [totalPurchasedCoins, setTotalPurchasedCoins] = useState(0);
     const [peakLevel, setPeakLevel] = useState(0);
 
@@ -42,13 +44,17 @@ export const CoinProvider = ({ children }) => {
 
     useEffect(() => {
         try {
+            const cachedTokens = storage.getString(STORAGE_KEYS.TOKENS);
             const cachedCoins = storage.getString(STORAGE_KEYS.COINS);
             const cachedClanCoins = storage.getString(STORAGE_KEYS.CLAN_COINS);
             const cachedTotalPurchased = storage.getString(STORAGE_KEYS.TOTAL_PURCHASED);
             const cachedPeakLevel = storage.getString(STORAGE_KEYS.PEAK_LEVEL);
 
-            if (cachedCoins !== undefined && cachedCoins !== null) setCoins(Number(cachedCoins));
+            if (cachedCoins !== undefined && cachedCoins !== null) setCoins(Number(cachedCoins))
             else setCoins(0);
+
+            if (cachedTokens !== undefined && cachedTokens !== null) setTokens(Number(cachedTokens));
+            else setTokens(0);
 
             if (cachedClanCoins !== undefined && cachedClanCoins !== null) setClanCoins(Number(cachedClanCoins));
             else setClanCoins(0);
@@ -65,24 +71,30 @@ export const CoinProvider = ({ children }) => {
     }, [storage, user?.deviceId]);
 
     // Renamed to setCoins so it can be exported and maintain cache sync
-    const updateCoins = (newVal) => {
+    const updateCoins = useCallback((newVal) => {
         setCoins(newVal);
         storage.set(STORAGE_KEYS.COINS, String(newVal));
-    };
+    }, [storage]);
 
-    const updateClanCoins = (newVal) => {
+    // Renamed to setTokens so it can be exported and maintain cache sync
+    const updateTokens = useCallback((newVal) => {
+        setTokens(newVal);
+        storage.set(STORAGE_KEYS.TOKENS, String(newVal));
+    }, [storage]);
+
+    const updateClanCoins = useCallback((newVal) => {
         setClanCoins(newVal);
         storage.set(STORAGE_KEYS.CLAN_COINS, String(newVal));
-    };
+    }, [storage]);
 
-    const updateTotalPurchased = (newTotal) => {
+    const updateTotalPurchased = useCallback((newTotal) => {
         setTotalPurchasedCoins(newTotal);
         storage.set(STORAGE_KEYS.TOTAL_PURCHASED, String(newTotal));
 
         const newPeakLevel = calculatePeakLevel(newTotal);
         setPeakLevel(newPeakLevel);
         storage.set(STORAGE_KEYS.PEAK_LEVEL, String(newPeakLevel));
-    };
+    }, [storage]);
 
     useEffect(() => {
         if (user?.coins !== undefined) {
@@ -91,7 +103,7 @@ export const CoinProvider = ({ children }) => {
         if (user?.totalPurchasedCoins !== undefined) {
             updateTotalPurchased(user.totalPurchasedCoins);
         }
-    }, [user?.coins, user?.totalPurchasedCoins]);
+    }, [user?.coins, user?.totalPurchasedCoins, updateCoins, updateTotalPurchased]);
 
     const fetchCoins = useCallback(async () => {
         const stored = storage.getString("mobileUser");
@@ -105,6 +117,7 @@ export const CoinProvider = ({ children }) => {
             const data = await response.json();
             if (data.success) {
                 updateCoins(data.balance || 0);
+                updateTokens(data.tokens || 0);
                 if (data.totalPurchasedCoins !== undefined) {
                     updateTotalPurchased(data.totalPurchasedCoins);
                 }
@@ -112,7 +125,7 @@ export const CoinProvider = ({ children }) => {
         } catch (error) {
             console.error("Failed to fetch coins:", error);
         }
-    }, [storage]);
+    }, [storage, updateCoins, updateTokens, updateTotalPurchased]);
 
     // ⚡️ FIXED: Reverted back to using .set("", "") instead of .delete()
     useEffect(() => {
@@ -122,7 +135,7 @@ export const CoinProvider = ({ children }) => {
         } else {
             updateClanCoins(cCoins || 0);
         }
-    }, [userClan, cCoins]);
+    }, [userClan, cCoins, storage, updateClanCoins]);
 
     useEffect(() => {
         if (user?.deviceId) {
@@ -134,7 +147,7 @@ export const CoinProvider = ({ children }) => {
         }
     }, [user?.deviceId, fetchCoins]);
 
-    const processTransaction = async (action, type, extraData = null, clanTag = null) => {
+    const processTransaction = useCallback(async (action, type, extraData = null, clanTag = null) => {
         if (!user?.deviceId) return { success: false, error: 'No device ID' };
 
         setIsProcessingTransaction(true);
@@ -197,22 +210,36 @@ export const CoinProvider = ({ children }) => {
             setIsProcessingTransaction(false);
             return { success: false, error: error.message };
         }
-    };
+    }, [user?.deviceId, userClan?.tag, updateClanCoins, updateCoins, updateTotalPurchased]);
+
+    // 🧠 MEMOIZED CONTEXT VALUE TO PREVENT UNNECESSARY CONSUMER RERENDERS
+    const contextValue = useMemo(() => ({
+        coins,
+        tokens,
+        setCoins: updateCoins, // Exporting updateCoins as setCoins
+        clanCoins,
+        totalPurchasedCoins,
+        peakLevel,
+        processTransaction,
+        isProcessingTransaction,
+        fetchCoins
+    }), [
+        coins,
+        tokens,
+        updateCoins,
+        clanCoins,
+        totalPurchasedCoins,
+        peakLevel,
+        processTransaction,
+        isProcessingTransaction,
+        fetchCoins
+    ]);
 
     return (
-        <CoinContext.Provider value={{
-            coins,
-            setCoins: updateCoins, // Exporting updateCoins as setCoin
-            clanCoins,
-            totalPurchasedCoins,
-            peakLevel,
-            processTransaction,
-            isProcessingTransaction,
-            fetchCoins
-        }}>
+        <CoinContext.Provider value={contextValue}>
             {children}
         </CoinContext.Provider>
     );
 };
 
-export const useCoins = () => useContext(CoinContext);
+export const useCoins = () => useContext(CoinContext)

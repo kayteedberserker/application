@@ -1,4 +1,5 @@
 import { Image } from 'expo-image';
+import { LinearGradient } from 'expo-linear-gradient'; // ⚡️ ADDED: Native Expo Gradient Support
 import LottieView from 'lottie-react-native';
 import React, { useEffect, useMemo, useRef } from 'react';
 import { StyleSheet, View } from 'react-native'; // ⚡️ ADDED: Image
@@ -11,9 +12,22 @@ import Animated, {
     withSequence,
     withTiming
 } from 'react-native-reanimated';
-import Svg, { Defs, LinearGradient, Rect, Stop, SvgXml } from "react-native-svg";
+import { SvgXml } from "react-native-svg"; // ⚡️ OPTIMIZED: Kept only SvgXml to handle custom strings safely
 
-const PlayerBackground = React.memo(({ equippedBg, themeColor, borderRadius = 48, isFeed = false, isCover }) => {
+// Helper utility to safely inject opacity into hex colors for expo-linear-gradient stops
+const hexToRgba = (hex, alpha) => {
+    if (!hex || typeof hex !== 'string' || !hex.startsWith('#')) return hex;
+    let color = hex.substring(1);
+    if (color.length === 3) {
+        color = color.split('').map(char => char + char).join('');
+    }
+    const r = parseInt(color.substring(0, 2), 16);
+    const g = parseInt(color.substring(2, 4), 16);
+    const b = parseInt(color.substring(4, 6), 16);
+    return `rgba(${r}, ${g}, ${b}, ${alpha})`;
+};
+
+const PlayerBackground = React.memo(({ equippedBg, themeColor, borderRadius = 48, isFeed = false, isCover, isVisible = false }) => {
     const lottieRef = useRef(null);
     const bgVisual = equippedBg?.visualConfig || equippedBg?.visualData || {};
 
@@ -25,6 +39,9 @@ const PlayerBackground = React.memo(({ equippedBg, themeColor, borderRadius = 48
 
     // ⚡️ IMAGE SUPPORT: Check for static image/webp URL
     const imageUrl = equippedBg?.url || bgVisual.imageUrl;
+
+    // Determine animation rule: only kill animation when it IS in the feed AND NOT visible.
+    const shouldAnimate = !isFeed || isVisible;
 
     // ⚡️ PERFORMANCE: Memoize Lottie source to prevent re-initialization
     const lottieSource = useMemo(() =>
@@ -49,7 +66,8 @@ const PlayerBackground = React.memo(({ equippedBg, themeColor, borderRadius = 48
         cancelAnimation(pulseAnim);
         cancelAnimation(sweepAnim);
 
-        if (isFeed) {
+        // Render static version only if in feed view and the component isn't visible
+        if (!shouldAnimate) {
             pulseAnim.value = 1;
             sweepAnim.value = 0.5;
             return;
@@ -74,7 +92,7 @@ const PlayerBackground = React.memo(({ equippedBg, themeColor, borderRadius = 48
             cancelAnimation(pulseAnim);
             cancelAnimation(sweepAnim);
         };
-    }, [animationType, isFeed]);
+    }, [animationType, shouldAnimate]);
 
     // --- ANIMATED STYLES ---
     const animatedBgStyle = useAnimatedStyle(() => {
@@ -89,7 +107,7 @@ const PlayerBackground = React.memo(({ equippedBg, themeColor, borderRadius = 48
     });
 
     return (
-        <View style={[{ borderRadius, overflow: 'hidden' }, StyleSheet.absoluteFillObject]}>
+        <View style={[{ borderRadius, overflow: 'hidden' }, StyleSheet.absoluteFill]}>
             {/* Ambient Background Glow */}
             <View
                 pointerEvents="none"
@@ -98,13 +116,13 @@ const PlayerBackground = React.memo(({ equippedBg, themeColor, borderRadius = 48
             />
 
             {/* MAIN BACKGROUND LAYER */}
-            <Animated.View style={[StyleSheet.absoluteFillObject, animatedBgStyle]}>
+            <Animated.View style={[StyleSheet.absoluteFill, animatedBgStyle]}>
                 {/* 1. STATIC IMAGE (WebP/Cloudinary) - Highest Priority */}
                 {imageUrl ? (
                     <Image
                         source={{ uri: imageUrl }}
-                        style={[StyleSheet.absoluteFillObject, { opacity: bgOpacity }]}
-                        resizeMode="cover"
+                        style={[StyleSheet.absoluteFill, { opacity: bgOpacity }]}
+                        contentFit="cover"
                     />
                 ) : null}
 
@@ -113,9 +131,9 @@ const PlayerBackground = React.memo(({ equippedBg, themeColor, borderRadius = 48
                     <LottieView
                         ref={lottieRef}
                         source={lottieSource}
-                        autoPlay={!isFeed}
-                        loop={!isFeed}
-                        style={[StyleSheet.absoluteFillObject]}
+                        autoPlay={shouldAnimate}
+                        loop={shouldAnimate}
+                        style={[StyleSheet.absoluteFill]}
                         resizeMode="cover"
                         renderMode="hardware"
                         colorFilters={[{ keypath: "**", color: primary }]}
@@ -123,7 +141,7 @@ const PlayerBackground = React.memo(({ equippedBg, themeColor, borderRadius = 48
 
                     /* 3. CUSTOM SVG DESIGNS */
                 ) : processedSvg ? (
-                    <View style={[StyleSheet.absoluteFillObject, { opacity: bgOpacity }]}>
+                    <View style={[StyleSheet.absoluteFill, { opacity: bgOpacity }]}>
                         <SvgXml
                             xml={processedSvg}
                             width="100%"
@@ -134,39 +152,38 @@ const PlayerBackground = React.memo(({ equippedBg, themeColor, borderRadius = 48
 
                     /* 4. FALLBACK GRADIENT (Only if no Image, Lottie, or SVG) */
                 ) : !imageUrl && (
-                    <View style={[StyleSheet.absoluteFillObject, { opacity: bgOpacity }]}>
-                        <Svg height="100%" width="100%" style={StyleSheet.absoluteFillObject}>
-                            <Defs>
-                                <LinearGradient id="playerCardGrad" x1="0%" y1="0%" x2="100%">
-                                    <Stop offset="0%" stopColor={primary} stopOpacity={0.15} />
-                                    <Stop offset="100%" stopColor={secondary} stopOpacity={0.02} />
-                                </LinearGradient>
-                            </Defs>
-                            <Rect x="0" y="0" width="100%" height="100%" fill="url(#playerCardGrad)" />
-                        </Svg>
-                    </View>
+                    <LinearGradient
+                        colors={[hexToRgba(primary, 0.15), hexToRgba(secondary, 0.02)]}
+                        start={{ x: 0, y: 0 }}
+                        end={{ x: 1, y: 0 }}
+                        style={[StyleSheet.absoluteFill, { opacity: bgOpacity }]}
+                    />
                 )}
             </Animated.View>
 
             {/* ⚡️ THE SWEEP OVERLAY */}
-            {animationType === 'sweep' && (
+            {animationType === 'sweep' && shouldAnimate && (
                 <Animated.View
                     pointerEvents="none"
                     style={[
                         sweepStyle,
-                        { position: 'absolute', top: 0, bottom: 0, width: '50%', opacity: 0.3 }
+                        {
+                            position: 'absolute',
+                            top: 0,
+                            bottom: 0,
+                            width: '50%',
+                            opacity: 0.3,
+                            transform: [{ skewX: '-20deg' }] // ⚡️ FIXED: Native transformation applied safely via Reanimated container style
+                        }
                     ]}
                 >
-                    <Svg height="100%" width="100%">
-                        <Defs>
-                            <LinearGradient id="sweepGrad" x1="0%" y1="0%" x2="100%" y2="0%">
-                                <Stop offset="0%" stopColor="#ffffff" stopOpacity="0" />
-                                <Stop offset="50%" stopColor="#ffffff" stopOpacity="1" />
-                                <Stop offset="100%" stopColor="#ffffff" stopOpacity="0" />
-                            </LinearGradient>
-                        </Defs>
-                        <Rect x="0" y="0" width="100%" height="100%" fill="url(#sweepGrad)" transform="skewX(-20)" />
-                    </Svg>
+                    <LinearGradient
+                        colors={['rgba(255, 255, 255, 0)', 'rgba(255, 255, 255, 1)', 'rgba(255, 255, 255, 0)']}
+                        locations={[0, 0.5, 1]}
+                        start={{ x: 0, y: 0 }}
+                        end={{ x: 1, y: 0 }}
+                        style={StyleSheet.absoluteFill}
+                    />
                 </Animated.View>
             )}
         </View>

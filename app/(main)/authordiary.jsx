@@ -33,7 +33,7 @@ import { useCoins } from "../../context/CoinContext";
 import { useStreak } from "../../context/StreakContext";
 import { useUploadProgress } from "../../context/UploadProgressContext";
 import { useUser } from "../../context/UserContext";
-import apiFetch from "../../utils/apiFetch";
+import { apiFetch } from "../../utils/apiFetch";
 // ⚡️ MAX PREMIUM REANIMATED IMPORTS
 import * as Haptics from 'expo-haptics';
 import Animated, {
@@ -50,10 +50,12 @@ import Animated, {
 } from "react-native-reanimated";
 import ImageEditorModal from "../../components/ImageEditorModal";
 
+
 // 🔹 Notification Handler Configuration
 Notifications.setNotificationHandler({
     handleNotification: async () => ({
-        shouldShowAlert: true,
+        shouldShowBanner: true,
+        shouldShowList: true,
         shouldPlaySound: true,
         shouldSetBadge: false,
     }),
@@ -92,7 +94,7 @@ export default function AuthorDiaryDashboard() {
 
     const { userClan, isInClan } = useClan();
     const { streak, refreshStreak } = useStreak();
-    const { startUpload, updateProgress, nextFile, setStatus, completeUpload, hideProgress } = useUploadProgress();
+    const { startUpload, updateProgress, nextFile, setStatus, completeUpload, hideProgress, uploadWithNativeEngine } = useUploadProgress();
     const fingerprint = user?.deviceId;
     const router = useRouter();
     const { coins, processTransaction, isProcessingTransaction } = useCoins();
@@ -263,7 +265,7 @@ export default function AuthorDiaryDashboard() {
             } catch (err) {
                 console.error("Save Error:", err);
             }
-        }, 1500);
+        }, 5000);
 
         return () => clearTimeout(timer);
     }, [title, message, category, clanSubCategory, hasPoll, pollOptions, fingerprint, DRAFT_KEY]);
@@ -466,6 +468,7 @@ export default function AuthorDiaryDashboard() {
     };
 
     const [mediaList, setMediaList] = useState([]);
+
     const pickImage = async () => {
         const remainingSlots = 15 - mediaList.length;
         if (remainingSlots <= 0) {
@@ -536,209 +539,177 @@ export default function AuthorDiaryDashboard() {
         } catch (err) { console.error("Streak update error:", err); return null; }
     }
 
+    // ----------------------------------------------------------------------
+    // HANDLESUBMIT IMPLEMENTATION (Optimized Webhook Architecture)
+    // ----------------------------------------------------------------------
+
     const handleSubmit = async () => {
         if (!title.trim() || !message.trim()) { CustomAlert("Error", "Title and Message are required."); return; }
         if (isOfflineMode) { CustomAlert("Offline", "Cannot transmit data while offline."); return; }
-        if (hasPoll && (pollOptions[0] == "" || pollOptions.length < 2)) {
-            CustomAlert("Error", "Polls require at least 2 option, disable poll if no options")
-            return
-        } else if (category == "Polls" && !hasPoll) {
-            CustomAlert("Error", "Polls category are for posts that includes polls")
-            return
+
+        if (hasPoll && (pollOptions[0] === "" || pollOptions.length < 2)) {
+            CustomAlert("Error", "Polls require at least 2 options, disable poll if no options.");
+            return;
+        } else if (category === "Polls" && !hasPoll) {
+            CustomAlert("Error", "Polls category are for posts that includes polls.");
+            return;
         }
 
-        // This triggers your loading animation state
         setSubmitting(true);
         setIsSubmissionTakingLong(false);
 
-        // INCREASED TIMEOUT: Wait 30 seconds before warning the user (prevents panic on large files)
-        const slowSubmitTimeout = setTimeout(() => {
-            setIsSubmissionTakingLong(true);
-            CustomAlert("Still transmitting...", "Large media files take a bit longer to process. It is still uploading safely.");
-        }, 30000);
+        let finalCategory = category;
+        let finalClanId = null;
 
-        // INCREASED TIMEOUT: Wait 45 seconds before forcing the "optimistic" pending state
-        const timeoutPromise = new Promise((resolve) =>
-            setTimeout(() => resolve({ isTimeout: true }), 45000)
-        );
+        if (category === "Clan") {
+            finalCategory = `Clan-${clanSubCategory}`;
+            finalClanId = userClan?.tag;
+        }
 
         try {
-            const uploadAndSubmit = async () => {
-                const finalMediaAssets = [];
+            // 🌟 STEP 1: Post Payload Initialization
+            const response = await apiFetch(`/posts`, {
+                method: "POST",
+                body: JSON.stringify({
+                    title,
+                    message,
+                    category: finalCategory,
+                    clanId: finalClanId,
+                    hasPoll,
+                    pollMultiple,
+                    pollOptions: hasPoll ? pollOptions.filter(opt => opt.trim() !== "").map(opt => ({ text: opt })) : [],
+                    fingerprint,
+                    mediaPending: mediaList.length > 0,
+                    totalFiles: mediaList.length
+                }),
+            });
 
-                // Start progress tracking
-                if (mediaList.length > 0) {
-                    startUpload(mediaList.length, "Starting upload...");
+            const data = await response.json();
+            if (!response.ok) throw new Error(data.message || "Failed to initialize post matrix.");
+
+            // Text-only bypass path
+            if (mediaList.length === 0) {
+                completeUpload();
+                if (data.isFirstPost && data.textStats) {
+                    Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
+                    setFirstPostModal({ visible: true, stats: data.auraStats, postData: data.post });
+                } else {
+                    CustomAlert("Success", "Transmission compiled successfully!");
                 }
+                await cleanUpFormState();
+                return;
+            }
 
-                // 1. Process and upload media payloads to the cloud grid
-                for (let fileIndex = 0; fileIndex < mediaList.length; fileIndex++) {
-                    const item = mediaList[fileIndex];
-                    if (item.url) { // Already uploaded
-                        finalMediaAssets.push(item);
-                        if (fileIndex > 0) nextFile(item.name || `File ${fileIndex + 1}`);
-                        continue;
-                    }
+            // 🛣️ PATH B: Multi-File Background Pipeline Handoff
+            const { post, signData } = data;
 
-                    const signRes = await apiFetch(`/upload/sign`, { method: "POST" });
-                    const signData = await signRes.json();
-                    if (!signRes.ok) throw new Error("Sync failure: Cloud Satellite unreachable.");
+            Notifications.scheduleNotificationAsync({
+                identifier: 'media_upload_status',
+                content: {
+                    title: 'Uploading Media',
+                    body: `Background system processing ${mediaList.length} attachment(s)...`,
+                },
+                trigger: null,
+            }).catch(e => console.log("Expo Notifications error:", e));
 
-                    const formData = new FormData();
-                    formData.append("file", {
-                        uri: item.localUri,
-                        type: item.type === "video" ? "video/mp4" : "image/jpeg",
-                        name: item.type === "video" ? "video.mp4" : "photo.jpg",
-                    });
-                    formData.append("api_key", signData.apiKey);
-                    formData.append("timestamp", signData.timestamp);
-                    formData.append("signature", signData.signature);
-                    formData.append("folder", "posts");
-                    formData.append("resource_type", item.type === "video" ? "video" : "image");
+            // Fire UI state setup
+            startUpload(mediaList.length);
 
-                    // Upload with progress tracking
-                    const cloudRes = await new Promise((resolve, reject) => {
-                        const xhr = new XMLHttpRequest();
+            // 🌐 MAP AND TRANSMIT ALL FILES IMMEDIATELY
+            // Registering everything instantly ensures native channels take full control before app sleep
+            const uploadPromises = mediaList.map((item) => {
+                const endpointUrl = `https://api.cloudinary.com/v1_1/${signData.cloudName}/${item.type === "video" ? "video" : "image"}/upload`;
 
-                        // Track upload progress
-                        xhr.upload.addEventListener('progress', (e) => {
-                            if (e.lengthComputable) {
-                                const percentComplete = (e.loaded / e.total) * 100;
-                                updateProgress(percentComplete, fileIndex + 1, item.type === "video" ? "Uploading video..." : "Uploading image...");
-                            }
-                        });
+                const parameters = {
+                    api_key: signData.apiKey,
+                    timestamp: signData.timestamp,
+                    signature: signData.signature,
+                    folder: signData.folder,
+                    context: signData.context,
+                    notification_url: signData.notificationUrl // Cloudinary webhook callback string
+                };
 
-                        xhr.addEventListener('load', () => {
-                            if (xhr.status >= 200 && xhr.status < 300) {
-                                try {
-                                    const response = JSON.parse(xhr.responseText);
-                                    resolve({ ok: true, json: async () => response });
-                                } catch (e) {
-                                    reject(new Error('Invalid response format'));
-                                }
-                            } else {
-                                reject(new Error(`Upload failed with status ${xhr.status}`));
-                            }
-                        });
+                return uploadWithNativeEngine(
+                    endpointUrl,
+                    item.localUri,
+                    {},
+                    parameters,
+                    "file",
+                    "POST",
+                    (progress, uniqueUri) => updateProgress(uniqueUri, progress) // Unique key update
+                );
+            });
 
-                        xhr.addEventListener('error', () => reject(new Error('Upload error')));
-                        xhr.addEventListener('abort', () => reject(new Error('Upload aborted')));
+            // ⚡ NON-BLOCKING LIFECYCLE CAPTURE
+            // Let the engine listen to completion asynchronously so UI code finishes immediately
+            Promise.all(uploadPromises)
+                .then(() => {
+                    completeUpload();
 
-                        xhr.open('POST', `https://api.cloudinary.com/v1_1/${signData.cloudName}/${item.type === "video" ? "video" : "image"}/upload`);
-                        xhr.send(formData);
-                    });
+                    // Extra local notification fallback if they are using the app actively
+                    Notifications.scheduleNotificationAsync({
+                        identifier: 'media_upload_complete',
+                        content: {
+                            title: 'Media Uploaded',
+                            body: 'All media successfully synced with the server grid.',
+                        },
+                        trigger: null,
+                    }).catch(() => { });
+                })
+                .catch((err) => {
+                    console.error("A background asset failed in the batch pool:", err);
+                    setStatus('error', err.message || "Transmission execution fault.");
 
-                    const cloudData = await cloudRes.json();
-                    if (!cloudRes.ok) throw new Error(cloudData.error?.message || "Media Extraction Failed: Cloud grid rejection.");
-
-                    setStatus('processing', null);
-                    updateProgress(100, fileIndex + 1, "Processing...");
-
-                    let finalUrl = cloudData.secure_url;
-                    const transform = item.type === "video" ? "c_limit,w_720,br_1.5m,q_auto,vc_auto" : "c_limit,w_1080,f_auto,q_auto";
-                    finalUrl = finalUrl.replace("/upload/", `/upload/${transform}/`);
-
-                    finalMediaAssets.push({
-                        url: finalUrl,
-                        type: item.type,
-                        public_id: cloudData.public_id // Saved for future-proofing your database
-                    });
-                }
-
-                // Mark as complete before sending to API
-                if (mediaList.length > 0) {
-                    setStatus('processing', null);
-                    updateProgress(100, mediaList.length, "Finalizing...");
-                }
-
-                // 2. Transmit final payload to the Great Library
-                let finalCategory = category;
-                let finalClanId = null;
-
-                if (category === "Clan") {
-                    finalCategory = `Clan-${clanSubCategory}`;
-                    finalClanId = userClan?.tag;
-                }
-
-                const response = await apiFetch(`/posts`, {
-                    method: "POST",
-                    body: JSON.stringify({
-                        title,
-                        message,
-                        category: finalCategory,
-                        clanId: finalClanId,
-                        media: finalMediaAssets,
-                        mediaUrl: finalMediaAssets.length > 0 ? finalMediaAssets[0].url : mediaUrlLink || null,
-                        mediaType: finalMediaAssets.length > 0 ? finalMediaAssets[0].type : (mediaUrlLink?.includes("video") ? "video" : "image"),
-                        hasPoll,
-                        pollMultiple,
-                        pollOptions: hasPoll ? pollOptions.filter(opt => opt.trim() !== "").map(opt => ({ text: opt })) : [],
-                        fingerprint
-                    }),
+                    Notifications.scheduleNotificationAsync({
+                        identifier: 'media_upload_status',
+                        content: {
+                            title: 'Media Transfer Interrupted',
+                            body: 'An attachment in the sequence failed to upload.',
+                        },
+                        trigger: null,
+                    }).catch(() => { });
                 });
 
-                const data = await response.json();
-                if (!response.ok) throw new Error(data.message || "Failed to create post");
-
-                // Complete the upload progress
-                completeUpload();
-
-                return { ...data, isTimeout: false };
+            // 🌟 OPTIMISTIC FEED INJECTION
+            const optimisticPost = {
+                _id: post._id,
+                title: title,
+                status: 'pending',
+                createdAt: new Date().toISOString()
             };
+            mutateTodayPosts({ posts: [optimisticPost, ...todayPosts] }, false);
 
-            const uploadPromise = uploadAndSubmit();
-            const result = await Promise.race([uploadPromise, timeoutPromise]);
+            CustomAlert("Uplink Active", "Your files are uploading in the background. You can safely browse or lock your phone.");
+            await cleanUpFormState();
 
-            if (result.isTimeout) {
-                const optimisticPost = {
-                    _id: `temp-${Date.now()}`,
-                    title: title,
-                    status: 'pending',
-                    createdAt: new Date().toISOString()
-                };
-                mutateTodayPosts({ posts: [optimisticPost, ...todayPosts] }, false);
-                CustomAlert("Success", "Neural transmission initiated. Your post is pending decryption in the archives.");
-            }
-
-            const finalResult = await uploadPromise;
-
-            if (!finalResult.isTimeout) {
-                if (finalResult.isFirstPost && finalResult.auraStats) {
-                    Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
-                    setFirstPostModal({ visible: true, stats: finalResult.auraStats, postData: finalResult.post });
-                } else {
-                    CustomAlert("Success", "Your entry has been submitted for approval!");
-                }
-            }
-
-            await AsyncStorage.removeItem(DRAFT_KEY);
-            DeviceEventEmitter.emit("POST_CREATED_SUCCESS");
-            updateStreak(fingerprint);
-            refreshStreak();
-
-            setMediaList([]);
-            setTitle("");
-            setMessage("");
-            setMediaUrlLink("");
-            setPickedImage(false);
-
-            mutateTodayPosts();
-
-            const baseLimit = isInClan ? userRank.postLimit + 2 : userRank.postLimit;
-
-            if (additionalSlot === 1 && (todayPosts.length + 1) >= (baseLimit + 1)) {
-                setAdditionalSlot(0);
-                await AsyncStorage.setItem("additionalSlot", "0");
-            }
         } catch (err) {
-            setStatus('error', err.message || "Upload failed");
-            CustomAlert("Error", err.message || "Upload or post submission failed.");
+            setStatus('error', err.message || "Transmission execution fault.");
+            CustomAlert("System Failure", err.message || "Failed to finalize post deployment pipelines.");
             mutateTodayPosts();
         } finally {
-            clearTimeout(slowSubmitTimeout);
-            setIsSubmissionTakingLong(false);
-            // This disables the loading animation, ensuring the UI returns to normal
             setSubmitting(false);
+        }
+    };
+
+    // Isolated helper state cleaner to keep codebase maintainable
+    const cleanUpFormState = async () => {
+        await AsyncStorage.removeItem(DRAFT_KEY);
+        DeviceEventEmitter.emit("POST_CREATED_SUCCESS");
+        updateStreak(fingerprint);
+        refreshStreak();
+
+        setMediaList([]);
+        setTitle("");
+        setMessage("");
+        setMediaUrlLink("");
+        setPickedImage(false);
+
+        mutateTodayPosts();
+
+        const baseLimit = isInClan ? userRank.postLimit + 2 : userRank.postLimit;
+        if (additionalSlot === 1 && (todayPosts.length + 1) >= (baseLimit + 1)) {
+            setAdditionalSlot(0);
+            await AsyncStorage.setItem("additionalSlot", "0");
         }
     };
 
@@ -879,6 +850,10 @@ export default function AuthorDiaryDashboard() {
         return <View className="px-4 py-1">{finalElements}</View>;
     };
 
+    const previewContent = useMemo(() => {
+        return renderPreviewContent();
+    }, [message]);
+
     const handleAdditionalSlot = async () => {
         if (coins < 20) {
             CustomAlert("Insufficient OC", "You need 20 OC 🪙 to purchase additional slot. Check back daily!")
@@ -952,6 +927,9 @@ export default function AuthorDiaryDashboard() {
             </View>
         );
     };
+    const missionLog = useMemo(() => {
+        return renderMissionLog();
+    }, [todayPosts, showMissionLog]);
 
     if (contextLoading || submitting) {
         return <AnimeLoading
@@ -1263,7 +1241,7 @@ export default function AuthorDiaryDashboard() {
                             </View>
                         )}
 
-                        {renderMissionLog()}
+                        {missionLog}
                     </View>
                 ) : (
                     <View>
@@ -1291,7 +1269,7 @@ export default function AuthorDiaryDashboard() {
                             <Ionicons name={showMissionLog ? "chevron-up" : "chevron-down"} size={20} color={THEME.accent} />
                         </TouchableOpacity>
 
-                        {showMissionLog && renderMissionLog()}
+                        {showMissionLog && missionLog}
 
                         {/* --- FORM SECTION --- */}
                         <View className="flex-row justify-between items-center mb-6 mt-4">
@@ -1309,7 +1287,7 @@ export default function AuthorDiaryDashboard() {
                         </View>
 
                         {showPreview ? (
-                            <View style={{ backgroundColor: THEME.card, borderColor: THEME.border }} className="mb-6 rounded-3xl border-2 p-2">{renderPreviewContent()}</View>
+                            <View style={{ backgroundColor: THEME.card, borderColor: THEME.border }} className="mb-6 rounded-3xl border-2 p-2">{previewContent}</View>
                         ) : (
                             <View className="space-y-6">
                                 <View>
@@ -1471,7 +1449,7 @@ export default function AuthorDiaryDashboard() {
 
                                 <View style={{ backgroundColor: THEME.card, borderColor: hasPoll ? THEME.accent : THEME.border }} className="p-6 rounded-3xl border-2 mt-4">
                                     <View className="flex-row justify-between items-center mb-4">
-                                        <Text className="font-black uppercase tracking-widest text-[11px]">Deploy Poll Module</Text>
+                                        <Text style={{ color: isDark ? "white" : "black" }} className="font-black uppercase tracking-widest text-[11px]">Deploy Poll Module</Text>
                                         <Switch
                                             value={hasPoll}
                                             onValueChange={setHasPoll}

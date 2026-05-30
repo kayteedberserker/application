@@ -27,7 +27,7 @@ const getClanTierDetails = (title) => {
     case "Phantom Troupe": return { rank: 4, color: '#a855f7' };
     case "Upper Moon": return { rank: 3, color: '#60a5fa' };
     case "Squad 13": return { rank: 2, color: '#10b981' };
-    default: return { rank: 1, color: '#94a3b8' };
+    default: return { rank: 1, color: '#94a3b8' }
   }
 };
 
@@ -109,7 +109,7 @@ export default function ClanCard({ clan, isDark, THEME = { card: '#0a0a0a', text
     >
       {/* ⚡️ REPLACED HARDCODED BACKGROUND & WATERMARK */}
       <PlayerBackground equippedBg={equippedBg} themeColor={rankInfo.color} borderRadius={35} />
-      <PlayerWatermark equippedWatermark={equippedWatermark} isDark={isDark} />
+      <PlayerWatermark isVisible={true} isVisible={true} equippedWatermark={equippedWatermark} isDark={isDark} />
 
       <View className="items-center z-10">
         <View className="relative items-center justify-center mb-4">
@@ -143,6 +143,7 @@ export default function ClanCard({ clan, isDark, THEME = { card: '#0a0a0a', text
             fontSize={30}
             isDark={isDark}
             showPeakBadge={false}
+            isVisible={true}
             showFlame={false}
           />
           {isVerified && (

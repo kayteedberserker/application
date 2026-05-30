@@ -9,7 +9,7 @@ import * as Notifications from "expo-notifications";
 import { Stack, usePathname, useRootNavigationState, useRouter } from "expo-router";
 import * as Updates from 'expo-updates';
 import { useColorScheme } from "nativewind";
-import { useCallback, useEffect, useRef, useState } from "react";
+import React, { useCallback, useEffect, useRef, useState } from "react";
 import { BackHandler, DeviceEventEmitter, Platform, StatusBar, View } from "react-native";
 import { useMMKV } from 'react-native-mmkv';
 import Purchases from 'react-native-purchases';
@@ -17,8 +17,8 @@ import { SafeAreaProvider, initialWindowMetrics } from "react-native-safe-area-c
 import Toast from 'react-native-toast-message';
 
 import AnimeLoading from "../components/AnimeLoading";
-import ReviewGate from "../components/ReviewGate";
 import ProgressModal from "../components/ProgressModal";
+import ReviewGate from "../components/ReviewGate";
 import { AlertProvider } from '../context/AlertContext';
 import { ClanProvider } from "../context/ClanContext";
 import { CoinProvider } from "../context/CoinContext";
@@ -89,6 +89,13 @@ async function registerForPushNotificationsAsync() {
         return token;
     } catch (e) { return null; }
 }
+
+// 🧠 ISOLATED CONTAINER CONSUMER TO BLOCK HIGH FREQUENCY OVERLAPS FROM THE ROOT
+const IsolatedUploadProgress = React.memo(() => {
+    const { uploadProgress, hideProgress } = useUploadProgress();
+
+    return <ProgressModal visible={uploadProgress.isVisible} onDismiss={hideProgress} progress={uploadProgress} />;
+});
 
 function RootLayoutContent() {
     const { refreshStreak } = useStreak();
@@ -386,7 +393,6 @@ function RootLayoutContent() {
         };
     }, [isUpdating, handleNotifeeInteraction, handleNotificationNavigation]);
 
-    // ⚡️ RENDER LOGIC
     if (!fontsLoaded || isUpdating || !appReady || !minLoadDone) {
         return (
             <AnimeLoading
@@ -397,9 +403,7 @@ function RootLayoutContent() {
         );
     }
 
-    // Get upload progress from context
-    const { uploadProgress } = useUploadProgress();
-
+    console.log("ROOT LAYOUT RE-RENDER");
     return (
         <View key={colorScheme} className="flex-1 bg-white dark:bg-gray-900">
             <StatusBar barStyle={isDark ? "light-content" : "dark-content"} backgroundColor={isDark ? "#0a0a0a" : "#ffffff"} />
@@ -412,7 +416,7 @@ function RootLayoutContent() {
             />
             <ReviewGate />
             <Toast />
-            <ProgressModal visible={uploadProgress.isVisible} progress={uploadProgress} />
+            <IsolatedUploadProgress />
         </View>
     );
 }

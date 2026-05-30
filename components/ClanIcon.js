@@ -6,8 +6,9 @@ const CoinIcon = React.memo(({ type = 'OC', size = 16, style }) => {
 
   // Note: Update these paths once you've saved your transparent 2D PNGs
   const source = type === 'OC'
-    ? require('../assets/images/orecoin.png')
-    : require('../assets/images/clancoin.png');
+    ? require('../assets/images/orecoin.png') : type === 'OCash'
+      ? require('../assets/images/orecash.png')
+      : require('../assets/images/clancoin.png');
 
   return (
     <Image

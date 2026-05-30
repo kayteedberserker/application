@@ -1,5 +1,5 @@
 import apiFetch from "@/utils/apiFetch";
-import { createContext, useContext, useEffect, useState } from "react";
+import { createContext, useContext, useEffect, useState, useMemo, useCallback } from "react";
 import { DeviceEventEmitter } from "react-native";
 import { useMMKV } from 'react-native-mmkv';
 import { useUser } from "./UserContext";
@@ -38,7 +38,7 @@ export const ClanProvider = ({ children }) => {
     }, [storage, user?.deviceId]);
 
     // ⚡️ FIXED: Reverted back to using .set("", "") instead of .delete()
-    const clearClanData = () => {
+    const clearClanData = useCallback(() => {
         setUserClan(null);
         setWarActionsCount(0);
         setClanRank(0);
@@ -46,19 +46,10 @@ export const ClanProvider = ({ children }) => {
         setFullData(0);
         setHasUnreadChat(false);
         storage.set("userClan", "");
-    };
+    }, [storage]);
 
-    useEffect(() => {
-        if (user?.deviceId) {
-            refreshClanStatus(user.deviceId);
-        } else {
-            clearClanData();
-            setIsLoading(false);
-        }
-    }, [user?.deviceId]);
-
-    const checkWarNotifications = async (clanTag) => {
-        if (!clanTag) return;
+    const checkWarNotifications = useCallback(async (clanTag) => {
+        if (!clanTag) return 0;
         try {
             const [pRes, nRes] = await Promise.all([
                 apiFetch(`/clans/wars?status=PENDING&tag=${clanTag}&limit=1`),
@@ -87,9 +78,9 @@ export const ClanProvider = ({ children }) => {
             console.error("Notification Check Error:", e);
             return 0;
         }
-    };
+    }, []);
 
-    const fetchFullDetails = async () => {
+    const fetchFullDetails = useCallback(async () => {
         if (!userClan || !user?.deviceId) return;
 
         try {
@@ -115,22 +106,16 @@ export const ClanProvider = ({ children }) => {
         } catch (err) {
             console.error("Fetch Details Error:", err);
         }
-    };
+    }, [userClan, user?.deviceId, storage]);
 
-    const markChatAsRead = () => {
+    const markChatAsRead = useCallback(() => {
         if (!userClan) return;
         const now = new Date().toISOString();
         storage.set(`lastReadChat_${userClan.tag}`, now);
         setHasUnreadChat(false);
-    };
+    }, [userClan, storage]);
 
-    useEffect(() => {
-        if (userClan) {
-            fetchFullDetails();
-        }
-    }, [userClan]);
-
-    const refreshClanStatus = async (deviceId) => {
+    const refreshClanStatus = useCallback(async (deviceId) => {
         if (!deviceId) return;
 
         setIsLoading(true);
@@ -155,35 +140,80 @@ export const ClanProvider = ({ children }) => {
         } finally {
             setIsLoading(false);
         }
-    };
+    }, [storage, checkWarNotifications, clearClanData]);
 
+    useEffect(() => {
+        if (userClan) {
+            fetchFullDetails();
+        }
+    }, [userClan, fetchFullDetails]);
+
+    useEffect(() => {
+        if (user?.deviceId) {
+            refreshClanStatus(user.deviceId);
+        } else {
+            clearClanData();
+            setIsLoading(false);
+        }
+    }, [user?.deviceId, refreshClanStatus, clearClanData]);
+
+    // External consumers wrapped safely to lock baseline references down
+    const checkWarNotificationsExternal = useCallback(() => {
+        return checkWarNotifications(userClan?.tag);
+    }, [checkWarNotifications, userClan?.tag]);
+
+    const refreshClanStatusExternal = useCallback(() => {
+        return refreshClanStatus(user?.deviceId);
+    }, [refreshClanStatus, user?.deviceId]);
+
+    // Computed Properties Matrix
     const userRole = userClan?.role || null;
     const isLeader = userRole === "leader";
     const isViceLeader = userRole === "viceleader";
     const canManageClan = isLeader || isViceLeader;
+    const isInClan = !!userClan;
+
+    // 🧠 MEMOIZED CONTEXT VALUE TO PREVENT UNNECESSARY CONSUMER RERENDERS
+    const contextValue = useMemo(() => ({
+        userClan,
+        allClans,
+        isLoading,
+        clanRank,
+        fullData,
+        cCoins,
+        warActionsCount,
+        hasUnreadChat,
+        markChatAsRead,
+        checkWarNotifications: checkWarNotificationsExternal,
+        refreshClanStatus: refreshClanStatusExternal,
+        clearClanData,
+        isInClan,
+        userRole,
+        isLeader,
+        isViceLeader,
+        canManageClan,
+    }), [
+        userClan,
+        allClans,
+        isLoading,
+        clanRank,
+        fullData,
+        cCoins,
+        warActionsCount,
+        hasUnreadChat,
+        markChatAsRead,
+        checkWarNotificationsExternal,
+        refreshClanStatusExternal,
+        clearClanData,
+        isInClan,
+        userRole,
+        isLeader,
+        isViceLeader,
+        canManageClan,
+    ]);
 
     return (
-        <ClanContext.Provider
-            value={{
-                userClan,
-                allClans,
-                isLoading,
-                clanRank,
-                fullData,
-                cCoins,
-                warActionsCount,
-                hasUnreadChat,
-                markChatAsRead,
-                checkWarNotifications: () => checkWarNotifications(userClan?.tag),
-                refreshClanStatus: () => refreshClanStatus(user?.deviceId),
-                clearClanData,
-                isInClan: !!userClan,
-                userRole,
-                isLeader,
-                isViceLeader,
-                canManageClan,
-            }}
-        >
+        <ClanContext.Provider value={contextValue}>
             {children}
         </ClanContext.Provider>
     );

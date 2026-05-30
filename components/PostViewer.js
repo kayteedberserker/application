@@ -1,27 +1,14 @@
 import { MaterialCommunityIcons } from '@expo/vector-icons';
 import { LegendList } from "@legendapp/list";
-import { useFocusEffect } from "expo-router"; // ⚡️ ADDED useFocusEffect
+import { useFocusEffect } from "expo-router";
 import { useColorScheme } from "nativewind";
 import { memo, useCallback, useEffect, useMemo, useRef, useState } from "react";
-import {
-    DeviceEventEmitter,
-    InteractionManager,
-    RefreshControl,
-    View
-} from "react-native";
+import { DeviceEventEmitter, InteractionManager, RefreshControl, View } from "react-native";
 import { useMMKV } from 'react-native-mmkv';
-import Animated, {
-    Easing,
-    useAnimatedStyle,
-    useSharedValue,
-    withRepeat,
-    withSequence,
-    withTiming
-} from "react-native-reanimated";
+import Animated, { Easing, useAnimatedStyle, useSharedValue, withRepeat, withSequence, withTiming } from "react-native-reanimated";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
-import { mutate as globalMutate } from "swr"; // ⚡️ ADDED globalMutate for instant hydration
+import { mutate as globalMutate } from "swr";
 import useSWRInfinite from "swr/infinite";
-
 import apiFetch from "../utils/apiFetch";
 import AnimeLoading from "./AnimeLoading";
 import PostCard from "./PostCard";
@@ -29,6 +16,9 @@ import { SyncLoading } from "./SyncLoading";
 import { Text } from "./Text";
 
 const fetcher = (url) => apiFetch(url).then(res => res.json());
+
+// ⚡️ GLOBAL EVENT CONSTANT
+export const FEED_VISIBILITY_EVENT = "feed_item_visibility_changed";
 
 const PostSkeleton = memo(() => {
     const isDark = useColorScheme() === "dark";
@@ -57,25 +47,50 @@ const PostSkeleton = memo(() => {
 
 const LIMIT = 15;
 const CACHE_KEY = "POSTS_CACHE_V1";
+const SESSION_STATE = { memoryCache: null, hasFetched: false };
 
-const SESSION_STATE = {
-    memoryCache: null,
-    hasFetched: false
-};
-
-// ⚡️ PERFORMANCE FIX 1: Aggressively Memoize the List Item
-const MemoizedPostItem = memo(({ item, isVisible, syncing, mutate, posts }) => {
-    // ⚡️ INSTANT HYDRATION: If we already have a session cache, render immediately
+// ⚡️ FIX 1: List items subscribe to the global listener instead of passing state down 3 levels
+const MemoizedPostItem = memo(({ item, syncing, mutate, posts }) => {
     const [isReady, setIsReady] = useState(SESSION_STATE.hasFetched);
-
+    const [isVisible, setIsVisible] = useState(false); // Default true for initial view
+    const visibilityTimeout = useRef(null);
     useEffect(() => {
-        if (isReady) return; // Skip if already ready (prevents flicker on return)
+        if (!isReady) {
+            const task = InteractionManager.runAfterInteractions(() => {
+                setIsReady(true);
+            });
+            return () => task.cancel();
+        }
+    }, [isReady]);
 
-        const task = InteractionManager.runAfterInteractions(() => {
-            setIsReady(true);
-        });
-        return () => task.cancel();
-    }, []); // Only run on mount
+    // ⚡️ Subscribes to visibility changes directly to avoid parent rendering loops
+    useEffect(() => {
+        const subscription = DeviceEventEmitter.addListener(
+            FEED_VISIBILITY_EVENT,
+            (visibleSet) => {
+                const currentVisibility = visibleSet.has(item._id);
+
+                if (visibilityTimeout.current) {
+                    clearTimeout(visibilityTimeout.current);
+                }
+
+                if (currentVisibility) {
+                    setIsVisible(true);
+                } else if (isVisible) {
+                    visibilityTimeout.current = setTimeout(() => {
+                        setIsVisible(false);
+                    }, 500);
+                }
+            }
+        );
+
+        return () => {
+            if (visibilityTimeout.current) {
+                clearTimeout(visibilityTimeout.current);
+            }
+            subscription.remove();
+        };
+    }, [item._id]);
 
     if (!isReady) return <PostSkeleton />;
 
@@ -85,29 +100,27 @@ const MemoizedPostItem = memo(({ item, isVisible, syncing, mutate, posts }) => {
             authorData={item.authorData}
             clanData={item.clanData}
             isFeed={true}
-            posts={posts}
             setPosts={mutate}
             syncing={syncing}
-            isVisible={isVisible}
+            isVisible={isVisible} // Clean toggle sent to Lottie/Skia downstream
         />
     );
 }, (prevProps, nextProps) => {
     return (
-        prevProps.isVisible === nextProps.isVisible &&
         prevProps.syncing === nextProps.syncing &&
-        prevProps.item === nextProps.item
+        prevProps.item === nextProps.item &&
+        prevProps.mutate === nextProps.mutate
     );
 });
 
 export default function PostsViewer() {
     const storage = useMMKV();
-
     const scrollRef = useRef(null);
     const insets = useSafeAreaInsets();
     const { colorScheme } = useColorScheme();
     const isDark = colorScheme === "dark";
 
-    const [cachedData, setCachedData] = useState(() => {
+    const cachedData = useMemo(() => {
         if (SESSION_STATE.memoryCache) return SESSION_STATE.memoryCache;
         try {
             const local = storage.getString(CACHE_KEY);
@@ -126,15 +139,11 @@ export default function PostsViewer() {
 
     const [isOfflineMode, setIsOfflineMode] = useState(false);
     const [refreshing, setRefreshing] = useState(false);
-
     const pulseAnim = useSharedValue(0);
 
     const saveHeavyCache = useCallback((data) => {
         try {
-            const cacheEntry = {
-                data: data,
-                timestamp: Date.now(),
-            };
+            const cacheEntry = { data: data, timestamp: Date.now() };
             storage.set(CACHE_KEY, JSON.stringify(cacheEntry));
         } catch (e) {
             console.error("MMKV Save Error", e);
@@ -179,10 +188,8 @@ export default function PostsViewer() {
         }
     });
 
-    // ⚡️ INSTANT FOCUS SYNC: Solves the "likes not updating" bug
     useFocusEffect(
         useCallback(() => {
-            // Silently tells SWR to re-verify the active posts in the background
             globalMutate(
                 key => typeof key === 'string' && (key.startsWith('/posts?') || key.startsWith('/posts/')),
                 undefined,
@@ -197,22 +204,36 @@ export default function PostsViewer() {
         await mutate();
     }, [mutate]);
 
-    const [visibleIds, setVisibleIds] = useState(new Set());
+    // ⚡️ FIX 2: Emits an event with IDs instead of saving to state. 0 parent re-renders!
+    const lastVisibleIds = useRef("");
 
     const onViewableItemsChanged = useRef(({ viewableItems }) => {
-        const newVisible = new Set(viewableItems.map(v => v.item._id));
-        setVisibleIds(newVisible);
+        const ids = viewableItems
+            .map(v => v.item._id)
+            .sort();
+
+        const key = ids.join(",");
+
+        if (key === lastVisibleIds.current) return;
+
+        lastVisibleIds.current = key;
+
+        DeviceEventEmitter.emit(
+            FEED_VISIBILITY_EVENT,
+            new Set(ids)
+        );
     }).current;
 
-    const viewabilityConfig = useRef({ itemVisiblePercentThreshold: 60 }).current;
+    // ⚡️ FIX 3: Lowered to 20% so big cards trigger visibility instantly when entering screen edge
+    const viewabilityConfig = useRef({ itemVisiblePercentThreshold: 20 }).current;
+
+    const hasMore = data ? data[data.length - 1]?.posts?.length === LIMIT : false;
 
     const posts = useMemo(() => {
         const sourceData = data || cachedData;
         if (!sourceData || !Array.isArray(sourceData)) return [];
-
         const orderedList = [];
         const seenIds = new Set();
-
         sourceData.forEach((page) => {
             if (page?.posts && Array.isArray(page.posts)) {
                 page.posts.forEach((p) => {
@@ -224,7 +245,6 @@ export default function PostsViewer() {
             }
         });
 
-        // ⚡️ THE TRICK: If we are fetching more, add 3 "Ghost" items
         if (isValidating && hasMore) {
             orderedList.push(
                 { _id: 'ghost-1', isGhost: true },
@@ -232,11 +252,8 @@ export default function PostsViewer() {
                 { _id: 'ghost-3', isGhost: true }
             );
         }
-
         return orderedList;
     }, [data, cachedData, isValidating, hasMore]);
-
-    const hasMore = data ? data[data.length - 1]?.posts?.length === LIMIT : false;
 
     useEffect(() => {
         const sub = DeviceEventEmitter.addListener("doScrollToTop", () => {
@@ -250,22 +267,19 @@ export default function PostsViewer() {
         setSize(size + 1);
     }, [hasMore, isValidating, isLoading, isOfflineMode, size, setSize]);
 
+    // ⚡️ FIX 4: Empty dependency array means this function reference NEVER changes, fixing your crash!
     const renderItem = useCallback(({ item }) => {
-        // ⚡️ Check for Ghost
         if (item.isGhost) {
             return <PostSkeleton />;
         }
-
         return (
             <MemoizedPostItem
                 item={item}
-                isVisible={true}
                 syncing={!SESSION_STATE.hasFetched || isValidating}
                 mutate={mutate}
-                posts={posts}
             />
         );
-    }, [isValidating, mutate, posts]);
+    }, [mutate, posts]); // Removed runtime validation flags that break the static instance cache
 
     const ListHeader = useCallback(() => (
         <View className="mb-5 pb-2">
@@ -313,8 +327,8 @@ export default function PostsViewer() {
                 }}
                 renderItem={renderItem}
                 estimatedItemSize={630}
-                drawDistance={1500}
-                // ⚡️ FIXED: Removed recycleItems=true to stop weird SWR caching bugs and scroll jumping
+                drawDistance={800}
+                recycleItems={true}
                 onViewableItemsChanged={onViewableItemsChanged}
                 viewabilityConfig={viewabilityConfig}
                 onEndReached={loadMore}

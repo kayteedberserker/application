@@ -19,6 +19,8 @@ const ClanBorder = React.memo(({
     animationType = "singleSnake",
     snakeLength = 120,
     duration = 3000,
+    isFeed = false,
+    isVisible = true,
     children
 }) => {
     const [layout, setLayout] = useState({ w: 0, h: 0 });
@@ -31,8 +33,11 @@ const ClanBorder = React.memo(({
         return 2 * (layout.w + layout.h);
     }, [layout.w, layout.h]);
 
+    // Determine animation rule: only kill animation when it IS in the feed AND NOT visible.
+    const shouldAnimate = !isFeed || isVisible;
+
     useEffect(() => {
-        if (perimeter > 0) {
+        if (perimeter > 0 && shouldAnimate) {
             linearProgress.value = 0;
             yoyoProgress.value = 0;
 
@@ -47,6 +52,9 @@ const ClanBorder = React.memo(({
                 -1,
                 true
             );
+        } else {
+            linearProgress.value = 0;
+            yoyoProgress.value = 0;
         }
 
         // ⚡️ PERFORMANCE FIX 2: Cleanup animations on unmount
@@ -55,7 +63,7 @@ const ClanBorder = React.memo(({
             cancelAnimation(linearProgress);
             cancelAnimation(yoyoProgress);
         };
-    }, [perimeter, duration, animationType]);
+    }, [perimeter, duration, animationType, shouldAnimate]);
 
     // ---------------------------------------------------------
     // ANIMATED PROPS (Offsets derived from the master progress)
@@ -169,7 +177,13 @@ const ClanBorder = React.memo(({
     return (
         <View onLayout={onLayout} style={styles.container}>
             {layout.w > 0 && (
-                <View style={StyleSheet.absoluteFill} pointerEvents="none">
+                <View style={{
+                    position: 'absolute',
+                    left: 0,
+                    right: 0,
+                    top: 0,
+                    bottom: 0
+                }} pointerEvents="none">
                     <Svg width={layout.w} height={layout.h}>
                         <Rect
                             x={strokeWidth / 2}
@@ -183,7 +197,7 @@ const ClanBorder = React.memo(({
                             strokeOpacity={0.1}
                             fill="none"
                         />
-                        {renderAnimatedPaths()}
+                        {shouldAnimate && renderAnimatedPaths()}
                     </Svg>
                 </View>
             )}

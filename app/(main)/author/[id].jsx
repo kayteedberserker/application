@@ -14,12 +14,12 @@ import {
     Modal,
     Pressable,
     ScrollView,
-    StyleSheet,
     TouchableOpacity,
     View
 } from "react-native";
 import { useMMKV } from 'react-native-mmkv';
 import Animated, {
+    cancelAnimation,
     Easing,
     interpolate,
     useAnimatedStyle,
@@ -47,6 +47,9 @@ import PlayerWatermark from "../../../components/PlayerWatermark";
 import TitleTag from "../../../components/TitleTag";
 
 const { width } = Dimensions.get('window');
+
+// ⚡️ GLOBAL EVENT CONSTANT FOR AUTHOR FEED VISIBILITY
+export const AUTHOR_FEED_VISIBILITY_EVENT = "author_feed_item_visibility_changed";
 
 const PostSkeleton = memo(() => {
     const isDark = useColorScheme() === "dark";
@@ -101,7 +104,7 @@ const getAuraTier = (rank) => {
     // DEFAULT FALLBACK OBJECT
     const fallback = { color: '#64748b', label: 'PLAYER', icon: 'shield-check' };
 
-    if (!rank || rank > 10 || rank <= 0) return fallback; // Return object, not undefined;
+    if (!rank || rank > 10 || rank <= 0) return fallback;
 
     switch (rank) {
         case 1:
@@ -163,8 +166,14 @@ const resolveUserRank = (level, currentAura) => {
     };
 };
 
-const MemoizedPostItem = memo(({ item, isVisible, authorData }) => {
+const MemoizedPostItem = memo(({ item }) => {
     const [isReady, setIsReady] = useState(false);
+    const [isVisible, setIsVisible] = useState(true);
+    const isVisibleRef = useRef(true);
+
+    useEffect(() => {
+        isVisibleRef.current = isVisible;
+    }, [isVisible]);
 
     useEffect(() => {
         setIsReady(false);
@@ -172,6 +181,33 @@ const MemoizedPostItem = memo(({ item, isVisible, authorData }) => {
             setIsReady(true);
         });
         return () => task.cancel();
+    }, [item._id]);
+
+    const visibilityTimeout = useRef(null);
+
+    useEffect(() => {
+        const subscription = DeviceEventEmitter.addListener(
+            AUTHOR_FEED_VISIBILITY_EVENT,
+            (visibleSet) => {
+                const currentVisibility = visibleSet.has(item._id);
+                if (visibilityTimeout.current) {
+                    clearTimeout(visibilityTimeout.current);
+                }
+                if (currentVisibility) {
+                    setIsVisible(true);
+                } else if (isVisibleRef.current) {
+                    visibilityTimeout.current = setTimeout(() => {
+                        setIsVisible(false);
+                    }, 500);
+                }
+            }
+        );
+        return () => {
+            subscription.remove();
+            if (visibilityTimeout.current) {
+                clearTimeout(visibilityTimeout.current);
+            }
+        };
     }, [item._id]);
 
     if (!isReady) return <View className="px-3"><PostSkeleton /></View>;
@@ -188,13 +224,190 @@ const MemoizedPostItem = memo(({ item, isVisible, authorData }) => {
         </View>
     );
 }, (prevProps, nextProps) => {
-    return prevProps.isVisible === nextProps.isVisible &&
-        prevProps.item === nextProps.item &&
-        prevProps.authorData === nextProps.authorData;
+    return prevProps.item === nextProps.item
+});
+
+const MemoizedHeader = memo(({
+    author,
+    isOffline,
+    isDark,
+    totalPosts,
+    setCardPreviewVisible,
+    themeColor,
+    activeGlowColor,
+    equippedGlow,
+    auraRank,
+    aura,
+    equippedTitle,
+    auraPulseStyle,
+    scanAnimatedStyle,
+    skeletonAnimatedStyle,
+    isVisible
+}) => {
+    if (!author && isOffline) {
+        return (
+            <View className="px-4 pt-20 pb-6 opacity-40">
+                <View className="p-6 bg-gray-100 dark:bg-[#111] border border-gray-200 dark:border-gray-800 rounded-[40px] items-center">
+                    <Animated.View style={[skeletonAnimatedStyle]} className="w-32 h-32 bg-gray-300 dark:bg-gray-800 rounded-full mb-6" />
+                    <Animated.View style={[skeletonAnimatedStyle]} className="w-48 h-8 bg-gray-300 dark:bg-gray-800 rounded-lg mb-4" />
+                </View>
+            </View>
+        );
+    }
+
+    if (!author) return null;
+
+    const totalAura = author.aura || 0;
+    const rankLevel = author.currentRankLevel || 1;
+    const writerRank = resolveUserRank(rankLevel, totalAura);
+
+    const favoriteCharacter = author?.preferences?.favCharacter || "NONE_SET";
+
+    const equippedBadges = author.inventory?.filter(i => i.category === 'BADGE' && i.isEquipped).slice(0, 10) || [];
+    const equippedBg = author.inventory?.find(i => i.category === 'BACKGROUND' && i.isEquipped);
+    const equippedBorder = author.inventory?.find(i => i.category === 'BORDER' && i.isEquipped);
+    const borderVisual = equippedBorder?.visualConfig || {};
+    const equippedWatermark = author.inventory?.find(i => i.category === 'WATERMARK' && i.isEquipped);
+
+    const HeaderCard = (
+        <View
+            className="relative p-6 bg-white dark:bg-[#0a0a0a] shadow-2xl rounded-[25px]"
+            style={{ width: '100%', borderRadius: 25, overflow: 'hidden' }}
+        >
+            <View className="absolute top-5 right-5 z-50 items-end gap-2">
+                <TouchableOpacity
+                    onPress={() => setCardPreviewVisible(true)}
+                    activeOpacity={0.7}
+                    className="bg-gray-100/80 dark:bg-white/10 p-2 rounded-2xl border border-gray-200/50 dark:border-white/10"
+                >
+                    <Ionicons name="card-outline" size={20} color={isDark ? "white" : "black"} />
+                </TouchableOpacity>
+            </View>
+
+            <PlayerBackground equippedBg={equippedBg} themeColor={themeColor} borderRadius={25} isVisible={isVisible} />
+            <PlayerWatermark equippedWatermark={equippedWatermark} isDark={isDark} isVisible={isVisible} />
+
+            <View className="flex-col items-center gap-6">
+                <View className="relative items-center justify-center">
+                    <Animated.View
+                        style={[{ position: 'absolute', width: 140, height: 140, borderRadius: 100, opacity: activeGlowColor ? 0.25 : 0.1 }, auraPulseStyle]}
+                    />
+                    <Animated.View style={[{ width: 160, height: 160 }, scanAnimatedStyle]} className="absolute border border-dashed rounded-full" />
+                    <AuraAvatar
+                        author={{ ...author, rank: auraRank, image: author.profilePic?.url, name: author.username }}
+                        aura={aura}
+                        glowColor={activeGlowColor}
+                        isTop10={auraRank > 0 && auraRank <= 10}
+                        isDark={isDark}
+                        size={130}
+                        isVisible={isVisible}
+                    />
+
+                    <View className="absolute -bottom-4">
+                        <TitleTag isDark={isDark} rank={auraRank} size={13} key={equippedTitle} equippedTitle={equippedTitle} isTop10={auraRank > 0 && auraRank <= 10} auraVisuals={aura} isVisible={isVisible} />
+                    </View>
+                </View>
+
+                <View className="items-center w-full">
+                    <View className="items-center justify-center mb-2">
+                        <PlayerNameplate
+                            author={author}
+                            themeColor={themeColor}
+                            equippedGlow={equippedGlow}
+                            auraRank={auraRank}
+                            isDark={isDark}
+                            fontSize={24}
+                            isVisible={isVisible}
+                        />
+
+                        {/* {equippedBadges.length > 0 && (
+<View className="flex-row flex-wrap justify-center gap-2 mt-2 mb-3">
+{equippedBadges.map((badge, bIdx) => (
+<BadgeIcon key={`spec-${bIdx}`} badge={badge} size={22} isDark={isDark} />
+))}
+</View>
+)} */}
+                    </View>
+
+                    <Text className="text-sm text-gray-500 dark:text-gray-400 text-center leading-relaxed font-medium px-8 italic mb-3">
+                        "{author.description || "This operator is a ghost in the machine..."}"
+                    </Text>
+
+                    <View className="bg-gray-50 dark:bg-white/5 border border-gray-100 dark:border-white/10 rounded-2xl px-5 py-2 flex-row items-center mb-1">
+                        <MaterialCommunityIcons name="shield-star-outline" size={14} color={themeColor} />
+                        <Text className="text-[10px] font-black uppercase tracking-widest text-gray-400 ml-2">GOAT:</Text>
+                        <Text className="text-[10px] font-black uppercase tracking-widest text-gray-900 dark:text-white ml-2 italic">{favoriteCharacter}</Text>
+                    </View>
+
+                    <View className="flex-row gap-8 mt-6 border-y border-gray-100 dark:border-gray-800 w-full py-4 justify-center">
+                        <View className="items-center">
+                            <Text className="text-[10px] font-black text-gray-400 uppercase tracking-widest">Aura</Text>
+                            <Text className="text-lg font-black" style={{ color: themeColor }}>{totalAura.toLocaleString()}</Text>
+                        </View>
+                        <View className="items-center">
+                            <Text className="text-[10px] font-black text-gray-400 uppercase tracking-widest">Glory</Text>
+                            <Text className="text-lg font-black" style={{ color: '#ec4899' }}>+{author.weeklyAura || 0}</Text>
+                        </View>
+                        <View className="items-center">
+                            <Text className="text-[10px] font-black text-gray-400 uppercase tracking-widest">Logs</Text>
+                            <Text className="text-lg font-black dark:text-white">{totalPosts}</Text>
+                        </View>
+                    </View>
+
+                    <View className="mt-8 w-full px-2">
+                        <View className="flex-row justify-between items-end mb-2">
+                            <View className="flex-row items-center gap-2">
+                                <Text className="text-2xl">{writerRank.icon}</Text>
+                                <View>
+                                    <Text style={{ color: writerRank.color }} className="text-[8px] font-mono uppercase tracking-[0.2em] leading-none mb-1">Class</Text>
+                                    <Text className="text-sm font-black uppercase tracking-tighter dark:text-white">{writerRank.title}</Text>
+                                </View>
+                            </View>
+                        </View>
+                    </View>
+                </View>
+            </View>
+        </View>
+    );
+
+    return (
+        <View className="px-4 pt-20 pb-6">
+            {equippedBorder ? (
+                <ClanBorder
+                    color={borderVisual.primaryColor || themeColor}
+                    secondaryColor={borderVisual.secondaryColor || null}
+                    animationType={borderVisual.animationType || "singleSnake"}
+                    snakeLength={borderVisual.snakeLength || 120}
+                    duration={borderVisual.duration || 3000}
+                    isVisible={isVisible}
+                >
+                    {HeaderCard}
+                </ClanBorder>
+            ) : HeaderCard}
+
+            <View className="flex-row items-center gap-4 mt-10 mb-4 px-2">
+                <Text className="text-xl font-black italic uppercase tracking-tighter text-gray-900 dark:text-white">
+                    Diary<Text style={{ color: themeColor }}> Archives </Text>
+                </Text>
+                <View className="h-[1px] flex-1 bg-gray-100 dark:bg-gray-800" />
+            </View>
+        </View>
+    );
+}, (prevProps, nextProps) => {
+    return prevProps.author === nextProps.author &&
+        prevProps.isOffline === nextProps.isOffline &&
+        prevProps.isDark === nextProps.isDark &&
+        prevProps.totalPosts === nextProps.totalPosts &&
+        prevProps.themeColor === nextProps.themeColor &&
+        prevProps.activeGlowColor === nextProps.activeGlowColor &&
+        prevProps.auraRank === nextProps.auraRank &&
+        prevProps.equippedTitle === nextProps.equippedTitle &&
+        prevProps.isVisible === nextProps.isVisible;
 });
 
 export default function AuthorPage() {
     const { id } = useLocalSearchParams();
+
     const router = useRouter();
     const insets = useSafeAreaInsets();
     const { colorScheme } = useColorScheme();
@@ -218,6 +431,7 @@ export default function AuthorPage() {
 
     const scrollRef = useRef(null);
     const playerCardRef = useRef(null);
+    const headerVisibleRef = useRef(true);
 
     const pulseAnim = useSharedValue(1);
     const rotationAnim = useSharedValue(0);
@@ -232,12 +446,22 @@ export default function AuthorPage() {
     const equippedGlow = author?.inventory?.find(i => i.category === 'GLOW' && i.isEquipped);
     const activeGlowColor = equippedGlow?.visualConfig?.primaryColor || null;
     const themeColor = activeGlowColor || aura.color;
+    const [headerVisible, setHeaderVisible] = useState(true);
 
     useEffect(() => {
-        pulseAnim.value = withRepeat(withSequence(withTiming(1.1, { duration: 2000 }), withTiming(1, { duration: 2000 })), -1, true);
-        rotationAnim.value = withRepeat(withTiming(1, { duration: 20000, easing: Easing.linear }), -1, false);
-        skeletonFade.value = withRepeat(withSequence(withTiming(0.7, { duration: 800 }), withTiming(0.3, { duration: 800 })), -1, true);
-    }, []);
+        if (headerVisible) {
+            pulseAnim.value = withRepeat(withSequence(withTiming(1.1, { duration: 2000 }), withTiming(1, { duration: 2000 })), -1, true);
+            rotationAnim.value = withRepeat(withTiming(1, { duration: 20000, easing: Easing.linear }), -1, false);
+            skeletonFade.value = withRepeat(withSequence(withTiming(0.7, { duration: 800 }), withTiming(0.3, { duration: 800 })), -1, true);
+        } else {
+            cancelAnimation(rotationAnim);
+            cancelAnimation(pulseAnim);
+            cancelAnimation(skeletonFade);
+            rotationAnim.value = 0;
+            pulseAnim.value = 1;
+            skeletonFade.value = 0.3;
+        }
+    }, [headerVisible]);
 
     const scanAnimatedStyle = useAnimatedStyle(() => ({
         transform: [{ rotate: `${interpolate(rotationAnim.value, [0, 1], [0, 360])}deg` }],
@@ -358,8 +582,6 @@ export default function AuthorPage() {
     // ⚡️ PERFORMANCE FIX: Instant SWR Sync on Focus
     useFocusEffect(
         useCallback(() => {
-            // Tells SWR to silently refresh every post currently mounted
-            // Without overriding the entire posts array with stale server data
             mutate(
                 key => typeof key === 'string' && (key.startsWith('/posts?') || key.startsWith('/posts/')),
                 undefined,
@@ -403,8 +625,16 @@ export default function AuthorPage() {
     };
 
     const lastScrollY = useRef(0);
+
     const handleScroll = useCallback((e) => {
         const offsetY = e.nativeEvent.contentOffset.y;
+        const shouldBeVisible = offsetY < 400;
+
+        if (shouldBeVisible !== headerVisibleRef.current) {
+            headerVisibleRef.current = shouldBeVisible;
+            setHeaderVisible(shouldBeVisible);
+        }
+
         if (Math.abs(offsetY - lastScrollY.current) > 20) {
             DeviceEventEmitter.emit("onScroll", offsetY);
             lastScrollY.current = offsetY;
@@ -412,7 +642,7 @@ export default function AuthorPage() {
     }, []);
 
     const listData = useMemo(() => {
-        if (loading && page === 1) {
+        if (loading && posts.length === 0) {
             return Array.from({ length: 5 }).map((_, i) => ({ _id: `skeleton-${i}`, isGhost: true }));
         }
         const list = [...posts];
@@ -420,172 +650,52 @@ export default function AuthorPage() {
             list.push({ _id: 'skeleton-more-1', isGhost: true }, { _id: 'skeleton-more-2', isGhost: true });
         }
         return list;
-    }, [posts, loading, page]);
+    }, [posts, loading]);
+
+    const lastVisibleIds = useRef("");
+
+    const onViewableItemsChanged = useRef(({ viewableItems }) => {
+        const ids = viewableItems
+            .map(v => v.item?._id)
+            .filter(id => typeof id === "string" && !id.startsWith("skeleton"));
+
+        const key = ids.sort().join(",");
+
+        if (key === lastVisibleIds.current) return;
+
+        lastVisibleIds.current = key;
+
+        DeviceEventEmitter.emit(
+            AUTHOR_FEED_VISIBILITY_EVENT,
+            new Set(ids)
+        );
+    }).current;
+
+    const viewabilityConfig = useRef({ itemVisiblePercentThreshold: 20 }).current;
 
     const renderItem = useCallback(({ item }) => (
         item.isGhost ? <View className="px-3"><PostSkeleton /></View> : (
-            <MemoizedPostItem item={item} isVisible={true} authorData={author} />
+            <MemoizedPostItem item={item} />
         )
-    ), [author]);
-
-    const AuthorSkeleton = useCallback(() => (
-        <View className="px-4 pt-20 pb-6 opacity-40">
-            <View className="p-6 bg-gray-100 dark:bg-[#111] border border-gray-200 dark:border-gray-800 rounded-[40px] items-center">
-                <Animated.View style={[skeletonAnimatedStyle]} className="w-32 h-32 bg-gray-300 dark:bg-gray-800 rounded-full mb-6" />
-                <Animated.View style={[skeletonAnimatedStyle]} className="w-48 h-8 bg-gray-300 dark:bg-gray-800 rounded-lg mb-4" />
-            </View>
-        </View>
-    ), [skeletonAnimatedStyle]);
-
-    const ListHeader = useCallback(() => {
-        if (!author && isOffline) return <AuthorSkeleton />;
-        if (!author) return null
-
-        const totalAura = author.aura || 0;
-        const rankLevel = author.currentRankLevel || 1;
-        const writerRank = resolveUserRank(rankLevel, totalAura)
-
-        const favoriteCharacter = author?.preferences?.favCharacter || "NONE_SET";
-
-        const equippedBadges = author.inventory?.filter(i => i.category === 'BADGE' && i.isEquipped).slice(0, 10) || [];
-        const equippedBg = author.inventory?.find(i => i.category === 'BACKGROUND' && i.isEquipped);
-        const equippedBorder = author.inventory?.find(i => i.category === 'BORDER' && i.isEquipped);
-        const borderVisual = equippedBorder?.visualConfig || {};
-        const equippedWatermark = author.inventory?.find(i => i.category === 'WATERMARK' && i.isEquipped)
-
-        const HeaderCard = (
-            <View
-                className="relative p-6 bg-white dark:bg-[#0a0a0a] shadow-2xl rounded-[25px]"
-                style={{ width: '100%', borderRadius: 25, overflow: 'hidden' }}
-            >
-                <View className="absolute top-5 right-5 z-50 items-end gap-2">
-                    <TouchableOpacity
-                        onPress={() => setCardPreviewVisible(true)}
-                        activeOpacity={0.7}
-                        className="bg-gray-100/80 dark:bg-white/10 p-2 rounded-2xl border border-gray-200/50 dark:border-white/10"
-                    >
-                        <Ionicons name="card-outline" size={20} color={isDark ? "white" : "black"} />
-                    </TouchableOpacity>
-                </View>
-
-                <PlayerBackground equippedBg={equippedBg} themeColor={themeColor} borderRadius={25} />
-                <PlayerWatermark equippedWatermark={equippedWatermark} isDark={isDark} />
-
-                <View className="flex-col items-center gap-6">
-                    <View className="relative items-center justify-center">
-                        <Animated.View
-                            style={[{ position: 'absolute', width: 140, height: 140, borderRadius: 100, opacity: activeGlowColor ? 0.25 : 0.1 }, auraPulseStyle]}
-                        />
-                        <Animated.View style={[{ width: 160, height: 160 }, scanAnimatedStyle]} className="absolute border border-dashed rounded-full" />
-                        <AuraAvatar
-                            author={{ ...author, rank: auraRank, image: author.profilePic?.url, name: author.username }}
-                            aura={aura}
-                            glowColor={activeGlowColor}
-                            isTop10={auraRank > 0 && auraRank <= 10}
-                            isDark={isDark}
-                            size={130}
-                        />
-
-                        <View className="absolute -bottom-4">
-                            <TitleTag isDark={isDark} rank={auraRank} size={13} key={equippedTitle} equippedTitle={equippedTitle} isTop10={auraRank > 0 && auraRank <= 10} auraVisuals={aura} />
-                        </View>
-                    </View>
-
-                    <View className="items-center w-full">
-                        <View className="items-center justify-center mb-2">
-                            <PlayerNameplate
-                                author={author}
-                                themeColor={themeColor}
-                                equippedGlow={equippedGlow}
-                                auraRank={auraRank}
-                                isDark={isDark}
-                                fontSize={24}
-                            />
-
-                            {/* {equippedBadges.length > 0 && (
-                                <View className="flex-row flex-wrap justify-center gap-2 mt-2 mb-3">
-                                    {equippedBadges.map((badge, bIdx) => (
-                                        <BadgeIcon key={`spec-${bIdx}`} badge={badge} size={22} isDark={isDark} />
-                                    ))}
-                                </View>
-                            )} */}
-                        </View>
-
-                        <Text className="text-sm text-gray-500 dark:text-gray-400 text-center leading-relaxed font-medium px-8 italic mb-3">
-                            "{author.description || "This operator is a ghost in the machine..."}"
-                        </Text>
-
-                        <View className="bg-gray-50 dark:bg-white/5 border border-gray-100 dark:border-white/10 rounded-2xl px-5 py-2 flex-row items-center mb-1">
-                            <MaterialCommunityIcons name="shield-star-outline" size={14} color={themeColor} />
-                            <Text className="text-[10px] font-black uppercase tracking-widest text-gray-400 ml-2">GOAT:</Text>
-                            <Text className="text-[10px] font-black uppercase tracking-widest text-gray-900 dark:text-white ml-2 italic">{favoriteCharacter}</Text>
-                        </View>
-
-                        <View className="flex-row gap-8 mt-6 border-y border-gray-100 dark:border-gray-800 w-full py-4 justify-center">
-                            <View className="items-center">
-                                <Text className="text-[10px] font-black text-gray-400 uppercase tracking-widest">Aura</Text>
-                                <Text className="text-lg font-black" style={{ color: themeColor }}>{totalAura.toLocaleString()}</Text>
-                            </View>
-                            <View className="items-center">
-                                <Text className="text-[10px] font-black text-gray-400 uppercase tracking-widest">Glory</Text>
-                                <Text className="text-lg font-black" style={{ color: '#ec4899' }}>+{author.weeklyAura || 0}</Text>
-                            </View>
-                            <View className="items-center">
-                                <Text className="text-[10px] font-black text-gray-400 uppercase tracking-widest">Logs</Text>
-                                <Text className="text-lg font-black dark:text-white">{totalPosts}</Text>
-                            </View>
-                        </View>
-
-                        <View className="mt-8 w-full px-2">
-                            <View className="flex-row justify-between items-end mb-2">
-                                <View className="flex-row items-center gap-2">
-                                    <Text className="text-2xl">{writerRank.icon}</Text>
-                                    <View>
-                                        <Text style={{ color: writerRank.color }} className="text-[8px] font-mono uppercase tracking-[0.2em] leading-none mb-1">Class</Text>
-                                        <Text className="text-sm font-black uppercase tracking-tighter dark:text-white">{writerRank.title}</Text>
-                                    </View>
-                                </View>
-                            </View>
-                        </View>
-                    </View>
-                </View>
-            </View>
-        );
-
-        return (
-            <View className="px-4 pt-20 pb-6">
-                {equippedBorder ? (
-                    <ClanBorder
-                        color={borderVisual.primaryColor || themeColor}
-                        secondaryColor={borderVisual.secondaryColor || null}
-                        animationType={borderVisual.animationType || "singleSnake"}
-                        snakeLength={borderVisual.snakeLength || 120}
-                        duration={borderVisual.duration || 3000}
-                    >
-                        {HeaderCard}
-                    </ClanBorder>
-                ) : HeaderCard}
-
-                <View className="flex-row items-center gap-4 mt-10 mb-4 px-2">
-                    <Text className="text-xl font-black italic uppercase tracking-tighter text-gray-900 dark:text-white">
-                        Diary<Text style={{ color: themeColor }}> Archives </Text>
-                    </Text>
-                    <View className="h-[1px] flex-1 bg-gray-100 dark:bg-gray-800" />
-                </View>
-            </View>
-        );
-    }, [author, isOffline, isDark, themeColor, activeGlowColor, aura, auraRank, totalPosts, scanAnimatedStyle, auraPulseStyle, skeletonAnimatedStyle]);
+    ), []);
 
     if (isInitialMount) {
-        <View style={{ backgroundColor: isDark ? "#050505" : "#ffffff" }} className="flex-1 items-center justify-center">
-            <SyncLoading message='Decrypting Anime Intel' />
-        </View>
+        return (
+            <View style={{ backgroundColor: isDark ? "#050505" : "#ffffff" }} className="flex-1 items-center justify-center">
+                <SyncLoading message='Decrypting Anime Intel' />
+            </View>
+        );
     }
 
     if (!author && isOffline) {
         return (
             <ScrollView className="flex-1 bg-white dark:bg-[#0a0a0a]" contentContainerStyle={{ paddingBottom: insets.bottom + 100 }}>
-                <AuthorSkeleton />
+                <View className="px-4 pt-20 pb-6 opacity-40">
+                    <View className="p-6 bg-gray-100 dark:bg-[#111] border border-gray-200 dark:border-gray-800 rounded-[40px] items-center">
+                        <Animated.View style={[skeletonAnimatedStyle]} className="w-32 h-32 bg-gray-300 dark:bg-gray-800 rounded-full mb-6" />
+                        <Animated.View style={[skeletonAnimatedStyle]} className="w-48 h-8 bg-gray-300 dark:bg-gray-800 rounded-lg mb-4" />
+                    </View>
+                </View>
                 <View className="items-center justify-center px-10 -mt-10">
                     <MaterialCommunityIcons name="wifi-strength-1-alert" size={48} color="#ef4444" />
                     <Text className="text-2xl font-black uppercase italic text-red-600 mt-4">Signal Interrupted</Text>
@@ -599,7 +709,6 @@ export default function AuthorPage() {
         );
     }
 
-
     return (
         <View className="flex-1 bg-white dark:bg-[#0a0a0a]">
             <LegendList
@@ -607,18 +716,34 @@ export default function AuthorPage() {
                 data={listData}
                 keyExtractor={(item) => item._id}
                 renderItem={renderItem}
-                removeClippedSubviews={true}
-                ListHeaderComponent={ListHeader}
-                recycleItems={true}
+                removeClippedSubviews={false}
+                ListHeaderComponent={
+                    <MemoizedHeader
+                        author={author}
+                        isOffline={isOffline}
+                        isDark={isDark}
+                        totalPosts={totalPosts}
+                        setCardPreviewVisible={setCardPreviewVisible}
+                        themeColor={themeColor}
+                        activeGlowColor={activeGlowColor}
+                        auraRank={auraRank}
+                        equippedGlow={equippedGlow}
+                        aura={aura}
+                        equippedTitle={equippedTitle}
+                        auraPulseStyle={auraPulseStyle}
+                        scanAnimatedStyle={scanAnimatedStyle}
+                        skeletonAnimatedStyle={skeletonAnimatedStyle}
+                        isVisible={headerVisible}
+                    />
+                }
                 estimatedItemSize={630}
-                drawDistance={1000}
-                // ⚡️ FIXED: Removed rcycleItems. Re-using old elements was confusing SWR keys
-
+                drawDistance={800}
+                recycleItems={true}
+                onViewableItemsChanged={onViewableItemsChanged}
+                viewabilityConfig={viewabilityConfig}
                 onScroll={handleScroll}
                 scrollEventThrottle={16}
-
                 contentContainerStyle={{ paddingBottom: insets.bottom + 100 }}
-
                 ListFooterComponent={
                     <View className="py-10">
                         {loading && !isInitialMount && <SyncLoading message="Fetching Author Posts" />}
@@ -643,7 +768,13 @@ export default function AuthorPage() {
 
             <Modal visible={cardPreviewVisible} transparent animationType="slide">
                 <View className="flex-1 bg-black/95">
-                    <Pressable style={StyleSheet.absoluteFill} onPress={() => setCardPreviewVisible(false)} />
+                    <Pressable style={{
+                        position: 'absolute',
+                        left: 0,
+                        right: 0,
+                        top: 0,
+                        bottom: 0
+                    }} onPress={() => setCardPreviewVisible(false)} />
                     <ScrollView contentContainerStyle={{ flexGrow: 1, justifyContent: 'center', alignItems: 'center', padding: 20 }} showsVerticalScrollIndicator={false}>
                         <View className="w-full pt-10 items-center">
                             <View className="w-full flex-row justify-between items-center">

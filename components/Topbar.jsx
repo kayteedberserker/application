@@ -1,7 +1,7 @@
 import { Ionicons } from "@expo/vector-icons";
 import { Image } from "expo-image";
 import { usePathname } from "expo-router";
-import { useEffect, useState } from "react";
+import { memo, useEffect, useState } from "react";
 import {
     ActivityIndicator,
     DeviceEventEmitter,
@@ -10,6 +10,7 @@ import {
 } from "react-native";
 import { useMMKV } from "react-native-mmkv";
 import Animated, {
+    cancelAnimation, // ⚡️ Added to stop leaks
     useAnimatedStyle,
     useSharedValue,
     withRepeat,
@@ -28,12 +29,12 @@ import { Text } from "./Text";
 // ⚡️ Global session flag: Resets to false only when the app is completely restarted.
 let hasShownThisSession = false;
 
-export default function TopBar({ isDark }) {
+function TopBar({ isDark }) {
     const storage = useMMKV();
     const CustomAlert = useAlert();
     const { streak, loading, refreshStreak } = useStreak();
     const { user, refreshUser } = useUser();
-    const { coins, peakLevel, processTransaction, isProcessingTransaction } = useCoins();
+    const { coins, tokens, peakLevel, processTransaction, isProcessingTransaction } = useCoins();
 
     const pathName = usePathname();
 
@@ -41,7 +42,6 @@ export default function TopBar({ isDark }) {
     const hasActiveStreak = streak?.streak > 0;
     const showRestoreUI = streak?.canRestore;
     const isZeroStreak = !hasActiveStreak && !showRestoreUI;
-
     // ⚡️ WALLET HINT STATE & ANIMATION
     const [showWalletHint, setShowWalletHint] = useState(false);
     const hintBounce = useSharedValue(0);
@@ -81,8 +81,15 @@ export default function TopBar({ isDark }) {
             );
 
             // Auto-hide after 8 seconds 
-            const hideTimer = setTimeout(() => setShowWalletHint(false), 8000);
-            return () => clearTimeout(hideTimer);
+            const hideTimer = setTimeout(() => {
+                setShowWalletHint(false);
+                cancelAnimation(hintBounce); // ⚡️ Stop background calculation loop
+            }, 8000);
+
+            return () => {
+                clearTimeout(hideTimer);
+                cancelAnimation(hintBounce); // ⚡️ Ensure cleanup on component unmount
+            };
         }
     }, []);
 
@@ -152,18 +159,15 @@ export default function TopBar({ isDark }) {
         );
     };
 
-    // ⚡️ Intercept the click to immediately hide the hint
+    // ⚡️ Intercept the click to immediately hide the hint and kill its loop thread
     const handleWalletClick = () => {
         setShowWalletHint(false);
+        cancelAnimation(hintBounce); // ⚡️ Safely tear down loop thread instantly
         DeviceEventEmitter.emit("navigateSafely", "/screens/Wallet");
     };
 
     const urgentButtonStyle = useAnimatedStyle(() => ({
         transform: [{ scale: pulse.value }],
-    }));
-
-    const healthyFlameStyle = useAnimatedStyle(() => ({
-        transform: [{ scale: !showRestoreUI && hasActiveStreak ? pulse.value : 1 }],
     }));
 
     const logoSrc = isDark
@@ -188,10 +192,10 @@ export default function TopBar({ isDark }) {
                     >
                         {peakLevel > 0 ? (
                             <View className="mr-0.5">
-                                <PeakBadge level={peakLevel} size={20} />
+                                <PeakBadge isFeed={true} level={peakLevel} size={20} />
                             </View>
                         ) : null}
-                        <View className="flex-col items-end justify-center">
+                        <View className="flex-col items-end gap-[1px] justify-center">
                             <View className="flex-row items-center">
                                 <Text className="text-yellow-500 font-black text-[11px] mr-1">{coins || 0}</Text>
                                 {isProcessingTransaction ? <ActivityIndicator size={10} color="#ca8a04" /> : <CoinIcon type="OC" size={14} />}
@@ -236,7 +240,7 @@ export default function TopBar({ isDark }) {
                     >
                         <Animated.View
                             style={[
-                                showRestoreUI ? urgentButtonStyle : healthyFlameStyle || {},
+                                showRestoreUI ? urgentButtonStyle : {},
                                 {
                                     paddingHorizontal: 6,
                                     paddingVertical: 4,
@@ -253,13 +257,13 @@ export default function TopBar({ isDark }) {
                                 <ActivityIndicator size="small" color="#ef4444" />
                             ) : (
                                 <View className="flex-row items-center">
-                                    <Animated.View style={healthyFlameStyle}>
+                                    <View>
                                         <Ionicons
                                             name={showRestoreUI ? "bonfire-outline" : "flame"}
                                             size={showRestoreUI ? 16 : 14}
                                             color={showRestoreUI ? "#ef4444" : isZeroStreak ? "#9ca3af" : "#f97316"}
                                         />
-                                    </Animated.View>
+                                    </View>
                                 </View>
                             )}
                             <View className="flex-row items-center ml-0.5">
@@ -310,3 +314,5 @@ export default function TopBar({ isDark }) {
         </View>
     );
 }
+
+export default memo(TopBar);

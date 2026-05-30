@@ -1,206 +1,152 @@
+import { useUploadProgress } from '@/context/UploadProgressContext';
 import React from 'react';
 import {
-    Modal,
-    View,
     ActivityIndicator,
-    useColorScheme,
     StyleSheet,
+    useColorScheme,
+    View,
 } from 'react-native';
 import Animated, {
-    FadeIn,
-    FadeOut,
     useAnimatedStyle,
     useSharedValue,
-    withTiming,
+    withTiming
 } from 'react-native-reanimated';
+import Svg, { Circle } from 'react-native-svg';
 import { Text } from './Text';
-import THEME from './useAppTheme';
 
-const ProgressModal = ({ visible, progress, onDismiss }) => {
+const ProgressModal = () => {
     const isDark = useColorScheme() === 'dark';
-    const scaleValue = useSharedValue(0.9);
+    const scaleValue = useSharedValue(0.8);
+    const opacityValue = useSharedValue(0);
+
+    const { uploadProgress: progress, hideProgress } = useUploadProgress();
+    const visible = progress.isVisible;
 
     React.useEffect(() => {
         if (visible) {
-            scaleValue.value = withTiming(1, { duration: 300 });
+            scaleValue.value = withTiming(1, { duration: 250 });
+            opacityValue.value = withTiming(1, { duration: 200 });
         } else {
-            scaleValue.value = withTiming(0.9, { duration: 300 });
+            scaleValue.value = withTiming(0.8, { duration: 200 });
+            opacityValue.value = withTiming(0, { duration: 200 });
         }
     }, [visible]);
 
+    React.useEffect(() => {
+        if (visible && (progress.status === 'error' || progress.status === 'completed')) {
+            const timer = setTimeout(() => {
+                hideProgress();
+            }, 3000);
+
+            return () => clearTimeout(timer);
+        }
+    }, [progress.status, visible, hideProgress]);
+
     const animatedStyle = useAnimatedStyle(() => ({
         transform: [{ scale: scaleValue.value }],
+        opacity: opacityValue.value,
     }));
 
-    const getStatusColor = () => {
-        switch (progress.status) {
-            case 'completed':
-                return '#10B981';
-            case 'error':
-                return '#EF4444';
-            case 'processing':
-                return '#F59E0B';
-            default:
-                return THEME.colors.primary;
-        }
+    if (!visible) return null;
+
+    // 🧮 Compute collective data calculations across dictionary keys safely
+    const progressKeys = Object.keys(progress.filesProgress || {});
+    const totalFiles = progress.totalFiles || 1;
+
+    let totalAccumulatedProgress = 0;
+    progressKeys.forEach((key) => {
+        totalAccumulatedProgress += progress.filesProgress[key] || 0;
+    });
+
+    const safeOverallProgress = Math.min(100, Math.max(0, Math.round(totalAccumulatedProgress / totalFiles)));
+
+    // Counter updates accurately by seeing how many attachments hit 100%
+    const completedFilesCount = progressKeys.filter(key => progress.filesProgress[key] >= 100).length;
+    const ongoingDisplayIndex = Math.min(totalFiles, completedFilesCount + 1);
+
+    const getDynamicProgressColor = (pct) => {
+        if (pct <= 25) return '#EF4444';
+        if (pct <= 50) return '#F97316';
+        if (pct <= 75) return '#EAB308';
+        return '#10B981';
     };
 
-    const getStatusText = () => {
-        switch (progress.status) {
-            case 'completed':
-                return 'Upload Complete ✓';
-            case 'error':
-                return `Error: ${progress.errorMessage || 'Upload failed'}`;
-            case 'processing':
-                return 'Processing...';
-            default:
-                return 'Uploading...';
-        }
-    };
-
-    const progressPercentage = Math.round(progress.fileProgress);
-    const overallProgress = progress.totalFiles > 0
-        ? ((progress.currentFile - 1 + progressPercentage / 100) / progress.totalFiles) * 100
-        : progressPercentage;
+    const radius = 28;
+    const circumference = 2 * Math.PI * radius;
+    const strokeDashoffset = circumference - (safeOverallProgress / 100) * circumference;
 
     return (
-        <Modal
-            visible={visible}
-            transparent={true}
-            animationType="fade"
-            onRequestClose={onDismiss}
-        >
-            <View style={[styles.container, { backgroundColor: isDark ? 'rgba(0,0,0,0.7)' : 'rgba(0,0,0,0.5)' }]}>
-                <Animated.View style={[styles.modal, animatedStyle, { backgroundColor: isDark ? '#1f2937' : '#ffffff' }]}>
-                    {/* Header */}
-                    <Text style={styles.title}>Upload Progress</Text>
-
-                    {/* File Counter */}
-                    {progress.totalFiles > 1 && (
-                        <Text style={[styles.fileCounter, { color: isDark ? '#9ca3af' : '#6b7280' }]}>
-                            File {progress.currentFile} of {progress.totalFiles}
-                        </Text>
-                    )}
-
-                    {/* File Name */}
-                    {progress.fileName && (
-                        <Text style={[styles.fileName, { color: isDark ? '#d1d5db' : '#374151' }]} numberOfLines={1}>
-                            {progress.fileName}
-                        </Text>
-                    )}
-
-                    {/* Progress Bar Container */}
-                    <View style={[styles.progressBarContainer, { backgroundColor: isDark ? '#374151' : '#e5e7eb' }]}>
-                        <Animated.View
-                            style={[
-                                styles.progressBar,
-                                {
-                                    width: `${overallProgress}%`,
-                                    backgroundColor: getStatusColor(),
-                                },
-                            ]}
+        <Animated.View style={[styles.container, animatedStyle]}>
+            <View style={[
+                styles.widget,
+                { backgroundColor: isDark ? '#111827' : '#ffffff', borderColor: isDark ? '#374151' : '#e5e7eb' }
+            ]}>
+                <View style={styles.circleContainer}>
+                    <Svg width={70} height={70} viewBox="0 0 70 70" style={styles.svgCanvas}>
+                        <Circle
+                            cx="35"
+                            cy="35"
+                            r={radius}
+                            stroke={isDark ? '#374151' : '#e5e7eb'}
+                            strokeWidth="4"
+                            fill="none"
                         />
-                    </View>
+                        <Circle
+                            cx="35"
+                            cy="35"
+                            r={radius}
+                            stroke={getDynamicProgressColor(safeOverallProgress)}
+                            strokeWidth="4"
+                            fill="none"
+                            strokeDasharray={circumference}
+                            strokeDashoffset={strokeDashoffset}
+                            strokeLinecap="round"
+                        />
+                    </Svg>
 
-                    {/* Percentage Text */}
-                    <View style={styles.percentageContainer}>
-                        <Text style={[styles.percentageText, { color: isDark ? '#9ca3af' : '#6b7280' }]}>
-                            {progressPercentage}%
+                    <View style={styles.textOverlay}>
+                        <Text style={[styles.percentageText, { color: isDark ? '#ffffff' : '#111827' }]}>
+                            {safeOverallProgress}%
                         </Text>
                     </View>
+                </View>
 
-                    {/* Status Text and Spinner */}
-                    <View style={styles.statusContainer}>
-                        {progress.status !== 'completed' && progress.status !== 'error' && (
-                            <ActivityIndicator
-                                size="small"
-                                color={getStatusColor()}
-                                style={styles.spinner}
-                            />
-                        )}
-                        <Text style={[styles.statusText, { color: getStatusColor() }]}>
-                            {getStatusText()}
-                        </Text>
-                    </View>
+                {totalFiles > 1 && (
+                    <Text style={[styles.fileCounter, { color: isDark ? '#9ca3af' : '#6b7280' }]}>
+                        {ongoingDisplayIndex}/{totalFiles}
+                    </Text>
+                )}
 
-                    {/* Tip Text */}
-                    {progress.status === 'uploading' && (
-                        <Text style={[styles.tipText, { color: isDark ? '#6b7280' : '#9ca3af' }]}>
-                            Please don't close the app
-                        </Text>
+                <View style={styles.statusIndicator}>
+                    {progress.status !== 'completed' && progress.status !== 'error' && (
+                        <ActivityIndicator
+                            size="small"
+                            color={getDynamicProgressColor(safeOverallProgress)}
+                            style={styles.spinner}
+                        />
                     )}
-                </Animated.View>
+                    {progress.status === 'completed' && (
+                        <Text style={{ color: '#10B981', fontSize: 16, fontWeight: '700' }}>✓</Text>
+                    )}
+                    {progress.status === 'error' && (
+                        <Text style={{ color: '#EF4444', fontSize: 16, fontWeight: '700' }}>✕</Text>
+                    )}
+                </View>
             </View>
-        </Modal>
+        </Animated.View>
     );
 };
 
 const styles = StyleSheet.create({
-    container: {
-        flex: 1,
-        justifyContent: 'center',
-        alignItems: 'center',
-    },
-    modal: {
-        width: '80%',
-        borderRadius: 16,
-        padding: 24,
-        alignItems: 'center',
-        shadowColor: '#000',
-        shadowOffset: { width: 0, height: 4 },
-        shadowOpacity: 0.3,
-        shadowRadius: 8,
-        elevation: 8,
-    },
-    title: {
-        fontSize: 18,
-        fontWeight: '700',
-        marginBottom: 12,
-    },
-    fileCounter: {
-        fontSize: 12,
-        marginBottom: 8,
-    },
-    fileName: {
-        fontSize: 13,
-        marginBottom: 16,
-        maxWidth: '100%',
-    },
-    progressBarContainer: {
-        width: '100%',
-        height: 8,
-        borderRadius: 4,
-        overflow: 'hidden',
-        marginBottom: 12,
-    },
-    progressBar: {
-        height: '100%',
-        borderRadius: 4,
-    },
-    percentageContainer: {
-        marginBottom: 16,
-    },
-    percentageText: {
-        fontSize: 24,
-        fontWeight: '700',
-    },
-    statusContainer: {
-        flexDirection: 'row',
-        alignItems: 'center',
-        marginBottom: 8,
-    },
-    spinner: {
-        marginRight: 8,
-    },
-    statusText: {
-        fontSize: 14,
-        fontWeight: '600',
-    },
-    tipText: {
-        fontSize: 12,
-        marginTop: 8,
-        fontStyle: 'italic',
-    },
+    container: { position: 'absolute', top: 120, left: 20, zIndex: 999 },
+    widget: { borderRadius: 14, paddingHorizontal: 14, paddingVertical: 12, alignItems: 'center', justifyContent: 'center', borderWidth: 1, shadowColor: '#000', shadowOffset: { width: 0, height: 2 }, shadowOpacity: 0.2, shadowRadius: 4, elevation: 5 },
+    circleContainer: { width: 70, height: 70, position: 'relative', justifyContent: 'center', alignItems: 'center', marginBottom: 6 },
+    svgCanvas: { position: 'absolute', top: 0, left: 0, transform: [{ rotate: '-90deg' }] },
+    textOverlay: { width: "100%", height: "100%", position: 'absolute', justifyContent: 'center', alignItems: 'center', zIndex: 10 },
+    percentageText: { fontSize: 12, fontWeight: '700', textAlign: 'center' },
+    fileCounter: { fontSize: 10, fontWeight: '600', marginBottom: 4 },
+    statusIndicator: { width: 18, height: 18, justifyContent: 'center', alignItems: 'center' },
+    spinner: { transform: [{ scale: 0.75 }] },
 });
 
 export default ProgressModal;

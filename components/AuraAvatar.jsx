@@ -24,13 +24,18 @@ const AuraAvatar = React.memo(function AuraAvatar({
     onPress,
     size = 44,
     isFeed = false,
-    glowColor = null
+    glowColor = null,
+    isVisible = false
 }) {
+
     const [imageLoading, setImageLoading] = useState(true);
 
     const displayColor = glowColor || aura?.color || '#3b82f6';
     const rank = author?.rank || 100;
     const hasPremiumAura = isTop10 || glowColor;
+
+    // Determine animation rule: only kill animation when it IS in the feed AND NOT visible.
+    const shouldAnimate = !isFeed || isVisible;
 
     // --- CHECK FOR AVATAR VFX (Fire, Lightning, etc.) ---
     const equippedVfx = useMemo(() => {
@@ -74,27 +79,37 @@ const AuraAvatar = React.memo(function AuraAvatar({
 
     // --- TIERED ANIMATION CONTROLLER ---
     useEffect(() => {
+        cancelAnimation(pulseAnim);
+        cancelAnimation(floatAnim);
+        cancelAnimation(rotateCW);
+        cancelAnimation(rotateCCW);
+
         if (!hasPremiumAura) return;
 
-        const pulseSpeed = rank === 1 ? 800 : rank <= 3 ? 1200 : rank <= 5 || glowColor ? 1500 : 2000;
-        pulseAnim.value = withRepeat(
-            withTiming(1.15, { duration: pulseSpeed, easing: Easing.inOut(Easing.ease) }),
-            -1, true
-        );
+        // Kill loop and reset to clean static values only if in feed and not visible
+        if (!shouldAnimate) {
+            pulseAnim.value = 1;
+            floatAnim.value = 0;
+            rotateCW.value = 0;
+            rotateCCW.value = 360;
+            return;
+        }
 
-        floatAnim.value = withRepeat(
-            withTiming(1, { duration: 2500, easing: Easing.inOut(Easing.ease) }),
-            -1, true
-        );
-
-        rotateCW.value = withRepeat(
-            withTiming(360, { duration: rank === 1 ? 3000 : 5000, easing: Easing.linear }),
-            -1, false
-        );
-        rotateCCW.value = withRepeat(
-            withTiming(0, { duration: rank === 1 ? 4000 : 6000, easing: Easing.linear }),
-            -1, false
-        );
+        // ⚡️ PERFORMANCE OPTIMIZATION: Fire exactly ONE master clock loop per component instance
+        if (rank <= 5 || glowColor) {
+            // High tiers run exactly ONE loop on the rotation track
+            rotateCW.value = withRepeat(
+                withTiming(360, { duration: rank === 1 ? 3000 : 5000, easing: Easing.linear }),
+                -1, false
+            );
+        } else if (rank >= 6 && rank <= 10 && !glowColor) {
+            // Lower tiers run exactly ONE loop on the pulse track
+            const pulseSpeed = 2000;
+            pulseAnim.value = withRepeat(
+                withTiming(1.15, { duration: pulseSpeed, easing: Easing.inOut(Easing.ease) }),
+                -1, true
+            );
+        }
 
         // ⚡️ PERFORMANCE FIX 4: Cleanup animations on unmount to free up the UI thread
         return () => {
@@ -103,35 +118,17 @@ const AuraAvatar = React.memo(function AuraAvatar({
             cancelAnimation(rotateCW);
             cancelAnimation(rotateCCW);
         };
-    }, [hasPremiumAura, rank, glowColor]);
+    }, [hasPremiumAura, rank, glowColor, shouldAnimate]);
 
-    // --- STYLES: THE BREATHING FIRE AURA ---
-    const fireGlowStyle = useAnimatedStyle(() => {
-        return {
-            transform: [
-                { rotate: rank === 1 ? '45deg' : '0deg' },
-                { scale: pulseAnim.value }
-            ],
-            shadowColor: displayColor,
-            shadowOffset: { width: 0, height: 0 },
-            shadowOpacity: interpolate(pulseAnim.value, [1, 1.15], [0.4, 0.9]),
-            shadowRadius: interpolate(pulseAnim.value, [1, 1.15], [5, 12]),
-        };
-    });
+    // ⚡️ PERFORMANCE OPTIMIZATION: Derive float displacements directly from the rotation loop
 
-    const floatingAvatarStyle = useAnimatedStyle(() => {
-        return {
-            transform: [
-                { rotate: rank === 1 ? '45deg' : '0deg' },
-                { translateY: interpolate(floatAnim.value, [0, 1], [0, -3]) }
-            ]
-        };
-    });
 
+    // ⚡️ PERFORMANCE OPTIMIZATION: Derive Counter-Clockwise motion mathematically (360 - CW)
     const cwRingStyle = useAnimatedStyle(() => ({ transform: [{ rotate: `${rotateCW.value}deg` }] }));
-    const ccwRingStyle = useAnimatedStyle(() => ({ transform: [{ rotate: `${rotateCCW.value}deg` }] }));
+    const ccwRingStyle = useAnimatedStyle(() => ({ transform: [{ rotate: `${360 - rotateCW.value}deg` }] }));
+
     const fadeRingStyle = useAnimatedStyle(() => ({
-        transform: [{ rotate: `${rotateCW.value}deg` }],
+        transform: [{ rotate: '0deg' }], // Keep rotation clean and static for lower tiers to reduce load
         opacity: interpolate(pulseAnim.value, [1, 1.15], [0.1, 0.6])
     }));
 
@@ -169,7 +166,6 @@ const AuraAvatar = React.memo(function AuraAvatar({
                     <Animated.View
                         style={[
                             frameStyle,
-                            fireGlowStyle,
                             {
                                 position: 'absolute',
                                 width: size + 2,
@@ -221,8 +217,8 @@ const AuraAvatar = React.memo(function AuraAvatar({
                 >
                     <LottieView
                         source={vfxSource}
-                        autoPlay={!isFeed}
-                        loop={!isFeed}
+                        autoPlay={shouldAnimate}
+                        loop={shouldAnimate}
                         style={{
                             width: '100%',
                             height: '100%',
@@ -239,7 +235,6 @@ const AuraAvatar = React.memo(function AuraAvatar({
             <Animated.View
                 style={[
                     frameStyle,
-                    hasPremiumAura ? floatingAvatarStyle : {},
                     {
                         width: size,
                         height: size,
@@ -251,10 +246,10 @@ const AuraAvatar = React.memo(function AuraAvatar({
                 ]}
             >
                 {/* ⚡️ CHECK 1: Is it an Animated Lottie Avatar? */}
-                {animatedAvatarSource ? (
+                {shouldAnimate && animatedAvatarSource ? (
                     <LottieView
                         source={animatedAvatarSource}
-                        autoPlay={true}
+                        autoPlay={shouldAnimate}
                         loop={true}
                         style={[
                             { width: '100%', height: '100%' },
@@ -268,7 +263,7 @@ const AuraAvatar = React.memo(function AuraAvatar({
                     <View
                         style={[
                             { flex: 1, alignItems: 'center', justifyContent: 'center' },
-                            rank === 1 ? { transform: [{ rotate: '-45deg' }] } : {}
+                            { transform: rank === 1 ? [{ rotate: '-45deg' }] : {} }
                         ]}
                     >
                         <SvgXml
