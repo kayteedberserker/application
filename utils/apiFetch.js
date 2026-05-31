@@ -36,7 +36,7 @@ initializeServerIndex();
 // Returns the live dynamic base context route path mapping
 const getBaseUrl = () => {
   if (__DEV__) {
-    return "http://10.103.92.121:3000/api";
+    return "http://10.143.187.121:3000/api"
   }
   return PRODUCTION_SERVERS[currentServerIndex]
 };

@@ -56,9 +56,7 @@ const getAuraTier = (rank) => {
     const ESPADA_5 = '#4c0519'; // Black Cherry (Rank 10)
 
     // DEFAULT FALLBACK OBJECT
-    const fallback = { color: '#64748b', label: 'PLAYER', icon: 'shield-check' };
-
-    if (!rank || rank > 10 || rank <= 0) return fallback; // Return object, not undefined;
+    // const fallback = { color: '#64748b', label: 'PLAYER', icon: 'shield-check' };
 
     switch (rank) {
         case 1:
@@ -83,9 +81,6 @@ const getAuraTier = (rank) => {
             return { color: ESPADA_4, label: 'ESPADA 4', icon: 'sword-cross' };
         case 10:
             return { color: ESPADA_5, label: 'ESPADA 5', icon: 'sword-cross' };
-
-        default:
-            return { color: '#1e293b', label: 'VANGUARD', icon: 'shield-check' };
     }
 };
 

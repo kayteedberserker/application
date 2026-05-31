@@ -1,7 +1,7 @@
 import { Feather, Ionicons, MaterialCommunityIcons } from "@expo/vector-icons";
 import * as Clipboard from 'expo-clipboard';
 import { Image } from 'expo-image';
-import * as MediaLibrary from 'expo-media-library';
+import { Asset, requestPermissionsAsync } from 'expo-media-library';
 import { useRouter } from 'expo-router';
 import * as Sharing from 'expo-sharing';
 import React, { memo, useEffect, useMemo, useRef, useState } from 'react';
@@ -443,10 +443,17 @@ const ClanProfile = () => {
             if (clanCardRef.current) {
                 setIsSaving(true);
                 Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
+
+                // Capture the reference layout to a local URI string
                 const uri = await clanCardRef.current.capture();
-                const { status } = await MediaLibrary.requestPermissionsAsync();
+
+                // ✅ 1. Modern class-based permission check
+                const { status } = await requestPermissionsAsync();
                 if (status === 'granted') {
-                    await MediaLibrary.saveToLibraryAsync(uri);
+
+                    // ✅ 2. Modern class-based method to save to the library
+                    await Asset.create(uri);
+
                     Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
                     CustomAlert("Archived", "The Clan Scroll has been saved to your device.");
                 } else {

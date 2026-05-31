@@ -1,7 +1,7 @@
 import { Feather, Ionicons, MaterialCommunityIcons } from "@expo/vector-icons";
 import * as FileSystem from 'expo-file-system/legacy';
 import { Image } from "expo-image";
-import * as MediaLibrary from 'expo-media-library';
+import { Asset, requestPermissionsAsync } from 'expo-media-library';
 import { useVideoPlayer, VideoView } from "expo-video";
 import React, { memo, useEffect, useMemo, useRef, useState } from "react";
 import {
@@ -662,10 +662,6 @@ const PostCardComponent = ({ post, authorData, clanData, setPosts, isFeed, hideM
   useEffect(() => {
   }, [isVisible]);
 
-  if (__DEV__) {
-    console.log("Im rerendering on scroll", post?.title);
-  }
-
   const CustomAlert = useAlert();
   const { user } = useUser();
   const isDark = useColorScheme() === "dark"
@@ -974,7 +970,9 @@ const PostCardComponent = ({ post, authorData, clanData, setPosts, isFeed, hideM
     try {
       Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
       setIsDownloading(true);
-      const { status } = await MediaLibrary.requestPermissionsAsync();
+
+      // ✅ 1. Check Permissions using modern API
+      const { status } = await requestPermissionsAsync();
       if (status !== 'granted') {
         CustomAlert("Permission Denied", "We need gallery permissions to save media.");
         setIsDownloading(false);
@@ -982,7 +980,6 @@ const PostCardComponent = ({ post, authorData, clanData, setPosts, isFeed, hideM
       }
 
       // --- INSTANT SAVE CACHE CHECK ---
-      // 1. Check if our LightboxVideoPlayer already hashed and cached this
       const hashed = await Crypto.digestStringAsync(
         Crypto.CryptoDigestAlgorithm.SHA256,
         item.url
@@ -993,10 +990,8 @@ const PostCardComponent = ({ post, authorData, clanData, setPosts, isFeed, hideM
       let uriToSave;
 
       if (videoInfo.exists) {
-        // It's already cached! We use this for an instant save.
         uriToSave = cachedVideoUri;
       } else {
-        // 2. Fallback check for standard filename cache (or download it if missing)
         const fileName = item.url.split('/').pop() || (item.type === "video" ? "video.mp4" : "image.jpg");
         const fileUri = FileSystem.cacheDirectory + fileName;
         const fileInfo = await FileSystem.getInfoAsync(fileUri);
@@ -1009,18 +1004,24 @@ const PostCardComponent = ({ post, authorData, clanData, setPosts, isFeed, hideM
         }
       }
 
-      await MediaLibrary.saveToLibraryAsync(uriToSave);
+      // ✅ 2. FIXED: Use the correct modern class static method
+      // Asset.create automatically copies the file into the library.
+      await Asset.create(uriToSave);
+
       setIsMediaSaved(true);
       setTimeout(() => setIsMediaSaved(false), 3000);
 
-      // Clean up the temp file ONLY if it's not the cached video our player relies on
       if (uriToSave !== cachedVideoUri) {
         await FileSystem.deleteAsync(uriToSave, { idempotent: true });
       }
     } catch (error) {
+      console.log(error);
       CustomAlert("System Failure", "Unable to download media.");
-    } finally { setIsDownloading(false); }
+    } finally {
+      setIsDownloading(false);
+    }
   };
+
 
   const parseCustomSyntax = (text) => {
     if (!text) return [];

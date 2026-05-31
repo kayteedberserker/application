@@ -1,7 +1,7 @@
 import { Feather, Ionicons, MaterialCommunityIcons } from "@expo/vector-icons";
 import { LegendList } from "@legendapp/list";
 import * as Haptics from 'expo-haptics';
-import * as MediaLibrary from 'expo-media-library';
+import { Asset, requestPermissionsAsync } from 'expo-media-library';
 import { useFocusEffect, useLocalSearchParams, useRouter } from "expo-router"; // ⚡️ ADDED: useFocusEffect
 import * as Sharing from "expo-sharing";
 import { useColorScheme } from "nativewind";
@@ -643,19 +643,26 @@ export default function ClanPage() {
       if (clanCardRef.current) {
         setIsSaving(true);
         Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
+
+        // Capture the reference layout to a local URI string
         const uri = await clanCardRef.current.capture();
-        const { status } = await MediaLibrary.requestPermissionsAsync();
+
+        // ✅ 1. Modern class-based permission check
+        const { status } = await requestPermissionsAsync();
         if (status === 'granted') {
-          await MediaLibrary.saveToLibraryAsync(uri);
+
+          // ✅ 2. Modern class-based method to save to the library
+          await Asset.create(uri);
+
           Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
-          showAlert("Archived", "Clan Scroll saved to device.");
+          CustomAlert("Archived", "The Clan Scroll has been saved to your device.");
         } else {
-          showAlert("Permission Denied", "Gallery access required.");
+          CustomAlert("Permission Denied", "Access to gallery is required to save scrolls.");
         }
       }
     } catch (error) {
       console.error("Save Error:", error);
-      showAlert("Error", "Failed to save.");
+      CustomAlert("Error", "Failed to save the clan scroll.");
     } finally {
       setIsSaving(false);
     }

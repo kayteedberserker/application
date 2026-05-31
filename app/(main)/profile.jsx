@@ -2,7 +2,7 @@ import { Feather, Ionicons, MaterialCommunityIcons } from "@expo/vector-icons";
 import * as Clipboard from 'expo-clipboard';
 import * as Haptics from 'expo-haptics';
 import * as ImagePicker from "expo-image-picker";
-import * as MediaLibrary from 'expo-media-library';
+import { Asset, requestPermissionsAsync } from 'expo-media-library';
 import { useRouter } from "expo-router";
 import * as Sharing from "expo-sharing";
 import { useColorScheme as useNativeWind } from "nativewind";
@@ -327,6 +327,10 @@ const SecurityModal = memo(({ visible, onClose, user, setUser, isDark }) => {
     const handleSetEmail = async () => {
         if (!email.trim()) {
             CustomAlert("Error", "Please enter a valid email address.");
+            return;
+        }
+        if (user?.securityLevel === 1) {
+            CustomAlert("Error", "You need to have a PIN before setting email.");
             return;
         }
 
@@ -1530,7 +1534,7 @@ export default function MobileProfilePage() {
     const storage = useMMKV();
     const CustomAlert = useAlert()
     const [theinventory, setInventory] = useState([])
-    const { user, setUser, contextLoading, handleLogout, isLoggingOut } = useUser();
+    const { user, setUser, contextLoading, handleLogout, isLoggingOut, syncProfile } = useUser();
 
     const { clearClanData } = useClan();
 
@@ -1598,42 +1602,8 @@ export default function MobileProfilePage() {
 
     // Safe guards for null user during logout
     useEffect(() => {
-        if (!user?.deviceId) return;
-        const syncUserWithDB = async () => {
-            try {
-                const res = await apiFetch(`/users/me?fingerprint=${user.deviceId}`);
-                const dbUser = await res.json();
-
-                if (res.ok) {
-                    setUser({ ...user, ...dbUser });
-                    setDescription(dbUser.description || "");
-                    setUsername(dbUser.username || "");
-
-                    const dbAnimes = Array.isArray(dbUser.preferences?.favAnimes) ? dbUser.preferences.favAnimes.join(', ') : "";
-                    const dbGenres = Array.isArray(dbUser.preferences?.favGenres) ? dbUser.preferences.favGenres.join(', ') : "";
-                    const dbChar = dbUser.preferences?.favCharacter || "";
-
-                    setFavAnimes(dbAnimes);
-                    setFavGenres(dbGenres);
-                    setFavCharacter(dbChar);
-
-                    const postRes = await apiFetch(`/posts?author=${dbUser._id}&limit=1`);
-                    const postData = await postRes.json();
-                    const newTotal = postData.total || 0;
-                    if (postRes.ok) setTotalPosts(newTotal);
-
-                    storage.set(CACHE_KEY_USER_EXTRAS, JSON.stringify({
-                        username: dbUser.username,
-                        description: dbUser.description,
-                        totalPosts: newTotal,
-                        favAnimes: dbAnimes,
-                        favGenres: dbGenres,
-                        favCharacter: dbChar
-                    }));
-                }
-            } catch (err) { console.error("Sync User Error:", err); }
-        };
-        syncUserWithDB();
+        if (!user?.deviceId) return
+        syncProfile()
     }, [user?.deviceId]);
 
     const getKey = (pageIndex, previousPageData) => {
@@ -1754,19 +1724,26 @@ export default function MobileProfilePage() {
             if (playerCardRef.current) {
                 setIsSaving(true);
                 Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
+
+                // Capture the reference layout to a local URI string
                 const uri = await playerCardRef.current.capture();
-                const { status } = await MediaLibrary.requestPermissionsAsync();
+
+                // ✅ 1. Modern class-based permission check
+                const { status } = await requestPermissionsAsync();
                 if (status === 'granted') {
-                    await MediaLibrary.saveToLibraryAsync(uri);
+
+                    // ✅ 2. Modern class-based method to save to the library
+                    await Asset.create(uri);
+
                     Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
-                    Toast.show({ type: 'success', text1: 'Saved to Gallery', text2: 'Your Operator identity has been archived.' });
+                    CustomAlert("Archived", "The Clan Scroll has been saved to your device.");
                 } else {
-                    CustomAlert("Permission Denied", "We need gallery permissions to save your card.");
+                    CustomAlert("Permission Denied", "Access to gallery is required to save scrolls.");
                 }
             }
         } catch (error) {
             console.error("Save Error:", error);
-            Toast.show({ type: 'error', text1: 'Error', text2: 'Failed to archive card.' });
+            CustomAlert("Error", "Failed to save the clan scroll.");
         } finally {
             setIsSaving(false);
         }

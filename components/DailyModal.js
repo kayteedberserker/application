@@ -228,9 +228,7 @@ const CountdownTimer = ({ startsAt, color }) => {
 };
 
 const CLAN_REFERRAL_MAP = {
-    "SYSTEM777": { name: "THE SYSTEM FLT", tag: "SYSTEM", color: "#3b82f6", description: "The core architecture crew. Optimized for maximum processing grind." },
-    "STRAWHAT": { name: "Straw Hat Fleet", tag: "SHF", color: "#EF4444", description: "For the dreamers, pioneers, and those hunting the ultimate digital treasure." },
-    "AKATSUKI": { name: "Akatsuki Crimson", tag: "AKATSUKI", color: "#DC2626", description: "Operate from the shadows. High performance, zero visibility execution." },
+    "ORE-THE-A744": { name: "THE REAPER BL", tag: "THE-REAPER-CLAN", color: "#3b82f6", description: "Join THE REAPER BL Clan on Oreblogda." },
     // Add new custom collaborated clans here easily matching user.referredBy
 };
 
@@ -345,7 +343,7 @@ export default function DailyModal() {
     }, [targetClan, user?.referredBy, storage]);
 
     useEffect(() => {
-        if (!user || hasShownThisSession) return;
+        if (!user || hasShownThisSession || visible) return;
 
         const todayStr = new Date().toDateString();
         const localClaimedToday = storage.getBoolean(`daily_claimed_${todayStr}`);
@@ -362,18 +360,14 @@ export default function DailyModal() {
         const nextPromo = getNextEvent();
         if (nextPromo) setCurrentPromo(nextPromo);
 
+        // 1. PRIORITY: DAILY CLAIM
         if (canClaimToday && !hasClaimed) {
             setModalMode('daily');
             const timer = setTimeout(() => setVisible(true), 1500);
             return () => clearTimeout(timer);
         }
 
-        if (nextPromo) {
-            setModalMode('event');
-            const timer = setTimeout(() => setVisible(true), 1500);
-            return () => clearTimeout(timer);
-        }
-
+        // 2. PRIORITY: CLAN MODAL
         if (canShowClanInvite()) {
             setModalMode('clan');
             const currentCount = storage.getNumber(`clan_invite_show_count_${user.referredBy}`) || 0;
@@ -382,12 +376,20 @@ export default function DailyModal() {
             return () => clearTimeout(timer);
         }
 
+        // 3. PRIORITY: EVENT PROMO
+        if (nextPromo) {
+            setModalMode('event');
+            const timer = setTimeout(() => setVisible(true), 1500);
+            return () => clearTimeout(timer);
+        }
+
+        // 4. PRIORITY: WEB COLLAB
         if (canShowCollab()) {
             setModalMode('collab');
             const timer = setTimeout(() => setVisible(true), 1500);
             return () => clearTimeout(timer);
         }
-    }, [user, activeEvents, hasClaimed, canShowCollab, canShowClanInvite, getNextEvent, storage]);
+    }, [user, activeEvents, hasClaimed, canShowCollab, canShowClanInvite, getNextEvent, storage, visible]);
 
     const handleClaimDaily = async () => {
         if (isProcessingTransaction) return;
@@ -395,79 +397,31 @@ export default function DailyModal() {
         const type = `daily_login`;
         const result = await processTransaction('claim', type, null, null);
 
+        const todayStr = new Date().toDateString();
+
         if (result.success) {
-            const todayStr = new Date().toDateString();
             setHasClaimed(true);
             storage.set(`daily_claimed_${todayStr}`, true);
 
+            // Close modal after showing the acquired state, DO NOT chain to the next modal
             timeoutRef.current = setTimeout(() => {
-                if (currentPromo) {
-                    setModalMode('event');
-                } else if (canShowClanInvite()) {
-                    setModalMode('clan');
-                    const currentCount = storage.getNumber(`clan_invite_show_count_${user.referredBy}`) || 0;
-                    storage.set(`clan_invite_show_count_${user.referredBy}`, currentCount + 1);
-                } else if (canShowCollab()) {
-                    showCollabAndTrack();
-                    setModalMode('collab');
-                } else {
-                    hasShownThisSession = true;
-                    setVisible(false);
-                }
-            }, 1000);
-        } else {
-            const todayStr = new Date().toDateString();
-            storage.set(`daily_claimed_${todayStr}`, true);
-
-            if (currentPromo) {
-                setModalMode('event');
-            } else if (canShowClanInvite()) {
-                setModalMode('clan');
-                const currentCount = storage.getNumber(`clan_invite_show_count_${user.referredBy}`) || 0;
-                storage.set(`clan_invite_show_count_${user.referredBy}`, currentCount + 1);
-            } else if (canShowCollab()) {
-                showCollabAndTrack();
-                setModalMode('collab');
-            } else {
                 hasShownThisSession = true;
                 setVisible(false);
-            }
+            }, 1000);
+        } else {
+            // If it fails but we still want to mark it as local claimed
+            storage.set(`daily_claimed_${todayStr}`, true);
+            hasShownThisSession = true;
+            setVisible(false);
         }
     };
 
     const handleDismissEvent = () => {
+        // Perform cleanup and cooldown tracking based on what was dismissed
         if (modalMode === 'event' && currentPromo) {
             storage.set(`last_dismissed_${currentPromo.id}`, new Date().toDateString());
             const thirtyMinsFromNow = new Date().getTime() + (30 * 60 * 1000);
             storage.set(GLOBAL_COOLDOWN_KEY, thirtyMinsFromNow);
-
-            if (canShowClanInvite()) {
-                setModalMode('clan');
-                const currentCount = storage.getNumber(`clan_invite_show_count_${user.referredBy}`) || 0;
-                storage.set(`clan_invite_show_count_${user.referredBy}`, currentCount + 1);
-                return;
-            }
-            if (canShowCollab()) {
-                showCollabAndTrack();
-                setModalMode('collab');
-                return;
-            }
-        } else if (modalMode === 'daily') {
-            if (currentPromo) {
-                setModalMode('event');
-                return;
-            }
-            if (canShowClanInvite()) {
-                setModalMode('clan');
-                const currentCount = storage.getNumber(`clan_invite_show_count_${user.referredBy}`) || 0;
-                storage.set(`clan_invite_show_count_${user.referredBy}`, currentCount + 1);
-                return;
-            }
-            if (canShowCollab()) {
-                showCollabAndTrack();
-                setModalMode('collab');
-                return;
-            }
         } else if (modalMode === 'clan') {
             if (user?.referredBy) {
                 const currentCount = storage.getNumber(`clan_invite_show_count_${user.referredBy}`) || 0;
@@ -475,15 +429,11 @@ export default function DailyModal() {
                     storage.set(`clan_invite_shown_${user.referredBy}`, true);
                 }
             }
-            if (canShowCollab()) {
-                showCollabAndTrack();
-                setModalMode('collab');
-                return;
-            }
         } else if (modalMode === 'collab') {
             showCollabAndTrack();
         }
 
+        // Close strictly. No chaining.
         hasShownThisSession = true;
         setVisible(false);
     };

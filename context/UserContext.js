@@ -46,7 +46,10 @@ export const UserProvider = ({ children }) => {
 
   const [pinModalVisible, setPinModalVisible] = useState(false);
   const [pinSuccess, setPinSuccess] = useState(false);
+
+  // Session flags to guarantee single-execution per app launch
   const hasSyncedIdentity = useRef(false);
+  const hasSyncedProfile = useRef(false);
 
   /**
    * 🛠️ DEFENSIVE STORAGE UPDATE
@@ -91,7 +94,8 @@ export const UserProvider = ({ children }) => {
           referralCode: dbUser.referralCode || currentUser.referralCode,
           invitedUsers: dbUser.invitedUsers || currentUser.invitedUsers || [],
           inventory: dbUser.inventory || currentUser.inventory || [], // Sync inventory changes seamlessly
-          securityLevel: dbUser.securityLevel || 0
+          securityLevel: dbUser.securityLevel || 0,
+          email: dbUser.email || 0,
         };
         updateUserData(updatedUser);
 
@@ -101,7 +105,7 @@ export const UserProvider = ({ children }) => {
         return updatedUser;
       }
     } catch (fetchErr) {
-      console.error("Failed to sync fresh user profile values:", fetchErr);
+      console.error("Failed to sync fresh user profile values:", fetchErr)
     }
     return null;
   }, [pinSuccess, updateUserData]);
@@ -173,6 +177,7 @@ export const UserProvider = ({ children }) => {
 
         setInternalUser(null);
         hasSyncedIdentity.current = false;
+        hasSyncedProfile.current = false; // Reset the sync flag on logout
 
         router.replace("/screens/FirstLaunchScreen");
 
@@ -257,13 +262,13 @@ export const UserProvider = ({ children }) => {
         }
       }
 
-      // Initial Stats Sync fallback if incomplete
-      if (!currentUser.referralCode) {
+      // Automatic Session Profile Sync (Strictly ONCE per session launch)
+      if (!hasSyncedProfile.current) {
+        hasSyncedProfile.current = true; // Lock immediately to prevent race conditions
         await syncProfile();
-        setLoading(false);
-      } else {
-        setLoading(false);
       }
+
+      setLoading(false);
     };
 
     backgroundSyncUser();
@@ -273,7 +278,7 @@ export const UserProvider = ({ children }) => {
   const contextValue = useMemo(() => ({
     user,
     setUser: updateUserDataWrapper,
-    syncProfile, 
+    syncProfile,
     loading,
     pinModalVisible,
     setPinModalVisible,

@@ -183,7 +183,7 @@ const TitleTag = React.memo(({
         }
     ], [config.text, config.glow, size, letterSpacing, hasHighGlow]);
 
-    if (auraVisuals?.label === "PLAYER") {
+    if (auraVisuals?.label === "PLAYER" && !equippedTitle) {
         return null;
     }
 
