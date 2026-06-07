@@ -1,172 +1,166 @@
-{
-  "expo": {
-    "name": "Oreblogda - Test Build",
-      "slug": "oreblogda",
-        "version": "2.2.1",
-          "orientation": "default",
-            "icon": "./assets/images/myicon.png",
-              "scheme": "oreblogda",
-                "userInterfaceStyle": "automatic",
-                  "newArchEnabled": true,
-                    "ios": {
-      "supportsTablet": true,
-        "bundleIdentifier": "com.kaytee.oreblogda.dev",
-          "associatedDomains": [
-            "applinks:oreblogda.com"
-          ]
-    },
-    "notification": {
-      "icon": "./assets/images/notification.png",
-        "color": "#E6F4FE"
-    },
-    "android": {
-      "adaptiveIcon": {
-        "backgroundColor": "#E6F4FE",
-          "foregroundImage": "./assets/images/myicon.png",
-            "backgroundImage": "./assets/images/myicon.png"
-      },
-      "package": "com.kaytee.oreblogda.dev",
-        "googleServicesFile": "./google-services.json",
-          "edgeToEdgeEnabled": true,
-            "predictiveBackGestureEnabled": false,
-              "permissions": [
-                "com.android.vending.BILLING",
-                "POST_NOTIFICATIONS"
-              ],
-                "intentFilters": [
-                  {
-                    "action": "VIEW",
-                    "autoVerify": true,
-                    "data": [
-                      {
-                        "scheme": "https",
-                        "host": "oreblogda.com"
-                      },
-                      {
-                        "scheme": "http",
-                        "host": "oreblogda.com"
-                      }
-                    ],
-                    "category": [
-                      "BROWSABLE",
-                      "DEFAULT"
-                    ]
-                  },
-                  {
-                    "action": "VIEW",
-                    "data": [
-                      {
-                        "scheme": "oreblogda"
-                      }
-                    ],
-                    "category": [
-                      "BROWSABLE",
-                      "DEFAULT"
-                    ]
-                  }
-                ]
-    },
-    "web": {
-      "output": "static",
-        "favicon": "./assets/images/myicon.png"
-    },
-    "plugins": [
-      "./withPurchases.js",
-      "expo-router",
-      [
-        "expo-splash-screen",
-        {
-          "image": "./assets/images/myicon.png",
-          "imageWidth": 200,
-          "resizeMode": "contain",
-          "backgroundColor": "#ffffff",
-          "dark": {
-            "image": "./assets/images/myicon.png",
-            "backgroundColor": "#050505"
-          }
-        }
-      ],
-      "expo-secure-store",
-      [
-        "expo-build-properties",
-        {
-          "android": {
-            "newArchEnabled": true,
-            "minSdkVersion": 25,
-            "launchMode": "singleTop",
-            "enableProguardInReleaseBuilds": true,
-            "enableMinifyInReleaseBuilds": false,
-            "networkSecurityConfig": "./network_security_config.xml"
-          },
-          "ios": {
-            "newArchEnabled": true
-          }
-        }
-      ],
-      "expo-video",
-      "expo-font",
-      "expo-image",
-      "expo-sharing",
-      "expo-web-browser",
-      [
-        "expo-notifications",
-        {
-          "icon": "./assets/images/notification.png",
-          "color": "#E6F4FE",
-          "sounds": []
-        }
-      ]
-    ],
-      "experiments": {
-      "typedRoutes": true,
-        "reactCompiler": true
-    },
-    "runtimeVersion": "v7_global",
-      "updates": {
-      "url": "https://u.expo.dev/b22841d4-0736-4aa0-89d2-d9a48af0defc",
-        "enableBsdiffPatchSupport": true,
-          "enabled": true,
-            "checkAutomatically": "ON_LOAD",
-              "fallbackToCacheTimeout": 0
-    },
-    "owner": "oreblog",
-      "extra": {
-      "router": { },
-      "eas": {
-        "projectId": "b22841d4-0736-4aa0-89d2-d9a48af0defc"
-      }
-    }
-  }
-}
+// {
+//   "expo": {
+//     "name": "Oreblogda - Test Build",
+//     "slug": "oreblogda",
+//     "version": "2.2.3",
+//     "orientation": "default",
+//     "icon": "./assets/images/myicon.png",
+//     "scheme": "oreblogda",
+//     "userInterfaceStyle": "automatic",
+//     "newArchEnabled": true,
+//     "owner": "oreblog",
+//     "runtimeVersion": "v7_global",
+//     "ios": {
+//       "supportsTablet": true,
+//       "bundleIdentifier": "com.kaytee.oreblogda.dev",
+//       "infoPlist": {
+//         "UIBackgroundModes": [
+//           "remote-notification",
+//           "remote-notification"
+//         ],
+//         "ITSAppUsesNonExemptEncryption": false
+//       }
+//     },
+//     "android": {
+//       "adaptiveIcon": {
+//         "backgroundColor": "#E6F4FE",
+//         "foregroundImage": "./assets/images/myicon.png",
+//         "backgroundImage": "./assets/images/myicon.png"
+//       },
+//       "package": "com.kaytee.oreblogda.dev",
+//       "googleServicesFile": "./google-services.json",
+//       "predictiveBackGestureEnabled": false,
+//       "permissions": [
+//         "com.android.vending.BILLING",
+//         "POST_NOTIFICATIONS"
+//       ],
+//       "intentFilters": [
+//         {
+//           "action": "VIEW",
+//           "autoVerify": true,
+//           "data": [
+//             {
+//               "scheme": "https",
+//               "host": "oreblogda.com"
+//             },
+//             {
+//               "scheme": "http",
+//               "host": "oreblogda.com"
+//             }
+//           ],
+//           "category": [
+//             "BROWSABLE",
+//             "DEFAULT"
+//           ]
+//         },
+//         {
+//           "action": "VIEW",
+//           "data": [
+//             {
+//               "scheme": "oreblogda"
+//             }
+//           ],
+//           "category": [
+//             "BROWSABLE",
+//             "DEFAULT"
+//           ]
+//         }
+//       ]
+//     },
+//     "web": {
+//       "output": "static",
+//       "favicon": "./assets/images/myicon.png"
+//     },
+//     "plugins": [
+//       "expo-router",
+//       [
+//         "expo-splash-screen",
+//         {
+//           "image": "./assets/images/myicon.png",
+//           "imageWidth": 200,
+//           "resizeMode": "contain",
+//           "backgroundColor": "#ffffff",
+//           "dark": {
+//             "image": "./assets/images/myicon.png",
+//             "backgroundColor": "#050505"
+//           }
+//         }
+//       ],
+//       "expo-secure-store",
+//       [
+//         "expo-build-properties",
+//         {
+//           "android": {
+//             "minSdkVersion": 25,
+//             "launchMode": "singleTop",
+//             "enableProguardInReleaseBuilds": true,
+//             "enableMinifyInReleaseBuilds": false,
+//             "networkSecurityConfig": "./network_security_config.xml"
+//           }
+//         }
+//       ],
+//       "expo-video",
+//       "expo-font",
+//       "expo-image",
+//       "expo-sharing",
+//       "expo-web-browser",
+//       [
+//         "expo-notifications",
+//         {
+//           "icon": "./assets/images/notification.png",
+//           "color": "#E6F4FE",
+//           "sounds": []
+//         }
+//       ]
+//     ],
+//     "experiments": {
+//       "typedRoutes": true
+//     },
+//     "updates": {
+//       "url": "https://u.expo.dev/b22841d4-0736-4aa0-89d2-d9a48af0defc",
+//       "enableBsdiffPatchSupport": true,
+//       "enabled": true,
+//       "checkAutomatically": "ON_LOAD",
+//       "fallbackToCacheTimeout": 0
+//     },
+//     "extra": {
+//       "router": {},
+//       "eas": {
+//         "projectId": "b22841d4-0736-4aa0-89d2-d9a48af0defc"
+//       }
+//     }
+//   }
+// }
 
 
-// And google service
-{
-  "project_info": {
-    "project_number": "1028280177256",
-      "project_id": "oreblogda-dev",
-        "storage_bucket": "oreblogda-dev.firebasestorage.app"
-  },
-  "client": [
-    {
-      "client_info": {
-        "mobilesdk_app_id": "1:1028280177256:android:01af1c3ad0492eb92fe1dd",
-        "android_client_info": {
-          "package_name": "com.kaytee.oreblogda.dev"
-        }
-      },
-      "oauth_client": [],
-      "api_key": [
-        {
-          "current_key": "AIzaSyBp45thUkz3r1BbZVXxrKVjjrdV8mN6XHk"
-        }
-      ],
-      "services": {
-        "appinvite_service": {
-          "other_platform_oauth_client": []
-        }
-      }
-    }
-  ],
-    "configuration_version": "1"
-}
+
+// // And google service
+// {
+//   "project_info": {
+//     "project_number": "1028280177256",
+//       "project_id": "oreblogda-dev",
+//         "storage_bucket": "oreblogda-dev.firebasestorage.app"
+//   },
+//   "client": [
+//     {
+//       "client_info": {
+//         "mobilesdk_app_id": "1:1028280177256:android:01af1c3ad0492eb92fe1dd",
+//         "android_client_info": {
+//           "package_name": "com.kaytee.oreblogda.dev"
+//         }
+//       },
+//       "oauth_client": [],
+//       "api_key": [
+//         {
+//           "current_key": "AIzaSyBp45thUkz3r1BbZVXxrKVjjrdV8mN6XHk"
+//         }
+//       ],
+//       "services": {
+//         "appinvite_service": {
+//           "other_platform_oauth_client": []
+//         }
+//       }
+//     }
+//   ],
+//     "configuration_version": "1"
+// }

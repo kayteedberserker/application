@@ -186,7 +186,7 @@ const getOperativeTitle = (media) => {
 	if (media.includes("Blue Lock")) return "Egoist";
 	if (media.includes("Elden Ring")) return "Tarnished";
 	if (media.includes("Valorant") || media.includes("CODM")) return "Agent";
-	return "Operative";
+	return "Player";
 };
 
 const getGenreReaction = (genres) => {
@@ -437,7 +437,7 @@ export default function FirstLaunchScreen() {
 			// 7. 🔄 REFRESH APP STATE
 			if (refreshStreak) refreshStreak();
 			if (refreshClanStatus) refreshClanStatus();
-			if(syncProfile) syncProfile(); // Ensure we have the freshest profile data, including inventory and clan status
+			if (syncProfile) syncProfile(); // Ensure we have the freshest profile data, including inventory and clan status
 			setRecoveredUid(data.user?.uid);
 			setShowAwakeningModal(true);
 			setTimeout(() => {
@@ -561,7 +561,7 @@ export default function FirstLaunchScreen() {
 				storage.set("HAS_SEEN_WELCOME", onboardingFlags.HAS_SEEN_WELCOME || "true");
 			}
 			if (refreshStreak) refreshStreak();
-			if(syncProfile) syncProfile(); // Ensure we have the freshest profile data, including inventory and clan status
+			if (syncProfile) syncProfile(); // Ensure we have the freshest profile data, including inventory and clan status
 			Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
 			if (isRecoveryMode) {
 				setRecoveredUid(data.user?.uid);
@@ -627,7 +627,7 @@ export default function FirstLaunchScreen() {
 	const floatingStyle = useAnimatedStyle(() => ({ transform: [{ translateY: floatAnim.value }] }));
 
 	if (loading) return <AnimeLoading tipType={"general"} message="Checking Session" subMessage="Initializing Neural Link" />;
-	if (isProcessing && !showAwakeningModal) return <AnimeLoading tipType={"general"} message="Synchronizing Soul" subMessage={`Welcome to the Guild, ${username || dynamicTitle || 'Operative'}`} />;
+	if (isProcessing && !showAwakeningModal) return <AnimeLoading tipType={"general"} message="Synchronizing Soul" subMessage={`Welcome to the Guild, ${username || dynamicTitle || 'Player'}`} />;
 
 	const isDialogueStep = step % 2 === 0 && !isRecoveryMode;
 	const currentPhase = Math.ceil(step / 2) || 1;
@@ -732,7 +732,7 @@ export default function FirstLaunchScreen() {
 						</View>
 
 						<Text className="text-gray-400 text-[11px] text-center leading-5 mb-8 font-medium px-2">
-							Your neural link has been re-established. Keep your Operative UID secure for future access.
+							Your neural link has been re-established. Keep your UID secure for future access.
 						</Text>
 
 						<TouchableOpacity
@@ -814,7 +814,7 @@ export default function FirstLaunchScreen() {
 											<TextInput
 												style={{ backgroundColor: isDark ? 'rgba(0,0,0,0.6)' : 'rgba(255,255,255,0.8)', borderColor: activeColor, color: primaryTextColor }}
 												className="w-full border-2 rounded-3xl px-6 py-6 mb-2 font-black italic text-xl text-center shadow-lg"
-												placeholder="ENTER OPERATIVE UID..."
+												placeholder="ENTER PLAYER UID..."
 												placeholderTextColor={THEME.textSecondary + '80'}
 												value={recoverId}
 												onChangeText={setRecoverId}

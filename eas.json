@@ -28,6 +28,19 @@
         "buildType": "app-bundle"
       },
       "channel": "production"
+    },
+    "development_simulator": {
+      "developmentClient": true,
+      "distribution": "internal",
+      "ios": {
+        "simulator": true
+      }
+    },
+    "preview_simulator": {
+      "distribution": "internal",
+      "ios": {
+        "simulator": true
+      }
     }
   },
   "submit": {

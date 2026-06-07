@@ -28,7 +28,7 @@ const initializeServerIndex = async () => {
       }
     }
   } catch (e) {
-    console.error("❌ Failed to read server index from SecureStore:", e);
+    console.error("❌ Failed to read server index from SecureStore:", e)
   }
 };
 initializeServerIndex();
@@ -36,7 +36,7 @@ initializeServerIndex();
 // Returns the live dynamic base context route path mapping
 const getBaseUrl = () => {
   if (__DEV__) {
-    return "http://10.143.187.121:3000/api"
+    return "http://192.168.1.99:3000/api"
   }
   return PRODUCTION_SERVERS[currentServerIndex]
 };
@@ -50,10 +50,6 @@ const handleServerFailover = async () => {
   const oldUrl = PRODUCTION_SERVERS[currentServerIndex];
   currentServerIndex = (currentServerIndex + 1) % PRODUCTION_SERVERS.length;
   const newUrl = PRODUCTION_SERVERS[currentServerIndex];
-
-  if (__DEV__ || console.log) {
-    console.log(`🚨 Server limit reached or connection failed at: ${oldUrl}. Automatically shifting traffic engine down to: ${newUrl}`);
-  }
 
   // Save the new working server configuration to storage so next launch is instant
   try {
@@ -288,6 +284,8 @@ export const apiFetch = async (endpoint, options = {}, retryCount = 0) => {
 
   delete fetchOptions.onProgress;
 
+  // 🧪 TELEMETRY DEBUG: Log exact request outline before network transmission
+
   try {
     let response;
 
@@ -298,8 +296,11 @@ export const apiFetch = async (endpoint, options = {}, retryCount = 0) => {
       response = await fetch(url, fetchOptions);
     }
 
+    // 📥 TELEMETRY DEBUG: Log response metadata immediately upon receipt
+
     // Intercept response status codes to intercept Vercel execution rate threshold exhaustion
     if (isVercelLimitError(response.status) && retryCount < PRODUCTION_SERVERS.length) {
+      if (__DEV__) console.warn(`⚠️ [THE SYSTEM] Vercel limit detected (${response.status}). Attempting failover...`);
       await handleServerFailover();
       return await apiFetch(endpoint, options, retryCount + 1);
     }
@@ -315,6 +316,7 @@ export const apiFetch = async (endpoint, options = {}, retryCount = 0) => {
     // to block "Unexpected end of input" exceptions before they manifest.
     try {
       const responseText = await clonedResponse.text();
+
       if (responseText && responseText.trim() !== "") {
         data = JSON.parse(responseText);
       }
@@ -324,6 +326,7 @@ export const apiFetch = async (endpoint, options = {}, retryCount = 0) => {
 
     // 1. Handle Single-Session "Kicks"
     if (response.status === 421 && data.message === "SESSION_INVALID") {
+      if (__DEV__) console.log(`🛑 [THE SYSTEM] Session invalid kick rule matched.`);
       if (!isLoggingOut && onSessionExpired) {
         isLoggingOut = true;
         onSessionExpired();
@@ -333,14 +336,17 @@ export const apiFetch = async (endpoint, options = {}, retryCount = 0) => {
 
     // 2. Handle Token Expiry
     if (response.status === 421 || response.status === 455) {
+      if (__DEV__) console.log(`🔑 [THE SYSTEM] Token expired (${response.status}). Triggering silent refresh chain...`);
       const refreshSuccess = await attemptTokenRefresh();
       if (refreshSuccess) {
         const newToken = await SecureStore.getItemAsync('userToken');
         const retryHeaders = { ...headers, "Authorization": `Bearer ${newToken}` };
+        if (__DEV__) console.log(`🔄 [THE SYSTEM] Token refresh successful. Retrying original payload...`);
         return await apiFetch(endpoint, { ...options, headers: retryHeaders }, retryCount);
       }
 
       if (requestPinCallback) {
+        if (__DEV__) console.log(`📌 [THE SYSTEM] Refresh failed. Prompting user security PIN backup fallback verification...`);
         const pinSuccess = await requestPinCallback();
         if (pinSuccess) {
           const newToken = await SecureStore.getItemAsync('userToken');
@@ -353,11 +359,17 @@ export const apiFetch = async (endpoint, options = {}, retryCount = 0) => {
     return response;
 
   } catch (error) {
+    // 💥 TELEMETRY DEBUG: Log structural or hardware connection layer crash instances
+    if (__DEV__) {
+      console.error(`💥 [THE SYSTEM] FATAL FETCH EXCEPTION CAUGHT:`, error);
+    }
+
     if (error.message?.includes("Network request failed") || error.message?.includes("Upload error")) {
       console.error("Security Block, limit drop, or Network Issue encountered:", error);
     }
 
     if (retryCount < PRODUCTION_SERVERS.length) {
+      if (__DEV__) console.warn(`🔄 [THE SYSTEM] Retrying target sequence context via failover loops...`);
       await handleServerFailover();
       return await apiFetch(endpoint, options, retryCount + 1);
     }
@@ -366,9 +378,9 @@ export const apiFetch = async (endpoint, options = {}, retryCount = 0) => {
 };
 
 /**
- * 🛰️ Returns the live active base URL for webhook bindings
- * Safeguards against local private IPs which Cloudinary cannot route to.
- */
+* 🛰️ Returns the live active base URL for webhook bindings
+* Safeguards against local private IPs which Cloudinary cannot route to.
+*/
 export const getActiveBaseUrl = () => {
   const activeUrl = getBaseUrl();
 

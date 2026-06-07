@@ -21,6 +21,11 @@ const INSTALLED_RUNTIME = Updates.runtimeVersion || 'v1';
 const SNOOZE_KEY = 'OREBLOGDA_UPDATE_SNOOZE';
 const SNOOZE_DURATION = 60 * 60 * 1000; // 1 Hour in milliseconds
 
+// ⚡️ GLOBAL SESSION FLAG
+// Keeps track of the check at the module level so it strictly fires once per app launch,
+// regardless of how many times the UpdateHandler component unmounts/remounts.
+let hasCheckedSessionUpdate = false;
+
 // Helper to check standard app version
 const isAppUpdateRequired = (installed, latest) => {
   if (!latest) return false;
@@ -64,7 +69,11 @@ export default function UpdateHandler() {
   const pulseAnim = useSharedValue(1);
 
   useEffect(() => {
-    fetchLatestVersion();
+    // ⚡️ STRICT SESSION LOCK
+    if (!hasCheckedSessionUpdate) {
+      hasCheckedSessionUpdate = true; // Lock it immediately
+      fetchLatestVersion();
+    }
   }, []);
 
   useEffect(() => {

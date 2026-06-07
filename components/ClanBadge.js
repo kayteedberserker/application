@@ -28,13 +28,6 @@ import {
 import Svg, { G, Path as SvgPath } from 'react-native-svg';
 import { Text } from './Text';
 
-// Tier Definitions
-const TIER = {
-    LEGENDARY: 'legendary', // Sharp Hexagon
-    EPIC: 'epic',           // Rounded Hexagon
-    RARE: 'rare'            // Slanted Rectangle
-};
-
 /**
  * PATH FACTORY
  * Generates shapes with internal padding to prevent clipping.
@@ -45,7 +38,7 @@ const getBadgePath = (size, tier) => {
     const s = size - padding * 2;
     const center = size / 2;
 
-    if (tier === TIER.LEGENDARY || tier === TIER.EPIC) {
+    if (tier === TIER.LEGENDARY || tier === TIER.MYTHIC || tier === TIER.EPIC) {
         const r = s / 2;
         for (let i = 0; i < 6; i++) {
             const angle = (Math.PI / 3) * i - Math.PI / 2;
@@ -66,27 +59,47 @@ const getBadgePath = (size, tier) => {
     return path;
 };
 
+const TIER = {
+    RARE: "RARE",
+    EPIC: "EPIC",
+    LEGENDARY: "LEGENDARY",
+    MYTHIC: "MYTHIC" // 🌟 Hyper-exclusive new tier
+};
+
 export const BADGE_LIBRARY = {
     "The Pirate King": { icon: "skull-crossbones", title: "Pirate King", sub: "Weekly #1", color: "#fbbf24", tier: TIER.LEGENDARY },
-    "The Pillars": { icon: "pillar", title: "The Pillars", sub: "Weekly Top 3", color: "#f87171", tier: TIER.EPIC },
+
+    // 🎨 SWAPPED RED -> BURNT CHILI ORANGE
+    "The Pillars": { icon: "pillar", title: "The Pillars", sub: "Weekly Top 3", color: "#f97316", tier: TIER.EPIC },
+
     "Hunter Association": { icon: "compass-outline", title: "Hunters", sub: "Weekly Top 10", color: "#60a5fa", tier: TIER.RARE },
     "Talk-no-jutsu": { icon: "chat-processing", title: "Talk-no-jutsu", sub: "Most Discussed", color: "#fbbf24", tier: TIER.LEGENDARY },
-    "Gear 2nd": { icon: "lightning-bolt", title: "Gear 2nd", sub: "2.0X Growth", color: "#ef4444", tier: TIER.EPIC },
+
+    // 🎨 SWAPPED RED -> HOT NEON PINK (Fits the Gear 2nd aesthetic perfectly)
+    "Gear 2nd": { icon: "lightning-bolt", title: "Gear 2nd", sub: "2.0X Growth", color: "#ec4899", tier: TIER.EPIC },
+
     "Gotei 13": { icon: "shield-sword", title: "Gotei 13", sub: "10+ Members", color: "#a855f7", tier: TIER.RARE },
     "The 5 Kage": { icon: "account-group", title: "The 5 Kage", sub: "5+ Members", color: "#f97316", tier: TIER.LEGENDARY },
     "Library of Ohara": { icon: "library", title: "Ohara", sub: "1K+ Posts", color: "#3b82f6", tier: TIER.RARE },
     "Sage Mode": { icon: "eye", title: "Sage Mode", sub: "High Activity", color: "#10b981", tier: TIER.RARE },
     "Zenkai Boost": { icon: "dna", title: "Zenkai Boost", sub: "1.5X Growth", color: "#f472b6", tier: TIER.EPIC },
     "Unlimited Chakra": { icon: "infinity", title: "Unlimited", sub: "4 Wks Stable", color: "#2dd4bf", tier: TIER.RARE },
-    "Final Form": { icon: "fire", title: "Final Form", sub: "Rank 6 Achieved", color: "#f87171", tier: TIER.EPIC },
-    "One-Shot": { icon: "target", title: "One-Shot", sub: "500 Likes/Hr", color: "#ef4444", tier: TIER.EPIC },
+
+    // 🎨 SWAPPED RED -> CORAL SUNSET
+    "Final Form": { icon: "fire", title: "Final Form", sub: "Rank 6 Achieved", color: "#ff7a59", tier: TIER.EPIC },
+
+    // 🎨 SWAPPED RED -> CRIMSON MAGENTA
+    "One-Shot": { icon: "target", title: "One-Shot", sub: "500 Likes/Hr", color: "#be185d", tier: TIER.EPIC },
+
     "King's Haki": { icon: "waves", title: "King's Haki", sub: "100K+ Total Likes", color: "#7c3aed", tier: TIER.LEGENDARY },
     "Scouter Lvl 1": { icon: "radar", title: "Scouter Lvl 1", sub: "1K+ Followers", color: "#4ade80", tier: TIER.RARE },
     "Scouter Lvl 2": { icon: "radar", title: "Scouter Lvl 2", sub: "5K+ Followers", color: "#22c55e", tier: TIER.RARE },
     "Scouter Lvl 3": { icon: "radar", title: "Scouter Lvl 3", sub: "10K+ Followers", color: "#16a34a", tier: TIER.RARE },
-    "Scouter Lvl 4": { icon: "radar", title: "Scouter Lvl 4", sub: "50K+ Followers", color: "#15803d", tier: TIER.EPIC },
+    "Scouter Lvl 4": { icon: "radar", title: "Scouter Lvl 4", sub: "550K+ Followers", color: "#15803d", tier: TIER.EPIC },
     "Scouter: Broken Scale": { icon: "alert-decagram", title: "Broken Scale", sub: "80K+ Followers", color: "#facc15", tier: TIER.EPIC },
-    "Scouter: It's Over 9000": { icon: "flash", title: "Over 9000", sub: "100K+ Followers", color: "#dc2626", tier: TIER.LEGENDARY },
+
+    // 🎨 SWAPPED RED -> DEEP VIOLET ECLIPSE
+    "Scouter: It's Over 9000": { icon: "flash", title: "Over 9000", sub: "100K+ Followers", color: "#4c1d95", tier: TIER.LEGENDARY },
 
     // ⚔️ ACTUAL CUSTOM CLAN PROGRESSION TIERS
     "HYPE VANGUARD": {
@@ -97,14 +110,10 @@ export const BADGE_LIBRARY = {
         icon: ({ size, color }) => (
             <Svg width={size} height={size} viewBox="0 0 100 100" fill="none">
                 <G transform="scale(0.85) translate(8, 8)">
-                    {/* Multi-layered Cyber Aegis Front Shield */}
                     <SvgPath d="M50 5 L90 20 V55 C90 75 72 90 50 95 C28 90 10 75 10 55 V20 Z" stroke={color} strokeWidth="4" strokeLinejoin="round" />
-                    {/* Inner Negative Space Fragment Plate */}
                     <SvgPath d="M50 17 L80 28 V53 C80 68 67 80 50 84 C33 80 20 68 20 53 V28 Z" fill={`${color}20`} stroke={color} strokeWidth="2" />
-                    {/* Twin Wing Tech Rails */}
                     <SvgPath d="M32 38 L45 50 L32 62" stroke={color} strokeWidth="4" strokeLinecap="round" strokeLinejoin="round" />
                     <SvgPath d="M68 38 L55 50 L68 62" stroke={color} strokeWidth="4" strokeLinecap="round" strokeLinejoin="round" />
-                    {/* Core Core Laser Node */}
                     <SvgPath d="M50 42 L55 50 L50 58 L45 50 Z" fill={color} />
                 </G>
             </Svg>
@@ -118,37 +127,29 @@ export const BADGE_LIBRARY = {
         icon: ({ size, color }) => (
             <Svg width={size} height={size} viewBox="0 0 100 100" fill="none">
                 <G transform="scale(0.85) translate(8, 8)">
-                    {/* Outer Interlocking Geometric Hex-Triplex Frame */}
                     <SvgPath d="M50 8 L92 80 L8 80 Z" stroke={color} strokeWidth="4" strokeLinejoin="round" />
-                    {/* Carved Out Cyberpunk Underlayer */}
                     <SvgPath d="M50 24 L80 74 H20 Z" fill={`${color}25`} stroke={color} strokeWidth="2" />
-                    {/* Floating Tech Mandibles */}
                     <SvgPath d="M50 38 L65 65 H35 Z" stroke={color} strokeWidth="3" strokeLinejoin="round" />
-                    {/* Central Syndicate Core Crest */}
                     <SvgPath d="M50 48 L56 58 H44 Z" fill={color} />
-                    {/* Mechanical Sub-lines */}
                     <SvgPath d="M50 8 V24 M8 80 L20 74 M92 80 L80 74" stroke={color} strokeWidth="3" strokeLinecap="round" />
                 </G>
             </Svg>
         )
     },
+
+    // 🎨 SWAPPED EXPULSION OF GENERIC RED -> BURNT AMBER GOLD FOR DYNASTY
     "HYPE DYNASTY": {
         title: "Hype Dynasty",
         sub: "500K+ Points",
-        color: "#ef4444",
+        color: "#eab308",
         tier: TIER.LEGENDARY,
         icon: ({ size, color }) => (
             <Svg width={size} height={size} viewBox="0 0 100 100" fill="none">
                 <G transform="scale(0.85) translate(8, 8)">
-                    {/* Shogunate Mecha Overlord Crest / Layered Pagoda Citadel */}
                     <SvgPath d="M10 25 Q50 10 90 25 L82 35 Q50 25 18 35 Z" fill={color} />
-                    {/* Main Gate Columns */}
                     <SvgPath d="M26 35 V85 H36 V35 Z M64 35 V85 H74 V35 Z" stroke={color} strokeWidth="3" fill={`${color}20`} />
-                    {/* Aggressive Roof Wings */}
                     <SvgPath d="M18 48 Q50 38 82 48 L76 56 Q50 48 24 56 Z" fill={color} opacity="0.8" />
-                    {/* Twin Energy Broad-blades In Center */}
                     <SvgPath d="M44 42 L50 35 L56 42 V75 L50 82 L44 75 Z" stroke={color} strokeWidth="2" fill={color} />
-                    {/* Foundation Guard Rails */}
                     <SvgPath d="M5 85 H95 V92 H5 Z" fill={color} />
                 </G>
             </Svg>
@@ -162,42 +163,56 @@ export const BADGE_LIBRARY = {
         icon: ({ size, color }) => (
             <Svg width={size} height={size} viewBox="0 0 100 100" fill="none">
                 <G transform="scale(0.85) translate(8, 8)">
-                    {/* Five-Point Spiked Razor Crown Design */}
                     <SvgPath d="M8 28 L24 48 L50 15 L76 48 L92 28 V82 H8 Z" stroke={color} strokeWidth="4" strokeLinejoin="round" />
-                    {/* Imperial Inner Guard Visor */}
                     <SvgPath d="M18 52 L28 62 H72 L82 52 V74 H18 Z" fill={`${color}30`} stroke={color} strokeWidth="2" />
-                    {/* Relic Slots / Diamond Emblems */}
                     <SvgPath d="M50 35 L56 45 L50 55 L44 45 Z" fill={color} />
                     <SvgPath d="M24 55 L28 61 L24 67 L20 61 Z" fill={color} opacity="0.7" />
                     <SvgPath d="M76 55 L80 61 L76 67 L72 61 Z" fill={color} opacity="0.7" />
-                    {/* Lower Fortress Grid Base */}
                     <SvgPath d="M8 82 H92 V90 H8 Z" fill={color} />
                 </G>
             </Svg>
         )
     },
-    "PEAK CLAN": {
+
+    // 🌟 BRAND NEW ADDITION: EXCLUSIVE CO-FOUNDING PARTNER CLAN BADGE
+    "Peak Clan": {
         title: "Peak Clan",
         sub: "The Absolute Summit",
-        color: "#10b981", // Emerald Neon Green
+        color: "#06b6d4", // Electric Cyber Cyan
         tier: TIER.LEGENDARY,
         icon: ({ size, color }) => (
             <Svg width={size} height={size} viewBox="0 0 100 100" fill="none">
                 <G transform="scale(0.85) translate(8, 8)">
-                    {/* Outer Apex / Mountain Frame Geometry */}
-                    <SvgPath d="M50 5 L92 45 L80 90 H20 L8 45 Z" stroke={color} strokeWidth="4" strokeLinejoin="round" />
+                    {/* Futuristic Double Shield Ring */}
+                    <SvgPath d="M50 5 L88 22 V50 C88 72 72 89 50 95 C28 89 12 72 12 50 V22 Z" stroke={color} strokeWidth="4" />
+                    <SvgPath d="M50 14 L78 28 V50 C78 67 66 81 50 86 C34 81 22 67 22 50 V28 Z" fill={`${color}15`} stroke={color} strokeWidth="1.5" strokeDasharray="4 2" />
+                    {/* Sleek Minimalist Twin Lightning Core */}
+                    <SvgPath d="M55 25 L32 52 H48 L45 75 L68 48 H52 Z" fill={color} />
+                </G>
+            </Svg>
+        )
+    },
 
-                    {/* Inner Fractured Grid Plate */}
-                    <SvgPath d="M50 20 L80 50 L70 80 H30 L20 50 Z" fill={`${color}20`} stroke={color} strokeWidth="1.5" />
-
-                    {/* The Peak Crest (Geometric Split-Apex Mountain) */}
-                    <SvgPath d="M50 28 L72 72 H58 L50 50 L42 72 H28 Z" fill={color} stroke={color} strokeWidth="2" strokeLinejoin="round" />
-
-                    {/* Upward Laser Guidewires (Ascension Paths) */}
-                    <SvgPath d="M18 78 L35 42 M82 78 L65 42" stroke={color} strokeWidth="3" strokeLinecap="round" opacity="0.8" />
-
-                    {/* Floating Zenith Crown Star */}
-                    <SvgPath d="M50 12 L53 18 L59 18 L54 22 L56 28 L50 24 L44 28 L46 22 L41 18 L47 18 Z" fill={color} />
+    // 🟥 THE ABSOLUTE PINNACLE: EXCLUSIVE MYTHIC RED THEME
+    "Prime Clan": {
+        title: "Prime Clan",
+        sub: "Official Verified Partner",
+        color: "#dc2626", // 🛑 Exclusive Crimson Mythic Red
+        tier: TIER.MYTHIC,
+        icon: ({ size, color }) => (
+            <Svg width={size} height={size} viewBox="0 0 100 100" fill="none">
+                {/* 🚀 Scaled up from 0.85 to 0.96 to make the icon larger inside its frame */}
+                <G transform="scale(0.96) translate(2, 2)">
+                    {/* Heavy Cyber Citadel Outer Edge */}
+                    <SvgPath d="M50 3 L95 25 L80 88 H20 L5 25 Z" stroke={color} strokeWidth="4.5" strokeLinejoin="round" />
+                    {/* Radioactive Under-Glow Fragment Mesh */}
+                    <SvgPath d="M50 16 L83 32 L72 78 H28 L17 32 Z" fill={`${color}25`} stroke={color} strokeWidth="2" />
+                    {/* The Giant Split-Apex Shard Volcanic Mountain */}
+                    <SvgPath d="M50 22 L76 72 H60 L50 48 L40 72 H24 Z" fill={color} stroke={color} strokeWidth="2" strokeLinejoin="round" />
+                    {/* Kinetic Force Energy Rays radiating out */}
+                    <SvgPath d="M12 82 L30 38 M88 82 L70 38" stroke={color} strokeWidth="3" strokeLinecap="round" />
+                    {/* The Zenith Halo Star (Overlord Core) */}
+                    <SvgPath d="M50 8 L54 15 L61 15 L56 19 L58 25 L50 21 L42 25 L44 19 L39 15 L46 15 Z" fill={color} />
                 </G>
             </Svg>
         )
@@ -277,6 +292,7 @@ const BadgeDetailModal = memo(BadgeDetailModalComponent);
 // Extracted ClanBadge Component
 const ClanBadgeComponent = ({ badgeName, size = 80 }) => {
     const badge = BADGE_LIBRARY[badgeName];
+
     const [modalVisible, setModalVisible] = useState(false);
 
     const shine = useSharedValue(0);
@@ -304,7 +320,8 @@ const ClanBadgeComponent = ({ badgeName, size = 80 }) => {
     if (!badge) return null;
 
     const iconSize = size * 0.46; // Marginally upscaled to balance custom vectors
-    const glowRadius = badge.tier === TIER.LEGENDARY ? 12 : 5;
+    const glowRadius = (badge.tier === TIER.LEGENDARY || badge.tier === TIER.MYTHIC) ? 12 : 5;
+
 
     return (
         <>

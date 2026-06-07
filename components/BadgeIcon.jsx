@@ -1,6 +1,5 @@
 // BadgeIcon.jsx
 import { MaterialCommunityIcons } from '@expo/vector-icons';
-import LottieView from 'lottie-react-native';
 import React, { useMemo } from 'react'; // Added useMemo
 import { View } from 'react-native';
 import { SvgXml } from "react-native-svg";
@@ -58,16 +57,7 @@ export default function BadgeIcon({ badge, size = 25, containerStyle, isDark }) 
 
     return (
         <View style={containerStyle}>
-            {isLottie ? (
-                <LottieView
-                    autoPlay
-                    loop
-                    renderMode="hardware" // 🔥 Essential for Infinix GPU performance
-                    style={{ width: size * 1.5, height: size * 1.5 }}
-                    source={source}
-                    resizeMode="contain"
-                />
-            ) : visual.svgCode ? (
+            {visual.svgCode ? (
                 <RemoteSvgIcon xml={visual.svgCode} size={size} />
             ) : null}
         </View>

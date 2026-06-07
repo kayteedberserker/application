@@ -3,7 +3,6 @@ import { Canvas, Group, Mask, Path, Rect, Skia, LinearGradient as SkiaLinearGrad
 import { Image } from 'expo-image';
 import { LinearGradient } from 'expo-linear-gradient';
 import { useRouter } from 'expo-router';
-import LottieView from 'lottie-react-native';
 import { MotiView } from 'moti';
 import React, { memo, useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { ActivityIndicator, Dimensions, Linking, Modal, TouchableOpacity, useColorScheme, View } from 'react-native';
@@ -132,21 +131,6 @@ const MiniSkiaCard = memo(({ colors, glow, abbr, width = 36, height = 48, isDark
 });
 
 const RemoteSvgIcon = React.memo(({ xml, lottieUrl, lottieJson, size = 50, color }) => {
-    if (lottieJson || lottieUrl) {
-        return (
-            <View style={{ width: size, height: size, alignItems: 'center', justifyContent: 'center' }}>
-                <LottieView
-                    source={lottieJson ? lottieJson : { uri: lottieUrl }}
-                    autoPlay
-                    loop
-                    style={{ width: size * 1.2, height: size * 1.2 }}
-                    resizeMode="contain"
-                    renderMode="hardware"
-                />
-            </View>
-        );
-    }
-
     const processedXml = useMemo(() => {
         if (!xml || typeof xml !== 'string' || !xml.includes('<svg')) {
             return null;
@@ -349,7 +333,7 @@ export default function DailyModal() {
         const localClaimedToday = storage.getBoolean(`daily_claimed_${todayStr}`);
         const serverClaimedToday = user.lastClaimedDate ? new Date(user.lastClaimedDate).toDateString() === todayStr : false;
         const canClaimToday = !localClaimedToday && !serverClaimedToday;
-        const currentStreak = user.consecutiveStreak || 0
+        const currentStreak = user.consecutiveStreak || 1
 
         if (canClaimToday) {
             setTargetDay(currentStreak)

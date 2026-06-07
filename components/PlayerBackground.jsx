@@ -1,6 +1,5 @@
 import { Image } from 'expo-image';
 import { LinearGradient } from 'expo-linear-gradient'; // ⚡️ ADDED: Native Expo Gradient Support
-import LottieView from 'lottie-react-native';
 import React, { useEffect, useMemo, useRef } from 'react';
 import { StyleSheet, View } from 'react-native'; // ⚡️ ADDED: Image
 import Animated, {
@@ -127,20 +126,7 @@ const PlayerBackground = React.memo(({ equippedBg, themeColor, borderRadius = 48
                 ) : null}
 
                 {/* 2. LOTTIE ANIMATION */}
-                {hasLottie ? (
-                    <LottieView
-                        ref={lottieRef}
-                        source={lottieSource}
-                        autoPlay={shouldAnimate}
-                        loop={shouldAnimate}
-                        style={[StyleSheet.absoluteFill]}
-                        resizeMode="cover"
-                        renderMode="hardware"
-                        colorFilters={[{ keypath: "**", color: primary }]}
-                    />
-
-                    /* 3. CUSTOM SVG DESIGNS */
-                ) : processedSvg ? (
+                {processedSvg ? (
                     <View style={[StyleSheet.absoluteFill, { opacity: bgOpacity }]}>
                         <SvgXml
                             xml={processedSvg}

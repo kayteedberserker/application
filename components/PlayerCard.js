@@ -185,7 +185,7 @@ export default function PlayerCard({ author, totalPosts, isDark }) {
               <Text className="text-xl font-black" style={{ color: writerRank.color }}>{totalAura}</Text>
             </View>
             <View className="items-center flex-1 border-l border-gray-100 dark:border-gray-800">
-              <Text className="text-[11px] font-black text-gray-400 uppercase tracking-widest mb-1">Glory</Text>
+              <Text className="text-[11px] font-black text-gray-400 uppercase tracking-widest mb-1">Weekly Aura</Text>
               <Text className="text-xl font-black" style={{ color: '#ec4899' }}>+{author.weeklyAura || 0}</Text>
             </View>
             <View className="items-center flex-1 border-l border-gray-100 dark:border-gray-800">

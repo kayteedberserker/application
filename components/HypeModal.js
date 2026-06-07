@@ -29,25 +29,25 @@ import CoinIcon from './ClanIcon';
 // ⚡️ RARITY CONFIG WITH ABBREVIATIONS (SKIA SHAPES REMOVED)
 const HYPE_TIERS = {
     FREE: {
-        cost: 0, points: 50,
+        cost: 0, points: 10,
         label: 'FREE HYPE', rarity: 'COMMON', abbr: 'FH',
         colors: ['#475569', '#1e293b', '#0f172a'],
         glow: '#94a3b8'
     },
     STANDARD: {
-        cost: 20, points: 100,
+        cost: 50, points: 50,
         label: 'STANDARD', rarity: 'RARE', abbr: 'SH',
         colors: ['#0284c7', '#0369a1', '#082f49'],
         glow: '#38bdf8'
     },
     SUPER: {
-        cost: 100, points: 600,
+        cost: 200, points: 250,
         label: 'SUPER HYPE', rarity: 'EPIC', abbr: 'SP',
         colors: ['#9333ea', '#6b21a8', '#3b0764'],
         glow: '#c084fc'
     },
     MEGA: {
-        cost: 400, points: 3000,
+        cost: 500, points: 700,
         label: 'MEGA BLAST', rarity: 'LEGENDARY', abbr: 'ME',
         colors: ['#d97706', '#92400e', '#451a03'],
         glow: '#fbbf24'

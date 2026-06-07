@@ -31,7 +31,7 @@ export default function Poll({ poll, isVisible, postId, readOnly = false }) {
         postId ? `/posts/${postId}` : null,
         fetcher,
         {
-            refreshInterval: isVisible ? 5000 : 180000,
+            refreshInterval: isVisible ? 60000 : 300000,
             revalidateOnFocus: true,
             dedupingInterval: 0,
         }

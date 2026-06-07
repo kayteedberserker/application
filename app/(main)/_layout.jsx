@@ -206,7 +206,7 @@ export default function MainLayout() {
             const legacyUserStr = await AsyncStorage.getItem("mobileUser");
 
             if (legacyUserStr) {
-                if (__DEV__) console.log("Gatekeeper: Migrating veteran operative to MMKV...");
+                if (__DEV__) console.log("Gatekeeper: Migrating veteran player to MMKV...");
                 storage.set("mobileUser", legacyUserStr);
                 const parsed = JSON.parse(legacyUserStr);
                 setUser(parsed);

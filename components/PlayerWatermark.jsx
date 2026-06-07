@@ -1,6 +1,5 @@
 import { MaterialCommunityIcons } from "@expo/vector-icons";
 import { Image } from "expo-image";
-import LottieView from 'lottie-react-native';
 import { memo, useEffect, useMemo, useRef } from 'react';
 import { StyleSheet, View } from 'react-native'; // ⚡️ ADDED: Image
 import Animated, {
@@ -100,21 +99,6 @@ const PlayerWatermark = memo(({ equippedWatermark, isDark, isFeed = false, isVis
                             height: iconSize,
                         }}
                         contentFit="contain"
-                    />
-                ) : hasLottie ? (
-                    <LottieView
-                        autoPlay={shouldAnimate}
-                        loop={shouldAnimate}
-                        ref={animation}
-                        renderMode="hardware"
-                        style={{
-                            width: iconSize * 1.2,
-                            height: iconSize * 1.2,
-                        }}
-                        source={memoizedLottieSource}
-                        colorFilters={watermarkVisual.applyThemeColor ? [
-                            { keypath: "**", color: iconColor }
-                        ] : []}
                     />
                 ) : processedSvg ? (
                     <SvgXml

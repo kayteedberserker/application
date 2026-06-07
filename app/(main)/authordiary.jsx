@@ -106,8 +106,9 @@ export default function AuthorDiaryDashboard() {
     const [message, setMessage] = useState("");
 
     // Category States
-    const [category, setCategory] = useState("Review");
-    const [clanSubCategory, setClanSubCategory] = useState("General");
+    const [category, setCategory] = useState("Clan");
+
+    const [clanSubCategory, setClanSubCategory] = useState("Review");
 
     const [mediaUrlLink, setMediaUrlLink] = useState("");
     const [selection, setSelection] = useState({ start: 0, end: 0 });
@@ -146,6 +147,14 @@ export default function AuthorDiaryDashboard() {
 
     const CACHE_KEY_TODAY = `CACHE_TODAY_POSTS_${fingerprint}`;
     const DRAFT_KEY = `draft_${fingerprint}`;
+    useEffect(() => {
+        console.log(isInClan, "isInClan");
+
+        if (!isInClan) {
+            console.log("User is not in a clan, setting category to 'Review'");
+            setCategory("Review");
+        }
+    }, [isInClan]);
 
     // =================================================================
     // 1. INTERCEPT: CHECK FOR FIRST POST FLAG
@@ -174,7 +183,7 @@ export default function AuthorDiaryDashboard() {
                     if (data.message) setMessage(data.message);
                     if (data.category) setCategory(data.category);
                     if (data.clanSubCategory) setClanSubCategory(data.clanSubCategory);
-                    if (data.hasPoll) setHasPoll(data.hasPoll);
+                    if (data.hasPoll) setHasPoll(data.hasPoll)
                     if (data.pollOptions) setPollOptions(data.pollOptions);
                     if (data.timestamp) setLastSavedTime(data.timestamp);
                 }
@@ -280,7 +289,7 @@ export default function AuthorDiaryDashboard() {
                     text: "Clear Everything",
                     style: "destructive",
                     onPress: async () => {
-                        setTitle(""); setMessage(""); setCategory("Review"); setHasPoll(false);
+                        setTitle(""); setMessage(""); setCategory(isInClan ? "Clan" : "Review"); setClanSubCategory("Review"); setHasPoll(false);
                         setPollOptions(["", ""]); setMediaUrlLink(""); setPickedImage(false); setMediaList([]);
                         try {
                             await AsyncStorage.removeItem(DRAFT_KEY);
@@ -544,7 +553,9 @@ export default function AuthorDiaryDashboard() {
     // ----------------------------------------------------------------------
 
     const handleSubmit = async () => {
+
         if (!title.trim() || !message.trim()) { CustomAlert("Error", "Title and Message are required."); return; }
+
         if (isOfflineMode) { CustomAlert("Offline", "Cannot transmit data while offline."); return; }
 
         if (hasPoll && (pollOptions[0] === "" || pollOptions.length < 2)) {
@@ -585,6 +596,7 @@ export default function AuthorDiaryDashboard() {
             });
 
             const data = await response.json();
+
             if (!response.ok) throw new Error(data.message || "Failed to initialize post matrix.");
 
             // Text-only bypass path
@@ -603,30 +615,21 @@ export default function AuthorDiaryDashboard() {
             // 🛣️ PATH B: Multi-File Background Pipeline Handoff
             const { post, signData } = data;
 
-            Notifications.scheduleNotificationAsync({
-                identifier: 'media_upload_status',
-                content: {
-                    title: 'Uploading Media',
-                    body: `Background system processing ${mediaList.length} attachment(s)...`,
-                },
-                trigger: null,
-            }).catch(e => console.log("Expo Notifications error:", e));
-
-            // Fire UI state setup
+            // 🌟 Fire UI state setup (Triggers Notifee Foreground Service via Context)
             startUpload(mediaList.length);
 
             // 🌐 MAP AND TRANSMIT ALL FILES IMMEDIATELY
-            // Registering everything instantly ensures native channels take full control before app sleep
-            const uploadPromises = mediaList.map((item) => {
-                const endpointUrl = `https://api.cloudinary.com/v1_1/${signData.cloudName}/${item.type === "video" ? "video" : "image"}/upload`;
+            const uploadPromises = mediaList.map((item, index) => {
+                const currentSignData = Array.isArray(signData) ? signData[index] : signData;
+                const endpointUrl = `https://api.cloudinary.com/v1_1/${currentSignData.cloudName}/${item.type === "video" ? "video" : "image"}/upload`;
 
                 const parameters = {
-                    api_key: signData.apiKey,
-                    timestamp: signData.timestamp,
-                    signature: signData.signature,
-                    folder: signData.folder,
-                    context: signData.context,
-                    notification_url: signData.notificationUrl // Cloudinary webhook callback string
+                    api_key: currentSignData.apiKey,
+                    timestamp: currentSignData.timestamp,
+                    signature: currentSignData.signature,
+                    folder: currentSignData.folder,
+                    context: currentSignData.context,
+                    notification_url: currentSignData.notificationUrl
                 };
 
                 return uploadWithNativeEngine(
@@ -636,38 +639,20 @@ export default function AuthorDiaryDashboard() {
                     parameters,
                     "file",
                     "POST",
-                    (progress, uniqueUri) => updateProgress(uniqueUri, progress) // Unique key update
+                    (progress, uniqueUri) => updateProgress(uniqueUri, progress)
                 );
             });
 
             // ⚡ NON-BLOCKING LIFECYCLE CAPTURE
-            // Let the engine listen to completion asynchronously so UI code finishes immediately
             Promise.all(uploadPromises)
                 .then(() => {
                     completeUpload();
-
-                    // Extra local notification fallback if they are using the app actively
-                    Notifications.scheduleNotificationAsync({
-                        identifier: 'media_upload_complete',
-                        content: {
-                            title: 'Media Uploaded',
-                            body: 'All media successfully synced with the server grid.',
-                        },
-                        trigger: null,
-                    }).catch(() => { });
+                    // 🌟 Success notification is now handled internally by Notifee in the context
                 })
                 .catch((err) => {
                     console.error("A background asset failed in the batch pool:", err);
                     setStatus('error', err.message || "Transmission execution fault.");
-
-                    Notifications.scheduleNotificationAsync({
-                        identifier: 'media_upload_status',
-                        content: {
-                            title: 'Media Transfer Interrupted',
-                            body: 'An attachment in the sequence failed to upload.',
-                        },
-                        trigger: null,
-                    }).catch(() => { });
+                    // 🌟 Error notification is now handled internally by Notifee in the context
                 });
 
             // 🌟 OPTIMISTIC FEED INJECTION
@@ -677,9 +662,11 @@ export default function AuthorDiaryDashboard() {
                 status: 'pending',
                 createdAt: new Date().toISOString()
             };
+
             mutateTodayPosts({ posts: [optimisticPost, ...todayPosts] }, false);
 
-            CustomAlert("Uplink Active", "Your files are uploading in the background. You can safely browse or lock your phone.");
+            CustomAlert("Uplink Active", "Your files are uploading in the background. Do not close app.");
+
             await cleanUpFormState();
 
         } catch (err) {
@@ -989,7 +976,7 @@ export default function AuthorDiaryDashboard() {
                             {/* ⚡️ FIX: Reduced padding to p-6 and mb-12 to mb-6 */}
                             <View style={{ backgroundColor: isDark ? 'rgba(0,0,0,0.5)' : 'rgba(255,255,255,0.7)', borderColor: isDark ? 'rgba(255,255,255,0.05)' : 'rgba(0,0,0,0.05)' }} className="w-full p-6 rounded-[30px] border shadow-2xl mb-6">
                                 <PremiumTextReveal
-                                    text={`Uplink established, ${user?.username || 'Operative'}.\n\nThe village is waiting to hear your voice. It is time for your first transmission.`}
+                                    text={`Uplink established, ${user?.username || 'Player'}.\n\nThe village is waiting to hear your voice. It is time for your first transmission.`}
                                     style={{ color: primaryTextColor, fontSize: 18, lineHeight: 26, fontWeight: '900', fontStyle: 'italic', textTransform: 'uppercase' }}
                                 />
                             </View>

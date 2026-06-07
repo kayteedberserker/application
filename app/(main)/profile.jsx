@@ -41,7 +41,6 @@ import apiFetch from "../../utils/apiFetch";
 // ⚡️ Correct Reanimated Imports
 import { Image } from "expo-image";
 import * as SecureStore from 'expo-secure-store';
-import LottieView from 'lottie-react-native'; // ⚡️ Added for Inventory Previews
 import { MotiView } from 'moti';
 import Animated, {
     Easing,
@@ -716,20 +715,6 @@ const AuthorStoreModal = memo(({ visible, onClose, user, isDark, setInventory })
                                     <Text className="text-[10px] dark:text-white/50 font-black uppercase tracking-tighter">Frame</Text>
                                 </View>
                             </ClanBorder>
-                        ) : (isVfx || isLottie) ? (
-                            <LottieView
-                                source={visual.lottieJson ? visual.lottieJson : { uri: visual.lottieUrl }}
-                                autoPlay
-                                renderMode="hardware"
-                                loop
-                                style={{
-                                    width: isVfx ? '150%' : '100%',
-                                    height: isVfx ? '150%' : '100%',
-                                    position: 'absolute',
-                                    bottom: isVfx ? -10 : 0
-                                }}
-                                resizeMode="contain"
-                            />
                         ) : visual.svgCode ? (
                             <RemoteSvgIcon
                                 xml={visual.svgCode}
@@ -998,7 +983,7 @@ const AuthorInventoryModal = memo(({ visible, onClose, user, setUser, isDark, th
     const [isUpdating, setIsUpdating] = useState(false);
     const [updatingTitle, setUpdatingTitle] = useState(null); // ⚡️ Track specific title loading
     const [itemToPreview, setItemToPreview] = useState(null); // ⚡️ Setup preview state for inventory
-    const CustomAlert = useAlert();
+    const CustomAlert = useAlert()
 
     const inventory = theinventory || user?.inventory || [];
     // ⚡️ Added 'HYPE' to the categories array
@@ -1271,21 +1256,6 @@ const AuthorInventoryModal = memo(({ visible, onClose, user, setUser, isDark, th
                                                     }}
                                                     contentFit="contain"
                                                 />
-                                            ) : (isVfx || isLottie) ? (
-                                                /* ⚡️ Render Lottie for VFX or Animated Watermarks */
-                                                <LottieView
-                                                    source={visual.lottieJson ? visual.lottieJson : { uri: visual.lottieUrl }}
-                                                    autoPlay
-                                                    loop
-                                                    renderMode="hardware"
-                                                    style={{
-                                                        width: (isVfx || isLottie) ? '140%' : '100%',
-                                                        height: (isVfx || isLottie) ? '140%' : '100%',
-                                                        position: 'absolute',
-                                                        bottom: isVfx ? -8 : 0
-                                                    }}
-                                                    resizeMode="contain"
-                                                />
                                             ) : visual.svgCode ? (
                                                 <RemoteSvgIcon
                                                     xml={visual.svgCode}
@@ -1534,7 +1504,7 @@ export default function MobileProfilePage() {
     const storage = useMMKV();
     const CustomAlert = useAlert()
     const [theinventory, setInventory] = useState([])
-    const { user, setUser, contextLoading, handleLogout, isLoggingOut, syncProfile } = useUser();
+    const { user, setUser, contextLoading, handleLogout, isLoggingOut } = useUser();
 
     const { clearClanData } = useClan();
 
@@ -1602,8 +1572,42 @@ export default function MobileProfilePage() {
 
     // Safe guards for null user during logout
     useEffect(() => {
-        if (!user?.deviceId) return
-        syncProfile()
+        if (!user?.deviceId) return;
+        const syncUserWithDB = async () => {
+            try {
+                const res = await apiFetch(`/users/me?fingerprint=${user.deviceId}`);
+                const dbUser = await res.json();
+
+                if (res.ok) {
+                    setUser({ ...user, ...dbUser });
+                    setDescription(dbUser.description || "");
+                    setUsername(dbUser.username || "");
+
+                    const dbAnimes = Array.isArray(dbUser.preferences?.favAnimes) ? dbUser.preferences.favAnimes.join(', ') : "";
+                    const dbGenres = Array.isArray(dbUser.preferences?.favGenres) ? dbUser.preferences.favGenres.join(', ') : "";
+                    const dbChar = dbUser.preferences?.favCharacter || "";
+
+                    setFavAnimes(dbAnimes);
+                    setFavGenres(dbGenres);
+                    setFavCharacter(dbChar);
+
+                    const postRes = await apiFetch(`/posts?author=${dbUser._id}&limit=1`);
+                    const postData = await postRes.json();
+                    const newTotal = postData.total || 0;
+                    if (postRes.ok) setTotalPosts(newTotal);
+
+                    storage.set(CACHE_KEY_USER_EXTRAS, JSON.stringify({
+                        username: dbUser.username,
+                        description: dbUser.description,
+                        totalPosts: newTotal,
+                        favAnimes: dbAnimes,
+                        favGenres: dbGenres,
+                        favCharacter: dbChar
+                    }));
+                }
+            } catch (err) { console.error("Sync User Error:", err); }
+        };
+        syncUserWithDB();
     }, [user?.deviceId]);
 
     const getKey = (pageIndex, previousPageData) => {
@@ -1816,7 +1820,7 @@ export default function MobileProfilePage() {
     }, [user?.deviceId]);
 
     const tryhandleLogout = () => {
-        CustomAlert("De-Synchronize", "Hibernating neural link... Your operative environment will be preserved for quick re-entry.", [
+        CustomAlert("De-Synchronize", "Hibernating neural link... Your environment will be preserved for quick re-entry.", [
             { text: "Cancel", style: "cancel" },
             {
                 text: "LogOut",

@@ -1,5 +1,4 @@
 import { Image } from "expo-image";
-import LottieView from 'lottie-react-native';
 import React, { useEffect, useMemo, useState } from "react";
 import { ActivityIndicator, Pressable, View } from "react-native";
 import Animated, {
@@ -215,19 +214,6 @@ const AuraAvatar = React.memo(function AuraAvatar({
                         overflow: 'visible' // Prevents the animation from clipping off edges
                     }}
                 >
-                    <LottieView
-                        source={vfxSource}
-                        autoPlay={shouldAnimate}
-                        loop={shouldAnimate}
-                        style={{
-                            width: '100%',
-                            height: '100%',
-                            transform: [{ scale: equippedVfx?.visualConfig?.zoom || 1 }]
-                        }}
-                        resizeMode="contain"
-                        renderMode="hardware"
-                        colorFilters={equippedVfx?.visualConfig?.applyThemeColor ? [{ keypath: "**", color: displayColor }] : []}
-                    />
                 </View>
             )}
 
@@ -246,20 +232,7 @@ const AuraAvatar = React.memo(function AuraAvatar({
                 ]}
             >
                 {/* ⚡️ CHECK 1: Is it an Animated Lottie Avatar? */}
-                {shouldAnimate && animatedAvatarSource ? (
-                    <LottieView
-                        source={animatedAvatarSource}
-                        autoPlay={shouldAnimate}
-                        loop={true}
-                        style={[
-                            { width: '100%', height: '100%' },
-                            { transform: rank === 1 ? [{ rotate: '-45deg' }, { scale: lottieAvatarZoom }] : [{ scale: lottieAvatarZoom }] }
-                        ]}
-                        resizeMode="cover"
-                        renderMode="hardware"
-                    />
-
-                ) : processedSvgAvatarCode ? (
+                {processedSvgAvatarCode ? (
                     <View
                         style={[
                             { flex: 1, alignItems: 'center', justifyContent: 'center' },

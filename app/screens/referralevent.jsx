@@ -43,7 +43,6 @@ import { useUser } from "../../context/UserContext";
 import apiFetch from "../../utils/apiFetch";
 
 // ⚡️ Imports PlayerCard for the Preview Modal
-import LottieView from "lottie-react-native";
 import PlayerCard from "../../components/PlayerCard";
 
 const { width } = Dimensions.get('window');
@@ -68,21 +67,6 @@ const RemoteSvgIcon = React.memo(({ xml, lottieUrl, lottieJson, imageUrl, size =
                 contentFit="contain"
             />
         )
-    }
-    // ⚡️ 1. Lottie Animation Check (Stays the same)
-    if (lottieJson || lottieUrl) {
-        return (
-            <View style={{ width: size, height: size, alignItems: 'center', justifyContent: 'center' }}>
-                <LottieView
-                    source={lottieJson ? lottieJson : { uri: lottieUrl }}
-                    autoPlay
-                    loop
-                    style={{ width: size * 1.2, height: size * 1.2 }}
-                    resizeMode="contain"
-                    renderMode="hardware" // 🔥 Good choice for performance
-                />
-            </View>
-        );
     }
 
     // ⚡️ 2. SVG Validation & Color Injection

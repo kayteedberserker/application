@@ -28,7 +28,6 @@ import { Text } from "../../components/Text";
 import { LegendList } from "@legendapp/list";
 
 import * as Haptics from 'expo-haptics'; // ⚡️ ADD THIS
-import LottieView from 'lottie-react-native';
 import { MotiView } from 'moti';
 import Animated, {
     Easing, // ⚡️ ADD THIS
@@ -832,10 +831,6 @@ const ClanProfile = () => {
                     <View className="relative">
                         <Animated.View
                             style={[
-                                {
-                                    position: 'absolute', inset: -15, borderRadius: 100,
-                                    backgroundColor: activeGlowColor || APP_BLUE, opacity: 0.1,
-                                },
                                 pulseStyle
                             ]}
                         />
@@ -1937,15 +1932,6 @@ const ClanStoreModal = memo(({ visible, fetchFullDetails, onClose, isDark, clan 
                                     <Text className="text-[10px] dark:text-white/50 font-black uppercase tracking-tighter">Frame</Text>
                                 </View>
                             </ClanBorder>
-                        ) : isLottie ? (
-                            <LottieView
-                                source={visual.lottieJson ? visual.lottieJson : { uri: visual.lottieUrl }}
-                                autoPlay
-                                renderMode="hardware"
-                                loop
-                                style={{ width: '120%', height: '120%', position: 'absolute' }}
-                                resizeMode="contain"
-                            />
                         ) : visual.svgCode ? (
                             <RemoteSvgIcon xml={visual.svgCode} color={visual.glowColor || visual.primaryColor || visual.color} size={50} />
                         ) : (
@@ -2224,8 +2210,6 @@ const ClanInventoryModal = memo(({ visible, onClose, fetchFullDetails, clan, isD
                                                             <Text className="text-[6px] dark:text-white/40 font-black uppercase">Frame</Text>
                                                         </View>
                                                     </ClanBorder>
-                                                ) : isLottie ? (
-                                                    <LottieView renderMode="hardware" source={visual.lottieJson ? visual.lottieJson : { uri: visual.lottieUrl }} autoPlay loop style={{ width: '140%', height: '140%', position: 'absolute' }} resizeMode="contain" />
                                                 ) : visual.svgCode ? (
                                                     <RemoteSvgIcon xml={visual.svgCode} size={40} color={visual.primaryColor || visual.color} />
                                                 ) : (

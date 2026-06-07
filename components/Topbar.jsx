@@ -180,7 +180,7 @@ function TopBar({ isDark }) {
         <View className={`flex-row items-center justify-between px-1 pl-4 h-14 ${isDark ? "bg-[#050505] border-b border-blue-900/30" : "bg-white border-b border-gray-200"} z-50`}>
             <Image
                 source={logoSrc}
-                style={{ width: 94, height: 52, resizeMode: "contain" }}
+                style={{ width: 94, height: 52, contentFit: "contain" }}
             />
             <View className="flex-row items-center gap-1 relative">
 

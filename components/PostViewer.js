@@ -279,7 +279,7 @@ export default function PostsViewer() {
                 mutate={mutate}
             />
         );
-    }, [mutate, posts]); // Removed runtime validation flags that break the static instance cache
+    }, [mutate]); // Removed runtime validation flags that break the static instance cache
 
     const ListHeader = useCallback(() => (
         <View className="mb-5 pb-2">

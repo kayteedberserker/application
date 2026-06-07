@@ -1,3 +1,4 @@
+import notifee, { AndroidImportance } from '@notifee/react-native';
 import {
     createUploadTask,
     FileSystemSessionType,
@@ -5,7 +6,7 @@ import {
     SessionType,
     UploadType
 } from 'expo-file-system/legacy';
-import { createContext, useCallback, useContext, useMemo, useState } from 'react';
+import { createContext, useCallback, useContext, useEffect, useMemo, useRef, useState } from 'react';
 
 const UploadProgressContext = createContext();
 
@@ -13,16 +14,121 @@ export const UploadProgressProvider = ({ children }) => {
     const [uploadProgress, setUploadProgress] = useState({
         isVisible: false,
         totalFiles: 0,
-        filesProgress: {}, // 📊 Dictionary tracking: { [fileUri]: progressPercentage }
+        filesProgress: {},
         status: 'uploading',
         errorMessage: null,
     });
+
+    const lastNotifiedProgress = useRef(-1);
+    // ✅ FIX 1: Initialize the ref with the static ID string
+    const notificationIdRef = useRef('upload_foreground');
+
+    // ✅ IMPROVEMENT #1: Create the channel ONCE on startup
+    useEffect(() => {
+        notifee.createChannel({
+            id: 'upload_channel',
+            name: 'Media Uploads',
+            vibration: false,
+            importance: AndroidImportance.LOW,
+        });
+    }, []);
+
+    // ⚡️ Foreground Service Tracker
+    useEffect(() => {
+        const updateNativeForegroundService = async () => {
+            if (!uploadProgress.isVisible) return;
+
+            const progressKeys = Object.keys(uploadProgress.filesProgress || {});
+            const totalFiles = uploadProgress.totalFiles || 1;
+
+            let totalAccumulatedProgress = 0;
+            progressKeys.forEach((key) => {
+                totalAccumulatedProgress += uploadProgress.filesProgress[key] || 0;
+            });
+
+            const safeOverallProgress = Math.min(100, Math.max(0, Math.round(totalAccumulatedProgress / totalFiles)));
+
+            // ✅ SERIOUS ISSUE #2 FIX: Throttle notification updates to every 5%
+            const throttledProgress = Math.floor(safeOverallProgress / 5) * 5;
+
+            if (uploadProgress.status === 'uploading' && throttledProgress !== lastNotifiedProgress.current) {
+                lastNotifiedProgress.current = throttledProgress;
+
+                // ✅ FIX 1: Don't assign to the ref, just use the static string
+                await notifee.displayNotification({
+                    id: notificationIdRef.current,
+                    title: 'Deploying Media to Grid',
+                    body: `Transmission in progress: ${throttledProgress}%`,
+                    android: {
+                        channelId: 'upload_channel', // Reusing the channel created on mount
+                        asForegroundService: true,
+                        color: '#10B981',
+                        smallIcon: 'notification_icon',
+                        onlyAlertOnce: true,
+                        progress: {
+                            max: 100,
+                            current: throttledProgress, // Using the throttled value
+                        },
+                    },
+                });
+            } else if (uploadProgress.status === 'completed') {
+                // 🌟 FIX 2: Explicitly kill the foreground service
+                await notifee.stopForegroundService();
+
+                // 🌟 FIX 2: Manually cancel the progress notification to prevent duplicates on some OEMs
+                await notifee.cancelNotification(notificationIdRef.current);
+
+                // Spawn a brand new, regular notification with a different ID
+                await notifee.displayNotification({
+                    id: 'upload_success_alert',
+                    title: 'Media Uploaded',
+                    body: 'All media successfully synced with the server grid.',
+                    android: {
+                        channelId: 'upload_channel',
+                        color: '#10B981',
+                        smallIcon: 'notification_icon',
+                        autoCancel: true, // 🌟 UX FIX: Dismisses automatically when tapped
+                        pressAction: {
+                            id: 'default',
+                        },
+                    }
+                });
+                lastNotifiedProgress.current = -1;
+
+            } else if (uploadProgress.status === 'error') {
+                // 🌟 FIX 2: Explicitly kill the foreground service
+                await notifee.stopForegroundService();
+
+                // 🌟 FIX 2: Manually cancel the progress notification
+                await notifee.cancelNotification(notificationIdRef.current);
+
+                // Spawn a brand new, regular notification
+                await notifee.displayNotification({
+                    id: 'upload_error_alert',
+                    title: 'Media Transfer Interrupted',
+                    body: uploadProgress.errorMessage || 'An attachment in the sequence failed to upload.',
+                    android: {
+                        channelId: 'upload_channel',
+                        color: '#EF4444',
+                        smallIcon: 'notification_icon',
+                        autoCancel: true, // 🌟 UX FIX: Dismisses automatically when tapped
+                        pressAction: {
+                            id: 'default',
+                        },
+                    }
+                });
+                lastNotifiedProgress.current = -1;
+            }
+        };
+
+        updateNativeForegroundService();
+    }, [uploadProgress]);
 
     const startUpload = useCallback((totalFiles) => {
         setUploadProgress({
             isVisible: true,
             totalFiles,
-            filesProgress: {}, // Flush progress mapping tracking
+            filesProgress: {},
             status: 'uploading',
             errorMessage: null,
         });
@@ -52,7 +158,6 @@ export const UploadProgressProvider = ({ children }) => {
 
     const completeUpload = useCallback(() => {
         setUploadProgress((prev) => {
-            // Force-fill all files to 100 on complete
             const completedMap = { ...prev.filesProgress };
             Object.keys(completedMap).forEach(key => { completedMap[key] = 100; });
             return {
@@ -73,9 +178,6 @@ export const UploadProgressProvider = ({ children }) => {
         });
     }, []);
 
-    /**
-    * 🚀 NATIVE BACKGROUND UPLOAD ENGINE
-    */
     const uploadWithNativeEngine = useCallback(async (
         endpointUrl,
         fileUri,
@@ -86,8 +188,6 @@ export const UploadProgressProvider = ({ children }) => {
         onCustomProgress = null
     ) => {
         try {
-            const extractedFileName = fileUri.split('/').pop() || 'upload_file';
-
             if (!onCustomProgress) {
                 startUpload(1);
             }
@@ -116,7 +216,10 @@ export const UploadProgressProvider = ({ children }) => {
                     sessionType: BACKGROUND_SESSION,
                 },
                 (data) => {
-                    const progress = (data.totalBytesSent / data.totalBytesExpectedToSend) * 100;
+                    // ✅ IMPROVEMENT #2 FIX: Protect against division by zero
+                    const total = data.totalBytesExpectedToSend || 1;
+                    const progress = (data.totalBytesSent / total) * 100;
+
                     if (onCustomProgress) {
                         onCustomProgress(progress, fileUri);
                     } else {

@@ -1,6 +1,6 @@
 {
   "expo": {
-    "name": "Oreblogda",
+    "name": "Oreblogda - Test Build",
     "slug": "oreblogda",
     "version": "2.2.3",
     "orientation": "default",
@@ -8,14 +8,18 @@
     "scheme": "oreblogda",
     "userInterfaceStyle": "automatic",
     "newArchEnabled": true,
-    "owner": "oreblogda",
+    "owner": "oreblog",
     "runtimeVersion": "v7_global",
     "ios": {
       "supportsTablet": true,
-      "bundleIdentifier": "com.kaytee.oreblogda",
-      "associatedDomains": [
-        "applinks:oreblogda.com"
-      ]
+      "bundleIdentifier": "com.kaytee.oreblogda.dev",
+      "infoPlist": {
+        "UIBackgroundModes": [
+          "remote-notification",
+          "remote-notification"
+        ],
+        "ITSAppUsesNonExemptEncryption": false
+      }
     },
     "android": {
       "adaptiveIcon": {
@@ -23,7 +27,7 @@
         "foregroundImage": "./assets/images/myicon.png",
         "backgroundImage": "./assets/images/myicon.png"
       },
-      "package": "com.kaytee.oreblogda",
+      "package": "com.kaytee.oreblogda.dev",
       "googleServicesFile": "./google-services.json",
       "predictiveBackGestureEnabled": false,
       "permissions": [
@@ -113,7 +117,7 @@
       "typedRoutes": true
     },
     "updates": {
-      "url": "https://u.expo.dev/b6b7afd1-028a-425e-a84e-6a2af706a736",
+      "url": "https://u.expo.dev/b22841d4-0736-4aa0-89d2-d9a48af0defc",
       "enableBsdiffPatchSupport": true,
       "enabled": true,
       "checkAutomatically": "ON_LOAD",
@@ -122,7 +126,7 @@
     "extra": {
       "router": {},
       "eas": {
-        "projectId": "b6b7afd1-028a-425e-a84e-6a2af706a736"
+        "projectId": "b22841d4-0736-4aa0-89d2-d9a48af0defc"
       }
     }
   }

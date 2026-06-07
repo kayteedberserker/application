@@ -1,8 +1,11 @@
 import FontAwesome from '@expo/vector-icons/FontAwesome';
 import Ionicons from '@expo/vector-icons/Ionicons';
 import MaterialCommunityIcons from '@expo/vector-icons/MaterialCommunityIcons';
-import notifee, { AndroidImportance, EventType } from '@notifee/react-native';
+// 🌟 NEW: Added AndroidStyle
+import notifee, { AndroidImportance, AndroidStyle, EventType } from '@notifee/react-native';
 import Constants from 'expo-constants';
+// 🌟 NEW: Added FileSystem for caching images locally
+import * as FileSystem from 'expo-file-system';
 import { useFonts } from "expo-font";
 import * as Linking from 'expo-linking';
 import * as Notifications from "expo-notifications";
@@ -34,28 +37,99 @@ let IS_NAVIGATING_GLOBAL = false;
 let LAST_PROCESSED_NOTIF_ID = null;
 let LAST_PROCESSED_URL = null;
 
+// ⚡️ REGISTER NOTIFEE FOREGROUND SERVICE & BACKGROUND EVENTS
+if (Platform.OS === 'android') {
+    notifee.registerForegroundService((notification) => {
+        return new Promise((resolve) => {
+            // Keeps the service alive. 
+            // It will automatically shut down when your upload context sets 'asForegroundService: false'
+        });
+    });
+
+    // 🌟 NEW: Ensure Notifee captures background events silently
+    notifee.onBackgroundEvent(async ({ type, detail }) => {
+        // Deep linking on press is naturally handled by getInitialNotification later
+        if (type === EventType.PRESS && detail.notification?.data) {
+            console.log("Background Notification Pressed", detail.notification.data);
+        }
+    });
+}
+
 // 🔹 REVENUE_CAT KEYS
 const REVENUE_CAT_API_KEYS = {
     ios: "goog_your_ios_key_here",
     android: "goog_cypWcXGzLgDujHkFvHTcUoqUNQi"
 };
 
+// 🌟 NEW: RICH NOTIFICATION IMAGE HANDLER
+const downloadNotificationImage = async (url, id) => {
+    if (!url) return null;
+    try {
+        const fileUri = `${FileSystem.cacheDirectory}notif_${id || Date.now()}.jpg`;
+        const { uri } = await FileSystem.downloadAsync(url, fileUri);
+        return uri;
+    } catch (error) {
+        console.error("❌ Failed to download notification image:", error);
+        return null;
+    }
+};
+
 // 🔹 NOTIFICATION HANDLER
 Notifications.setNotificationHandler({
     handleNotification: async (notification) => {
-        const { data } = notification.request.content;
+        const { title, body, data } = notification.request.content;
         const groupId = data?.groupId;
+        const mediaUrl = data?.mediaUrl; // 🌟 Look for the image URL
+        const postId = data?.postId;
 
-        if (Platform.OS === 'android' && groupId) {
-            try {
+        try {
+            // 🌟 NEW: If there is an image, we build a cross-platform Rich Notification
+            if (mediaUrl) {
+                const localImagePath = await downloadNotificationImage(mediaUrl, postId);
+
+                if (localImagePath) {
+                    await notifee.displayNotification({
+                        title: title || "New Alert",
+                        body: body || "",
+                        data: data || {},
+                        android: {
+                            channelId: 'default',
+                            smallIcon: 'notification_icon', // Your silhouette
+                            color: '#10B981',
+                            style: {
+                                type: AndroidStyle.BIGPICTURE,
+                                picture: localImagePath,
+                            },
+                            pressAction: {
+                                id: 'default',
+                            },
+                        },
+                        ios: {
+                            attachments: [
+                                { url: localImagePath } // Renders the image on iOS
+                            ]
+                        }
+                    });
+
+                    // Tell Expo NOT to show its default banner, since Notifee just handled it gorgeously
+                    return {
+                        shouldShowBanner: false,
+                        shouldPlaySound: true,
+                        shouldSetBadge: false,
+                    };
+                }
+            }
+
+            // Original logic for non-image pushes
+            if (Platform.OS === 'android' && groupId) {
                 return {
                     shouldShowBanner: false,
                     shouldPlaySound: false,
                     shouldSetBadge: false,
                 };
-            } catch (error) {
-                console.error("Notifee Display Error:", error);
             }
+        } catch (error) {
+            console.error("Rich Notification Display Error:", error);
         }
 
         return {

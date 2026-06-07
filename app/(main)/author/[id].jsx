@@ -345,7 +345,7 @@ const MemoizedHeader = memo(({
                             <Text className="text-lg font-black" style={{ color: themeColor }}>{totalAura.toLocaleString()}</Text>
                         </View>
                         <View className="items-center">
-                            <Text className="text-[10px] font-black text-gray-400 uppercase tracking-widest">Glory</Text>
+                            <Text className="text-[10px] font-black text-gray-400 uppercase tracking-widest">Weekly Aura</Text>
                             <Text className="text-lg font-black" style={{ color: '#ec4899' }}>+{author.weeklyAura || 0}</Text>
                         </View>
                         <View className="items-center">
@@ -407,7 +407,7 @@ const MemoizedHeader = memo(({
 
 export default function AuthorPage() {
     const { id } = useLocalSearchParams();
-
+    const CustomAlert = useAlert()
     const router = useRouter();
     const insets = useSafeAreaInsets();
     const { colorScheme } = useColorScheme();
@@ -436,8 +436,6 @@ export default function AuthorPage() {
     const pulseAnim = useSharedValue(1);
     const rotationAnim = useSharedValue(0);
     const skeletonFade = useSharedValue(0.3);
-
-    const showAlert = useAlert();
 
     const auraRank = author?.previousRank || null;
 

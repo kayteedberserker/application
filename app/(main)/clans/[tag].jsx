@@ -204,6 +204,8 @@ const MemoizedHeader = memo(({
   showAlert,
   isVisible
 }) => {
+  console.log(clan?.badges, "clan badges");
+
   if (!clan && isOffline) {
     return (
       <View className="px-4 pt-20 pb-6 opacity-40">
@@ -655,14 +657,14 @@ export default function ClanPage() {
           await Asset.create(uri);
 
           Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
-          CustomAlert("Archived", "The Clan Scroll has been saved to your device.");
+          showAlert("Archived", "The Clan Scroll has been saved to your device.");
         } else {
-          CustomAlert("Permission Denied", "Access to gallery is required to save scrolls.");
+          showAlert("Permission Denied", "Access to gallery is required to save scrolls.");
         }
       }
     } catch (error) {
       console.error("Save Error:", error);
-      CustomAlert("Error", "Failed to save the clan scroll.");
+      showAlert("Error", "Failed to save the clan scroll.");
     } finally {
       setIsSaving(false);
     }
@@ -822,7 +824,7 @@ export default function ClanPage() {
               </View>
 
               {cardPreviewVisible && (
-                <View style={{ transform: [{ scale: Math.min(1, (width - 40) / 380) }], width: 380, alignItems: 'center', marginTop: 30 }}>
+                <View style={{ transform: [{ scale: Math.min(1, (width - 40) / 380) }], width: 380, alignItems: 'center' }}>
                   <ClanCard clan={clan} isDark={isDark} forSnapshot={true} />
                 </View>
               )}

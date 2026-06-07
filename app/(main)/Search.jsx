@@ -68,8 +68,6 @@ const getAuraTier = (rank) => {
         case 10:
             return { color: ESPADA_5, label: 'ESPADA 5', icon: 'sword-cross' };
 
-        default:
-            return { color: '#1e293b', label: 'VANGUARD', icon: 'shield-check' };
     }
 };
 
@@ -528,7 +526,7 @@ const SearchScreen = () => {
                         </View>
                     )}
 
-                    <View className="flex-1 px-4 mt-2">
+                    <View className="flex-1 px-4">
                         {loading && page === 1 ? (
                             <View className="flex-1 justify-center items-center">
                                 <SyncLoading message="Establishing Link...." />
