@@ -1488,19 +1488,23 @@ const PostCardComponent = ({ post, authorData, clanData, setPosts, isFeed, hideM
 		transform: [{ scale: buttonScale.value }]
 	}));
 	const fillWidth = useSharedValue(0);
-
 	const { data: postData, mutate } = useSWR(
-		(!syncing && post?._id) ? `/posts/${post._id}` : null,
+		(isVisible) ? `/posts/${post._id}` : null,
 		fetcher,
 		{
-			refreshInterval: 600000,
-			fallbackData: post,
-			revalidateOnMount: true,
-			revalidateIfStale: true
+			fallbackData: post,       // Use the prop data immediately
+			revalidateOnMount: false, // ⚡️ DISABLE: Don't fetch just because it appeared
+			revalidateIfStale: false, // ⚡️ DISABLE: Don't re-fetch unless you manually trigger it
+			revalidateOnFocus: false, // ⚡️ DISABLE: Don't re-fetch when you switch tabs
+			dedupingInterval: 600000, // ⚡️ IMPORTANT: Cache results for 10 minutes
 		}
-	);
+	)
 
 	const totalLikes = postData?.likesCount ?? postData?.likes?.length ?? post?.likesCount ?? post?.likes?.length ?? 0;
+	useEffect(() => {
+		console.log(totalLikes, postData?.likesCount, "is the likecount b4 and after?", post?.likesCount, postData?.likes?.length, post?.likes?.length, post?.title);
+	}, [totalLikes, postData?.likesCount]);
+
 	const totalComments = postData?.commentsCount ?? postData?.comments?.length ?? post?.commentsCount ?? post?.comments?.length ?? 0;
 	const totalViews = postData?.viewsCount ?? postData?.views ?? post?.viewsCount ?? post?.views ?? 0;
 	const totalShares = postData?.sharesCount ?? post?.sharesCount ?? post?.shares ?? 0;
@@ -1658,6 +1662,7 @@ const PostCardComponent = ({ post, authorData, clanData, setPosts, isFeed, hideM
 		const fingerprint = user?.deviceId;
 		const previousData = postData || post;
 		const currentLikes = totalLikes;
+		console.log(currentLikes, "is the likecount b4 liking");
 
 		Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
 		setLiked(true);
@@ -1668,6 +1673,7 @@ const PostCardComponent = ({ post, authorData, clanData, setPosts, isFeed, hideM
 			likes: [...((postData || post)?.likes || []), { fingerprint }],
 			hasLiked: true
 		}, false);
+		console.log(postData?.likesCount, "is supposed to be the new likeCount");
 
 		try {
 			const res = await apiFetch(`/posts/${post?._id}`, {
@@ -2089,7 +2095,7 @@ const PostCardComponent = ({ post, authorData, clanData, setPosts, isFeed, hideM
 						<Pressable onPress={handleLike} disabled={liked} className="flex-row items-center gap-1.5 py-1">
 							<Ionicons name={liked ? "heart" : "heart-outline"} size={19} color={liked ? "#ef4444" : isDark ? "#9ca3af" : "#4b5563"} />
 							<Text className={`text-xs font-black ${liked ? "text-red-500" : "text-gray-500"}`}>
-								{totalLikes > 0 ? (post.formattedLikes || totalLikes) : "Like"}
+								{totalLikes > 0 ? totalLikes : "Like"}
 							</Text>
 						</Pressable>
 
