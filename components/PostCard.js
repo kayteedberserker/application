@@ -1501,9 +1501,6 @@ const PostCardComponent = ({ post, authorData, clanData, setPosts, isFeed, hideM
 	)
 
 	const totalLikes = postData?.likesCount ?? postData?.likes?.length ?? post?.likesCount ?? post?.likes?.length ?? 0;
-	useEffect(() => {
-		console.log(totalLikes, postData?.likesCount, "is the likecount b4 and after?", post?.likesCount, postData?.likes?.length, post?.likes?.length, post?.title);
-	}, [totalLikes, postData?.likesCount]);
 
 	const totalComments = postData?.commentsCount ?? postData?.comments?.length ?? post?.commentsCount ?? post?.comments?.length ?? 0;
 	const totalViews = postData?.viewsCount ?? postData?.views ?? post?.viewsCount ?? post?.views ?? 0;
@@ -1662,7 +1659,6 @@ const PostCardComponent = ({ post, authorData, clanData, setPosts, isFeed, hideM
 		const fingerprint = user?.deviceId;
 		const previousData = postData || post;
 		const currentLikes = totalLikes;
-		console.log(currentLikes, "is the likecount b4 liking");
 
 		Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
 		setLiked(true);
@@ -1673,7 +1669,6 @@ const PostCardComponent = ({ post, authorData, clanData, setPosts, isFeed, hideM
 			likes: [...((postData || post)?.likes || []), { fingerprint }],
 			hasLiked: true
 		}, false);
-		console.log(postData?.likesCount, "is supposed to be the new likeCount");
 
 		try {
 			const res = await apiFetch(`/posts/${post?._id}`, {
