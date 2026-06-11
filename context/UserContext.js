@@ -1,307 +1,265 @@
 import AsyncStorage from '@react-native-async-storage/async-storage';
+import * as Notifications from 'expo-notifications';
 import { router } from "expo-router";
 import { createContext, useCallback, useContext, useEffect, useMemo, useRef, useState } from "react";
+import { Platform } from "react-native";
 import { useMMKV } from "react-native-mmkv";
 import apiFetch, { setSessionExpiredHandler, syncApiUser } from "../utils/apiFetch";
 import { getFingerprint } from "../utils/device";
 import { useAlert } from './AlertContext';
-
 const UserContext = createContext();
-
-export const UserProvider = ({ children }) => {
-  const storage = useMMKV();
-  const CustomAlert = useAlert(); // ✅ Moved to top level
-  const [isLoggingOut, setIsLoggingOut] = useState(false);
-
-  // ⚡️ 1. SYNCHRONOUS INIT
-  // Renamed the setter to setInternalUser to distinguish between State vs Persistent 
-  const [user, setInternalUser] = useState(() => {
+const STREAK_CACHE_KEY = "streak_local_cache";
+const APP_SECRET = "thisismyrandomsuperlongsecretkey";
+const STREAK_NOTIF_IDS = ["streak-24h", "streak-2h", "streak-lost"];
+const scheduleStreakReminders = async (expiresAt) => {
+    if (!expiresAt) return [];
     try {
-      const stored = storage.getString("mobileUser");
-      if (stored) {
-        const parsedUser = JSON.parse(stored);
-        syncApiUser(parsedUser);
-        return parsedUser;
-      }
-    } catch (e) {
-      console.error("Failed to parse user from MMKV", e);
-    }
-    return null;
-  });
-
-  // Keep a mutable reference track of user data to eliminate callback reference mutations safely
-  const userRef = useRef(user);
-  useEffect(() => {
-    userRef.current = user;
-  }, [user]);
-
-  const [loading, setLoading] = useState(() => {
-    try {
-      const stored = storage.getString("mobileUser");
-      return !stored;
-    } catch (e) {
-      return true;
-    }
-  });
-
-  const [pinModalVisible, setPinModalVisible] = useState(false);
-  const [pinSuccess, setPinSuccess] = useState(false);
-
-  // Session flags to guarantee single-execution per app launch
-  const hasSyncedIdentity = useRef(false);
-  const hasSyncedProfile = useRef(false);
-
-  /**
-   * 🛠️ DEFENSIVE STORAGE UPDATE
-   * This handles standard data updates while the user is active.
-   */
-  const updateUserData = useCallback((newData) => {
-    setInternalUser(newData);
-
-    // Defensive check: Only touch storage if the instance and methods exist
-    // This prevents the "undefined is not a function" crash during logout races
-    try {
-      if (storage && typeof storage.set === 'function') {
-        if (newData) {
-          storage.set("mobileUser", JSON.stringify(newData));
-        } else if (typeof storage.delete === 'function') {
-          storage.delete("mobileUser");
+        const { status: existingStatus } = await Notifications.getPermissionsAsync();
+        let finalStatus = existingStatus;
+        if (existingStatus !== 'granted') {
+            const { status } = await Notifications.requestPermissionsAsync();
+            finalStatus = status;
         }
-      }
-    } catch (err) {
-      console.warn("MMKV update intercepted during transition:", err);
-    }
-
-    syncApiUser(newData);
-  }, [storage]);
-
-  /**
-   * 🔄 REUSABLE PROFILE PROFILE & INVENTORY SYNC PROTOCOL
-   * Pulls the absolute freshest state down from backend DB manually or automatically.
-   * Locked cleanly with a user tracking ref to guarantee maximum reference stability.
-   */
-  const syncProfile = useCallback(async () => {
-    const currentUser = userRef.current;
-    if (!currentUser?.deviceId) return null;
-    try {
-      const res = await apiFetch(`/users/me?fingerprint=${currentUser.deviceId}`);
-      if (res.status === 200) {
-        const dbUser = await res.json();
-        const updatedUser = {
-          ...currentUser,
-          country: dbUser.country || "Unknown",
-          username: dbUser.username || currentUser.username,
-          referralCode: dbUser.referralCode || currentUser.referralCode,
-          invitedUsers: dbUser.invitedUsers || currentUser.invitedUsers || [],
-          inventory: dbUser.inventory || currentUser.inventory || [], // Sync inventory changes seamlessly
-          securityLevel: dbUser.securityLevel || 0,
-          email: dbUser.email || 0,
-        };
-        updateUserData(updatedUser);
-
-        if (updatedUser.securityLevel < 2 && !pinSuccess) {
-          setPinModalVisible(true);
-        }
-        return updatedUser;
-      }
-    } catch (fetchErr) {
-      console.error("Failed to sync fresh user profile values:", fetchErr)
-    }
-    return null;
-  }, [pinSuccess, updateUserData]);
-
-  /**
-   * 🛡️ THE SESSION TERMINATION PROTOCOL
-   */
-  const handleInternalLogout = useCallback(async (isSystemKick = false) => {
-    if (isLoggingOut) return;
-
-    const performCleanup = async () => {
-      try {
-        setIsLoggingOut(true);
-
-        // ⚡️ 0. NOTIFY BACKEND
-        const currentUser = userRef.current;
-        if (!isSystemKick && currentUser?.deviceId) {
-          try {
-            await apiFetch('/mobile/logout', {
-              method: 'POST',
-              body: { deviceId: currentUser.deviceId }
+        if (finalStatus !== 'granted') return [];
+        const CHANNEL_ID = 'streak-reminders';
+        if (Platform.OS === 'android') {
+            await Notifications.setNotificationChannelAsync(CHANNEL_ID, {
+                name: 'Streak Reminders',
+                importance: Notifications.AndroidImportance.HIGH,
+                sound: 'default',
             });
-          } catch (apiErr) {
-            if (__DEV__) console.log("Server unreachable. Proceeding with local hibernation.");
-          }
         }
-
-        // ⚡️ 1. PREPARE SESSION HISTORY
-        let updatedHistory = [];
-        try {
-          const rawHistory = storage.getString("session_history");
-          const sessionHistory = rawHistory ? JSON.parse(rawHistory) : [];
-
-          if (currentUser) {
-            const currentSession = {
-              uid: currentUser.uid,
-              deviceId: currentUser.deviceId,
-              username: currentUser.username,
-              pfp: currentUser.profilePic?.url || currentUser.image,
-            };
-
-            updatedHistory = [
-              currentSession,
-              ...sessionHistory.filter(s => s && s.uid !== currentSession.uid)
-            ].slice(0, 3);
-          }
-        } catch (historyErr) {
-          if (__DEV__) console.log("History preservation skipped.");
+        await Promise.all(STREAK_NOTIF_IDS.map(id => Notifications.cancelScheduledNotificationAsync(id)));
+        const expiryDate = new Date(expiresAt).getTime();
+        const now = Date.now();
+        const GROUP_KEY = "com.oreblogda.STREAK_GROUP";
+        const trigger24h = expiryDate - (24 * 60 * 60 * 1000);
+        if (trigger24h > now) {
+            await Notifications.scheduleNotificationAsync({
+                identifier: "streak-24h",
+                content: { title: "🔥 Streak at Risk!", body: "24 hours left to post!", data: { screen: 'CreatePost' }, android: { channelId: CHANNEL_ID, groupKey: GROUP_KEY }, threadIdentifier: GROUP_KEY },
+                trigger: { type: Notifications.SchedulableTriggerInputTypes.DATE, date: new Date(trigger24h), channelId: CHANNEL_ID },
+            });
         }
-
-        // ⚡️ 2. THE SAFE SWAP
-        try {
-          if (storage && typeof storage.clearAll === 'function') {
-            storage.clearAll();
-          } else {
-            storage.delete("mobileUser");
-            storage.delete("auth_token");
-          }
-
-          if (updatedHistory.length > 0 && storage && typeof storage.set === 'function') {
-            storage.set("session_history", JSON.stringify(updatedHistory));
-          }
-        } catch (storageErr) {
-          console.warn("Storage purge encountered a snag:", storageErr);
+        const trigger2h = expiryDate - (2 * 60 * 60 * 1000);
+        if (trigger2h > now) {
+            await Notifications.scheduleNotificationAsync({
+                identifier: "streak-2h",
+                content: { title: "⚠️ FINAL WARNING", body: "2 hours left! Post now!", sound: true, priority: 'high', data: { screen: 'CreatePost' }, android: { channelId: CHANNEL_ID, groupKey: GROUP_KEY }, threadIdentifier: GROUP_KEY },
+                trigger: { type: Notifications.SchedulableTriggerInputTypes.DATE, date: new Date(trigger2h), channelId: CHANNEL_ID },
+            });
         }
-
-        // ⚡️ 3. CLEANUP & REDIRECT
-        await AsyncStorage.clear().catch(() => { });
-
-        setInternalUser(null);
-        hasSyncedIdentity.current = false;
-        hasSyncedProfile.current = false; // Reset the sync flag on logout
-
-        router.replace("/screens/FirstLaunchScreen");
-
-      } catch (error) {
-        console.error("Critical Hibernation Error:", error);
-        setInternalUser(null);
-        router.replace("/screens/FirstLaunchScreen");
-      } finally {
-        setIsLoggingOut(false);
-      }
-    };
-
-    if (isSystemKick) {
-      CustomAlert(
-        "Neural Link Severed",
-        "Your session has been terminated. Please log in again to re-establish the connection.",
-        [{ text: "Understood", onPress: performCleanup }]
-      );
-    } else {
-      performCleanup();
+        if (expiryDate > now) {
+            await Notifications.scheduleNotificationAsync({
+                identifier: "streak-lost",
+                content: { title: "💀 Streak Lost", body: "Your streak has expired.", android: { channelId: CHANNEL_ID, groupKey: GROUP_KEY }, threadIdentifier: GROUP_KEY },
+                trigger: { type: Notifications.SchedulableTriggerInputTypes.DATE, date: new Date(expiryDate), channelId: CHANNEL_ID },
+            });
+        }
+        return await Notifications.getAllScheduledNotificationsAsync();
+    } catch (e) {
+        console.error("Notif Error:", e);
+        return [];
     }
-  }, [isLoggingOut, storage, CustomAlert]);
-
-  // 📡 ATTACH API LISTENER FOR SESSION KICKS
-  useEffect(() => {
-    setSessionExpiredHandler(() => {
-      handleInternalLogout(true);
-    });
-  }, [handleInternalLogout]);
-
-  // Wrapper for external consumers
-  const updateUserDataWrapper = useCallback((newData) => {
-    updateUserData(newData);
-  }, [updateUserData]);
-
-  // Handle standard app logout triggering
-  const handleLogoutExternal = useCallback(() => {
-    handleInternalLogout(false);
-  }, [handleInternalLogout]);
-
-  // ⚡️ IDENTITY & DATA SYNC
-  useEffect(() => {
-    const backgroundSyncUser = async () => {
-      const currentUser = userRef.current;
-      if (!currentUser?.deviceId) {
-        setLoading(false);
-        return;
-      }
-
-      // Identity Sync Protocol
-      if ((!currentUser.uid || !currentUser.hardwareId) && !hasSyncedIdentity.current) {
-        hasSyncedIdentity.current = true;
-        try {
-          const fingerprint = await getFingerprint();
-          const res = await apiFetch('/mobile/sync-identity', {
-            method: 'POST',
-            body: {
-              deviceId: currentUser.deviceId,
-              hardwareId: fingerprint.hardwareId
-            }
-          });
-
-          if (res.status === 200) {
-            const data = await res.json();
-            if (data.uid) {
-              const updatedUser = {
-                ...currentUser,
-                uid: data.uid,
-                hardwareId: fingerprint.hardwareId,
-                securityLevel: data.securityLevel || 0
-              };
-              updateUserData(updatedUser);
-
-              if (updatedUser.securityLevel < 2 && !pinSuccess) {
-                setPinModalVisible(true);
-              }
-            }
-          }
-        } catch (err) {
-          console.error("Identity Sync Failed:", err);
-          hasSyncedIdentity.current = false;
-        }
-      }
-
-      // Automatic Session Profile Sync (Strictly ONCE per session launch)
-      if (!hasSyncedProfile.current) {
-        hasSyncedProfile.current = true; // Lock immediately to prevent race conditions
-        await syncProfile();
-      }
-
-      setLoading(false);
-    };
-
-    backgroundSyncUser();
-  }, [syncProfile, pinSuccess, updateUserData]);
-
-  // 🧠 MEMOIZED CONTEXT VALUE TO PREVENT UNNECESSARY CONSUMER RERENDERS
-  const contextValue = useMemo(() => ({
-    user,
-    setUser: updateUserDataWrapper,
-    syncProfile,
-    loading,
-    pinModalVisible,
-    setPinModalVisible,
-    pinSuccess,
-    setPinSuccess,
-    isLoggingOut,
-    handleLogout: handleLogoutExternal
-  }), [
-    user,
-    updateUserDataWrapper,
-    syncProfile,
-    loading,
-    pinModalVisible,
-    pinSuccess,
-    isLoggingOut,
-    handleLogoutExternal
-  ]);
-
-  return (
-    <UserContext.Provider value={contextValue}>
-      {children}
-    </UserContext.Provider>
-  )
 };
-
+export const UserProvider = ({ children }) => {
+    const storage = useMMKV();
+    const CustomAlert = useAlert();
+    const [isLoggingOut, setIsLoggingOut] = useState(false);
+    // ⚡️ USER INIT
+    const [user, setInternalUser] = useState(() => {
+        try {
+            const stored = storage.getString("mobileUser");
+            if (stored) {
+                const parsedUser = JSON.parse(stored);
+                syncApiUser(parsedUser);
+                return parsedUser;
+            }
+        } catch (e) { console.error("Parse user error", e); }
+        return null;
+    });
+    const userRef = useRef(user);
+    useEffect(() => { userRef.current = user; }, [user]);
+    const [pinModalVisible, setPinModalVisible] = useState(false);
+    const [pinSuccess, setPinSuccess] = useState(false);
+    const hasSyncedIdentity = useRef(false);
+    // ⚡️ STREAK INIT
+    const [streakData, setStreakDataLocal] = useState(() => {
+        try {
+            const saved = storage.getString(STREAK_CACHE_KEY);
+            if (saved) return JSON.parse(saved);
+        } catch (e) { console.error("Cache Read Error", e); }
+        return { streak: 0, lastPostDate: null, canRestore: false, recoverableStreak: 0, expiresAt: null };
+    });
+    const [scheduledList, setScheduledList] = useState([]);
+    const isScheduling = useRef(false);
+    const [loading, setLoading] = useState(() => {
+        return !storage.getString("mobileUser") || !storage.getString(STREAK_CACHE_KEY);
+    });
+    // ⚡️ SETTERS
+    const updateUserData = useCallback((newData) => {
+        setInternalUser(newData);
+        try {
+            if (storage && typeof storage.set === 'function') {
+                if (newData) {
+                    storage.set("mobileUser", JSON.stringify(newData));
+                } else if (typeof storage.delete === 'function') {
+                    storage.delete("mobileUser");
+                }
+            }
+        } catch (err) { console.warn("MMKV err:", err); }
+        syncApiUser(newData);
+        if (newData?.securityLevel < 2 && !pinSuccess) setPinModalVisible(true);
+        setLoading(false);
+    }, [storage, pinSuccess]);
+    const updateStreakData = useCallback(async (newStreak) => {
+        setStreakDataLocal(newStreak);
+        storage.set(STREAK_CACHE_KEY, JSON.stringify(newStreak));
+        if (newStreak.expiresAt && !isScheduling.current) {
+            isScheduling.current = true;
+            const scheduled = await scheduleStreakReminders(newStreak.expiresAt);
+            setScheduledList(scheduled);
+            isScheduling.current = false;
+        }
+        setLoading(false);
+    }, [storage]);
+    // ⚡️ MERGED FETCH PROTOCOL (Hits the new combined `/users/me` route)
+    const syncProfile = useCallback(async () => {
+        const currentUser = userRef.current;
+        if (!currentUser?.deviceId) return null;
+        try {
+            const res = await apiFetch(`/users/me?fingerprint=${currentUser.deviceId}`, {
+                headers: { "x-oreblogda-secret": APP_SECRET }
+            });
+            if (res.status === 200) {
+                const data = await res.json();
+                if (data.user) {
+                    const updatedUser = {
+                        ...currentUser,
+                        ...data.user,
+                        country: data.user.country || "Unknown",
+                        username: data.user.username || currentUser.username,
+                        inventory: data.user.inventory || currentUser.inventory || []
+                    };
+                    updateUserData(updatedUser);
+                }
+                if (data.streak) {
+                    updateStreakData(data.streak);
+                }
+                return data;
+            }
+        } catch (fetchErr) { console.error("Failed to sync fresh profile values:", fetchErr); }
+        return null;
+    }, [updateUserData, updateStreakData]);
+    // Standalone Streak Refresh (Kept for strict refresh gestures)
+    const refreshStreak = useCallback(async () => {
+        const currentUser = userRef.current;
+        if (!currentUser?.deviceId) return;
+        try {
+            const res = await apiFetch(`/users/streak/${currentUser.deviceId}`, { headers: { "Content-Type": "application/json", "x-oreblogda-secret": APP_SECRET } });
+            if (res.ok) {
+                const data = await res.json();
+                updateStreakData(data);
+            }
+        } catch (e) { console.error("Streak Fetch Error:", e); }
+    }, [updateStreakData]);
+    // ⚡️ LOGOUT PROTOCOL (Combined)
+    const handleInternalLogout = useCallback(async (isSystemKick = false) => {
+        if (isLoggingOut) return;
+        const performCleanup = async () => {
+            try {
+                setIsLoggingOut(true);
+                const currentUser = userRef.current;
+                if (!isSystemKick && currentUser?.deviceId) {
+                    try { await apiFetch('/mobile/logout', { method: 'POST', body: { deviceId: currentUser.deviceId } }); } catch (apiErr) { }
+                }
+                let updatedHistory = [];
+                try {
+                    const rawHistory = storage.getString("session_history");
+                    const sessionHistory = rawHistory ? JSON.parse(rawHistory) : [];
+                    if (currentUser) {
+                        const currentSession = { uid: currentUser.uid, deviceId: currentUser.deviceId, username: currentUser.username, pfp: currentUser.profilePic?.url || currentUser.image };
+                        updatedHistory = [currentSession, ...sessionHistory.filter(s => s && s.uid !== currentSession.uid)].slice(0, 3);
+                    }
+                } catch (historyErr) { }
+                try {
+                    if (storage && typeof storage.clearAll === 'function') storage.clearAll();
+                    else { storage.delete("mobileUser"); storage.delete("auth_token"); storage.delete(STREAK_CACHE_KEY); }
+                    if (updatedHistory.length > 0 && storage) storage.set("session_history", JSON.stringify(updatedHistory));
+                } catch (storageErr) { }
+                await Promise.all(STREAK_NOTIF_IDS.map(id => Notifications.cancelScheduledNotificationAsync(id).catch(() => { })));
+                await AsyncStorage.clear().catch(() => { });
+                setInternalUser(null);
+                setStreakDataLocal({ streak: 0, lastPostDate: null, canRestore: false, recoverableStreak: 0, expiresAt: null });
+                hasSyncedIdentity.current = false;
+                router.replace("/screens/FirstLaunchScreen");
+            } catch (error) {
+                setInternalUser(null);
+                router.replace("/screens/FirstLaunchScreen");
+            } finally {
+                setIsLoggingOut(false);
+            }
+        };
+        if (isSystemKick) {
+            CustomAlert("Neural Link Severed", "Your session has been terminated. Please log in again.", [{ text: "Understood", onPress: performCleanup }]);
+        } else {
+            performCleanup();
+        }
+    }, [isLoggingOut, storage, CustomAlert]);
+    useEffect(() => {
+        setSessionExpiredHandler(() => { handleInternalLogout(true); });
+    }, [handleInternalLogout]);
+    // ⚡️ IDENTITY SYNC (Preserved, but profile auto-fetch removed)
+    useEffect(() => {
+        const backgroundSyncIdentity = async () => {
+            const currentUser = userRef.current;
+            if (!currentUser?.deviceId) {
+                setLoading(false);
+                return;
+            }
+            if ((!currentUser.uid || !currentUser.hardwareId) && !hasSyncedIdentity.current) {
+                hasSyncedIdentity.current = true;
+                try {
+                    const fingerprint = await getFingerprint();
+                    const res = await apiFetch('/mobile/sync-identity', { method: 'POST', body: { deviceId: currentUser.deviceId, hardwareId: fingerprint.hardwareId } });
+                    if (res.status === 200) {
+                        const data = await res.json();
+                        if (data.uid) {
+                            updateUserData({ ...currentUser, uid: data.uid, hardwareId: fingerprint.hardwareId, securityLevel: data.securityLevel || 0 });
+                        }
+                    }
+                } catch (err) {
+                    console.error("Identity Sync Failed:", err);
+                    hasSyncedIdentity.current = false;
+                }
+            }
+        };
+        backgroundSyncIdentity();
+    }, [updateUserData]);
+    const updateUserDataWrapper = useCallback((newData) => { updateUserData(newData); }, [updateUserData]);
+    const handleLogoutExternal = useCallback(() => { handleInternalLogout(false); }, [handleInternalLogout]);
+    const contextValue = useMemo(() => ({
+        // User API
+        user,
+        setUser: updateUserDataWrapper,
+        syncProfile,
+        loading,
+        pinModalVisible,
+        setPinModalVisible,
+        pinSuccess,
+        setPinSuccess,
+        isLoggingOut,
+        handleLogout: handleLogoutExternal,
+        // Streak API
+        streak: streakData,
+        setStreak: updateStreakData,
+        refreshStreak,
+        scheduledList,
+    }), [user, updateUserDataWrapper, syncProfile, loading, pinModalVisible, pinSuccess, isLoggingOut, handleLogoutExternal, streakData, updateStreakData, refreshStreak, scheduledList]);
+    return (
+        <UserContext.Provider value={contextValue}>
+            {children}
+        </UserContext.Provider>
+    );
+};
 export const useUser = () => useContext(UserContext);

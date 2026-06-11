@@ -1573,6 +1573,7 @@ import { LinearGradient } from 'expo-linear-gradient';
 import { AnimatePresence, MotiText, MotiView } from 'moti';
 import { useMMKVObject } from 'react-native-mmkv';
 import CoinIcon from "../../components/ClanIcon";
+import { SyncLoading } from "../../components/SyncLoading";
 import TitleTag from "../../components/TitleTag";
 
 const MilestoneReferral = ({ userReferralCode, isDark }) => {

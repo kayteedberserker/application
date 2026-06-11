@@ -19,7 +19,6 @@ import Animated, {
 } from "react-native-reanimated";
 import { useAlert } from "../context/AlertContext";
 import { useCoins } from "../context/CoinContext";
-import { useStreak } from "../context/StreakContext";
 import { useUser } from "../context/UserContext";
 import apiFetch from "../utils/apiFetch";
 import CoinIcon from "./ClanIcon";
@@ -32,8 +31,7 @@ let hasShownThisSession = false;
 function TopBar({ isDark }) {
     const storage = useMMKV();
     const CustomAlert = useAlert();
-    const { streak, loading, refreshStreak } = useStreak();
-    const { user, refreshUser } = useUser();
+    const { user, refreshUser, streak, loading, refreshStreak } = useUser();
     const { coins, tokens, peakLevel, processTransaction, isProcessingTransaction } = useCoins();
 
     const pathName = usePathname();

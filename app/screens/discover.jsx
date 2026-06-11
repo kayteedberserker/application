@@ -9,7 +9,6 @@ import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import ClanCrest from '../../components/ClanCrest';
 import CoinIcon from '../../components/ClanIcon';
 import { SyncLoading } from "../../components/SyncLoading";
-import { useStreak } from "../../context/StreakContext";
 import { useUser } from "../../context/UserContext";
 import apiFetch from '../../utils/apiFetch';
 
@@ -57,8 +56,7 @@ export default function ClanDiscover() {
     const router = useRouter();
     const insets = useSafeAreaInsets();
 
-    const { user } = useUser();
-    const { streak: streakData } = useStreak();
+    const { user, streak: streakData } = useUser();
 
     const [clans, setClans] = useState(CLANS_MEMORY_CACHE);
     // ⚡️ Optimized: Read Rank Level directly from the User Context

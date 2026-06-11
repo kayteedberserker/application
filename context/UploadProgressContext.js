@@ -49,7 +49,7 @@ export const UploadProgressProvider = ({ children }) => {
             const safeOverallProgress = Math.min(100, Math.max(0, Math.round(totalAccumulatedProgress / totalFiles)));
 
             // ✅ SERIOUS ISSUE #2 FIX: Throttle notification updates to every 5%
-            const throttledProgress = Math.floor(safeOverallProgress / 5) * 5;
+            const throttledProgress = Math.floor(safeOverallProgress / 2) * 2
 
             if (uploadProgress.status === 'uploading' && throttledProgress !== lastNotifiedProgress.current) {
                 lastNotifiedProgress.current = throttledProgress;

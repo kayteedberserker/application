@@ -40,15 +40,18 @@ export default function ReferralDashboard() {
     const fetchLatestData = useCallback(async () => {
         try {
             if (user?.deviceId) {
-                const res = await apiFetch(`/users/me?fingerprint=${user.deviceId}`);
+                // ⚡️ FIXED: Pass the required authorization gateway secret
+                const res = await apiFetch(`/users/me?fingerprint=${user.deviceId}`, {
+                    headers: { "x-oreblogda-secret": "thisismyrandomsuperlongsecretkey" }
+                });
                 const response = await res.json();
-                if (response) {
+                // ⚡️ FIXED: Extract fields safely from response.user nesting
+                if (res.ok && response?.user) {
                     const newData = {
-                        referralCode: response.referralCode || user.referralCode,
-                        invitedUsers: response.invitedUsers || []
+                        referralCode: response.user.referralCode || user.referralCode,
+                        invitedUsers: response.user.invitedUsers || []
                     };
                     setDbData(newData);
-                    // 🔹 Update MMKV Cache Synchronously
                     storage.set(CACHE_KEY, JSON.stringify(newData));
                 }
             }

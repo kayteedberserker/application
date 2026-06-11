@@ -225,20 +225,6 @@ export default function MainLayout() {
     }, [isUserAuthenticated, setUser, storage]);
 
     useEffect(() => {
-        if (user?.deviceId) {
-            const updateActivity = async () => {
-                try {
-                    await apiFetch("/mobile/app-open", {
-                        method: "POST",
-                        body: JSON.stringify({ deviceId: user.deviceId }),
-                    });
-                } catch (err) { }
-            };
-            updateActivity();
-        }
-    }, [user?.deviceId]);
-
-    useEffect(() => {
         if (systemScheme) {
             setColorScheme(systemScheme);
         }
@@ -600,11 +586,14 @@ export default function MainLayout() {
                     position: "absolute",
                     bottom: insets.bottom + 15,
                     height: 60,
-                    left: isActive ? 25 : 50,
+                    // 🛠️ FIX: Center the bar and let it hug the items naturally
+                    alignSelf: "center",
+                    marginRight: "10%",
                     borderRadius: 30,
                     backgroundColor: isDark ? "rgba(17, 17, 17, 0.95)" : "rgba(255, 255, 255, 0.95)",
                     flexDirection: "row",
                     alignItems: "center",
+                    justifyContent: "center",
                     paddingHorizontal: 8,
                     elevation: 10,
                     shadowColor: "#000",

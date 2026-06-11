@@ -2,10 +2,9 @@ import FontAwesome from '@expo/vector-icons/FontAwesome';
 import Ionicons from '@expo/vector-icons/Ionicons';
 import MaterialCommunityIcons from '@expo/vector-icons/MaterialCommunityIcons';
 // 🌟 NEW: Added AndroidStyle
-import notifee, { AndroidImportance, AndroidStyle, EventType } from '@notifee/react-native';
-import Constants from 'expo-constants';
-// 🌟 NEW: Added FileSystem for caching images locally
-import * as FileSystem from 'expo-file-system';
+import notifee, { AndroidStyle, EventType } from '@notifee/react-native';
+// 🌟 Import the modern components
+import * as FileSystem from 'expo-file-system/legacy';
 import { useFonts } from "expo-font";
 import * as Linking from 'expo-linking';
 import * as Notifications from "expo-notifications";
@@ -26,143 +25,132 @@ import { AlertProvider } from '../context/AlertContext';
 import { ClanProvider } from "../context/ClanContext";
 import { CoinProvider } from "../context/CoinContext";
 import { EventProvider } from "../context/EventContext";
-import { StreakProvider, useStreak } from "../context/StreakContext";
 import { UploadProgressProvider, useUploadProgress } from "../context/UploadProgressContext";
 import { UserProvider, useUser } from "../context/UserContext";
-import apiFetch from "../utils/apiFetch";
 import "./globals.css";
 
 // 🛑 GLOBAL LOCKS
 let IS_NAVIGATING_GLOBAL = false;
 let LAST_PROCESSED_NOTIF_ID = null;
 let LAST_PROCESSED_URL = null;
-
-// ⚡️ REGISTER NOTIFEE FOREGROUND SERVICE & BACKGROUND EVENTS
-if (Platform.OS === 'android') {
-    notifee.registerForegroundService((notification) => {
-        return new Promise((resolve) => {
-            // Keeps the service alive. 
-            // It will automatically shut down when your upload context sets 'asForegroundService: false'
-        });
-    });
-
-    // 🌟 NEW: Ensure Notifee captures background events silently
-    notifee.onBackgroundEvent(async ({ type, detail }) => {
-        // Deep linking on press is naturally handled by getInitialNotification later
-        if (type === EventType.PRESS && detail.notification?.data) {
-            console.log("Background Notification Pressed", detail.notification.data);
-        }
-    });
-}
-
-// 🔹 REVENUE_CAT KEYS
-const REVENUE_CAT_API_KEYS = {
-    ios: "goog_your_ios_key_here",
-    android: "goog_cypWcXGzLgDujHkFvHTcUoqUNQi"
-};
-
-// 🌟 NEW: RICH NOTIFICATION IMAGE HANDLER
-const downloadNotificationImage = async (url, id) => {
-    if (!url) return null;
-    try {
-        const fileUri = `${FileSystem.cacheDirectory}notif_${id || Date.now()}.jpg`;
-        const { uri } = await FileSystem.downloadAsync(url, fileUri);
-        return uri;
-    } catch (error) {
-        console.error("❌ Failed to download notification image:", error);
-        return null;
-    }
-};
-
 // 🔹 NOTIFICATION HANDLER
+/**
+ * GLOBAL NOTIFICATION HANDLER
+ *
+ * IMPORTANT:
+ * Expo supports only ONE notification handler.
+ * Do not call Notifications.setNotificationHandler()
+ * anywhere else in the app.
+ */
 Notifications.setNotificationHandler({
     handleNotification: async (notification) => {
         const { title, body, data } = notification.request.content;
+
+        // 🌟 INSTANT LOGGING: See this immediately when a push arrives
+        console.log("🔥 FOREGROUND PUSH INTERCEPTED:", title, data);
+
         const groupId = data?.groupId;
-        const mediaUrl = data?.mediaUrl; // 🌟 Look for the image URL
-        const postId = data?.postId;
+        const mediaUrl = data?.mediaUrl || data?.fcm_options?.image;
+        const authorPfpUrl = data?.authorPfp;
 
         try {
-            // 🌟 NEW: If there is an image, we build a cross-platform Rich Notification
-            if (mediaUrl) {
-                const localImagePath = await downloadNotificationImage(mediaUrl, postId);
+            if (mediaUrl || authorPfpUrl) {
+                console.log("⏳ Downloading rich media assets...");
 
-                if (localImagePath) {
+                // Download both concurrently. Protected by the 2-second timeout.
+                const [localPostImage, localPfpImage] = await Promise.all([
+                    mediaUrl ? downloadNotificationImage(mediaUrl, 'media') : Promise.resolve(null),
+                    authorPfpUrl ? downloadNotificationImage(authorPfpUrl, 'pfp') : Promise.resolve(null)
+                ]);
+
+                console.log("✅ Downloads complete. PostImage:", !!localPostImage, "PFP:", !!localPfpImage);
+
+                if (localPostImage || localPfpImage) {
                     await notifee.displayNotification({
                         title: title || "New Alert",
                         body: body || "",
                         data: data || {},
                         android: {
                             channelId: 'default',
-                            smallIcon: 'notification_icon', // Your silhouette
+                            smallIcon: 'notification_icon',
                             color: '#10B981',
-                            style: {
+                            largeIcon: localPfpImage || localPostImage,
+                            style: localPostImage ? {
                                 type: AndroidStyle.BIGPICTURE,
-                                picture: localImagePath,
-                            },
-                            pressAction: {
-                                id: 'default',
-                            },
+                                picture: localPostImage,
+                            } : undefined,
+                            pressAction: { id: 'default' },
                         },
                         ios: {
-                            attachments: [
-                                { url: localImagePath } // Renders the image on iOS
-                            ]
+                            attachments: localPostImage
+                                ? [{ url: localPostImage }]
+                                : (localPfpImage ? [{ url: localPfpImage }] : [])
                         }
                     });
 
-                    // Tell Expo NOT to show its default banner, since Notifee just handled it gorgeously
-                    return {
-                        shouldShowBanner: false,
-                        shouldPlaySound: true,
-                        shouldSetBadge: false,
-                    };
+                    // Successfully displayed via Notifee, hide default Expo banner
+                    return { shouldShowBanner: false, shouldPlaySound: true, shouldSetBadge: false };
                 }
             }
 
-            // Original logic for non-image pushes
+            // Original fallback logic
             if (Platform.OS === 'android' && groupId) {
-                return {
-                    shouldShowBanner: false,
-                    shouldPlaySound: false,
-                    shouldSetBadge: false,
-                };
+                return { shouldShowBanner: false, shouldPlaySound: false, shouldSetBadge: false };
             }
         } catch (error) {
-            console.error("Rich Notification Display Error:", error);
+            console.error("❌ Rich Notification Display Error:", error);
         }
 
-        return {
-            shouldShowBanner: true,
-            shouldPlaySound: true,
-            shouldSetBadge: false,
-        };
+        // Failsafe: Always show standard text banner if images fail
+        return { shouldShowBanner: true, shouldPlaySound: true, shouldSetBadge: false };
     },
 });
+// ⚡️ REGISTER NOTIFEE FOREGROUND SERVICE & BACKGROUND EVENTS
+if (Platform.OS === 'android') {
+    notifee.registerForegroundService((notification) => {
+        return new Promise((resolve) => { });
+    });
 
-async function registerForPushNotificationsAsync() {
-    if (Platform.OS === 'web') return null;
-    if (Platform.OS === 'android') {
-        await Notifications.setNotificationChannelAsync('default', {
-            name: 'default',
-            importance: Notifications.AndroidImportance.MAX,
-            vibrationPattern: [0, 250, 250, 250],
-            lightColor: '#FF231F7C',
-        });
-    }
-    const { status: existingStatus } = await Notifications.getPermissionsAsync();
-    let finalStatus = existingStatus;
-    if (existingStatus !== 'granted') {
-        const { status } = await Notifications.requestPermissionsAsync();
-        finalStatus = status;
-    }
-    if (finalStatus !== 'granted') return null;
-    const projectId = Constants?.expoConfig?.extra?.eas?.projectId || "yMNrI6jWuN";
-    try {
-        const token = (await Notifications.getExpoPushTokenAsync({ projectId })).data;
-        return token;
-    } catch (e) { return null; }
+    notifee.onBackgroundEvent(async ({ type, detail }) => {
+        if (type === EventType.PRESS && detail.notification?.data) {
+            console.log("Background Notification Pressed", detail.notification.data);
+        }
+    });
 }
+
+const REVENUE_CAT_API_KEYS = {
+    ios: "goog_your_ios_key_here",
+    android: "goog_cypWcXGzLgDujHkFvHTcUoqUNQi"
+};
+
+// 🌟 TIMEOUT FIX: Force the download to abort if it takes longer than 2 seconds
+const downloadNotificationImage = async (url, prefix = 'notif') => {
+    if (!url) return null;
+
+    // Cloudinary optimization: Force JPG format for Notifee stability
+    let targetUrl = url;
+    if (targetUrl.includes('cloudinary.com')) {
+        targetUrl = targetUrl.replace('.mp4', '.jpg').replace('/upload/', '/upload/w_600,q_auto,f_jpg/');
+    }
+
+    try {
+        const uniqueHash = Math.floor(Math.random() * 1000000);
+        const filename = `${prefix}_${Date.now()}_${uniqueHash}.jpg`;
+        const fileUri = `${FileSystem.documentDirectory}${filename}`;
+        const downloadPromise = FileSystem.downloadAsync(targetUrl, fileUri);
+        const downloadResult = await Promise.race([downloadPromise]);
+
+        let localUri = downloadResult.uri;
+        if (localUri && !localUri.startsWith('file://')) {
+            localUri = `file://${localUri}`;
+        }
+
+        return localUri;
+    } catch (error) {
+        console.error(`❌ Download failed for ${prefix}:`, error.message);
+        return null; // Return null safely so the push doesn't crash
+    }
+};
 
 // 🧠 ISOLATED CONTAINER CONSUMER TO BLOCK HIGH FREQUENCY OVERLAPS FROM THE ROOT
 const IsolatedUploadProgress = React.memo(() => {
@@ -172,7 +160,6 @@ const IsolatedUploadProgress = React.memo(() => {
 });
 
 function RootLayoutContent() {
-    const { refreshStreak } = useStreak();
     const { colorScheme } = useColorScheme();
     const isDark = colorScheme === "dark";
     const router = useRouter();
@@ -406,28 +393,6 @@ function RootLayoutContent() {
         ...FontAwesome.font,
     });
 
-    useEffect(() => {
-        if (!fontsLoaded || isUpdating) return;
-        const setupNotifications = async () => {
-            if (Platform.OS === 'android') {
-                await notifee.createChannel({
-                    id: 'default',
-                    name: 'Default Channel',
-                    importance: AndroidImportance.HIGH,
-                });
-            }
-            const token = await registerForPushNotificationsAsync();
-            if (token && user?.deviceId) {
-                apiFetch("/users/update-push-token", {
-                    method: 'POST',
-                    headers: { 'Content-Type': 'application/json' },
-                    body: JSON.stringify({ deviceId: user.deviceId, pushToken: token })
-                }).catch(() => { });
-            }
-        };
-        setupNotifications();
-    }, [fontsLoaded, user?.deviceId, isUpdating]);
-
     // 🔹 NOTIFICATION LISTENERS
     const handleNotificationNavigation = useCallback((response) => {
         const data = response?.notification?.request?.content?.data || {};
@@ -476,8 +441,6 @@ function RootLayoutContent() {
             />
         );
     }
-
-    console.log("ROOT LAYOUT RE-RENDER");
     return (
         <View key={colorScheme} className="flex-1 bg-white dark:bg-gray-900">
             <StatusBar barStyle={isDark ? "light-content" : "dark-content"} backgroundColor={isDark ? "#0a0a0a" : "#ffffff"} />
@@ -500,17 +463,15 @@ export default function RootLayout() {
         <SafeAreaProvider initialMetrics={initialWindowMetrics}>
             <AlertProvider>
                 <UserProvider>
-                    <StreakProvider>
-                        <ClanProvider>
-                            <CoinProvider>
-                                <EventProvider>
-                                    <UploadProgressProvider>
-                                        <RootLayoutContent />
-                                    </UploadProgressProvider>
-                                </EventProvider>
-                            </CoinProvider>
-                        </ClanProvider>
-                    </StreakProvider>
+                    <ClanProvider>
+                        <CoinProvider>
+                            <EventProvider>
+                                <UploadProgressProvider>
+                                    <RootLayoutContent />
+                                </UploadProgressProvider>
+                            </EventProvider>
+                        </CoinProvider>
+                    </ClanProvider>
                 </UserProvider>
             </AlertProvider>
         </SafeAreaProvider>

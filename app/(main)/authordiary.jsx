@@ -30,7 +30,6 @@ import THEME from "../../components/useAppTheme";
 import { useAlert } from "../../context/AlertContext";
 import { useClan } from "../../context/ClanContext";
 import { useCoins } from "../../context/CoinContext";
-import { useStreak } from "../../context/StreakContext";
 import { useUploadProgress } from "../../context/UploadProgressContext";
 import { useUser } from "../../context/UserContext";
 import { apiFetch } from "../../utils/apiFetch";
@@ -49,17 +48,6 @@ import Animated, {
     ZoomIn
 } from "react-native-reanimated";
 import ImageEditorModal from "../../components/ImageEditorModal";
-
-
-// 🔹 Notification Handler Configuration
-Notifications.setNotificationHandler({
-    handleNotification: async () => ({
-        shouldShowBanner: true,
-        shouldShowList: true,
-        shouldPlaySound: true,
-        shouldSetBadge: false,
-    }),
-});
 
 const COOLDOWN_NOTIFICATION_KEY = "cooldown_notification_id";
 const fetcher = (url) => apiFetch(url).then((res) => res.json());
@@ -90,10 +78,9 @@ const resolveUserRank = (level) => {
 export default function AuthorDiaryDashboard() {
     const CustomAlert = useAlert();
     const storage = useMMKV()
-    const { user, loading: contextLoading } = useUser();
+    const { user, loading: contextLoading, refreshStreak, streak } = useUser();
 
     const { userClan, isInClan } = useClan();
-    const { streak, refreshStreak } = useStreak();
     const { startUpload, updateProgress, nextFile, setStatus, completeUpload, hideProgress, uploadWithNativeEngine } = useUploadProgress();
     const fingerprint = user?.deviceId;
     const router = useRouter();

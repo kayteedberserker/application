@@ -12,6 +12,7 @@ import Animated, {
     withSequence,
     withTiming,
 } from 'react-native-reanimated';
+import { useSafeAreaInsets } from 'react-native-safe-area-context'; // ⚡️ ADDED: To dynamically calculate notch height
 import useSWR from 'swr';
 import apiFetch from '../utils/apiFetch';
 import { Text } from './Text';
@@ -54,12 +55,13 @@ export default function GlobalMarquee({ isDark }) {
     const { user } = useUser();
     const { userClan } = useClan();
     const storage = useMMKV();
+    const insets = useSafeAreaInsets(); // ⚡️ ADDED: Fetch device safe area
 
     const userId = user?._id || '';
     const clanId = userClan?.tag || '';
     const endpoint = `/message-pills?userId=${userId}&clanId=${clanId}`;
 
-    const { data } = useSWR(endpoint, fetcher, { refreshInterval: 60000 });
+    const { data } = useSWR(endpoint, fetcher, { refreshInterval: 600000 });
 
     const [viewCounts, setViewCounts] = useState({});
     const [batchCount, setBatchCount] = useState(0);
@@ -196,7 +198,9 @@ export default function GlobalMarquee({ isDark }) {
                 height: 45,
                 backgroundColor: themeBg,
                 position: 'absolute',
-                top: 85,
+                // ⚡️ CHANGED: top: 85 has been updated to adapt to the notch height dynamically 
+                // We know Topbar is 55px, CategoryNav is 40px. So we anchor exactly below them.
+                top: insets.top + 50,
                 left: 0,
                 right: 0,
                 overflow: 'hidden'

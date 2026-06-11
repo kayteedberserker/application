@@ -1,22 +1,27 @@
 {
   "expo": {
-    "name": "Oreblogda - Test Build",
+    "name": "Oreblogda",
     "slug": "oreblogda",
-    "version": "2.2.3",
+    "version": "2.2.5",
     "orientation": "default",
     "icon": "./assets/images/myicon.png",
     "scheme": "oreblogda",
     "userInterfaceStyle": "automatic",
     "newArchEnabled": true,
-    "owner": "oreblog",
-    "runtimeVersion": "v7_global",
+    "owner": "oreblogda",
+    "runtimeVersion": "v8_global",
     "ios": {
       "supportsTablet": true,
-      "bundleIdentifier": "com.kaytee.oreblogda.dev",
+      "bundleIdentifier": "com.kaytee.oreblogda",
       "infoPlist": {
         "UIBackgroundModes": [
           "remote-notification",
           "remote-notification"
+        ],
+        "UISupportedInterfaceOrientations": [
+          "UIInterfaceOrientationPortrait",
+          "UIInterfaceOrientationLandscapeLeft",
+          "UIInterfaceOrientationLandscapeRight"
         ],
         "ITSAppUsesNonExemptEncryption": false
       }
@@ -27,7 +32,7 @@
         "foregroundImage": "./assets/images/myicon.png",
         "backgroundImage": "./assets/images/myicon.png"
       },
-      "package": "com.kaytee.oreblogda.dev",
+      "package": "com.kaytee.oreblogda",
       "googleServicesFile": "./google-services.json",
       "predictiveBackGestureEnabled": false,
       "permissions": [
@@ -94,7 +99,7 @@
             "minSdkVersion": 25,
             "launchMode": "singleTop",
             "enableProguardInReleaseBuilds": true,
-            "enableMinifyInReleaseBuilds": false,
+            "enableMinifyInReleaseBuilds": true,
             "networkSecurityConfig": "./network_security_config.xml"
           }
         }
@@ -111,13 +116,15 @@
           "color": "#E6F4FE",
           "sounds": []
         }
-      ]
+      ],
+      "@react-native-firebase/app",
+      "@react-native-firebase/messaging"
     ],
     "experiments": {
       "typedRoutes": true
     },
     "updates": {
-      "url": "https://u.expo.dev/b22841d4-0736-4aa0-89d2-d9a48af0defc",
+      "url": "https://u.expo.dev/b6b7afd1-028a-425e-a84e-6a2af706a736",
       "enableBsdiffPatchSupport": true,
       "enabled": true,
       "checkAutomatically": "ON_LOAD",
@@ -126,7 +133,7 @@
     "extra": {
       "router": {},
       "eas": {
-        "projectId": "b22841d4-0736-4aa0-89d2-d9a48af0defc"
+        "projectId": "b6b7afd1-028a-425e-a84e-6a2af706a736"
       }
     }
   }

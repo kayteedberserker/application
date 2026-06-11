@@ -114,7 +114,7 @@ function CategoryNav({ isDark }) {
 
     // Updated SWR config: 2 minutes interval (120000ms), refocus revalidation true, and grabbed mutate to allow manual fetching
     const { data, isValidating, mutate } = useSWR(endpoint, fetcher, {
-        refreshInterval: 120000,
+        refreshInterval: 600000,
         revalidateOnFocus: true
     });
 

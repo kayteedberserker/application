@@ -1570,32 +1570,27 @@ export default function MobileProfilePage() {
     const activeGlowColor = equippedGlow?.visualConfig?.primaryColor || null;
     const dynamicAuraColor = activeGlowColor || weeklyAuraTier?.color || '#3b82f6';
 
-    // Safe guards for null user during logout
     useEffect(() => {
         if (!user?.deviceId) return;
         const syncUserWithDB = async () => {
             try {
-                const res = await apiFetch(`/users/me?fingerprint=${user.deviceId}`);
-                const dbUser = await res.json();
-
+                // ⚡️ Fetch merged payload
+                const res = await apiFetch(`/users/me?fingerprint=${user.deviceId}`, { headers: { "x-oreblogda-secret": "thisismyrandomsuperlongsecretkey" } });
+                const data = await res.json();
                 if (res.ok) {
+                    const { user: dbUser, totalPosts: newTotal } = data;
+                    // ⚡️ Update Context & Local State
                     setUser({ ...user, ...dbUser });
-                    setDescription(dbUser.description || "");
                     setUsername(dbUser.username || "");
-
+                    setDescription(dbUser.description || "");
+                    setTotalPosts(newTotal);
                     const dbAnimes = Array.isArray(dbUser.preferences?.favAnimes) ? dbUser.preferences.favAnimes.join(', ') : "";
                     const dbGenres = Array.isArray(dbUser.preferences?.favGenres) ? dbUser.preferences.favGenres.join(', ') : "";
                     const dbChar = dbUser.preferences?.favCharacter || "";
-
                     setFavAnimes(dbAnimes);
                     setFavGenres(dbGenres);
                     setFavCharacter(dbChar);
-
-                    const postRes = await apiFetch(`/posts?author=${dbUser._id}&limit=1`);
-                    const postData = await postRes.json();
-                    const newTotal = postData.total || 0;
-                    if (postRes.ok) setTotalPosts(newTotal);
-
+                    // ⚡️ Cache everything for offline/instant load next time
                     storage.set(CACHE_KEY_USER_EXTRAS, JSON.stringify({
                         username: dbUser.username,
                         description: dbUser.description,
@@ -1605,7 +1600,7 @@ export default function MobileProfilePage() {
                         favCharacter: dbChar
                     }));
                 }
-            } catch (err) { console.error("Sync User Error:", err); }
+            } catch (err) { console.error("Sync User UI Error:", err); }
         };
         syncUserWithDB();
     }, [user?.deviceId]);

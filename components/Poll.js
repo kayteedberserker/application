@@ -1,189 +1,105 @@
 import { MaterialCommunityIcons } from "@expo/vector-icons";
 import { usePathname, useRouter } from "expo-router";
-import { useEffect, useState } from "react";
+import { memo, useEffect, useState } from "react";
 import { DeviceEventEmitter, Pressable, View } from "react-native";
-import { useMMKV } from "react-native-mmkv"; // ⚡️ Correct Hook Import
+import { useMMKV } from "react-native-mmkv";
 import Toast from "react-native-toast-message";
 import useSWR from "swr";
 import { useUser } from "../context/UserContext";
 import apiFetch from "../utils/apiFetch";
 import { Text } from "./Text";
-
-const API_URL = "https://oreblogda.com";
-
 const fetcher = (url) => apiFetch(url).then(res => res.json());
-
-export default function Poll({ poll, isVisible, postId, readOnly = false }) {
-    const storage = useMMKV(); // ⚡️ Initialized safely inside the component
+const Poll = memo(({ poll, isVisible, postId, readOnly = false }) => {
+    const storage = useMMKV();
     const { user } = useUser();
     const pathname = usePathname();
     const router = useRouter();
-
     const [selectedOptions, setSelectedOptions] = useState([]);
     const [submitted, setSubmitted] = useState(false);
     const [loading, setLoading] = useState(false);
-
-    // ✅ Route Check
-    const isPostPage = pathname.includes("post/")
-
-    // --- SWR: live post (poll source of truth) ---
+    const isPostPage = pathname.includes("post/");
     const { data, mutate } = useSWR(
         postId ? `/posts/${postId}` : null,
         fetcher,
-        {
-            refreshInterval: isVisible ? 60000 : 300000,
-            revalidateOnFocus: true,
-            dedupingInterval: 0,
-        }
+        { refreshInterval: isVisible ? 60000 : 300000, revalidateOnFocus: true, dedupingInterval: 0 }
     );
     const livePoll = data?.poll ? data?.poll : poll;
-    // --- Server-driven vote status (priority) ---
     const serverVoteStatus = livePoll?.hasVoted;
-
     const serverVotedOptions = livePoll?.userVotedOptions || [];
-
-    const displayOptions = isPostPage
-        ? livePoll.options
-        : livePoll.options?.slice(0, 2);
-
+    const displayOptions = isPostPage ? livePoll.options : livePoll.options?.slice(0, 2);
     const hasMoreOptions = !isPostPage && livePoll.options?.length > 2;
-
-    // Init selected from server if voted
     useEffect(() => {
         if (serverVoteStatus) {
             setSelectedOptions(serverVotedOptions);
             setSubmitted(true);
         }
     }, [serverVoteStatus, serverVotedOptions]);
-
     const handleOptionChange = (optionIndex) => {
-        // Disable changes if already voted per server
         if (readOnly || serverVoteStatus) return;
-
         if (livePoll.pollMultiple) {
-            setSelectedOptions((prev) =>
-                prev.includes(optionIndex)
-                    ? prev.filter((i) => i !== optionIndex)
-                    : [...prev, optionIndex]
-            );
+            setSelectedOptions((prev) => prev.includes(optionIndex) ? prev.filter((i) => i !== optionIndex) : [...prev, optionIndex]);
         } else {
             setSelectedOptions([optionIndex]);
         }
     };
-
     const handleVote = async () => {
         if (readOnly || selectedOptions.length === 0 || !user?.deviceId || loading) {
-            if (!user?.deviceId) {
-                Toast.show({ type: "error", text1: "Device ID not found" });
-            }
+            if (!user?.deviceId) Toast.show({ type: "error", text1: "Device ID not found" });
             return;
         }
         setLoading(true);
         const localVoteKey = `voted_poll_${postId}`;
         setSubmitted(true);
         storage.set(localVoteKey, true);
-        // --- Optimistic UI update ---
         const optimisticPoll = {
             ...livePoll,
-            options: livePoll.options.map((opt, i) =>
-                selectedOptions.includes(i)
-                    ? { ...opt, votes: opt.votes + 1 }
-                    : opt
-            ),
+            options: livePoll.options.map((opt, i) => selectedOptions.includes(i) ? { ...opt, votes: opt.votes + 1 } : opt),
             voters: [...(livePoll.voters || []), user.deviceId],
         };
-
-        mutate(
-            (current) => ({ ...current, poll: optimisticPoll }),
-            false
-        );
-
+        mutate((current) => ({ ...current, poll: optimisticPoll }), false);
         try {
             const res = await apiFetch(`/posts/${postId}`, {
                 method: "PATCH",
-                body: JSON.stringify({
-                    action: "vote",
-                    fingerprint: user.deviceId,
-                    payload: { selectedOptions },
-                }),
+                body: JSON.stringify({ action: "vote", fingerprint: user.deviceId, payload: { selectedOptions } }),
             });
-
             const result = await res.json();
-
             if (!res.ok) {
-                if (result.message === "Already voted") {
-                    Toast.show({ type: "info", text1: "You’ve already voted!" });
-                } else {
-                    throw new Error(result.message || "Vote failed");
-                }
-            } else {
+                if (result.message === "Already voted") Toast.show({ type: "info", text1: "You’ve already voted!" });
+                else throw new Error(result.message || "Vote failed");
             }
-
             mutate();
-
         } catch (err) {
-            // 🚨 REVERT IF FAILED: Unlock UI and set local memory to false
             setSubmitted(false);
-            storage.set(localVoteKey, false); // ⚡️ The safe alternative to .delete()
-
+            storage.set(localVoteKey, false);
             Toast.show({ type: "error", text1: "Vote failed, retrying…" });
             mutate();
         } finally {
             setLoading(false);
         }
     };
-
     const totalVotes = livePoll.options.reduce((sum, opt) => sum + opt.votes, 0);
-
     return (
         <View className="mt-6 p-5 border border-gray-200 dark:border-blue-900/30 rounded-[24px] bg-white/50 dark:bg-black/40 shadow-sm relative overflow-hidden">
-
-            {/* Mobile HUD Header */}
             <View className="flex-row items-center justify-between mb-4">
                 <View className="flex-row items-center gap-2">
                     <View className="w-1.5 h-1.5 bg-blue-600 rounded-full" />
-                    <Text className="text-[9px] font-black uppercase tracking-[0.2em] text-gray-900 dark:text-white">
-                        Consensus_Protocol
-                    </Text>
+                    <Text className="text-[9px] font-black uppercase tracking-[0.2em] text-gray-900 dark:text-white">Consensus_Protocol</Text>
                 </View>
-                <Text className="text-[8px] font-mono text-blue-600/60">
-                    Total: {totalVotes}
-                </Text>
+                <Text className="text-[8px] font-mono text-blue-600/60">Total: {totalVotes}</Text>
             </View>
-
             <View className="flex-col">
                 {displayOptions.map((opt, i) => {
                     const percentage = totalVotes ? ((opt.votes / totalVotes) * 100).toFixed(1) : 0;
                     const isSelected = selectedOptions.includes(i);
-
                     return (
-                        <Pressable
-                            key={i}
-                            onPress={() => !readOnly && !submitted && handleOptionChange(i)}
-                            className={`mb-3 w-full p-4 rounded-2xl border ${serverVoteStatus && serverVotedOptions.includes(i)
-                                ? "border-green-600 bg-green-600/5 dark:bg-green-600/10"
-                                : isSelected
-                                    ? "border-blue-600 bg-blue-600/5 dark:bg-blue-600/10"
-                                    : "border-gray-100 dark:border-gray-800 bg-gray-50 dark:bg-gray-900/50"
-                                }`}
-                        >
+                        <Pressable key={i} onPress={() => !readOnly && !submitted && handleOptionChange(i)} className={`mb-3 w-full p-4 rounded-2xl border ${serverVoteStatus && serverVotedOptions.includes(i) ? "border-green-600 bg-green-600/5 dark:bg-green-600/10" : isSelected ? "border-blue-600 bg-blue-600/5 dark:bg-blue-600/10" : "border-gray-100 dark:border-gray-800 bg-gray-50 dark:bg-gray-900/50"}`}>
                             <View className="flex-row items-start justify-between mb-3">
-                                <Text
-                                    className={`text-[11px] font-bold uppercase flex-1 mr-4 leading-4 ${isSelected ? 'text-blue-600' : 'text-gray-700 dark:text-gray-300'}`}
-                                >
-                                    {opt.text}
-                                </Text>
+                                <Text className={`text-[11px] font-bold uppercase flex-1 mr-4 leading-4 ${isSelected ? 'text-blue-600' : 'text-gray-700 dark:text-gray-300'}`}>{opt.text}</Text>
                                 <Text className="text-[10px] font-mono font-bold text-blue-500">{percentage}%</Text>
                             </View>
-
-                            {/* Progress Bar */}
                             <View className="w-full bg-gray-200 dark:bg-gray-800 h-2 rounded-full overflow-hidden">
-                                <View
-                                    className="bg-blue-600 h-full"
-                                    style={{ width: `${percentage}%` }}
-                                />
+                                <View className="bg-blue-600 h-full" style={{ width: `${percentage}%` }} />
                             </View>
-
                             <View className="flex-row justify-between mt-2.5">
                                 <Text className="text-[8px] font-mono text-gray-400">Data_Points: {opt.votes}</Text>
                                 {isSelected && (
@@ -197,61 +113,42 @@ export default function Poll({ poll, isVisible, postId, readOnly = false }) {
                     );
                 })}
             </View>
-
-            {/* ✅ Check More Options Trigger (Only in Feed) */}
             {hasMoreOptions && (
-                <Pressable
-                    onPress={() => DeviceEventEmitter.emit("navigateSafely", `/post/${postId}`)}
-                    className="mt-1 mb-4 pt-4 border-t border-gray-100 dark:border-gray-800 flex-row items-center justify-center gap-2"
-                >
+                <Pressable onPress={() => DeviceEventEmitter.emit("navigateSafely", `/post/${postId}`)} className="mt-1 mb-4 pt-4 border-t border-gray-100 dark:border-gray-800 flex-row items-center justify-center gap-2">
                     <MaterialCommunityIcons name="poll" size={14} color="#3b82f6" />
-                    <Text className="text-[10px] font-black text-blue-500 uppercase tracking-widest">
-                        Check {livePoll.options.length - 2} more options
-                    </Text>
+                    <Text className="text-[10px] font-black text-blue-500 uppercase tracking-widest">Check {livePoll.options.length - 2} more options</Text>
                     <MaterialCommunityIcons name="chevron-right" size={14} color="#3b82f6" />
                 </Pressable>
             )}
-
             {!readOnly && !submitted && (
                 <View className="mt-2">
-                    <Pressable
-                        onPress={handleVote}
-                        disabled={loading || selectedOptions.length === 0}
-                        className={`relative h-12 bg-gray-900 dark:bg-white rounded-xl flex-row items-center justify-center overflow-hidden ${loading ? 'opacity-70' : ''}`}
-                    >
+                    <Pressable onPress={handleVote} disabled={loading || selectedOptions.length === 0} className={`relative h-12 bg-gray-900 dark:bg-white rounded-xl flex-row items-center justify-center overflow-hidden ${loading ? 'opacity-70' : ''}`}>
                         {loading ? (
                             <View className="flex-row items-center gap-2">
                                 <View className="w-3 h-3 border-2 border-gray-400 border-t-blue-600 rounded-full" />
                                 <Text className="text-[10px] font-black uppercase tracking-widest text-white dark:text-black">Processing...</Text>
                             </View>
                         ) : (
-                            <Text className="text-[10px] font-black uppercase tracking-widest text-white dark:text-black">
-                                Transmit Selection
-                            </Text>
+                            <Text className="text-[10px] font-black uppercase tracking-widest text-white dark:text-black">Transmit Selection</Text>
                         )}
-
-                        {/* Mobile Loading Bar Animation */}
-                        {loading && (
-                            <View className="absolute bottom-0 left-0 right-0 h-1 bg-blue-600" />
-                        )}
+                        {loading && <View className="absolute bottom-0 left-0 right-0 h-1 bg-blue-600" />}
                     </Pressable>
-
-                    {loading && (
-                        <Text className="text-[8px] font-mono text-blue-500 text-center mt-2 animate-pulse uppercase">
-                            Encrypting Choice / Sending to Network...
-                        </Text>
-                    )}
+                    {loading && <Text className="text-[8px] font-mono text-blue-500 text-center mt-2 animate-pulse uppercase">Encrypting Choice / Sending to Network...</Text>}
                 </View>
             )}
-
             {submitted && (
                 <View className="mt-4 p-3 bg-green-500/10 border border-green-500/20 rounded-xl flex-row items-center justify-center gap-2">
                     <View className="w-1.5 h-1.5 bg-green-500 rounded-full" />
-                    <Text className="text-[9px] font-black uppercase tracking-widest text-green-600">
-                        Vote Logged Successfully
-                    </Text>
+                    <Text className="text-[9px] font-black uppercase tracking-widest text-green-600">Vote Logged Successfully</Text>
                 </View>
             )}
         </View>
     );
-}
+});
+// ⚡️ Add deep comparison to ensure it only rerenders when absolute necessary
+export default memo(Poll, (prevProps, nextProps) => {
+    return prevProps.postId === nextProps.postId &&
+        prevProps.isVisible === nextProps.isVisible &&
+        prevProps.readOnly === nextProps.readOnly &&
+        prevProps.poll?.hasVoted === nextProps.poll?.hasVoted;
+});

@@ -44,7 +44,6 @@ import { Text } from "../../components/Text";
 import THEME from "../../components/useAppTheme";
 import { useAlert } from "../../context/AlertContext";
 import { useClan } from "../../context/ClanContext";
-import { useStreak } from "../../context/StreakContext";
 import { useUser } from "../../context/UserContext";
 import apiFetch, { syncApiUser } from "../../utils/apiFetch";
 import { getFingerprint } from "../../utils/device";
@@ -217,8 +216,7 @@ export default function FirstLaunchScreen() {
 	const CustomAlert = useAlert();
 	const router = useRouter();
 	const isMounted = useRef(true);
-	const { setUser, syncProfile } = useUser();
-	const { refreshStreak } = useStreak();
+	const { setUser, syncProfile, refreshStreak } = useUser();
 	const { refreshClanStatus } = useClan();
 	const isDark = useColorScheme() === "dark";
 
