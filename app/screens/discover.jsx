@@ -6,8 +6,18 @@ import { memo, useCallback, useEffect, useRef, useState } from 'react';
 import { ActivityIndicator, Clipboard, DeviceEventEmitter, Modal, ScrollView, Text, TextInput, TouchableOpacity, View } from 'react-native';
 import { useMMKV } from 'react-native-mmkv';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
+
+// ⚡️ IMPORT REANIMATED
+import Animated, {
+    Easing,
+    interpolate,
+    useAnimatedStyle,
+    useSharedValue,
+    withRepeat,
+    withTiming
+} from 'react-native-reanimated';
+
 import ClanCrest from '../../components/ClanCrest';
-import CoinIcon from '../../components/ClanIcon';
 import { SyncLoading } from "../../components/SyncLoading";
 import { useUser } from "../../context/UserContext";
 import apiFetch from '../../utils/apiFetch';
@@ -22,7 +32,6 @@ const USER_STATS_CACHE_KEY = 'clan_user_stats_cache';
 const MIN_RANK_REQUIRED = 4;
 const MIN_STREAK_REQUIRED = 5;
 
-// ⚡️ IMPORTED AURA TIERS
 // ⚡️ IMPORTED AURA TIERS
 export const AURA_TIERS = [
     { level: 1, req: 0, title: "E-Rank Novice", icon: "🌱", color: "#94a3b8" },
@@ -45,8 +54,6 @@ const resolveUserRank = (level) => {
         level: currentTier.level
     };
 };
-
-
 
 export default function ClanDiscover() {
     const storage = useMMKV();
@@ -74,6 +81,24 @@ export default function ClanDiscover() {
 
     const searchTimeout = useRef(null);
     const scrollRef = useRef(null);
+
+    // ⚡️ REANIMATED SHARED VALUE FOR PULSE
+    const createPulse = useSharedValue(0);
+
+    useEffect(() => {
+        // Start the continuous pulse animation
+        createPulse.value = withRepeat(
+            withTiming(1, { duration: 2000, easing: Easing.out(Easing.ease) }),
+            -1,
+            false
+        );
+    }, []);
+
+    // ⚡️ ANIMATED STYLE FOR THE INDICATOR
+    const createPulseStyle = useAnimatedStyle(() => ({
+        transform: [{ scale: interpolate(createPulse.value, [0, 1], [1, 1.6]) }],
+        opacity: interpolate(createPulse.value, [0, 0.6, 1], [0.5, 0, 0]),
+    }));
 
     useEffect(() => {
         if (CLANS_MEMORY_CACHE.length === 0) {
@@ -141,8 +166,6 @@ export default function ClanDiscover() {
         }
     }, [clans.length, saveToDisk, user?.deviceId]);
 
-
-
     const handleLoadMore = () => {
         if (!loadingMore && hasMore && !loading) {
             fetchClans(page + 1, search);
@@ -154,13 +177,14 @@ export default function ClanDiscover() {
     };
 
     const handlePressCreate = () => {
-        const currentStreak = streakData?.streak || 0;
-        // ⚡️ Check against new MIN_RANK_REQUIRED (Level 4) using the Context Level
-        if (userRankLevel < MIN_RANK_REQUIRED || currentStreak < MIN_STREAK_REQUIRED) {
-            setShowReqModal(true);
-        } else {
-            setCreateModalVisible(true);
-        }
+        setCreateModalVisible(true);
+        // const currentStreak = streakData?.streak || 0;
+        // // ⚡️ Check against new MIN_RANK_REQUIRED (Level 4) using the Context Level
+        // if (userRankLevel < MIN_RANK_REQUIRED || currentStreak < MIN_STREAK_REQUIRED) {
+        //      setShowReqModal(true);
+        // } else {
+        //      setCreateModalVisible(true);
+        // }
     };
 
     const renderItem = useCallback(({ item, index }) => (
@@ -185,7 +209,7 @@ export default function ClanDiscover() {
                     </View>
                 </View>
                 <TouchableOpacity
-                    onPress={onRefresh}
+                    onRefresh={onRefresh}
                     className={`w-12 h-12 items-center justify-center rounded-2xl border ${isDark ? "bg-zinc-900 border-zinc-800" : "bg-white border-zinc-200 shadow-sm"}`}
                 >
                     <Ionicons name="refresh" size={20} color={isDark ? "#fff" : "#000"} />
@@ -204,12 +228,28 @@ export default function ClanDiscover() {
                         onChangeText={setSearch}
                     />
                 </View>
-                <TouchableOpacity
-                    className="w-16 h-16 bg-blue-600 rounded-3xl items-center justify-center shadow-xl shadow-blue-600/40"
-                    onPress={handlePressCreate}
-                >
-                    <Ionicons name="add" size={32} color="#fff" />
-                </TouchableOpacity>
+
+                {/* ⚡️ CREATE CLAN BUTTON WITH REANIMATED INDICATOR */}
+                <View className="relative items-center justify-center">
+                    <Animated.View
+                        style={[
+                            {
+                                position: 'absolute',
+                                width: 64, // Matches w-16
+                                height: 64, // Matches h-16
+                                borderRadius: 24, // Matches rounded-3xl
+                                backgroundColor: '#2563eb', // Matches blue-600
+                            },
+                            createPulseStyle
+                        ]}
+                    />
+                    <TouchableOpacity
+                        className="w-16 h-16 bg-blue-600 rounded-3xl items-center justify-center shadow-xl shadow-blue-600/40 relative z-10"
+                        onPress={handlePressCreate}
+                    >
+                        <Ionicons name="add" size={32} color="#fff" />
+                    </TouchableOpacity>
+                </View>
             </View>
 
             {loading && clans.length === 0 ? (
@@ -352,8 +392,6 @@ const RequirementModal = memo(({ visible, onClose, stats, isDark }) => {
     );
 });
 
-// ... CustomAlert, RequirementModal, ClanCard components remain unchanged
-
 const CustomAlert = memo(({ config, onClose, isDark }) => {
     if (!config.visible) return null;
     return (
@@ -375,7 +413,6 @@ const CustomAlert = memo(({ config, onClose, isDark }) => {
         </Modal>
     );
 });
-
 
 const ClanCard = memo(({ clan, lbRank, isDark, refreshClans, showAlert }) => {
     const storage = useMMKV();
@@ -649,7 +686,6 @@ const CreateClanModal = memo(({ visible, onClose, onSuccess, isDark, showAlert }
                             ) : (
                                 <View className="flex-row items-center">
                                     <Text className="text-white font-black text-[18px] uppercase tracking-tighter mr-2">Confirm Foundation</Text>
-                                    <CoinIcon size={22} type='OC' />
                                     <Ionicons name="chevron-forward" size={20} color="white" />
                                 </View>
                             )}

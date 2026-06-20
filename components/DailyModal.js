@@ -245,7 +245,6 @@ export default function DailyModal() {
         };
     }, []);
 
-    // 7-Day Reward Configurations Look-up Matrix matching your layout logic perfectly
     const currentReward = useMemo(() => {
         const schedule = {
             1: { type: 'OC', amount: 5 },
@@ -292,7 +291,6 @@ export default function DailyModal() {
         storage.set(COLLAB_COOLDOWN_KEY, new Date().getTime());
     }, [storage]);
 
-    // Check if user is referred by an active partner clan blueprint
     const targetClan = useMemo(() => {
         if (!user?.referredBy) return null;
         return CLAN_REFERRAL_MAP[user.referredBy] || null;
@@ -301,7 +299,6 @@ export default function DailyModal() {
     const canShowClanInvite = useCallback(() => {
         if (!targetClan || !user?.referredBy) return false;
 
-        // Check if the user has already joined this clan via followed_clans key
         const followedClansStr = storage.getString("followed_clans");
         let followedClans = [];
         try {
@@ -325,6 +322,15 @@ export default function DailyModal() {
         const showCount = storage.getNumber(`clan_invite_show_count_${user.referredBy}`) || 0;
         return showCount < 3;
     }, [targetClan, user?.referredBy, storage]);
+
+    // ⚡️ NEW: CLAN CREATION REQUIREMENT PROMO CHECK
+    const canShowClanPromo = useCallback(() => {
+        const completed = storage.getBoolean('clan_creation_promo_completed');
+        if (completed) return false;
+
+        const count = storage.getNumber('clan_creation_promo_show_count') || 0;
+        return count < 3; // Max 3 times shown
+    }, [storage]);
 
     useEffect(() => {
         if (!user || hasShownThisSession || visible) return;
@@ -351,7 +357,7 @@ export default function DailyModal() {
             return () => clearTimeout(timer);
         }
 
-        // 2. PRIORITY: CLAN MODAL
+        // 2. PRIORITY: CLAN INVITE MODAL
         if (canShowClanInvite()) {
             setModalMode('clan');
             const currentCount = storage.getNumber(`clan_invite_show_count_${user.referredBy}`) || 0;
@@ -360,20 +366,29 @@ export default function DailyModal() {
             return () => clearTimeout(timer);
         }
 
-        // 3. PRIORITY: EVENT PROMO
+        // 3. PRIORITY: RESTRICTIONS LIFTED / DISCOVERY PROMO
+        if (canShowClanPromo()) {
+            setModalMode('clan_promo');
+            const currentCount = storage.getNumber('clan_creation_promo_show_count') || 0;
+            storage.set('clan_creation_promo_show_count', currentCount + 1);
+            const timer = setTimeout(() => setVisible(true), 1500);
+            return () => clearTimeout(timer);
+        }
+
+        // 4. PRIORITY: EVENT PROMO
         if (nextPromo) {
             setModalMode('event');
             const timer = setTimeout(() => setVisible(true), 1500);
             return () => clearTimeout(timer);
         }
 
-        // 4. PRIORITY: WEB COLLAB
+        // 5. PRIORITY: WEB COLLAB
         if (canShowCollab()) {
             setModalMode('collab');
             const timer = setTimeout(() => setVisible(true), 1500);
             return () => clearTimeout(timer);
         }
-    }, [user, activeEvents, hasClaimed, canShowCollab, canShowClanInvite, getNextEvent, storage, visible]);
+    }, [user, activeEvents, hasClaimed, canShowCollab, canShowClanInvite, canShowClanPromo, getNextEvent, storage, visible]);
 
     const handleClaimDaily = async () => {
         if (isProcessingTransaction) return;
@@ -387,13 +402,11 @@ export default function DailyModal() {
             setHasClaimed(true);
             storage.set(`daily_claimed_${todayStr}`, true);
 
-            // Close modal after showing the acquired state, DO NOT chain to the next modal
             timeoutRef.current = setTimeout(() => {
                 hasShownThisSession = true;
                 setVisible(false);
             }, 1000);
         } else {
-            // If it fails but we still want to mark it as local claimed
             storage.set(`daily_claimed_${todayStr}`, true);
             hasShownThisSession = true;
             setVisible(false);
@@ -401,7 +414,6 @@ export default function DailyModal() {
     };
 
     const handleDismissEvent = () => {
-        // Perform cleanup and cooldown tracking based on what was dismissed
         if (modalMode === 'event' && currentPromo) {
             storage.set(`last_dismissed_${currentPromo.id}`, new Date().toDateString());
             const thirtyMinsFromNow = new Date().getTime() + (30 * 60 * 1000);
@@ -417,7 +429,8 @@ export default function DailyModal() {
             showCollabAndTrack();
         }
 
-        // Close strictly. No chaining.
+        // clan_promo automatically handles max count logic via MMKV inside useEffect
+
         hasShownThisSession = true;
         setVisible(false);
     };
@@ -443,7 +456,6 @@ export default function DailyModal() {
         setVisible(false);
     };
 
-    // ⚔️ ROUTE DIRECTLY TO CLANS/TAG AND TRACK COMPLETION
     const handleJoinClan = () => {
         if (user?.referredBy) {
             storage.set(`clan_invite_show_count_${user.referredBy}`, 3);
@@ -452,6 +464,14 @@ export default function DailyModal() {
         hasShownThisSession = true;
         setVisible(false);
         router.push(`/clans/${targetClan?.tag}`);
+    };
+
+    // ⚡️ NEW: ROUTE TO DISCOVERY & SILENCE FUTURE PROMPTS
+    const handleGoToDiscovery = () => {
+        storage.set('clan_creation_promo_completed', true); // Never show again
+        hasShownThisSession = true;
+        setVisible(false);
+        router.push('/screens/discovery');
     };
 
     if (!visible || !modalMode) return null;
@@ -465,7 +485,7 @@ export default function DailyModal() {
     return (
         <Modal transparent visible={visible} animationType="fade">
             <View className="flex-1 justify-center items-center px-3" style={{ backgroundColor: isDarkMode ? 'rgba(0,0,0,0.92)' : 'rgba(15,23,42,0.75)' }}>
-                {(modalMode === 'collab' || modalMode === 'clan') && (
+                {(modalMode === 'collab' || modalMode === 'clan' || modalMode === 'clan_promo') && (
                     <View className="absolute inset-0 opacity-10">
                         <Image
                             source={{ uri: MODAL_BG_IMAGE_URI }}
@@ -478,9 +498,9 @@ export default function DailyModal() {
                 <View
                     style={{
                         backgroundColor: activeSurface,
-                        borderColor: modalMode === 'daily' ? THEME.accent : modalMode === 'clan' ? targetClan?.color : eventColor
+                        borderColor: modalMode === 'daily' ? THEME.accent : modalMode === 'clan' ? targetClan?.color : modalMode === 'clan_promo' ? '#06b6d4' : eventColor
                     }}
-                    className={`w-full rounded-2xl px-3 py-8 border-2 items-center shadow-2xl relative ${modalMode === 'daily' ? 'shadow-blue-500/40' : modalMode === 'clan' ? 'shadow-emerald-500/30' : 'shadow-purple-500/30'
+                    className={`w-full rounded-2xl px-3 py-8 border-2 items-center shadow-2xl relative ${modalMode === 'daily' ? 'shadow-blue-500/40' : modalMode === 'clan' ? 'shadow-emerald-500/30' : modalMode === 'clan_promo' ? 'shadow-cyan-500/30' : 'shadow-purple-500/30'
                         }`}
                 >
                     {showDismissButton && (
@@ -757,6 +777,71 @@ export default function DailyModal() {
                         </View>
                     )}
 
+                    {/* ⚡️ NEW: RESTRICTIONS LIFTED CLAN CREATION PROMO */}
+                    {modalMode === 'clan_promo' && (
+                        <View className="w-full items-center">
+                            <MotiView
+                                from={{ opacity: 0, scale: 0.95, translateY: 10 }}
+                                animate={{ opacity: 1, scale: 1, translateY: 0 }}
+                                transition={{ type: 'timing', duration: 400 }}
+                                className="w-full rounded-3xl border p-6 items-center"
+                                style={{
+                                    backgroundColor: activeSurface,
+                                    borderColor: '#06b6d4',
+                                    shadowColor: '#06b6d4',
+                                    shadowOpacity: 0.25,
+                                    shadowRadius: 20,
+                                    elevation: 8
+                                }}
+                            >
+                                <View
+                                    style={{ backgroundColor: `#06b6d415`, borderColor: `#06b6d430` }}
+                                    className="w-20 h-20 rounded-2xl items-center justify-center border mechanical-box mb-4"
+                                >
+                                    <MaterialCommunityIcons name="sword-cross" size={44} color="#06b6d4" />
+                                </View>
+
+                                <Text style={{ color: '#06b6d4' }} className="uppercase tracking-[0.3em] text-[10px] font-black text-center mb-1">
+                                    System Override
+                                </Text>
+
+                                <Text style={{ color: activeText }} className="text-2xl font-black italic uppercase text-center tracking-tight mb-3">
+                                    Found Your Clan
+                                </Text>
+
+                                <Text style={{ color: activeSecondary }} className="text-[13px] leading-6 text-center mb-6 px-2">
+                                    The legacy requirements to found a Clan have been completely dismantled. You can now forge your own syndicate and gather your allies immediately. Head to the Discovery terminal to claim your tag.
+                                </Text>
+
+                                <TouchableOpacity
+                                    onPress={handleGoToDiscovery}
+                                    style={{
+                                        backgroundColor: '#06b6d4',
+                                        shadowColor: '#06b6d4',
+                                        shadowOffset: { width: 0, height: 6 },
+                                        shadowOpacity: 0.3,
+                                        shadowRadius: 10
+                                    }}
+                                    className="w-full h-14 rounded-xl flex-row items-center justify-center mb-3"
+                                >
+                                    <Text className="text-slate-950 font-black text-[12px] uppercase tracking-[0.2em]">
+                                        Enter Discovery
+                                    </Text>
+                                    <Ionicons name="compass" size={15} color="#0f172a" style={{ marginLeft: 6 }} />
+                                </TouchableOpacity>
+
+                                <TouchableOpacity
+                                    onPress={handleDismissEvent}
+                                    className="w-full h-12 rounded-xl border border-slate-300/10 bg-white/5 items-center justify-center"
+                                >
+                                    <Text style={{ color: activeSecondary }} className="font-bold text-[11px] uppercase tracking-[0.15em]">
+                                        Ignore Update
+                                    </Text>
+                                </TouchableOpacity>
+                            </MotiView>
+                        </View>
+                    )}
+
                     {modalMode === 'collab' && (
                         <View className="w-full items-center">
                             <MotiView
@@ -828,7 +913,7 @@ export default function DailyModal() {
                         </View>
                     )}
 
-                    {showDismissButton && modalMode !== 'collab' && modalMode !== 'clan' && (
+                    {showDismissButton && modalMode !== 'collab' && modalMode !== 'clan' && modalMode !== 'clan_promo' && (
                         <TouchableOpacity
                             onPress={handleDismissEvent}
                             activeOpacity={0.5}

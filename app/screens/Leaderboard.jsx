@@ -389,8 +389,8 @@ export default function Leaderboard() {
     const tabOffset = useSharedValue(0);
     const TOGGLE_WIDTH = width - 32;
 
-    const authorTabs = ["level", "aura", "posts", "streak", "peak"];
-    const clanTabs = ["points", "followers", "weekly", "badges"];
+    const authorTabs = ["aura", "level", "streak", "posts", "peak"];
+    const clanTabs = ["weekly", "points", "followers", "badges"];
     const currentTabs = category === "authors" ? authorTabs : clanTabs;
     const TAB_WIDTH = (TOGGLE_WIDTH - 8) / currentTabs.length;
 

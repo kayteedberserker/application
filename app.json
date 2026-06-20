@@ -13,9 +13,9 @@
     "ios": {
       "supportsTablet": true,
       "bundleIdentifier": "com.kaytee.oreblogda",
+      "googleServicesFile": "./GoogleService-Info.plist",
       "infoPlist": {
         "UIBackgroundModes": [
-          "remote-notification",
           "remote-notification"
         ],
         "UISupportedInterfaceOrientations": [
@@ -95,6 +95,9 @@
       [
         "expo-build-properties",
         {
+          "ios": {
+            "useFrameworks": "static"
+          },
           "android": {
             "minSdkVersion": 25,
             "launchMode": "singleTop",
@@ -118,7 +121,14 @@
         }
       ],
       "@react-native-firebase/app",
-      "@react-native-firebase/messaging"
+      "@react-native-firebase/messaging",
+      [
+        "@evennit/notifee-expo-plugin",
+        {
+          "iosDeploymentTarget": "15.1",
+          "apsEnvMode": "development"
+        }
+      ]
     ],
     "experiments": {
       "typedRoutes": true
