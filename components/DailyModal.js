@@ -468,10 +468,10 @@ export default function DailyModal() {
 
     // ⚡️ NEW: ROUTE TO DISCOVERY & SILENCE FUTURE PROMPTS
     const handleGoToDiscovery = () => {
-        storage.set('clan_creation_promo_completed', true); // Never show again
+        storage.set('clan_creation_promo_complete', true); // Never show again
         hasShownThisSession = true;
         setVisible(false);
-        router.push('/screens/discovery');
+        router.push('/screens/discover');
     };
 
     if (!visible || !modalMode) return null;
@@ -802,15 +802,15 @@ export default function DailyModal() {
                                 </View>
 
                                 <Text style={{ color: '#06b6d4' }} className="uppercase tracking-[0.3em] text-[10px] font-black text-center mb-1">
-                                    System Override
+                                    New Update
                                 </Text>
 
                                 <Text style={{ color: activeText }} className="text-2xl font-black italic uppercase text-center tracking-tight mb-3">
-                                    Found Your Clan
+                                    Create Your Clan
                                 </Text>
 
                                 <Text style={{ color: activeSecondary }} className="text-[13px] leading-6 text-center mb-6 px-2">
-                                    The legacy requirements to found a Clan have been completely dismantled. You can now forge your own syndicate and gather your allies immediately. Head to the Discovery terminal to claim your tag.
+                                    We have completely removed the requirements to create a clan! You can now start your own clan and invite your friends immediately. Head over to the Discovery page to create yours now.
                                 </Text>
 
                                 <TouchableOpacity
@@ -825,7 +825,7 @@ export default function DailyModal() {
                                     className="w-full h-14 rounded-xl flex-row items-center justify-center mb-3"
                                 >
                                     <Text className="text-slate-950 font-black text-[12px] uppercase tracking-[0.2em]">
-                                        Enter Discovery
+                                        Go to Discovery
                                     </Text>
                                     <Ionicons name="compass" size={15} color="#0f172a" style={{ marginLeft: 6 }} />
                                 </TouchableOpacity>
@@ -835,7 +835,7 @@ export default function DailyModal() {
                                     className="w-full h-12 rounded-xl border border-slate-300/10 bg-white/5 items-center justify-center"
                                 >
                                     <Text style={{ color: activeSecondary }} className="font-bold text-[11px] uppercase tracking-[0.15em]">
-                                        Ignore Update
+                                        Maybe Later
                                     </Text>
                                 </TouchableOpacity>
                             </MotiView>
