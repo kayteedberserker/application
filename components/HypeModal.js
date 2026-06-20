@@ -1,23 +1,10 @@
-import {
-    Canvas,
-    Group,
-    LinearGradient,
-    Mask,
-    Path,
-    Rect,
-    Skia,
-    vec
-} from '@shopify/react-native-skia';
+import { MaterialCommunityIcons } from '@expo/vector-icons';
 import { AnimatePresence, MotiView } from 'moti';
 import React, { memo, useEffect, useMemo, useRef, useState } from 'react';
 import { ActivityIndicator, Modal, Pressable, StyleSheet, Text, View } from 'react-native';
 import {
-    cancelAnimation,
-    Easing,
     useAnimatedStyle,
-    useDerivedValue,
     useSharedValue,
-    withRepeat,
     withSequence,
     withSpring,
     withTiming
@@ -26,116 +13,91 @@ import { useCoins } from '../context/CoinContext';
 import { useUser } from '../context/UserContext';
 import CoinIcon from './ClanIcon';
 
-// ⚡️ RARITY CONFIG WITH ABBREVIATIONS (SKIA SHAPES REMOVED)
+// ⚡️ RARITY CONFIG WITH ABBREVIATIONS
 const HYPE_TIERS = {
     FREE: {
-        cost: 0, points: 10,
+        cost: 0, points: 50,
         label: 'FREE HYPE', rarity: 'COMMON', abbr: 'FH',
         colors: ['#475569', '#1e293b', '#0f172a'],
-        glow: '#94a3b8'
+        glow: '#94a3b8' // Gray Thunder
     },
     STANDARD: {
-        cost: 50, points: 50,
+        cost: 20, points: 100,
         label: 'STANDARD', rarity: 'RARE', abbr: 'SH',
         colors: ['#0284c7', '#0369a1', '#082f49'],
-        glow: '#38bdf8'
+        glow: '#38bdf8' // Blue Thunder
     },
     SUPER: {
-        cost: 200, points: 250,
+        cost: 100, points: 600,
         label: 'SUPER HYPE', rarity: 'EPIC', abbr: 'SP',
         colors: ['#9333ea', '#6b21a8', '#3b0764'],
-        glow: '#c084fc'
+        glow: '#c084fc' // Purple Thunder
     },
     MEGA: {
-        cost: 500, points: 700,
+        cost: 400, points: 3000,
         label: 'MEGA BLAST', rarity: 'LEGENDARY', abbr: 'ME',
         colors: ['#d97706', '#92400e', '#451a03'],
-        glow: '#fbbf24'
+        glow: '#fbbf24' // Gold Thunder
     }
 };
 
 // Array reference optimized to bypass inline processing allocation overheads
 const HYPE_TIERS_ENTRIES = Object.entries(HYPE_TIERS);
 
-// ⚡️ CLEAN SKIA CARD FRAME - TEXT ONLY (FILLS ~70% AREA)
-const MiniSkiaCard = memo(({ colors, glow, abbr, width = 36, height = 48, isDark }) => {
-    const progress = useSharedValue(-0.5);
+// ⚡️ NEW: DYNAMIC VECTOR HYPE ICON GENERATOR
+const HypeIconDisplay = memo(({ tierKey, color, size = 26 }) => {
+    // 1. Determine the structure based on the tier
+    const renderLayout = () => {
+        if (tierKey === 'MEGA') {
+            return (
+                <View style={{ alignItems: 'center', justifyContent: 'center' }}>
+                    {/* Top center bolt */}
+                    <MaterialCommunityIcons name="lightning-bolt" size={size} color={color} style={{ marginBottom: -10, zIndex: 2 }} />
+                    {/* Bottom side-by-side bolts */}
+                    <View style={{ flexDirection: 'row' }}>
+                        <MaterialCommunityIcons name="lightning-bolt" size={size} color={color} style={{ marginRight: -6 }} />
+                        <MaterialCommunityIcons name="lightning-bolt" size={size} color={color} style={{ marginLeft: -6 }} />
+                    </View>
+                </View>
+            );
+        }
 
-    useEffect(() => {
-        cancelAnimation(progress);
-        progress.value = withRepeat(
-            withTiming(1.5, { duration: 2400, easing: Easing.inOut(Easing.ease) }),
-            -1,
-            false
-        );
-        return () => cancelAnimation(progress);
-    }, [progress]);
+        if (tierKey === 'SUPER') {
+            return (
+                <View style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'center' }}>
+                    <MaterialCommunityIcons name="lightning-bolt" size={size * 1.1} color={color} style={{ marginRight: -6 }} />
+                    <MaterialCommunityIcons name="lightning-bolt" size={size * 1.1} color={color} style={{ marginLeft: -6 }} />
+                </View>
+            );
+        }
 
-    const layout = useMemo(() => {
-        const cut = 6;
-        const inset = 2;
-
-        const outerStr = `M ${cut} 0 L ${width} 0 L ${width} ${height - cut} L ${width - cut} ${height} L 0 ${height} L 0 ${cut} Z`;
-        const innerStr = `M ${cut + inset / 2} ${inset} L ${width - inset} ${inset} L ${width - inset} ${height - cut - inset / 2} L ${width - cut - inset / 2} ${height - inset} L ${inset} ${height - inset} L ${inset} ${cut + inset / 2} Z`;
-
-        return {
-            outerPath: Skia.Path.MakeFromSVGString(outerStr),
-            innerPath: Skia.Path.MakeFromSVGString(innerStr)
-        };
-    }, [width, height]);
-
-    const startPos = useDerivedValue(() => ({ x: progress.value * width, y: 0 }));
-    const endPos = useDerivedValue(() => ({ x: (progress.value + 0.5) * width, y: height }));
+        // FREE & STANDARD
+        return <MaterialCommunityIcons name="lightning-bolt" size={size * 1.3} color={color} />;
+    };
 
     return (
-        <View style={{ width, height, justifyContent: 'center', alignItems: 'center' }}>
-            <Canvas style={{
-                position: 'absolute',
-                left: 0,
-                right: 0,
-                top: 0,
-                bottom: 0
-            }}>
-                {/* Background Gradient */}
-                <Path path={layout.outerPath}>
-                    <LinearGradient start={vec(0, 0)} end={vec(width, height)} colors={colors} />
-                </Path>
+        <View style={{ width: 48, height: 48, justifyContent: 'center', alignItems: 'center' }}>
+            {/* Pulsing Energy Glow Behind */}
+            <MotiView
+                from={{ opacity: 0.3, scale: 0.85 }}
+                animate={{ opacity: 0.8, scale: 1.15 }}
+                transition={{ type: 'timing', duration: 1000, loop: true, direction: 'alternate' }}
+                style={{ position: 'absolute', textShadowColor: color, textShadowOffset: { width: 0, height: 0 }, textShadowRadius: 10 }}
+            >
+                {renderLayout()}
+            </MotiView>
 
-                {/* Inner Border Constraint */}
-                <Path path={layout.innerPath} color={glow} style="stroke" strokeWidth={0.5} opacity={0.3} />
-
-                {/* Animated Scanner Sweep */}
-                <Mask mode="luminance" mask={<Group><Path path={layout.outerPath} color="white" /></Group>}>
-                    <Rect x={0} y={0} width={width} height={height}>
-                        <LinearGradient
-                            start={startPos}
-                            end={endPos}
-                            colors={['transparent', 'rgba(255,255,255,0.4)', 'transparent']}
-                        />
-                    </Rect>
-                </Mask>
-            </Canvas>
-
-            {/* HIGH-IMPACT MAXI-TEXT (Fills approx 70% of the 36x48 container) */}
-            <Text style={{
-                position: 'absolute',
-                fontSize: 18,
-                fontWeight: '900',
-                color: '#ffffff',
-                letterSpacing: 0.5,
-                textAlign: 'center',
-                textShadowColor: 'rgba(0,0,0,0.75)',
-                textShadowOffset: { width: 0, height: 1.5 },
-                textShadowRadius: 2.5,
-            }}>
-                {abbr}
-            </Text>
+            {/* Solid Core Structure */}
+            <View style={{ position: 'absolute' }}>
+                {renderLayout()}
+            </View>
         </View>
     );
 });
 
+
 // ⚡️ MEMOIZED ROW ITEM (Prevents complete re-rendering on parent updates)
-const InteractiveRow = memo(({ data, inventoryCount, isLoading, onPress, coins, isDark }) => {
+const InteractiveRow = memo(({ tierKey, data, inventoryCount, isLoading, onPress, coins, isDark }) => {
     const scale = useSharedValue(1);
     const hasTokens = inventoryCount > 0;
     const isFree = data.cost === 0;
@@ -156,13 +118,8 @@ const InteractiveRow = memo(({ data, inventoryCount, isLoading, onPress, coins, 
                 borderColor: isDark ? '#1e293b' : '#cbd5e1'
             }
         ]}>
-            {/* 1. TEXT-ONLY SKIA CARD */}
-            <MiniSkiaCard
-                colors={data.colors}
-                glow={data.glow}
-                abbr={data.abbr}
-                isDark={isDark}
-            />
+            {/* 1. VECTOR HYPE EMBLEM */}
+            <HypeIconDisplay tierKey={tierKey} color={data.glow} size={24} />
 
             {/* 2. DETAILS AREA */}
             <View style={styles.detailsColumn}>
@@ -318,6 +275,7 @@ const HypeDrawer = ({ visible, onClose, onHype, isDark = true }) => {
                                 {HYPE_TIERS_ENTRIES.map(([key, data]) => (
                                     <InteractiveRow
                                         key={key}
+                                        tierKey={key} // Passes the key to determine layout rendering
                                         data={data}
                                         inventoryCount={inventoryCounts[key] || 0}
                                         isLoading={activeTier === key}
@@ -339,7 +297,7 @@ const HypeDrawer = ({ visible, onClose, onHype, isDark = true }) => {
     );
 };
 
-export default React.memo(HypeDrawer)
+export default React.memo(HypeDrawer);
 
 const styles = StyleSheet.create({
     modalOverlay: {

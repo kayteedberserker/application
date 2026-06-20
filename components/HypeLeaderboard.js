@@ -23,7 +23,7 @@ import { SyncLoading } from './SyncLoading';
 
 const TABS = [
     { id: 'USER_GIVEN', label: 'TOP HYPERS' },
-    { id: 'USER_RECEIVED', label: 'S-CLASS' },
+    { id: 'USER_RECEIVED', label: 'MOST HYPED' },
     { id: 'CLAN_RECEIVED', label: 'ELITE CLANS' },
 ];
 

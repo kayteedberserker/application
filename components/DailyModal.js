@@ -1,5 +1,4 @@
 import { Ionicons, MaterialCommunityIcons } from '@expo/vector-icons';
-import { Canvas, Group, Mask, Path, Rect, Skia, LinearGradient as SkiaLinearGradient, vec } from '@shopify/react-native-skia';
 import { Image } from 'expo-image';
 import { LinearGradient } from 'expo-linear-gradient';
 import { useRouter } from 'expo-router';
@@ -7,7 +6,6 @@ import { MotiView } from 'moti';
 import React, { memo, useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { ActivityIndicator, Dimensions, Linking, Modal, TouchableOpacity, useColorScheme, View } from 'react-native';
 import { useMMKV } from 'react-native-mmkv';
-import { cancelAnimation, Easing, useDerivedValue, useSharedValue, withRepeat, withTiming } from 'react-native-reanimated';
 import { SvgXml } from 'react-native-svg';
 import { useCoins } from '../context/CoinContext';
 import { useEvent } from '../context/EventContext';
@@ -53,79 +51,53 @@ const HYPE_TIERS = {
     }
 };
 
-// ⚡️ CLEAN SKIA CARD FRAME - TEXT ONLY
-const MiniSkiaCard = memo(({ colors, glow, abbr, width = 36, height = 48, isDark }) => {
-    const progress = useSharedValue(-0.5);
+// ⚡️ NEW: DYNAMIC VECTOR HYPE ICON GENERATOR
+const HypeIconDisplay = memo(({ tierKey, color, size = 26 }) => {
+    // 1. Determine the structure based on the tier
+    const renderLayout = () => {
+        if (tierKey === 'MEGA') {
+            return (
+                <View style={{ alignItems: 'center', justifyContent: 'center' }}>
+                    {/* Top center bolt */}
+                    <MaterialCommunityIcons name="lightning-bolt" size={size} color={color} style={{ marginBottom: -10, zIndex: 2 }} />
+                    {/* Bottom side-by-side bolts */}
+                    <View style={{ flexDirection: 'row' }}>
+                        <MaterialCommunityIcons name="lightning-bolt" size={size} color={color} style={{ marginRight: -6 }} />
+                        <MaterialCommunityIcons name="lightning-bolt" size={size} color={color} style={{ marginLeft: -6 }} />
+                    </View>
+                </View>
+            );
+        }
 
-    useEffect(() => {
-        cancelAnimation(progress);
-        progress.value = withRepeat(
-            withTiming(1.5, { duration: 2400, easing: Easing.inOut(Easing.ease) }),
-            -1,
-            false
-        );
-        return () => cancelAnimation(progress);
-    }, [progress]);
+        if (tierKey === 'SUPER') {
+            return (
+                <View style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'center' }}>
+                    <MaterialCommunityIcons name="lightning-bolt" size={size * 1.1} color={color} style={{ marginRight: -6 }} />
+                    <MaterialCommunityIcons name="lightning-bolt" size={size * 1.1} color={color} style={{ marginLeft: -6 }} />
+                </View>
+            );
+        }
 
-    const layout = useMemo(() => {
-        const cut = 6;
-        const inset = 2;
-
-        const outerStr = `M ${cut} 0 L ${width} 0 L ${width} ${height - cut} L ${width - cut} ${height} L 0 ${height} L 0 ${cut} Z`;
-        const innerStr = `M ${cut + inset / 2} ${inset} L ${width - inset} ${inset} L ${width - inset} ${height - cut - inset / 2} L ${width - cut - inset / 2} ${height - inset} L ${inset} ${height - inset} L ${inset} ${cut + inset / 2} Z`;
-
-        return {
-            outerPath: Skia.Path.MakeFromSVGString(outerStr),
-            innerPath: Skia.Path.MakeFromSVGString(innerStr)
-        };
-    }, [width, height]);
-
-    const startPos = useDerivedValue(() => ({ x: progress.value * width, y: 0 }));
-    const endPos = useDerivedValue(() => ({ x: (progress.value + 0.5) * width, y: height }));
+        // FREE & STANDARD
+        return <MaterialCommunityIcons name="lightning-bolt" size={size * 1.3} color={color} />;
+    };
 
     return (
-        <View style={{ width, height, justifyContent: 'center', alignItems: 'center' }}>
-            <Canvas style={{
-                position: 'absolute',
-                left: 0,
-                right: 0,
-                top: 0,
-                bottom: 0
-            }}>
-                {/* Background Gradient */}
-                <Path path={layout.outerPath}>
-                    <SkiaLinearGradient start={vec(0, 0)} end={vec(width, height)} colors={colors} />
-                </Path>
+        <View style={{ width: 48, height: 48, justifyContent: 'center', alignItems: 'center' }}>
+            {/* Pulsing Energy Glow Behind */}
+            <MotiView
+                from={{ opacity: 0.3, scale: 0.85 }}
+                animate={{ opacity: 0.8, scale: 1.15 }}
+                transition={{ type: 'timing', duration: 1000, loop: true, direction: 'alternate' }}
+                style={{ position: 'absolute', textShadowColor: color, textShadowOffset: { width: 0, height: 0 }, textShadowRadius: 10 }}
+            >
+                {renderLayout()}
+            </MotiView>
 
-                {/* Inner Border Constraint */}
-                <Path path={layout.innerPath} color={glow} style="stroke" strokeWidth={0.5} opacity={0.3} />
-
-                {/* Animated Scanner Sweep */}
-                <Mask mode="luminance" mask={<Group><Path path={layout.outerPath} color="white" /></Group>}>
-                    <Rect x={0} y={0} width={width} height={height}>
-                        <SkiaLinearGradient
-                            start={startPos}
-                            end={endPos}
-                            colors={['transparent', 'rgba(255,255,255,0.4)', 'transparent']}
-                        />
-                    </Rect>
-                </Mask>
-            </Canvas>
-
-            {/* HIGH-IMPACT MAXI-TEXT */}
-            <Text style={{
-                position: 'absolute',
-                fontSize: 18,
-                fontWeight: '900',
-                color: '#ffffff',
-                letterSpacing: 0.5,
-                textAlign: 'center',
-                textShadowColor: 'rgba(0,0,0,0.75)',
-                textShadowOffset: { width: 0, height: 1.5 },
-                textShadowRadius: 2.5,
-            }}>
-                {abbr}
-            </Text>
+            {/* Solid Core Structure */}
+            <View style={{ position: 'absolute' }}>
+                {renderLayout()}
+            </View>
         </View>
     );
 });
@@ -555,14 +527,7 @@ export default function DailyModal() {
                                             <Text className="text-5xl font-black italic tracking-tighter" style={{ color: HYPE_TIERS.FREE.glow }}>
                                                 +{currentReward.amount}
                                             </Text>
-                                            <MiniSkiaCard
-                                                colors={HYPE_TIERS.FREE.colors}
-                                                glow={HYPE_TIERS.FREE.glow}
-                                                abbr={HYPE_TIERS.FREE.abbr}
-                                                width={42}
-                                                height={56}
-                                                isDark={isDarkMode}
-                                            />
+                                            <HypeIconDisplay tierKey={"FREE"} color={HYPE_TIERS.FREE.glow} size={42} />
                                         </View>
                                     )}
 
@@ -575,18 +540,11 @@ export default function DailyModal() {
                                                 <CoinIcon size={32} type="OC" />
                                             </View>
                                             <Text className="text-xl font-black text-slate-400 dark:text-slate-600">&</Text>
-                                            <View className="flex-row items-center gap-3">
+                                            <View className="flex-row items-center">
                                                 <Text className="text-4xl font-black italic tracking-tighter" style={{ color: HYPE_TIERS.FREE.glow }}>
                                                     +{currentReward.amountHype}
                                                 </Text>
-                                                <MiniSkiaCard
-                                                    colors={HYPE_TIERS.FREE.colors}
-                                                    glow={HYPE_TIERS.FREE.glow}
-                                                    abbr={HYPE_TIERS.FREE.abbr}
-                                                    width={36}
-                                                    height={48}
-                                                    isDark={isDarkMode}
-                                                />
+                                                <HypeIconDisplay tierKey={"FREE"} color={HYPE_TIERS.FREE.glow} size={36} />
                                             </View>
                                         </View>
                                     )}
