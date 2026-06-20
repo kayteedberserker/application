@@ -345,7 +345,7 @@ export default function Leaderboard() {
     const isDark = colorScheme === 'dark';
 
     const [category, setCategory] = useState("authors");
-    const [type, setType] = useState("level");
+    const [type, setType] = useState("aura");
     const [cachedData, setCachedData] = useState(null);
     const [isOfflineMode, setIsOfflineMode] = useState(false);
 
@@ -353,9 +353,9 @@ export default function Leaderboard() {
 
     useEffect(() => {
         if (category === "clans") {
-            setType("points");
+            setType("weekly");
         } else {
-            setType("level");
+            setType("aura");
         }
     }, [category]);
 
