@@ -301,7 +301,7 @@ export default function DailyModal() {
         if (completed) return false;
 
         const count = storage.getNumber('clan_creation_promo_show_count') || 0;
-        return count < 3; // Max 3 times shown
+        return count < 2; // Max 3 times shown
     }, [storage]);
 
     useEffect(() => {
