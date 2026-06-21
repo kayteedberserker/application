@@ -1,4 +1,6 @@
 import { Feather, Ionicons, MaterialCommunityIcons } from "@expo/vector-icons";
+import AsyncStorage from '@react-native-async-storage/async-storage';
+import * as FileSystem from 'expo-file-system/legacy'; // ⚡️ ADDED FOR PERSISTENT MEDIA STORAGE
 import { Image } from "expo-image";
 import * as ImagePicker from 'expo-image-picker';
 import * as Notifications from 'expo-notifications';
@@ -19,22 +21,9 @@ import {
 } from "react-native";
 import Toast from "react-native-toast-message";
 import useSWR from "swr";
-// ⚡️ Swapped to AsyncStorage
-import AsyncStorage from '@react-native-async-storage/async-storage';
 
-import { useMMKV } from "react-native-mmkv";
-import AnimeLoading from "../../components/AnimeLoading";
-import CoinIcon from "../../components/ClanIcon";
-import { Text } from "../../components/Text";
-import THEME from "../../components/useAppTheme";
-import { useAlert } from "../../context/AlertContext";
-import { useClan } from "../../context/ClanContext";
-import { useCoins } from "../../context/CoinContext";
-import { useUploadProgress } from "../../context/UploadProgressContext";
-import { useUser } from "../../context/UserContext";
-import { apiFetch } from "../../utils/apiFetch";
-// ⚡️ MAX PREMIUM REANIMATED IMPORTS
 import * as Haptics from 'expo-haptics';
+import { useMMKV } from "react-native-mmkv";
 import Animated, {
     Easing,
     FadeIn,
@@ -47,7 +36,17 @@ import Animated, {
     withTiming,
     ZoomIn
 } from "react-native-reanimated";
+import AnimeLoading from "../../components/AnimeLoading";
+import CoinIcon from "../../components/ClanIcon";
 import ImageEditorModal from "../../components/ImageEditorModal";
+import { Text } from "../../components/Text";
+import THEME from "../../components/useAppTheme";
+import { useAlert } from "../../context/AlertContext";
+import { useClan } from "../../context/ClanContext";
+import { useCoins } from "../../context/CoinContext";
+import { useUploadProgress } from "../../context/UploadProgressContext";
+import { useUser } from "../../context/UserContext";
+import { apiFetch } from "../../utils/apiFetch";
 
 const COOLDOWN_NOTIFICATION_KEY = "cooldown_notification_id";
 const fetcher = (url) => apiFetch(url).then((res) => res.json());
@@ -61,7 +60,7 @@ export const AURA_TIERS = [
     { level: 5, req: 1500, title: "A-Rank Champion", icon: "🛡️", postLimit: 4 },
     { level: 6, req: 3000, title: "S-Rank Legend", icon: "🌟", postLimit: 5 },
     { level: 7, req: 6000, title: "SS-Rank Mythic", icon: "🌀", postLimit: 5 },
-    { level: 8, req: 12000, title: "Monarch", icon: "👑", postLimit: 6 }, // Unlimited/Max
+    { level: 8, req: 12000, title: "Monarch", icon: "👑", postLimit: 6 },
 ];
 
 const resolveUserRank = (level) => {
@@ -73,6 +72,30 @@ const resolveUserRank = (level) => {
         rankIcon: currentTier.icon,
         postLimit: currentTier.postLimit
     };
+};
+
+// ⚡️ HELPER: Save file to persistent document directory so it survives cache purges
+const saveMediaToPersistentStorage = async (uri) => {
+    if (!uri) return null;
+    try {
+        const filename = uri.split('/').pop();
+        const newPath = `${FileSystem.documentDirectory}draft_media_${Date.now()}_${filename}`;
+        await FileSystem.copyAsync({ from: uri, to: newPath });
+        return newPath;
+    } catch (e) {
+        console.error("Failed to persist media:", e);
+        return uri; // Fallback to original
+    }
+};
+
+// ⚡️ HELPER: Delete file to prevent storage bloat
+const deletePersistentMedia = async (uri) => {
+    if (!uri || !uri.includes(FileSystem.documentDirectory)) return;
+    try {
+        await FileSystem.deleteAsync(uri, { idempotent: true });
+    } catch (e) {
+        console.error("Failed to delete media:", e);
+    }
 };
 
 export default function AuthorDiaryDashboard() {
@@ -94,9 +117,7 @@ export default function AuthorDiaryDashboard() {
 
     // Category States
     const [category, setCategory] = useState("Clan");
-
     const [clanSubCategory, setClanSubCategory] = useState("Review");
-
     const [mediaUrlLink, setMediaUrlLink] = useState("");
     const [selection, setSelection] = useState({ start: 0, end: 0 });
     const [showPreview, setShowPreview] = useState(false);
@@ -123,9 +144,11 @@ export default function AuthorDiaryDashboard() {
     const [saveStatus, setSaveStatus] = useState("synced");
     const [lastSavedTime, setLastSavedTime] = useState("");
     const [isOfflineMode, setIsOfflineMode] = useState(false);
+    const [mediaList, setMediaList] = useState([]); // ⚡️ Initialized here
 
     const [cachedTodayPosts, setCachedTodayPosts] = useState(null);
     const [firstPostModal, setFirstPostModal] = useState({ visible: false, stats: null, postData: null });
+
     // FIRST POST CINEMATIC STATES
     const [isFirstPostFlow, setIsFirstPostFlow] = useState(false);
     const [introStep, setIntroStep] = useState(0);
@@ -134,11 +157,9 @@ export default function AuthorDiaryDashboard() {
 
     const CACHE_KEY_TODAY = `CACHE_TODAY_POSTS_${fingerprint}`;
     const DRAFT_KEY = `draft_${fingerprint}`;
-    useEffect(() => {
-        console.log(isInClan, "isInClan");
 
+    useEffect(() => {
         if (!isInClan) {
-            console.log("User is not in a clan, setting category to 'Review'");
             setCategory("Review");
         }
     }, [isInClan]);
@@ -148,7 +169,6 @@ export default function AuthorDiaryDashboard() {
     // =================================================================
     useEffect(() => {
         const checkFirstPost = storage.getNumber("trigger_first_post");
-
         if (checkFirstPost !== 0 && checkFirstPost !== undefined) {
             setIsFirstPostFlow(true);
         }
@@ -173,6 +193,11 @@ export default function AuthorDiaryDashboard() {
                     if (data.hasPoll) setHasPoll(data.hasPoll)
                     if (data.pollOptions) setPollOptions(data.pollOptions);
                     if (data.timestamp) setLastSavedTime(data.timestamp);
+                    // ⚡️ Restore Media List
+                    if (data.mediaList && Array.isArray(data.mediaList)) {
+                        setMediaList(data.mediaList);
+                        if (data.mediaList.length > 0) setPickedImage(true);
+                    }
                 }
 
                 // B. Restore Cached Posts
@@ -195,8 +220,6 @@ export default function AuthorDiaryDashboard() {
     // =================================================================
     // 3. DATA FETCHING & RANK SYNC
     // =================================================================
-
-    // ⚡️ INSTANT RANK SYNC: Always use the level provided by the user context
     useEffect(() => {
         if (user?.currentRankLevel) {
             setUserRank(resolveUserRank(user.currentRankLevel));
@@ -217,33 +240,20 @@ export default function AuthorDiaryDashboard() {
         }
     );
 
-    const todayPosts = useMemo(() => {
-        return todayPostsData?.posts || cachedTodayPosts?.posts || [];
-    }, [todayPostsData, cachedTodayPosts]);
+    const todayPosts = useMemo(() => todayPostsData?.posts || cachedTodayPosts?.posts || [], [todayPostsData, cachedTodayPosts]);
     const last6HoursPosts = useMemo(() => {
-        // 1. Safety check for data
         if (!todayPostsData?.posts || !Array.isArray(todayPostsData.posts)) return [];
-
         const SIX_HOURS_IN_MS = 6 * 60 * 60 * 1000;
         const now = Date.now();
-
-        return todayPostsData.posts.filter(post => {
-            // 2. Convert post date to timestamp
-            const postDate = new Date(post.createdAt).getTime();
-
-            // 3. Keep posts where the age is less than 6 hours
-            return (now - postDate) < SIX_HOURS_IN_MS;
-        });
+        return todayPostsData.posts.filter(post => (now - new Date(post.createdAt).getTime()) < SIX_HOURS_IN_MS);
     }, [todayPostsData]);
+
     const recentPostsCount = last6HoursPosts.length;
     const todayPost = todayPosts[0] || null;
-    // const postsLast24h = todayPosts.length;
-
-    // ⚡️ UPDATED MAX POSTS LOGIC: Reads directly from AURA_TIERS
     const maxPostsToday = isInClan ? userRank.postLimit + 2 + additionalSlot : userRank.postLimit + additionalSlot;
 
     // =================================================================
-    // 4. DRAFT AUTO-SAVE LOGIC
+    // 4. DRAFT AUTO-SAVE LOGIC (Now includes mediaList!)
     // =================================================================
     useEffect(() => {
         if (!fingerprint) return;
@@ -253,7 +263,7 @@ export default function AuthorDiaryDashboard() {
             try {
                 const now = new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit', second: '2-digit' });
                 const draftData = {
-                    title, message, category, clanSubCategory, hasPoll, pollOptions, timestamp: now
+                    title, message, category, clanSubCategory, hasPoll, pollOptions, mediaList, timestamp: now
                 };
                 await AsyncStorage.setItem(DRAFT_KEY, JSON.stringify(draftData));
                 setLastSavedTime(now);
@@ -261,21 +271,26 @@ export default function AuthorDiaryDashboard() {
             } catch (err) {
                 console.error("Save Error:", err);
             }
-        }, 5000);
+        }, 5000); // Wait 5 seconds after last change to prevent spamming storage
 
         return () => clearTimeout(timer);
-    }, [title, message, category, clanSubCategory, hasPoll, pollOptions, fingerprint, DRAFT_KEY]);
+    }, [title, message, category, clanSubCategory, hasPoll, pollOptions, mediaList, fingerprint, DRAFT_KEY]);
 
     const handleClearAll = useCallback(() => {
         CustomAlert(
             "Wipe Local Intel?",
-            "This will permanently delete your current draft.",
+            "This will permanently delete your current draft and all attached media files.",
             [
                 { text: "Cancel", style: "cancel" },
                 {
                     text: "Clear Everything",
                     style: "destructive",
                     onPress: async () => {
+                        // ⚡️ Delete persistent files to save space
+                        for (const media of mediaList) {
+                            await deletePersistentMedia(media.localUri);
+                        }
+
                         setTitle(""); setMessage(""); setCategory(isInClan ? "Clan" : "Review"); setClanSubCategory("Review"); setHasPoll(false);
                         setPollOptions(["", ""]); setMediaUrlLink(""); setPickedImage(false); setMediaList([]);
                         try {
@@ -286,7 +301,7 @@ export default function AuthorDiaryDashboard() {
                 }
             ]
         );
-    }, [CustomAlert, DRAFT_KEY]);
+    }, [CustomAlert, DRAFT_KEY, mediaList, isInClan]);
 
     // =================================================================
     // 5. NOTIFICATIONS & SYSTEM SETUP
@@ -463,7 +478,6 @@ export default function AuthorDiaryDashboard() {
         }, 50);
     };
 
-    const [mediaList, setMediaList] = useState([]);
 
     const pickImage = async () => {
         const remainingSlots = 15 - mediaList.length;
@@ -480,46 +494,62 @@ export default function AuthorDiaryDashboard() {
         });
 
         if (!result.canceled) {
-            // Define your limit (e.g., 100MB in bytes)
             const MAX_FILE_SIZE_BYTES = 100 * 1024 * 1024;
-
-            const validAssets = [];
             let hasOversizedFile = false;
 
-            result.assets.forEach(asset => {
-                // Check if fileSize exists (it might be null on some Android/iOS versions)
-                if (asset.fileSize && asset.fileSize > MAX_FILE_SIZE_BYTES) {
-                    hasOversizedFile = true;
-                } else {
-                    validAssets.push({
-                        localUri: asset.uri,
-                        type: asset.type === "video" ? "video" : "image",
-                        fileSize: asset.fileSize
-                    });
+            // ⚡️ We need to await the persistent copy process
+            const processAssets = async () => {
+                const newAssets = [];
+                for (const asset of result.assets) {
+                    if (asset.fileSize && asset.fileSize > MAX_FILE_SIZE_BYTES) {
+                        hasOversizedFile = true;
+                    } else {
+                        // Save it persistently!
+                        const persistentUri = await saveMediaToPersistentStorage(asset.uri);
+                        newAssets.push({
+                            localUri: persistentUri,
+                            type: asset.type === "video" ? "video" : "image",
+                            fileSize: asset.fileSize
+                        });
+                    }
                 }
-            });
 
-            if (hasOversizedFile) {
-                CustomAlert("File Too Large", "Some files exceed the 100MB limit and were not added.");
-            }
+                if (hasOversizedFile) {
+                    CustomAlert("File Too Large", "Some files exceed the 100MB limit and were not added.");
+                }
 
-            if (validAssets.length > 0) {
-                setMediaList(prev => [...prev, ...validAssets]);
-                setPickedImage(true);
-            }
+                if (newAssets.length > 0) {
+                    setMediaList(prev => [...prev, ...newAssets]);
+                    setPickedImage(true);
+                }
+            };
+
+            processAssets();
         }
     };
 
-    const handleSaveEdit = (editedUri) => {
+    const handleSaveEdit = async (editedUri) => {
+        // Also persist the newly edited image
+        const persistentUri = await saveMediaToPersistentStorage(editedUri);
+
+        // Delete the old unedited persistent file if we are replacing it
+        const oldFile = mediaList[editingIndex]?.localUri;
+        if (oldFile) await deletePersistentMedia(oldFile);
+
         const newList = [...mediaList];
-        newList[editingIndex] = { ...newList[editingIndex], localUri: editedUri };
+        newList[editingIndex] = { ...newList[editingIndex], localUri: persistentUri };
+
         setMediaList(newList);
         setIsEditorVisible(false);
         setEditingIndex(null);
         Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
     };
 
-    const removeMedia = (index) => {
+    const removeMedia = async (index) => {
+        const itemToRemove = mediaList[index];
+        if (itemToRemove?.localUri) {
+            await deletePersistentMedia(itemToRemove.localUri);
+        }
         const updatedList = mediaList.filter((_, i) => i !== index);
         setMediaList(updatedList);
         if (updatedList.length === 0) setPickedImage(false);
@@ -540,9 +570,7 @@ export default function AuthorDiaryDashboard() {
     // ----------------------------------------------------------------------
 
     const handleSubmit = async () => {
-
         if (!title.trim() || !message.trim()) { CustomAlert("Error", "Title and Message are required."); return; }
-
         if (isOfflineMode) { CustomAlert("Offline", "Cannot transmit data while offline."); return; }
 
         if (hasPoll && (pollOptions[0] === "" || pollOptions.length < 2)) {
@@ -634,12 +662,10 @@ export default function AuthorDiaryDashboard() {
             Promise.all(uploadPromises)
                 .then(() => {
                     completeUpload();
-                    // 🌟 Success notification is now handled internally by Notifee in the context
                 })
                 .catch((err) => {
                     console.error("A background asset failed in the batch pool:", err);
                     setStatus('error', err.message || "Transmission execution fault.");
-                    // 🌟 Error notification is now handled internally by Notifee in the context
                 });
 
             // 🌟 OPTIMISTIC FEED INJECTION
@@ -665,8 +691,13 @@ export default function AuthorDiaryDashboard() {
         }
     };
 
-    // Isolated helper state cleaner to keep codebase maintainable
+    // Isolated helper state cleaner
     const cleanUpFormState = async () => {
+        // ⚡️ Delete all persistent files from device to save storage space now that they are queued for cloud
+        for (const media of mediaList) {
+            await deletePersistentMedia(media.localUri);
+        }
+
         await AsyncStorage.removeItem(DRAFT_KEY);
         DeviceEventEmitter.emit("POST_CREATED_SUCCESS");
         updateStreak(fingerprint);
@@ -767,7 +798,7 @@ export default function AuthorDiaryDashboard() {
                             flexDirection: 'row',
                             alignItems: 'center',
                             marginHorizontal: 2,
-                            top: 4, // Aligns the pill vertically with standard text line-height 
+                            top: 4,
                         }}
                     >
                         <Feather
@@ -901,6 +932,7 @@ export default function AuthorDiaryDashboard() {
             </View>
         );
     };
+
     const missionLog = useMemo(() => {
         return renderMissionLog();
     }, [todayPosts, showMissionLog]);
@@ -942,25 +974,20 @@ export default function AuthorDiaryDashboard() {
 
         return (
             <View style={{ flex: 1, backgroundColor: isDark ? '#020617' : '#f8fafc' }}>
-                {/* ⚡️ FIX: Added ScrollView wrapper so nothing ever gets cut off */}
                 <ScrollView
                     contentContainerStyle={{ flexGrow: 1, justifyContent: 'center', paddingHorizontal: 24, paddingVertical: 40 }}
                     showsVerticalScrollIndicator={false}
                 >
-                    {/* STEP 0: THE UPLINK */}
                     {introStep === 0 && (
                         <Animated.View entering={FadeInRight.duration(600).springify()} exiting={FadeOutLeft.duration(300)} className="items-center px-2">
-                            {/* ⚡️ FIX: Reduced icon size and mb-10 to mb-6 */}
                             <Animated.View style={{ backgroundColor: isDark ? 'rgba(0,0,0,0.6)' : 'rgba(255,255,255,0.8)', borderColor: THEME.accent, shadowColor: THEME.accent }} className="w-24 h-24 rounded-[32px] items-center justify-center mb-6 border-[3px] shadow-[0_0_40px_rgba(0,0,0,0.3)]">
                                 <MaterialCommunityIcons name="satellite-uplink" size={48} color={THEME.accent} />
                             </Animated.View>
 
-                            {/* ⚡️ FIX: Reduced mb-8 to mb-4 */}
                             <Text style={{ color: THEME.accent }} className="font-black text-[13px] uppercase tracking-[0.4em] mb-4 text-center opacity-90">
                                 {">"} SYSTEM_READY
                             </Text>
 
-                            {/* ⚡️ FIX: Reduced padding to p-6 and mb-12 to mb-6 */}
                             <View style={{ backgroundColor: isDark ? 'rgba(0,0,0,0.5)' : 'rgba(255,255,255,0.7)', borderColor: isDark ? 'rgba(255,255,255,0.05)' : 'rgba(0,0,0,0.05)' }} className="w-full p-6 rounded-[30px] border shadow-2xl mb-6">
                                 <PremiumTextReveal
                                     text={`Uplink established, ${user?.username || 'Player'}.\n\nThe village is waiting to hear your voice. It is time for your first transmission.`}
@@ -968,7 +995,6 @@ export default function AuthorDiaryDashboard() {
                                 />
                             </View>
 
-                            {/* ⚡️ FIX: Reduced py-5 to py-4 */}
                             <Pressable
                                 onPress={() => { Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium); setIntroStep(1); }}
                                 className="w-full py-4 rounded-[24px] flex-row justify-center items-center bg-blue-600 shadow-lg shadow-blue-500/50"
@@ -981,7 +1007,6 @@ export default function AuthorDiaryDashboard() {
                         </Animated.View>
                     )}
 
-                    {/* STEP 1: TRANSMISSION PROTOCOLS */}
                     {introStep === 1 && (
                         <Animated.View entering={SlideInRight.duration(500).springify()} exiting={SlideOutLeft.duration(300)} className="w-full mb-10">
                             <View className="items-center mb-6">
@@ -994,9 +1019,8 @@ export default function AuthorDiaryDashboard() {
                                 </Text>
                             </View>
 
-                            {/* ⚡️ FIX: Reduced mb-8 to mb-6 */}
                             <View className="space-y-3 mb-6">
-                                {/* Rule 1: Formatting */}
+                                {/* Rule 1 */}
                                 <Animated.View entering={FadeInRight.delay(100).springify()} style={{ backgroundColor: isDark ? 'rgba(0,0,0,0.4)' : 'rgba(255,255,255,0.8)', borderColor: isDark ? '#334155' : '#e2e8f0' }} className="border p-4 rounded-2xl flex-row items-center">
                                     <View style={{ backgroundColor: '#a855f720' }} className="w-12 h-12 rounded-full items-center justify-center mr-4">
                                         <MaterialCommunityIcons name="format-text" size={22} color="#a855f7" />
@@ -1007,7 +1031,7 @@ export default function AuthorDiaryDashboard() {
                                     </View>
                                 </Animated.View>
 
-                                {/* Rule 2: Media */}
+                                {/* Rule 2 */}
                                 <Animated.View entering={FadeInRight.delay(250).springify()} style={{ backgroundColor: isDark ? 'rgba(0,0,0,0.4)' : 'rgba(255,255,255,0.8)', borderColor: isDark ? '#334155' : '#e2e8f0' }} className="border p-4 rounded-2xl flex-row items-center">
                                     <View style={{ backgroundColor: '#3b82f620' }} className="w-12 h-12 rounded-full items-center justify-center mr-4">
                                         <MaterialCommunityIcons name="multimedia" size={22} color="#3b82f6" />
@@ -1018,7 +1042,7 @@ export default function AuthorDiaryDashboard() {
                                     </View>
                                 </Animated.View>
 
-                                {/* Rule 3: Categories */}
+                                {/* Rule 3 */}
                                 <Animated.View entering={FadeInRight.delay(400).springify()} style={{ backgroundColor: isDark ? 'rgba(0,0,0,0.4)' : 'rgba(255,255,255,0.8)', borderColor: isDark ? '#334155' : '#e2e8f0' }} className="border p-4 rounded-2xl flex-row items-center">
                                     <View style={{ backgroundColor: '#f59e0b20' }} className="w-12 h-12 rounded-full items-center justify-center mr-4">
                                         <MaterialCommunityIcons name="folder-network" size={22} color="#f59e0b" />
@@ -1029,7 +1053,7 @@ export default function AuthorDiaryDashboard() {
                                     </View>
                                 </Animated.View>
 
-                                {/* Rule 4: Polls */}
+                                {/* Rule 4 */}
                                 <Animated.View entering={FadeInRight.delay(550).springify()} style={{ backgroundColor: isDark ? 'rgba(0,0,0,0.4)' : 'rgba(255,255,255,0.8)', borderColor: isDark ? '#334155' : '#e2e8f0' }} className="border p-4 rounded-2xl flex-row items-center">
                                     <View style={{ backgroundColor: '#10b98120' }} className="w-12 h-12 rounded-full items-center justify-center mr-4">
                                         <MaterialCommunityIcons name="poll" size={22} color="#10b981" />
@@ -1040,7 +1064,7 @@ export default function AuthorDiaryDashboard() {
                                     </View>
                                 </Animated.View>
 
-                                {/* Rule 5: System Judgment */}
+                                {/* Rule 5 */}
                                 <Animated.View entering={FadeInRight.delay(700).springify()} style={{ backgroundColor: isDark ? 'rgba(239,68,68,0.1)' : 'rgba(239,68,68,0.05)', borderColor: '#ef444450' }} className="border p-4 rounded-2xl flex-row items-center">
                                     <View style={{ backgroundColor: '#ef444420' }} className="w-12 h-12 rounded-full items-center justify-center mr-4">
                                         <MaterialCommunityIcons name="eye-outline" size={22} color="#ef4444" />
@@ -1064,13 +1088,11 @@ export default function AuthorDiaryDashboard() {
                         </Animated.View>
                     )}
 
-                    {/* STEP 2: SELECT A HOOK */}
                     {introStep === 2 && (
                         <Animated.View entering={SlideInRight.duration(500).springify()} exiting={SlideOutLeft.duration(300)} className="w-full">
                             <Text className="text-3xl font-black italic uppercase text-center mb-2" style={{ color: primaryTextColor }}>
                                 Select a Hook
                             </Text>
-                            {/* ⚡️ FIX: Reduced mb-8 to mb-6 */}
                             <Text style={{ color: THEME.textSecondary }} className="font-black uppercase text-[10px] mb-6 tracking-[0.2em] text-center opacity-80">
                                 Every legend starts with a single word. Pick a prompt to begin.
                             </Text>
@@ -1097,7 +1119,6 @@ export default function AuthorDiaryDashboard() {
                         </Animated.View>
                     )}
 
-                    {/* STEP 3: LOADING TRANSITION */}
                     {introStep === 3 && (
                         <Animated.View entering={ZoomIn.duration(600).springify()} className="items-center justify-center py-20">
                             <MaterialCommunityIcons name="shield-check" size={80} color="#22c55e" style={{ marginBottom: 30 }} />
@@ -1357,7 +1378,6 @@ export default function AuthorDiaryDashboard() {
                                                                 <Image style={{ width: "100%", height: "100%" }} source={{ uri: item.localUri || item.url }} contentFit="cover" />
                                                             )}
                                                         </View>
-                                                        {/* ⚡️ ADDED REMOVE BUTTON */}
                                                         <TouchableOpacity
                                                             onPress={() => removeMedia(index)}
                                                             className="absolute -top-2 -right-2 bg-red-600 w-6 h-6 rounded-full items-center justify-center border-2 border-black z-50"
@@ -1365,7 +1385,6 @@ export default function AuthorDiaryDashboard() {
                                                             <Ionicons name="close" size={14} color="white" />
                                                         </TouchableOpacity>
 
-                                                        {/* ⚡️ ADDED EDIT BUTTON FOR IMAGES */}
                                                         {item.type === "image" && (
                                                             <TouchableOpacity
                                                                 onPress={() => {
@@ -1379,7 +1398,6 @@ export default function AuthorDiaryDashboard() {
                                                         )}
                                                     </View>
                                                 ))}
-                                                {/* ⚡️ ADDED ADD BUTTON */}
                                                 {mediaList.length < 15 && (
                                                     <TouchableOpacity
                                                         onPress={pickImage}

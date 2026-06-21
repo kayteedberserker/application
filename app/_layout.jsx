@@ -47,7 +47,6 @@ Notifications.setNotificationHandler({
         const { title, body, data } = notification.request.content;
 
         // 🌟 INSTANT LOGGING: See this immediately when a push arrives
-        console.log("🔥 FOREGROUND PUSH INTERCEPTED:", title, data);
 
         const groupId = data?.groupId;
         const mediaUrl = data?.mediaUrl || data?.fcm_options?.image;
@@ -55,15 +54,12 @@ Notifications.setNotificationHandler({
 
         try {
             if (mediaUrl || authorPfpUrl) {
-                console.log("⏳ Downloading rich media assets...");
 
                 // Download both concurrently. Protected by the 2-second timeout.
                 const [localPostImage, localPfpImage] = await Promise.all([
                     mediaUrl ? downloadNotificationImage(mediaUrl, 'media') : Promise.resolve(null),
                     authorPfpUrl ? downloadNotificationImage(authorPfpUrl, 'pfp') : Promise.resolve(null)
                 ]);
-
-                console.log("✅ Downloads complete. PostImage:", !!localPostImage, "PFP:", !!localPfpImage);
 
                 if (localPostImage || localPfpImage) {
                     await notifee.displayNotification({
@@ -113,7 +109,7 @@ if (Platform.OS === 'android') {
 
     notifee.onBackgroundEvent(async ({ type, detail }) => {
         if (type === EventType.PRESS && detail.notification?.data) {
-            console.log("Background Notification Pressed", detail.notification.data);
+            if (__DEV__) console.log("Background Notification Pressed", detail.notification.data);
         }
     });
 }
@@ -252,24 +248,30 @@ function RootLayoutContent() {
             return;
         }
 
+        // 🌟 NEW: Check for exact screen or link route provided by the server first
+        let targetPath = data.screen || data.body?.screen || data.link || data.body?.link || "";
+
+        // Fallbacks for legacy/older notification structures
         const targetPostId = data.postId || data.id || data.body?.postId;
         const targetType = data.type || data.body?.type;
         const targetPage = data.page || data.body?.page;
         const targetDiscussionId = data.discussion || data.commentId;
 
-        let targetPath = "";
-        if (targetType === "open_diary" || targetType === "diary") {
-            targetPath = "/authordiary";
-        } else if (targetPostId) {
-            targetPath = `/post/${targetPostId}`;
-        } else if (targetType === "version_update") {
-            targetPath = "/";
-        } else if (targetType === "screen" && targetPage === "clanprofile") {
-            targetPath = "/clanprofile";
+        if (!targetPath || targetDiscussionId || targetPostId) {
+            if (targetType === "open_diary" || targetType === "diary") {
+                targetPath = "/authordiary";
+            } else if (targetPostId) {
+                targetPath = `/post/${targetPostId}`;
+            } else if (targetType === "version_update") {
+                targetPath = "/";
+            } else if (targetType === "screen" && targetPage === "clanprofile") {
+                targetPath = "/clanprofile";
+            }
         }
 
         if (!targetPath) return;
 
+        // Strip queries just to compare the base route for the 'same page' block
         const currentPathBase = currentPathRef.current.split('?')[0];
         const targetPathBase = targetPath.split('?')[0];
 
@@ -280,7 +282,11 @@ function RootLayoutContent() {
             return;
         }
 
-        const finalUrl = targetDiscussionId ? `${targetPath}?discussionId=${targetDiscussionId}` : targetPath;
+        // 🌟 Append discussionId if missing but present in the payload
+        let finalUrl = targetPath;
+        if (targetDiscussionId && !finalUrl.includes('discussionId=')) {
+            finalUrl += finalUrl.includes('?') ? `&discussionId=${targetDiscussionId}` : `?discussionId=${targetDiscussionId}`;
+        }
 
         // ⚡️ Apply Global Lock
         IS_NAVIGATING_GLOBAL = true;
@@ -361,7 +367,8 @@ function RootLayoutContent() {
                     const pathId = path.split('/').pop();
                     processRouting({ postId: pathId, type: 'post_detail', ...queryParams });
                 } else if (currentPathRef.current !== `/${path}`) {
-                    router.replace(path);
+                    // 🌟 Keep path query params attached for deep links
+                    router.replace({ pathname: `/${path}`, params: queryParams });
                 }
             }
         };

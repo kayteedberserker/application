@@ -160,14 +160,18 @@ export default function PlayerCard({ author, totalPosts, isDark }) {
                     </View>
 
                     {/* {equippedBadges.length > 0 && (
-<View className="flex-row flex-wrap justify-center gap-2 mt-3 mb-3">
-{equippedBadges.map((badge, bIdx) => (
-<BadgeIcon key={`spec-${bIdx}`} badge={badge} size={22} isDark={isDark} />
-))}
-</View>
-)} */}
+                        <View className="flex-row flex-wrap justify-center gap-2 mt-3 mb-3">
+                            {equippedBadges.map((badge, bIdx) => (
+                                <BadgeIcon key={`spec-${bIdx}`} badge={badge} size={22} isDark={isDark} />
+                            ))}
+                        </View>
+                    )} */}
 
-                    <Text className="text-sm text-gray-500 dark:text-gray-400 text-center leading-relaxed font-medium px-4 italic mb-5 mt-2">
+                    <Text
+                        numberOfLines={4}
+                        ellipsizeMode="tail"
+                        className="text-sm text-gray-500 dark:text-gray-400 text-center leading-relaxed font-medium px-4 italic mb-5 mt-2"
+                    >
                         "{author.description || "This operator is a ghost in the machine..."}"
                     </Text>
 

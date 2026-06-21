@@ -59,17 +59,31 @@ const tabs = [
     { id: 'profile', label: 'PROFILE', icon: 'person', route: '/profile', color: '#f59e0b', match: (p) => p === "/profile" },
 ];
 
-const NotificationBadge = ({ count, hasUnRead, size = 12, canManageClan }) => {
-    if (!hasUnRead && (!count || count <= 0)) return null;
-    if (!hasUnRead && !canManageClan) return null;
+const NotificationBadge = ({ count, hasUnRead, size = 14, canManageClan }) => {
+    // Hide if no unread chat AND (no requests OR user isn't an admin)
+    if (!hasUnRead && (!count || count <= 0 || !canManageClan)) return null;
+
+    // Determine if we should show a number (Join Requests) or just a dot (Unread Chat)
+    const showNumber = !hasUnRead && count > 0 && canManageClan;
+
     return (
         <View
             className="absolute -top-1 -right-1 bg-red-500 rounded-full items-center justify-center border-2 border-white dark:border-slate-900"
-            style={{ minWidth: size, height: size, paddingHorizontal: 2 }}
+            style={{
+                minWidth: size,
+                height: size,
+                paddingHorizontal: showNumber ? 3 : 0
+            }}
         >
-            {count > 9 && <View className="w-1 h-1 bg-white rounded-full" />}
+            {showNumber ? (
+                <Text style={{ fontSize: 8, color: 'white', fontWeight: '900', lineHeight: 10 }}>
+                    {count > 9 ? '9+' : count}
+                </Text>
+            ) : (
+                <View className="w-1.5 h-1.5 bg-white rounded-full" />
+            )}
         </View>
-    )
+    );
 };
 
 export default function MainLayout() {
@@ -127,9 +141,19 @@ export default function MainLayout() {
     // =================================================================
     useEffect(() => {
         const checkFirstPost = storage.getNumber("trigger_first_post");
-        if (checkFirstPost !== 0 && checkFirstPost !== undefined) {
+        let timer; // ✅ Declare it outside the block
+
+        if (checkFirstPost !== 0) {
             setIsFirstPostFlow(true);
+
+            timer = setTimeout(() => { // ✅ Assign it here
+                setIsFirstPostFlow(false);
+            }, 10000);
         }
+
+        return () => {
+            if (timer) clearTimeout(timer); // ✅ Safely clear it
+        };
     }, []);
 
 
@@ -413,7 +437,7 @@ export default function MainLayout() {
                 <CategoryNav isDark={isDark} />
             </Animated.View>
             {!isFirstPostFlow && <GlobalMarquee isDark={isDark} />}
-            {!isFirstPostFlow && <UpdateHandler />}
+            <UpdateHandler />
             {!isFirstPostFlow && <NeuralPinModal visible={pinModalVisible}
                 onSuccess={() => setPinModalVisible(false)} onClose={() => setPinModalVisible(false)} />}
 

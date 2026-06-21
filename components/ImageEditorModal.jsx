@@ -60,7 +60,6 @@ const FILTER_OPTIONS = [
     { id: 'vintage', label: 'Vintage', matrix: VINTAGE, icon: 'camera-gopro' },
 ];
 
-// --- ⚡️ Font Assets ---
 const fontAssets = [
     require('../assets/fonts/SpaceGrotesk.ttf'),
     require('../assets/fonts/Caveat-Regular.ttf'),
@@ -73,13 +72,11 @@ const BASE_FONT_SIZE = 40;
 const MIN_SCALE = 0.5;
 const MAX_SCALE = 4.0;
 
-// ⚡️ Sub-Component Optimized for Scaling and Performance
 const CanvasTextBlock = ({ tb, fonts, isSelected, selectionPaint, handlePaint }) => {
     const fontToUse = fonts[tb.fontIndex] || fonts[0];
     const padding = 10;
     const handleSize = 8;
 
-    // Moving the entire group handles scaling smoothly without double-offsetting coordinates
     const transform = useDerivedValue(() => [
         { translateX: tb.x.value },
         { translateY: tb.y.value },
@@ -116,7 +113,7 @@ const CanvasTextBlock = ({ tb, fonts, isSelected, selectionPaint, handlePaint })
     );
 };
 
-const ImageEditorModal = ({ isVisible, onClose, imageUri, onSave }) => {
+const ImageEditorModal = ({ isVisible, onClose, imageUri, onSave, isProfilePicture = false }) => {
     const skiaImage = useImage(imageUri);
     const viewShotRef = React.useRef();
 
@@ -128,7 +125,7 @@ const ImageEditorModal = ({ isVisible, onClose, imageUri, onSave }) => {
 
     const fonts = useMemo(() => [font0, font1, font2, font3, font4].filter(f => f !== null), [font0, font1, font2, font3, font4]);
 
-    const [tool, setTool] = useState('brush');
+    const [tool, setTool] = useState('crop');
     const [brushColor, setBrushColor] = useState(COLORS[1]);
     const [filter, setFilter] = useState('none');
     const [paths, setPaths] = useState([]);
@@ -142,7 +139,6 @@ const ImageEditorModal = ({ isVisible, onClose, imageUri, onSave }) => {
     const activeTextOffset = useSharedValue({ x: 0, y: 0 });
     const startScale = useSharedValue(1);
 
-    // New shared values for directional corner scaling
     const isResizingText = useSharedValue(false);
     const textCenterStart = useSharedValue({ x: 0, y: 0 });
     const textStartVector = useSharedValue({ x: 0, y: 0 });
@@ -157,38 +153,55 @@ const ImageEditorModal = ({ isVisible, onClose, imageUri, onSave }) => {
     const activePath = useSharedValue(emptyPath);
     const [isDrawing, setIsDrawing] = useState(false);
 
+    // ⚡️ Rectangular Crop Variables
     const cropT = useSharedValue(0);
     const cropL = useSharedValue(0);
     const cropB = useSharedValue(0);
     const cropR = useSharedValue(0);
-
     const cropStartT = useSharedValue(0);
     const cropStartL = useSharedValue(0);
     const cropStartB = useSharedValue(0);
     const cropStartR = useSharedValue(0);
     const cropHandle = useSharedValue(0);
 
+    // ⚡️ Circular 1:1 Crop Variables
+    const cropX = useSharedValue(0);
+    const cropY = useSharedValue(0);
+    const cropSize = useSharedValue(0);
+    const cropStartX = useSharedValue(0);
+    const cropStartY = useSharedValue(0);
+    const cropStartSize = useSharedValue(0);
+
     const resetAll = () => {
         setPaths([]);
         setTextBlocks([]);
-        setTool('brush');
+        setTool('crop');
         setBrushColor(COLORS[1]);
         setFilter('none');
         selectedTextId.value = null;
-        setSelectedTextIdState(null); // Fix: removed invalid runOnJS wrapper
+        setSelectedTextIdState(null);
+
         if (baseDim.w > 0) {
-            setCropState({ x: 0, y: 0, w: baseDim.w, h: baseDim.h });
-            const INSET = 20;
-            cropL.value = INSET;
-            cropT.value = INSET;
-            cropR.value = baseDim.w - INSET;
-            cropB.value = baseDim.h - INSET;
+            if (isProfilePicture) {
+                const size = Math.min(baseDim.w, baseDim.h) * 0.8;
+                cropSize.value = size;
+                cropX.value = (baseDim.w - size) / 2;
+                cropY.value = (baseDim.h - size) / 2;
+                setCropState({ x: cropX.value, y: cropY.value, w: size, h: size });
+            } else {
+                const INSET = 20;
+                cropL.value = INSET;
+                cropT.value = INSET;
+                cropR.value = baseDim.w - INSET;
+                cropB.value = baseDim.h - INSET;
+                setCropState({ x: INSET, y: INSET, w: baseDim.w - INSET * 2, h: baseDim.h - INSET * 2 });
+            }
         }
     };
 
     useEffect(() => {
         if (isVisible) resetAll();
-    }, [isVisible]);
+    }, [isVisible, isProfilePicture]);
 
     useEffect(() => {
         if (skiaImage) {
@@ -205,13 +218,21 @@ const ImageEditorModal = ({ isVisible, onClose, imageUri, onSave }) => {
             }
 
             setBaseDim({ w: targetW, h: targetH });
-            setCropState({ x: 0, y: 0, w: targetW, h: targetH });
 
-            const INSET = 20;
-            cropL.value = INSET;
-            cropT.value = INSET;
-            cropR.value = targetW - INSET;
-            cropB.value = targetH - INSET;
+            if (isProfilePicture) {
+                const size = Math.min(targetW, targetH) * 0.8;
+                cropSize.value = size;
+                cropX.value = (targetW - size) / 2;
+                cropY.value = (targetH - size) / 2;
+                setCropState({ x: cropX.value, y: cropY.value, w: size, h: size });
+            } else {
+                const INSET = 20;
+                cropL.value = INSET;
+                cropT.value = INSET;
+                cropR.value = targetW - INSET;
+                cropB.value = targetH - INSET;
+                setCropState({ x: INSET, y: INSET, w: targetW - INSET * 2, h: targetH - INSET * 2 });
+            }
 
             setIsLoaded(true);
         }
@@ -236,20 +257,23 @@ const ImageEditorModal = ({ isVisible, onClose, imageUri, onSave }) => {
         visualScale = displayW / activeW;
     }
 
+    // ==========================================
+    // ⚡️ STYLES FOR RECTANGLE MODE
+    // ==========================================
     const dimTop = useAnimatedStyle(() => ({
         position: 'absolute', top: 0, left: 0, right: 0, height: cropT.value * visualScale, backgroundColor: 'rgba(0,0,0,0.6)'
     }));
     const dimBottom = useAnimatedStyle(() => ({
-        position: 'absolute', bottom: 0, left: 0, right: 0, height: (baseDim.h - cropB.value) * visualScale, backgroundColor: 'rgba(0,0,0,0.6)'
+        position: 'absolute', bottom: 0, left: 0, right: 0, height: Math.max((baseDim.h - cropB.value) * visualScale, 0), backgroundColor: 'rgba(0,0,0,0.6)'
     }));
     const dimLeft = useAnimatedStyle(() => ({
         position: 'absolute', top: cropT.value * visualScale, bottom: (baseDim.h - cropB.value) * visualScale, left: 0, width: cropL.value * visualScale, backgroundColor: 'rgba(0,0,0,0.6)'
     }));
     const dimRight = useAnimatedStyle(() => ({
-        position: 'absolute', top: cropT.value * visualScale, bottom: (baseDim.h - cropB.value) * visualScale, right: 0, width: (baseDim.w - cropR.value) * visualScale, backgroundColor: 'rgba(0,0,0,0.6)'
+        position: 'absolute', top: cropT.value * visualScale, bottom: (baseDim.h - cropB.value) * visualScale, right: 0, width: Math.max((baseDim.w - cropR.value) * visualScale, 0), backgroundColor: 'rgba(0,0,0,0.6)'
     }));
 
-    const cropBoxStyle = useAnimatedStyle(() => ({
+    const rectCropBoxStyle = useAnimatedStyle(() => ({
         position: 'absolute',
         top: cropT.value * visualScale,
         left: cropL.value * visualScale,
@@ -260,8 +284,44 @@ const ImageEditorModal = ({ isVisible, onClose, imageUri, onSave }) => {
         backgroundColor: 'rgba(255,255,255,0.1)'
     }));
 
-    const cropGesture = Gesture.Pan()
-        .enabled(isCropping)
+    // ==========================================
+    // ⚡️ STYLES FOR CIRCULAR MODE
+    // ==========================================
+    const dimOverlayStyle = useAnimatedStyle(() => {
+        const size = cropSize.value * visualScale;
+        const borderW = Math.max(SCREEN_WIDTH, SCREEN_HEIGHT) * 2;
+        return {
+            position: 'absolute',
+            top: (cropY.value * visualScale) - borderW,
+            left: (cropX.value * visualScale) - borderW,
+            width: size + borderW * 2,
+            height: size + borderW * 2,
+            borderRadius: (size + borderW * 2) / 2,
+            borderWidth: borderW,
+            borderColor: 'rgba(0,0,0,0.7)',
+        };
+    });
+
+    const circleCropBoxStyle = useAnimatedStyle(() => {
+        const size = cropSize.value * visualScale;
+        return {
+            position: 'absolute',
+            top: cropY.value * visualScale,
+            left: cropX.value * visualScale,
+            width: size,
+            height: size,
+            borderRadius: size / 2,
+            borderWidth: 2,
+            borderColor: 'white',
+            overflow: 'hidden'
+        };
+    });
+
+    // ==========================================
+    // ⚡️ GESTURES: RECTANGULAR
+    // ==========================================
+    const rectCropGesture = Gesture.Pan()
+        .enabled(isCropping && !isProfilePicture)
         .onStart((g) => {
             cropStartT.value = cropT.value;
             cropStartL.value = cropL.value;
@@ -292,7 +352,7 @@ const ImageEditorModal = ({ isVisible, onClose, imageUri, onSave }) => {
             }
         })
         .onUpdate((g) => {
-            const minSize = 60;
+            const minSize = 60 / visualScale;
             const dx = g.translationX / visualScale;
             const dy = g.translationY / visualScale;
 
@@ -308,8 +368,7 @@ const ImageEditorModal = ({ isVisible, onClose, imageUri, onSave }) => {
             } else if (cropHandle.value === 4) {
                 cropR.value = Math.max(Math.min(baseDim.w, cropStartR.value + dx), cropL.value + minSize);
                 cropB.value = Math.max(Math.min(baseDim.h, cropStartB.value + dy), cropT.value + minSize);
-            }
-            else if (cropHandle.value === 6) {
+            } else if (cropHandle.value === 6) {
                 cropT.value = Math.min(Math.max(0, cropStartT.value + dy), cropB.value - minSize);
             } else if (cropHandle.value === 7) {
                 cropB.value = Math.max(Math.min(baseDim.h, cropStartB.value + dy), cropT.value + minSize);
@@ -317,8 +376,7 @@ const ImageEditorModal = ({ isVisible, onClose, imageUri, onSave }) => {
                 cropL.value = Math.min(Math.max(0, cropStartL.value + dx), cropR.value - minSize);
             } else if (cropHandle.value === 9) {
                 cropR.value = Math.max(Math.min(baseDim.w, cropStartR.value + dx), cropL.value + minSize);
-            }
-            else if (cropHandle.value === 5) {
+            } else if (cropHandle.value === 5) {
                 const w = cropStartR.value - cropStartL.value;
                 const h = cropStartB.value - cropStartT.value;
                 let newL = cropStartL.value + dx;
@@ -336,13 +394,79 @@ const ImageEditorModal = ({ isVisible, onClose, imageUri, onSave }) => {
             }
         });
 
-    const applyCrop = () => {
-        setCropState({
-            x: cropL.value,
-            y: cropT.value,
-            w: cropR.value - cropL.value,
-            h: cropB.value - cropT.value
+    // ==========================================
+    // ⚡️ GESTURES: CIRCULAR
+    // ==========================================
+    const cropPanGesture = Gesture.Pan()
+        .enabled(isCropping && isProfilePicture)
+        .onStart(() => {
+            cropStartX.value = cropX.value;
+            cropStartY.value = cropY.value;
+        })
+        .onUpdate((g) => {
+            const dx = g.translationX / visualScale;
+            const dy = g.translationY / visualScale;
+
+            let newX = cropStartX.value + dx;
+            let newY = cropStartY.value + dy;
+
+            if (newX < 0) newX = 0;
+            if (newY < 0) newY = 0;
+            if (newX + cropSize.value > baseDim.w) newX = baseDim.w - cropSize.value;
+            if (newY + cropSize.value > baseDim.h) newY = baseDim.h - cropSize.value;
+
+            cropX.value = newX;
+            cropY.value = newY;
         });
+
+    const cropPinchGesture = Gesture.Pinch()
+        .enabled(isCropping && isProfilePicture)
+        .onStart(() => {
+            cropStartSize.value = cropSize.value;
+            cropStartX.value = cropX.value;
+            cropStartY.value = cropY.value;
+        })
+        .onUpdate((g) => {
+            let newSize = cropStartSize.value * g.scale;
+            const maxSize = Math.min(baseDim.w, baseDim.h);
+
+            newSize = Math.max(60 / visualScale, Math.min(newSize, maxSize));
+
+            const sizeDiff = newSize - cropStartSize.value;
+            let newX = cropStartX.value - sizeDiff / 2;
+            let newY = cropStartY.value - sizeDiff / 2;
+
+            if (newX < 0) newX = 0;
+            if (newY < 0) newY = 0;
+            if (newX + newSize > baseDim.w) newX = baseDim.w - newSize;
+            if (newY + newSize > baseDim.h) newY = baseDim.h - newSize;
+
+            cropSize.value = newSize;
+            cropX.value = newX;
+            cropY.value = newY;
+        });
+
+    const cropComposedGesture = Gesture.Simultaneous(cropPinchGesture, cropPanGesture);
+
+    // ==========================================
+    // ⚡️ ACTIONS & DRAWING
+    // ==========================================
+    const applyCrop = () => {
+        if (isProfilePicture) {
+            setCropState({
+                x: cropX.value,
+                y: cropY.value,
+                w: cropSize.value,
+                h: cropSize.value
+            });
+        } else {
+            setCropState({
+                x: cropL.value,
+                y: cropT.value,
+                w: cropR.value - cropL.value,
+                h: cropB.value - cropT.value
+            });
+        }
         setTool('brush');
     };
 
@@ -368,7 +492,7 @@ const ImageEditorModal = ({ isVisible, onClose, imageUri, onSave }) => {
             const mapY = (g.y / visualScale) + (isCropping ? 0 : cropState.y);
             p.moveTo(mapX, mapY);
             activePath.value = p;
-            runOnJS(setIsDrawing)(true); // Correct: Inside worklet
+            runOnJS(setIsDrawing)(true);
         })
         .onUpdate((g) => {
             const currentP = activePath.value;
@@ -381,9 +505,9 @@ const ImageEditorModal = ({ isVisible, onClose, imageUri, onSave }) => {
         })
         .onFinalize(() => {
             if (activePath.value !== emptyPath) {
-                runOnJS(finalizePath)(activePath.value.copy(), brushColor); // Correct
+                runOnJS(finalizePath)(activePath.value.copy(), brushColor);
             } else {
-                runOnJS(setIsDrawing)(false); // Correct
+                runOnJS(setIsDrawing)(false);
             }
         });
 
@@ -397,19 +521,18 @@ const ImageEditorModal = ({ isVisible, onClose, imageUri, onSave }) => {
 
             isResizingText.value = false;
 
-            // 1. Check if we hit the handles of the CURRENTLY selected text to initiate resizing
             if (selectedTextId.value) {
                 const currentTb = textBlocks.find(t => t.id === selectedTextId.value);
                 if (currentTb) {
                     const scale = currentTb.scale.value;
-                    const p = 10; // Matches padding in CanvasTextBlock
+                    const p = 10;
 
                     const left = currentTb.x.value - (p * scale);
                     const right = currentTb.x.value + (currentTb.baseWidth + p) * scale;
                     const top = currentTb.y.value - (currentTb.th + p) * scale;
                     const bottom = currentTb.y.value + (currentTb.descent + p) * scale;
 
-                    const handleHitRadius = 35 / visualScale; // Forgiving touch target for corners
+                    const handleHitRadius = 35 / visualScale;
 
                     const hitTL = Math.hypot(mapX - left, mapY - top) < handleHitRadius;
                     const hitTR = Math.hypot(mapX - right, mapY - top) < handleHitRadius;
@@ -418,29 +541,22 @@ const ImageEditorModal = ({ isVisible, onClose, imageUri, onSave }) => {
 
                     if (hitTL || hitTR || hitBL || hitBR) {
                         isResizingText.value = true;
-
-                        // Accurately pinpoint the center of the bounding box
                         const boxTop = currentTb.y.value - (currentTb.th * scale);
                         const boxBottom = currentTb.y.value + (currentTb.descent * scale);
-
                         textCenterStart.value = {
                             x: currentTb.x.value + (currentTb.baseWidth * scale) / 2,
                             y: (boxTop + boxBottom) / 2
                         };
-
-                        // Record the initial directional vector from the center to the touched handle
                         textStartVector.value = {
                             x: mapX - textCenterStart.value.x,
                             y: mapY - textCenterStart.value.y
                         };
-
                         startScale.value = scale;
-                        return; // We hit a handle, so don't check for standard dragging
+                        return;
                     }
                 }
             }
 
-            // 2. Normal drag selection check if we didn't hit a handle
             let foundId = null;
             let grabOffsetX = 0;
             let grabOffsetY = 0;
@@ -467,7 +583,7 @@ const ImageEditorModal = ({ isVisible, onClose, imageUri, onSave }) => {
 
             selectedTextId.value = foundId;
             activeTextOffset.value = { x: grabOffsetX, y: grabOffsetY };
-            runOnJS(setSelectedTextIdState)(foundId); // Correct
+            runOnJS(setSelectedTextIdState)(foundId);
         })
         .onUpdate((g) => {
             const currentId = selectedTextId.value;
@@ -480,14 +596,11 @@ const ImageEditorModal = ({ isVisible, onClose, imageUri, onSave }) => {
             if (!tb) return;
 
             if (isResizingText.value) {
-                // Calculate the current directional vector
                 const currentVecX = mapX - textCenterStart.value.x;
                 const currentVecY = mapY - textCenterStart.value.y;
-
                 const startVecX = textStartVector.value.x;
                 const startVecY = textStartVector.value.y;
 
-                // Use the Dot Product to calculate scaling relative to the specific corner's quadrant!
                 const dotProduct = (currentVecX * startVecX) + (currentVecY * startVecY);
                 const startDistSq = (startVecX * startVecX) + (startVecY * startVecY);
 
@@ -498,11 +611,8 @@ const ImageEditorModal = ({ isVisible, onClose, imageUri, onSave }) => {
                     tb.scale.value = nextScale;
                 }
             } else {
-                // Normal drag updates
-                const newX = mapX - activeTextOffset.value.x;
-                const newY = mapY - activeTextOffset.value.y;
-                tb.x.value = newX;
-                tb.y.value = newY;
+                tb.x.value = mapX - activeTextOffset.value.x;
+                tb.y.value = mapY - activeTextOffset.value.y;
             }
         });
 
@@ -535,51 +645,28 @@ const ImageEditorModal = ({ isVisible, onClose, imageUri, onSave }) => {
             }
 
             if (foundId) {
-                selectedTextId.value = foundId; // Still mutate shared value on UI thread
-                runOnJS(setSelectedTextIdState)(foundId) // Call combined JS handler once
+                selectedTextId.value = foundId;
+                runOnJS(setSelectedTextIdState)(foundId);
             } else {
                 selectedTextId.value = null;
-                runOnJS(setSelectedTextIdState)(null); // Correct usage
+                runOnJS(setSelectedTextIdState)(null);
             }
         });
 
-    const handleTextTap = React.useCallback((id) => {
-        // Call both state setter and editor prompt on the JS thread
-        setSelectedTextIdState(id);
+    const textGestures = Gesture.Exclusive(textGestTap, textGestDrag);
 
-        // This part should also have been using a stable reference but for now we look into finding the tb
-        const tb = textBlocks.find(t => t.id === id);
-
-        if (!tb) return;
-
-        setNewTextInput(tb.text);
-        setIsEditingExisting(true);
-        setIsTextPromptVisible(true);
-    }, [textBlocks]); // Depends only on textBlocks state
-
-    // Removed pinch, updated exclusive gesture tree
-    const textGestures = Gesture.Exclusive(
-        textGestTap,
-        textGestDrag
-    );
+    // ⚡️ DYNAMIC GESTURE RACE FOR BOTH MODES
+    const activeGesture = isProfilePicture
+        ? Gesture.Race(textGestures, drawGesture, cropComposedGesture)
+        : Gesture.Race(textGestures, drawGesture, rectCropGesture);
 
     const openAddPrompt = () => {
-        setSelectedTextIdState(null); // Fix: Removed runOnJS
+        setSelectedTextIdState(null);
         selectedTextId.value = null;
         setNewTextInput('');
         setIsEditingExisting(false);
         setIsTextPromptVisible(true);
     };
-
-    const openEditPrompt = React.useCallback((id) => {
-        // textBlocks can still be accessed, just make sure to add it as a dependency
-        const tb = textBlocks.find(b => b.id === id);
-        if (tb) {
-            setNewTextInput(tb.text);
-            setIsEditingExisting(true);
-            setIsTextPromptVisible(true);
-        }
-    }, [textBlocks]); // Add dependencies that, when changed, should recreate the function
 
     const confirmAddOrEdit = () => {
         if (!newTextInput || newTextInput.trim() === '') {
@@ -588,7 +675,6 @@ const ImageEditorModal = ({ isVisible, onClose, imageUri, onSave }) => {
             return;
         }
 
-        // Fix: Guard against missing fonts
         if (!fonts || fonts.length === 0) {
             setIsTextPromptVisible(false);
             return;
@@ -622,7 +708,7 @@ const ImageEditorModal = ({ isVisible, onClose, imageUri, onSave }) => {
             setTextBlocks(prev => [...prev, newText]);
             const newId = newText.id;
             selectedTextId.value = newId;
-            setSelectedTextIdState(newId); // Fix: Removed runOnJS
+            setSelectedTextIdState(newId);
         }
         setIsTextPromptVisible(false);
     };
@@ -632,7 +718,7 @@ const ImageEditorModal = ({ isVisible, onClose, imageUri, onSave }) => {
         if (!currentId) return;
         setTextBlocks(prev => prev.filter(tb => tb.id !== currentId));
         selectedTextId.value = null;
-        setSelectedTextIdState(null); // Fix: Removed runOnJS
+        setSelectedTextIdState(null);
     };
 
     const changeSelectedTextColor = (colorVal) => {
@@ -662,11 +748,8 @@ const ImageEditorModal = ({ isVisible, onClose, imageUri, onSave }) => {
 
     const handleSave = async () => {
         selectedTextId.value = null;
-        setSelectedTextIdState(null); // Fix: Removed runOnJS
+        setSelectedTextIdState(null);
 
-        if (!viewShotRef.current) return;
-
-        // Fix: Give the UI one frame to actually hide the selection box before saving
         await new Promise(resolve => requestAnimationFrame(resolve));
 
         try {
@@ -716,14 +799,25 @@ const ImageEditorModal = ({ isVisible, onClose, imageUri, onSave }) => {
                             </View>
                         )}
 
-                        <View style={[styles.canvasWrapper, { width: displayW, height: displayH }]}>
+                        <View style={[styles.canvasWrapper, {
+                            width: displayW,
+                            height: displayH,
+                            borderRadius: (isCropping && isProfilePicture) ? 20 : (isProfilePicture ? displayW / 2 : 20),
+                            borderWidth: (isCropping || !isProfilePicture) ? 1 : 0
+                        }]}>
                             {isLoaded && skiaImage && (
                                 <ViewShot
                                     ref={viewShotRef}
-                                    options={{ format: 'jpg', quality: 1.0 }}
-                                    style={{ width: displayW, height: displayH, backgroundColor: '#000', overflow: 'hidden' }}
+                                    options={{ format: isProfilePicture ? 'png' : 'jpg', quality: 1.0 }}
+                                    style={{
+                                        width: displayW,
+                                        height: displayH,
+                                        backgroundColor: isProfilePicture ? 'transparent' : '#000',
+                                        overflow: 'hidden',
+                                        borderRadius: isProfilePicture && !isCropping ? displayW / 2 : 0
+                                    }}
                                 >
-                                    <GestureDetector gesture={Gesture.Race(textGestures, drawGesture, cropGesture)}>
+                                    <GestureDetector gesture={activeGesture}>
                                         <View style={{ width: displayW, height: displayH }}>
                                             <Canvas style={{ width: displayW, height: displayH, backgroundColor: 'transparent' }}>
                                                 <Group transform={[{ scale: visualScale }]}>
@@ -763,20 +857,39 @@ const ImageEditorModal = ({ isVisible, onClose, imageUri, onSave }) => {
                                                 </Group>
                                             </Canvas>
 
-                                            {isCropping && (
+                                            {/* ⚡️ PROFILE MASK: CIRCULAR */}
+                                            {isCropping && isProfilePicture && (
                                                 <View style={StyleSheet.absoluteFill} pointerEvents="none">
-                                                    <Animated.View style={dimTop} />
-                                                    <Animated.View style={dimBottom} />
-                                                    <Animated.View style={dimLeft} />
-                                                    <Animated.View style={dimRight} />
-
-                                                    <Animated.View style={cropBoxStyle}>
+                                                    <Animated.View style={dimOverlayStyle} />
+                                                    <Animated.View style={circleCropBoxStyle}>
                                                         <View style={styles.cropGrid}>
                                                             <View style={styles.gridLineH} />
                                                             <View style={styles.gridLineH2} />
                                                             <View style={styles.gridLineV} />
                                                             <View style={styles.gridLineV2} />
+                                                        </View>
+                                                    </Animated.View>
+                                                    <View style={[StyleSheet.absoluteFill, { justifyContent: 'center', alignItems: 'center' }]}>
+                                                        <Text className="text-white/50 text-[10px] uppercase font-black tracking-widest mt-12">
+                                                            Pinch & Drag to adjust
+                                                        </Text>
+                                                    </View>
+                                                </View>
+                                            )}
 
+                                            {/* ⚡️ NORMAL MASK: RECTANGULAR */}
+                                            {isCropping && !isProfilePicture && (
+                                                <View style={StyleSheet.absoluteFill} pointerEvents="none">
+                                                    <Animated.View style={dimTop} />
+                                                    <Animated.View style={dimBottom} />
+                                                    <Animated.View style={dimLeft} />
+                                                    <Animated.View style={dimRight} />
+                                                    <Animated.View style={rectCropBoxStyle}>
+                                                        <View style={styles.cropGrid}>
+                                                            <View style={styles.gridLineH} />
+                                                            <View style={styles.gridLineH2} />
+                                                            <View style={styles.gridLineV} />
+                                                            <View style={styles.gridLineV2} />
                                                             <View style={[styles.corner, { top: -2, left: -2, borderTopWidth: 4, borderLeftWidth: 4 }]} />
                                                             <View style={[styles.corner, { top: -2, right: -2, borderTopWidth: 4, borderRightWidth: 4 }]} />
                                                             <View style={[styles.corner, { bottom: -2, left: -2, borderBottomWidth: 4, borderLeftWidth: 4 }]} />
@@ -792,9 +905,9 @@ const ImageEditorModal = ({ isVisible, onClose, imageUri, onSave }) => {
                         </View>
                     </View>
 
+                    {/* Bottom Controls */}
                     <View className="px-6 pb-10">
                         <View className="flex-row items-center justify-between mb-6">
-
                             {tool === 'brush' && (
                                 <>
                                     <TouchableOpacity onPress={undo} className="bg-white/10 p-4 rounded-2xl">
@@ -854,20 +967,11 @@ const ImageEditorModal = ({ isVisible, onClose, imageUri, onSave }) => {
                                 <View className="flex-row items-center justify-between w-full">
                                     <ScrollView horizontal showsHorizontalScrollIndicator={false} className="flex-1">
                                         {FILTER_OPTIONS.map((f) => (
-                                            <TouchableOpacity
-                                                key={f.id}
-                                                onPress={() => setFilter(f.id)}
-                                                className="items-center mr-5"
-                                            >
-                                                <View
-                                                    className={`w-14 h-14 rounded-full items-center justify-center mb-2 ${filter === f.id ? 'border-2 border-white' : 'border border-white/20'}`}
-                                                    style={{ backgroundColor: '#2a2a2e' }}
-                                                >
+                                            <TouchableOpacity key={f.id} onPress={() => setFilter(f.id)} className="items-center mr-5">
+                                                <View className={`w-14 h-14 rounded-full items-center justify-center mb-2 ${filter === f.id ? 'border-2 border-white' : 'border border-white/20'}`} style={{ backgroundColor: '#2a2a2e' }}>
                                                     <MaterialCommunityIcons name={f.icon} size={24} color={filter === f.id ? 'white' : '#a1a1aa'} />
                                                 </View>
-                                                <Text className={`text-[10px] uppercase font-bold ${filter === f.id ? 'text-white' : 'text-zinc-400'}`}>
-                                                    {f.label}
-                                                </Text>
+                                                <Text className={`text-[10px] uppercase font-bold ${filter === f.id ? 'text-white' : 'text-zinc-400'}`}>{f.label}</Text>
                                             </TouchableOpacity>
                                         ))}
                                     </ScrollView>
@@ -880,36 +984,20 @@ const ImageEditorModal = ({ isVisible, onClose, imageUri, onSave }) => {
                         </View>
 
                         <View className="flex-row justify-between bg-zinc-900 p-2 rounded-[30px] border border-white/5 gap-x-2">
-                            <TouchableOpacity
-                                onPress={() => { setTool('brush'); selectedTextId.value = null; setSelectedTextIdState(null); }}
-                                className={`flex-1 flex-row justify-center items-center py-4 rounded-[24px] ${tool === 'brush' ? 'bg-blue-600' : ''}`}
-                            >
+                            <TouchableOpacity onPress={() => { setTool('brush'); selectedTextId.value = null; setSelectedTextIdState(null); }} className={`flex-1 flex-row justify-center items-center py-4 rounded-[24px] ${tool === 'brush' ? 'bg-blue-600' : ''}`}>
                                 <MaterialCommunityIcons name="pencil" size={20} color="white" />
-                                {tool === 'brush' && <Text className="text-white font-bold ml-2">Draw</Text>}
                             </TouchableOpacity>
 
-                            <TouchableOpacity
-                                onPress={() => { setTool('filter'); selectedTextId.value = null; setSelectedTextIdState(null); }}
-                                className={`flex-1 flex-row justify-center items-center py-4 rounded-[24px] ${tool === 'filter' ? 'bg-purple-600' : ''}`}
-                            >
+                            <TouchableOpacity onPress={() => { setTool('filter'); selectedTextId.value = null; setSelectedTextIdState(null); }} className={`flex-1 flex-row justify-center items-center py-4 rounded-[24px] ${tool === 'filter' ? 'bg-purple-600' : ''}`}>
                                 <MaterialCommunityIcons name="auto-fix" size={20} color="white" />
-                                {tool === 'filter' && <Text className="text-white font-bold ml-2">Filter</Text>}
                             </TouchableOpacity>
 
-                            <TouchableOpacity
-                                onPress={() => setTool('text')}
-                                className={`flex-1 flex-row justify-center items-center py-4 rounded-[24px] ${tool === 'text' ? 'bg-blue-600' : ''}`}
-                            >
+                            <TouchableOpacity onPress={() => setTool('text')} className={`flex-1 flex-row justify-center items-center py-4 rounded-[24px] ${tool === 'text' ? 'bg-blue-600' : ''}`}>
                                 <MaterialCommunityIcons name={selectedTextIdState ? "format-size" : "format-text"} size={20} color="white" />
-                                {tool === 'text' && <Text className="text-white font-bold ml-2">{selectedTextIdState ? "Edit" : "Text"}</Text>}
                             </TouchableOpacity>
 
-                            <TouchableOpacity
-                                onPress={() => { setTool('crop'); selectedTextId.value = null; setSelectedTextIdState(null); }}
-                                className={`flex-1 flex-row justify-center items-center py-4 rounded-[24px] ${tool === 'crop' ? 'bg-blue-600' : ''}`}
-                            >
+                            <TouchableOpacity onPress={() => { setTool('crop'); selectedTextId.value = null; setSelectedTextIdState(null); }} className={`flex-1 flex-row justify-center items-center py-4 rounded-[24px] ${tool === 'crop' ? 'bg-blue-600' : ''}`}>
                                 <MaterialCommunityIcons name="crop" size={20} color="white" />
-                                {tool === 'crop' && <Text className="text-white font-bold ml-2">Crop</Text>}
                             </TouchableOpacity>
 
                             {tool === 'crop' && (
@@ -955,13 +1043,10 @@ const ImageEditorModal = ({ isVisible, onClose, imageUri, onSave }) => {
 const styles = StyleSheet.create({
     container: { flex: 1, backgroundColor: '#000' },
     canvasWrapper: {
-        backgroundColor: '#000',
-        borderRadius: 20,
-        overflow: 'hidden',
-        borderWidth: 1,
-        borderColor: 'rgba(255,255,255,0.05)',
+        borderColor: 'rgba(255,255,255,0.2)',
         justifyContent: 'center',
-        alignItems: 'center'
+        alignItems: 'center',
+        overflow: 'hidden'
     },
     colorCircle: { width: 30, height: 30, borderRadius: 17, marginHorizontal: 6, borderWidth: 2 },
     cropGrid: { flex: 1, position: 'relative' },

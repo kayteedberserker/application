@@ -10,6 +10,8 @@ import { SvgXml } from 'react-native-svg';
 import { useCoins } from '../context/CoinContext';
 import { useEvent } from '../context/EventContext';
 import { useUser } from '../context/UserContext';
+import apiFetch from '../utils/apiFetch';
+import ClanCrest from './ClanCrest'; // ⚡️ NEW IMPORT REQUIRED
 import CoinIcon from './ClanIcon';
 import { Text } from './Text';
 import THEME from './useAppTheme';
@@ -20,6 +22,7 @@ const COLLAB_COOLDOWN_KEY = "collab_modal_last_shown";
 const COLLAB_WEB_LINK = "https://www.moviex.name.ng/";
 const COLLAB_IMAGE_URI = "https://res.cloudinary.com/donakg9he/image/upload/v1778998640/WhatsApp_Image_2026-05-17_at_7.14.42_AM_k2llzm.jpg";
 const MODAL_BG_IMAGE_URI = "https://res.cloudinary.com/donakg9he/image/upload/v1779001079/WhatsApp_Image_2026-05-17_at_7.56.39_AM_bbaxdp.jpg";
+const FALLBACK_AVATAR = "https://res.cloudinary.com/donakg9he/image/upload/v1779268803/avatar_placeholder_y9sps5.png";
 
 let hasShownThisSession = false;
 
@@ -183,11 +186,6 @@ const CountdownTimer = ({ startsAt, color }) => {
     );
 };
 
-const CLAN_REFERRAL_MAP = {
-    "ORE-THE-A744": { name: "THE REAPER BL", tag: "THE-REAPER-CLAN", color: "#3b82f6", description: "Join THE REAPER BL Clan on Oreblogda." },
-    // Add new custom collaborated clans here easily matching user.referredBy
-};
-
 export default function DailyModal() {
     const storage = useMMKV();
     const router = useRouter();
@@ -200,6 +198,12 @@ export default function DailyModal() {
     const [hasClaimed, setHasClaimed] = useState(false);
     const [modalMode, setModalMode] = useState(null);
     const [currentPromo, setCurrentPromo] = useState(null);
+
+    // ⚡️ NEW: Dynamic Clan States
+    const [targetClan, setTargetClan] = useState(null);
+    const [clanFetchAttempted, setClanFetchAttempted] = useState(false);
+    const [isJoiningClan, setIsJoiningClan] = useState(false);
+    const [isOpeningCollab, setIsOpeningCollab] = useState(false);
 
     const timeoutRef = useRef(null);
     const colorScheme = useColorScheme();
@@ -216,6 +220,33 @@ export default function DailyModal() {
             }
         };
     }, []);
+
+    // ⚡️ NEW: Fetch dynamic clan data in the background + pass userId
+    useEffect(() => {
+        const fetchReferredClan = async () => {
+            if (!user?.referredBy || !user?._id) {
+                setClanFetchAttempted(true);
+                return;
+            }
+
+            try {
+                const res = await apiFetch(`/events/active?referredBy=${user.referredBy}&userId=${user._id}`);
+                if (res.ok) {
+                    const data = await res.json();
+                    // The server will ONLY return referredClan if the user is not already following/member
+                    if (data.referredClan) {
+                        setTargetClan(data.referredClan);
+                    }
+                }
+            } catch (err) {
+                console.warn("Failed to fetch referral clan:", err);
+            } finally {
+                setClanFetchAttempted(true);
+            }
+        };
+
+        fetchReferredClan();
+    }, [user?.referredBy, user?._id]);
 
     const currentReward = useMemo(() => {
         const schedule = {
@@ -263,14 +294,11 @@ export default function DailyModal() {
         storage.set(COLLAB_COOLDOWN_KEY, new Date().getTime());
     }, [storage]);
 
-    const targetClan = useMemo(() => {
-        if (!user?.referredBy) return null;
-        return CLAN_REFERRAL_MAP[user.referredBy] || null;
-    }, [user?.referredBy]);
-
     const canShowClanInvite = useCallback(() => {
         if (!targetClan || !user?.referredBy) return false;
 
+        // This local logic catches cases where MMKV already knows they followed,
+        // though the server should also block it naturally now.
         const followedClansStr = storage.getString("followed_clans");
         let followedClans = [];
         try {
@@ -295,17 +323,19 @@ export default function DailyModal() {
         return showCount < 3;
     }, [targetClan, user?.referredBy, storage]);
 
-    // ⚡️ NEW: CLAN CREATION REQUIREMENT PROMO CHECK
     const canShowClanPromo = useCallback(() => {
         const completed = storage.getBoolean('clan_creation_promo_completed');
         if (completed) return false;
 
         const count = storage.getNumber('clan_creation_promo_show_count') || 0;
-        return count < 2; // Max 3 times shown
+        return count < 2;
     }, [storage]);
 
     useEffect(() => {
         if (!user || hasShownThisSession || visible) return;
+
+        // Wait until the dynamic clan check finishes before running priorities
+        if (user.referredBy && !clanFetchAttempted) return;
 
         const todayStr = new Date().toDateString();
         const localClaimedToday = storage.getBoolean(`daily_claimed_${todayStr}`);
@@ -329,7 +359,7 @@ export default function DailyModal() {
             return () => clearTimeout(timer);
         }
 
-        // 2. PRIORITY: CLAN INVITE MODAL
+        // 2. PRIORITY: CLAN INVITE MODAL (Will trigger only if canShowClanInvite returns true < 3 times)
         if (canShowClanInvite()) {
             setModalMode('clan');
             const currentCount = storage.getNumber(`clan_invite_show_count_${user.referredBy}`) || 0;
@@ -360,7 +390,7 @@ export default function DailyModal() {
             const timer = setTimeout(() => setVisible(true), 1500);
             return () => clearTimeout(timer);
         }
-    }, [user, activeEvents, hasClaimed, canShowCollab, canShowClanInvite, canShowClanPromo, getNextEvent, storage, visible]);
+    }, [user, activeEvents, hasClaimed, clanFetchAttempted, canShowCollab, canShowClanInvite, canShowClanPromo, getNextEvent, storage, visible]);
 
     const handleClaimDaily = async () => {
         if (isProcessingTransaction) return;
@@ -392,6 +422,7 @@ export default function DailyModal() {
             storage.set(GLOBAL_COOLDOWN_KEY, thirtyMinsFromNow);
         } else if (modalMode === 'clan') {
             if (user?.referredBy) {
+                // Ensures if they manually dismiss it, we count it towards the cap immediately
                 const currentCount = storage.getNumber(`clan_invite_show_count_${user.referredBy}`) || 0;
                 if (currentCount >= 3) {
                     storage.set(`clan_invite_shown_${user.referredBy}`, true);
@@ -400,8 +431,6 @@ export default function DailyModal() {
         } else if (modalMode === 'collab') {
             showCollabAndTrack();
         }
-
-        // clan_promo automatically handles max count logic via MMKV inside useEffect
 
         hasShownThisSession = true;
         setVisible(false);
@@ -414,6 +443,7 @@ export default function DailyModal() {
     };
 
     const handleOpenCollab = async () => {
+        setIsOpeningCollab(true);
         try {
             const supported = await Linking.canOpenURL(COLLAB_WEB_LINK);
             if (supported) {
@@ -421,26 +451,32 @@ export default function DailyModal() {
             }
         } catch (error) {
             console.warn('Unable to open collaboration link', error);
+        } finally {
+            setIsOpeningCollab(false);
+            showCollabAndTrack();
+            hasShownThisSession = true;
+            setVisible(false);
         }
-
-        showCollabAndTrack();
-        hasShownThisSession = true;
-        setVisible(false);
     };
 
     const handleJoinClan = () => {
-        if (user?.referredBy) {
-            storage.set(`clan_invite_show_count_${user.referredBy}`, 3);
-            storage.set(`clan_invite_shown_${user.referredBy}`, true);
-        }
-        hasShownThisSession = true;
-        setVisible(false);
-        router.push(`/clans/${targetClan?.tag}`);
+        setIsJoiningClan(true);
+        // Timeout applied simply to render the UI ActivityIndicator state gracefully before the unmount
+        setTimeout(() => {
+            if (user?.referredBy) {
+                // Stop showing entirely once they click Join
+                storage.set(`clan_invite_show_count_${user.referredBy}`, 3);
+                storage.set(`clan_invite_shown_${user.referredBy}`, true);
+            }
+            hasShownThisSession = true;
+            setVisible(false);
+            router.push(`/clans/${targetClan?.tag}`);
+            setIsJoiningClan(false);
+        }, 150);
     };
 
-    // ⚡️ NEW: ROUTE TO DISCOVERY & SILENCE FUTURE PROMPTS
     const handleGoToDiscovery = () => {
-        storage.set('clan_creation_promo_complete', true); // Never show again
+        storage.set('clan_creation_promo_complete', true);
         hasShownThisSession = true;
         setVisible(false);
         router.push('/screens/discover');
@@ -452,7 +488,7 @@ export default function DailyModal() {
     const EventIcon = currentPromo?.icon || 'party-popper';
     const tokenVisual = currentPromo?.tokenVisual || null;
     const isComingSoon = currentPromo?.isComing || currentPromo?.status === 'coming_soon';
-    const showDismissButton = !isProcessingTransaction;
+    const showDismissButton = !isProcessingTransaction && !isJoiningClan && !isOpeningCollab;
 
     return (
         <Modal transparent visible={visible} animationType="fade">
@@ -681,11 +717,21 @@ export default function DailyModal() {
                                     elevation: 8
                                 }}
                             >
-                                <View
-                                    style={{ backgroundColor: `${targetClan.color}15`, borderColor: `${targetClan.color}30` }}
-                                    className="w-20 h-20 rounded-2xl items-center justify-center border mechanical-box mb-4"
-                                >
-                                    <MaterialCommunityIcons name="shield" size={44} color={targetClan.color} />
+                                {/* ⚡️ NEW: Profile x Clan Crest Layout */}
+                                <View className="flex-row items-center justify-center space-x-5 mb-5 w-full">
+                                    <View className="w-[60px] h-[60px] rounded-full border-2 overflow-hidden bg-slate-800" style={{ borderColor: targetClan.color }}>
+                                        <Image
+                                            source={{ uri: targetClan.referrerImage || FALLBACK_AVATAR }}
+                                            contentFit="cover"
+                                            style={{ width: '100%', height: '100%' }}
+                                        />
+                                    </View>
+
+                                    <MaterialCommunityIcons name="close" size={20} color={activeSecondary} />
+
+                                    <View className="w-[60px] h-[60px] items-center justify-center">
+                                        <ClanCrest rank={targetClan.rank} size={60} isFeed={false} glowColor={targetClan.color} />
+                                    </View>
                                 </View>
 
                                 <Text style={{ color: targetClan.color }} className="uppercase tracking-[0.3em] text-[10px] font-black text-center mb-1">
@@ -696,18 +742,19 @@ export default function DailyModal() {
                                     Join {targetClan.name}
                                 </Text>
 
-                                <View className="px-3 py-1.5 rounded-md bg-slate-800/40 border border-slate-700/50 mb-5">
+                                <View className="px-3 py-1.5 rounded-md bg-slate-800/40 border border-slate-700/50 mb-4">
                                     <Text style={{ color: targetClan.color }} className="text-[12px] font-black tracking-widest">
                                         TAG: [{targetClan.tag}]
                                     </Text>
                                 </View>
 
                                 <Text style={{ color: activeSecondary }} className="text-[13px] leading-6 text-center mb-6 px-2">
-                                    {targetClan.description} You've been linked via a direct alliance referral. Sync immediately to access dedicated pools and shared clan multipliers.
+                                    You were referred by <Text style={{ color: targetClan.color, fontWeight: 'bold' }}>{targetClan.referrerName}</Text>, who is a prominent member of <Text style={{ color: targetClan.color, fontWeight: 'bold' }}>{targetClan.name}</Text>. {targetClan.description}
                                 </Text>
 
                                 <TouchableOpacity
                                     onPress={handleJoinClan}
+                                    disabled={isJoiningClan}
                                     style={{
                                         backgroundColor: targetClan.color,
                                         shadowColor: targetClan.color,
@@ -717,10 +764,16 @@ export default function DailyModal() {
                                     }}
                                     className="w-full h-14 rounded-xl flex-row items-center justify-center mb-3"
                                 >
-                                    <Text className="text-slate-950 font-black text-[12px] uppercase tracking-[0.2em]">
-                                        Join Clan Immediately
-                                    </Text>
-                                    <Ionicons name="flash" size={15} color="#0f172a" style={{ marginLeft: 6 }} />
+                                    {isJoiningClan ? (
+                                        <ActivityIndicator color="#0f172a" />
+                                    ) : (
+                                        <>
+                                            <Text className="text-slate-950 font-black text-[12px] uppercase tracking-[0.2em]">
+                                                Follow Clan Immediately
+                                            </Text>
+                                            <Ionicons name="flash" size={15} color="#0f172a" style={{ marginLeft: 6 }} />
+                                        </>
+                                    )}
                                 </TouchableOpacity>
 
                                 <TouchableOpacity
@@ -851,11 +904,16 @@ export default function DailyModal() {
                                 >
                                     <TouchableOpacity
                                         onPress={handleOpenCollab}
-                                        className="w-full h-14 items-center justify-center"
+                                        disabled={isOpeningCollab}
+                                        className="w-full h-14 items-center justify-center flex-row"
                                     >
-                                        <Text className="text-slate-900 font-black text-[13px] uppercase tracking-[0.2em]">
-                                            Open MOVIEX
-                                        </Text>
+                                        {isOpeningCollab ? (
+                                            <ActivityIndicator color="white" />
+                                        ) : (
+                                            <Text className="text-slate-900 font-black text-[13px] uppercase tracking-[0.2em]">
+                                                Open MOVIEX
+                                            </Text>
+                                        )}
                                     </TouchableOpacity>
                                 </LinearGradient>
 

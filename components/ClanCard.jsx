@@ -158,7 +158,11 @@ export default function ClanCard({ clan, isDark, THEME = { card: '#0a0a0a', text
                     )}
                 </View>
 
-                <Text className="text-sm text-gray-500 dark:text-gray-400 text-center italic px-4 mb-6">
+                <Text
+                    numberOfLines={4}
+                    ellipsizeMode="tail"
+                    className="text-sm text-gray-500 dark:text-gray-400 text-center italic px-4 mb-6"
+                >
                     "{clan.description || "A gathering of warriors with no code..."}"
                 </Text>
 
