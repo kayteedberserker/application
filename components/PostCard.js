@@ -797,7 +797,6 @@ const MemoizedContent = memo(({ message, feedExcerpt, title, isFeed, isDark, pos
                         key={`link-${i}`}
                         onPress={() => Linking.openURL(part.url)}
                         activeOpacity={0.7}
-                        className="w-fit"
                         style={{
                             backgroundColor: 'rgba(59, 130, 246, 0.15)',
                             paddingHorizontal: 8,
@@ -809,31 +808,16 @@ const MemoizedContent = memo(({ message, feedExcerpt, title, isFeed, isDark, pos
                             alignItems: 'center',
                             marginHorizontal: 2,
                             top: 4,
+                            alignSelf: 'baseline', // <--- This makes width fit its content
                         }}
                     >
-                        <Feather
-                            name="link-2"
-                            size={12}
-                            color="#60a5fa"
-                            style={{ marginRight: 4 }}
-                        />
-                        <Text
-                            style={{
-                                color: '#60a5fa',
-                                fontWeight: '900',
-                                fontSize: 13,
-                                textTransform: 'lowercase'
-                            }}
-                        >
+                        <Feather name="link-2" size={12} color="#60a5fa" style={{ marginRight: 4 }} />
+                        <Text style={{ color: '#60a5fa', fontWeight: '900', fontSize: 13, textTransform: 'lowercase' }} >
                             {part.content}
                         </Text>
-                        <Feather
-                            name="external-link"
-                            size={10}
-                            color="#60a5fa"
-                            style={{ marginLeft: 4, opacity: 0.6 }}
-                        />
+                        <Feather name="external-link" size={10} color="#60a5fa" style={{ marginLeft: 4, opacity: 0.6 }} />
                     </TouchableOpacity>
+
                 );
                 case "heading": return <Text key={i} className="text-xl font-bold mt-4 mb-2 text-black dark:text-white uppercase tracking-tight">{part.content}</Text>;
                 case "listItem": return <View key={i} className="flex-row items-start ml-4 my-1"><Text className="text-blue-500 mr-2 text-lg">•</Text><Text className="flex-1 text-base leading-6 text-gray-800 dark:text-gray-200">{part.content}</Text></View>;

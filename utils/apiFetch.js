@@ -27,7 +27,7 @@ initializeServerIndex();
 
 const getBaseUrl = () => {
     // "http://192.168.1.99:3000/api"
-    if (__DEV__) { return "http://192.168.1.99:3000/api" }
+    if (__DEV__) { return "http://10.232.77.121:3000/api" }
     return PRODUCTION_SERVERS[currentServerIndex]
 }
 
