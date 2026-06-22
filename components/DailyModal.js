@@ -719,7 +719,7 @@ export default function DailyModal() {
                             >
                                 {/* ⚡️ NEW: Profile x Clan Crest Layout */}
                                 <View className="flex-row items-center justify-center space-x-5 mb-5 w-full">
-                                    <View className="w-[60px] h-[60px] rounded-full border-2 overflow-hidden bg-slate-800" style={{ borderColor: targetClan.color }}>
+                                    <View className="w-[80px] h-[80px] rounded-full border-2 overflow-hidden bg-slate-800" style={{ borderColor: targetClan.color }}>
                                         <Image
                                             source={{ uri: targetClan.referrerImage || FALLBACK_AVATAR }}
                                             contentFit="cover"
@@ -730,7 +730,7 @@ export default function DailyModal() {
                                     <MaterialCommunityIcons name="close" size={20} color={activeSecondary} />
 
                                     <View className="w-[60px] h-[60px] items-center justify-center">
-                                        <ClanCrest rank={targetClan.rank} size={60} isFeed={false} glowColor={targetClan.color} />
+                                        <ClanCrest rank={targetClan.rank} size={80} isFeed={true} glowColor={targetClan.color} />
                                     </View>
                                 </View>
 

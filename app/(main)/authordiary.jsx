@@ -24,6 +24,7 @@ import useSWR from "swr";
 
 import * as Haptics from 'expo-haptics';
 import { useMMKV } from "react-native-mmkv";
+// 🌟 ADDED useSafeAreaInsets to fix tab bar overlap
 import Animated, {
     Easing,
     FadeIn,
@@ -36,6 +37,7 @@ import Animated, {
     withTiming,
     ZoomIn
 } from "react-native-reanimated";
+import { useSafeAreaInsets } from "react-native-safe-area-context";
 import AnimeLoading from "../../components/AnimeLoading";
 import CoinIcon from "../../components/ClanIcon";
 import ImageEditorModal from "../../components/ImageEditorModal";
@@ -100,7 +102,9 @@ const deletePersistentMedia = async (uri) => {
 
 export default function AuthorDiaryDashboard() {
     const CustomAlert = useAlert();
-    const storage = useMMKV()
+    const storage = useMMKV();
+    // 🌟 INSETS EXTRACTED HERE
+    const insets = useSafeAreaInsets();
     const { user, loading: contextLoading, refreshStreak, streak } = useUser();
 
     const { userClan, isInClan } = useClan();
@@ -451,29 +455,68 @@ export default function AuthorDiaryDashboard() {
     const sanitizeMessage = (text) => text;
 
     const insertTag = (tagType) => {
-        let tagOpen = "", tagClose = "";
-        switch (tagType) {
-            case 'section': tagOpen = "s("; tagClose = ")"; break;
-            case 'heading': tagOpen = "h("; tagClose = ")"; break;
-            case 'link': tagOpen = "link(url)-text("; tagClose = ")"; break;
-            case 'list': tagOpen = "l("; tagClose = ")"; break;
-        }
-
         const before = message.substring(0, selection.start);
         const after = message.substring(selection.end);
         const middle = message.substring(selection.start, selection.end);
 
-        const content = middle.length > 0 ? middle : (tagType === 'link' ? "Link Text" : "Add text here");
+        let tagOpen = "";
+        let tagClose = ")";
+        let content = middle.length > 0 ? middle : "Add text here";
+
+        // ⚡️ Check if the highlighted text looks like a valid URL
+        const isUrl = /^(https?:\/\/|www\.)[^\s]+$/i.test(middle.trim());
+
+        switch (tagType) {
+            case 'section':
+                tagOpen = "s(";
+                break;
+            case 'heading':
+                tagOpen = "h(";
+                break;
+            case 'list':
+                tagOpen = "l(";
+                break;
+            case 'link':
+                if (middle.length > 0 && isUrl) {
+                    // If it's a URL: place it in the url slot and put dummy text in the text slot
+                    tagOpen = `link(${middle.trim()})-text(`;
+                    content = "Link Text";
+                } else {
+                    // If it's normal text: place "url" in the url slot and keep the text
+                    tagOpen = "link(url)-text(";
+                    content = middle.length > 0 ? middle : "Link Text";
+                }
+                break;
+        }
 
         const newText = `${before}${tagOpen}${content}${tagClose}${after}`;
-        const cursorPosition = before.length + tagOpen.length + content.length + tagClose.length;
+
+        // ⚡️ Pro-Editor Selection Math
+        let selectionStart;
+        let selectionEnd;
+
+        if (tagType === 'link') {
+            if (middle.length > 0 && isUrl) {
+                // Highlights "Link Text"
+                selectionStart = before.length + tagOpen.length;
+                selectionEnd = selectionStart + content.length;
+            } else {
+                // Highlights "url"
+                selectionStart = before.length + 5; // "link(".length is 5
+                selectionEnd = selectionStart + 3;  // "url".length is 3
+            }
+        } else {
+            // For non-link tags, just drop the cursor at the very end
+            selectionStart = before.length + tagOpen.length + content.length + tagClose.length;
+            selectionEnd = selectionStart;
+        }
 
         setMessage(newText);
 
         setTimeout(() => {
             if (messageInputRef.current) {
                 messageInputRef.current.focus();
-                setSelection({ start: cursorPosition, end: cursorPosition });
+                setSelection({ start: selectionStart, end: selectionEnd });
             }
         }, 50);
     };
@@ -658,14 +701,25 @@ export default function AuthorDiaryDashboard() {
                 );
             });
 
+            // Capture current media before cleaning state so we can delete the actual files later
+            const filesToUpload = [...mediaList];
+
             // ⚡ NON-BLOCKING LIFECYCLE CAPTURE
             Promise.all(uploadPromises)
-                .then(() => {
+                .then(async () => {
                     completeUpload();
+                    // 🌟 FIX: We delete the files here AFTER they have successfully uploaded, not before!
+                    for (const media of filesToUpload) {
+                        await deletePersistentMedia(media.localUri);
+                    }
                 })
-                .catch((err) => {
+                .catch(async (err) => {
                     console.error("A background asset failed in the batch pool:", err);
                     setStatus('error', err.message || "Transmission execution fault.");
+                    // Clean up even if it fails to prevent storage bloat
+                    for (const media of filesToUpload) {
+                        await deletePersistentMedia(media.localUri);
+                    }
                 });
 
             // 🌟 OPTIMISTIC FEED INJECTION
@@ -693,10 +747,7 @@ export default function AuthorDiaryDashboard() {
 
     // Isolated helper state cleaner
     const cleanUpFormState = async () => {
-        // ⚡️ Delete all persistent files from device to save storage space now that they are queued for cloud
-        for (const media of mediaList) {
-            await deletePersistentMedia(media.localUri);
-        }
+        // ❌ REMOVED the physical file deletion from here. It is now handled in the Promise.all resolution block.
 
         await AsyncStorage.removeItem(DRAFT_KEY);
         DeviceEventEmitter.emit("POST_CREATED_SUCCESS");
@@ -975,7 +1026,8 @@ export default function AuthorDiaryDashboard() {
         return (
             <View style={{ flex: 1, backgroundColor: isDark ? '#020617' : '#f8fafc' }}>
                 <ScrollView
-                    contentContainerStyle={{ flexGrow: 1, justifyContent: 'center', paddingHorizontal: 24, paddingVertical: 40 }}
+                    // 🌟 FIX: We use safe area insets to pad the bottom so the button never sits behind the physical tab bar
+                    contentContainerStyle={{ flexGrow: 1, justifyContent: 'center', paddingHorizontal: 24, paddingTop: Math.max(insets.top, 40), paddingBottom: insets.bottom + 120 }}
                     showsVerticalScrollIndicator={false}
                 >
                     {introStep === 0 && (
@@ -1176,9 +1228,6 @@ export default function AuthorDiaryDashboard() {
                         <Text className="text-3xl font-black italic uppercase">
                             Welcome, <Text className="text-blue-600">{user?.username}</Text>
                         </Text>
-                    </View>
-                    <View className="bg-gray-900 px-3 py-1 rounded-lg border border-gray-800">
-                        <Text style={{ color: "#fff" }} className="text-white font-bold text-xs">🔥 {streak?.streak || 0}</Text>
                     </View>
                 </View>
 

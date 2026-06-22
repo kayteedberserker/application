@@ -145,7 +145,7 @@ export default function PlayerCard({ author, totalPosts, isDark }) {
                 </View>
 
                 <View className="items-center w-full">
-                    <View className="flex-row w-full items-center justify-center">
+                    <View className="flex-row w-full items-center justify-center px-4">
                         <PlayerNameplate
                             author={author}
                             themeColor={themeColor}
@@ -160,12 +160,12 @@ export default function PlayerCard({ author, totalPosts, isDark }) {
                     </View>
 
                     {/* {equippedBadges.length > 0 && (
-                        <View className="flex-row flex-wrap justify-center gap-2 mt-3 mb-3">
-                            {equippedBadges.map((badge, bIdx) => (
-                                <BadgeIcon key={`spec-${bIdx}`} badge={badge} size={22} isDark={isDark} />
-                            ))}
-                        </View>
-                    )} */}
+    <View className="flex-row flex-wrap justify-center gap-2 mt-3 mb-3">
+    {equippedBadges.map((badge, bIdx) => (
+    <BadgeIcon key={`spec-${bIdx}`} badge={badge} size={22} isDark={isDark} />
+    ))}
+    </View>
+    )} */}
 
                     <Text
                         numberOfLines={4}

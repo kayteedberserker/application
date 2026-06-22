@@ -793,13 +793,51 @@ const MemoizedContent = memo(({ message, feedExcerpt, title, isFeed, isDark, pos
                 case "text": return <Text key={i} className="text-base leading-7 text-gray-800 dark:text-gray-200">{part.content}</Text>;
                 case "br": return <View key={i} className="h-2" />;
                 case "link": return (
-                    <Pressable key={i} onPress={() => Linking.openURL(part.url)} style={({ pressed }) => [{ backgroundColor: pressed ? 'rgba(59, 130, 246, 0.2)' : 'rgba(59, 130, 246, 0.1)', paddingVertical: 4, paddingHorizontal: 10, borderRadius: 8, borderWidth: 1, borderColor: 'rgba(59, 130, 246, 0.3)', flexDirection: 'row', alignItems: 'center', marginVertical: 2, alignSelf: 'flex-start' }]}>
-                        <Feather name="link-2" size={14} color="#60a5fa" style={{ marginRight: 6 }} /><Text numberOfLines={1} ellipsizeMode="tail" style={{ color: '#60a5fa', fontWeight: '700', fontSize: 14, textDecorationLine: 'none' }}>{part.content}</Text><Feather name="external-link" size={12} color="#60a5fa" style={{ marginLeft: 6, opacity: 0.7 }} />
-                    </Pressable>
+                    <TouchableOpacity
+                        key={`link-${i}`}
+                        onPress={() => Linking.openURL(part.url)}
+                        activeOpacity={0.7}
+                        className="w-fit"
+                        style={{
+                            backgroundColor: 'rgba(59, 130, 246, 0.15)',
+                            paddingHorizontal: 8,
+                            paddingVertical: 2,
+                            borderRadius: 6,
+                            borderWidth: 1,
+                            borderColor: 'rgba(59, 130, 246, 0.3)',
+                            flexDirection: 'row',
+                            alignItems: 'center',
+                            marginHorizontal: 2,
+                            top: 4,
+                        }}
+                    >
+                        <Feather
+                            name="link-2"
+                            size={12}
+                            color="#60a5fa"
+                            style={{ marginRight: 4 }}
+                        />
+                        <Text
+                            style={{
+                                color: '#60a5fa',
+                                fontWeight: '900',
+                                fontSize: 13,
+                                textTransform: 'lowercase'
+                            }}
+                        >
+                            {part.content}
+                        </Text>
+                        <Feather
+                            name="external-link"
+                            size={10}
+                            color="#60a5fa"
+                            style={{ marginLeft: 4, opacity: 0.6 }}
+                        />
+                    </TouchableOpacity>
                 );
                 case "heading": return <Text key={i} className="text-xl font-bold mt-4 mb-2 text-black dark:text-white uppercase tracking-tight">{part.content}</Text>;
                 case "listItem": return <View key={i} className="flex-row items-start ml-4 my-1"><Text className="text-blue-500 mr-2 text-lg">•</Text><Text className="flex-1 text-base leading-6 text-gray-800 dark:text-gray-200">{part.content}</Text></View>;
-                case "section": return <View key={i} className="bg-gray-100 dark:bg-gray-800/60 p-4 my-3 rounded-2xl border-l-4 border-blue-500"><Text className="text-base italic leading-6 text-gray-700 dark:text-gray-300">{part.content}</Text></View>;
+                case "section": return <View key={i} className="bg-gray-100 dark:bg-gray-700 px-3 py-2.5 my-2 rounded-md border-l-4 border-blue-500"><Text className="text-base italic leading-6 text-gray-700 dark:text-gray-300">{part.content}</Text></View>;
                 default: return null;
             }
         });
@@ -936,7 +974,7 @@ const PostCardComponent = ({ post, authorData, clanData, setPosts, isFeed, hideM
         }, [])
     );
 
-    const { data: postData, mutate } = useSWR((isVisible) ? `/posts/${post._id}` : null, fetcher, { fallbackData: post, revalidateOnMount: false, revalidateIfStale: false, revalidateOnFocus: false, dedupingInterval: 600000 });
+    const { data: postData, mutate } = useSWR(`/posts/${post._id}`, fetcher, { fallbackData: post, revalidateOnMount: false, revalidateIfStale: false, revalidateOnFocus: false, dedupingInterval: 600000 });
 
     const totalLikes = postData?.likesCount ?? postData?.likes?.length ?? post?.likesCount ?? post?.likes?.length ?? 0;
     const totalComments = postData?.commentsCount ?? postData?.comments?.length ?? post?.commentsCount ?? post?.comments?.length ?? 0;

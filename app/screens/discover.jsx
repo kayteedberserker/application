@@ -66,7 +66,6 @@ export default function ClanDiscover() {
     const { user, streak: streakData } = useUser();
 
     const [clans, setClans] = useState(CLANS_MEMORY_CACHE);
-    // ⚡️ Optimized: Read Rank Level directly from the User Context
     const userRankLevel = user?.currentRankLevel || 1;
 
     const [search, setSearch] = useState('');
@@ -82,11 +81,9 @@ export default function ClanDiscover() {
     const searchTimeout = useRef(null);
     const scrollRef = useRef(null);
 
-    // ⚡️ REANIMATED SHARED VALUE FOR PULSE
     const createPulse = useSharedValue(0);
 
     useEffect(() => {
-        // Start the continuous pulse animation
         createPulse.value = withRepeat(
             withTiming(1, { duration: 2000, easing: Easing.out(Easing.ease) }),
             -1,
@@ -94,35 +91,15 @@ export default function ClanDiscover() {
         );
     }, []);
 
-    // ⚡️ ANIMATED STYLE FOR THE INDICATOR
     const createPulseStyle = useAnimatedStyle(() => ({
         transform: [{ scale: interpolate(createPulse.value, [0, 1], [1, 1.6]) }],
         opacity: interpolate(createPulse.value, [0, 0.6, 1], [0.5, 0, 0]),
     }));
 
-    useEffect(() => {
-        if (CLANS_MEMORY_CACHE.length === 0) {
-            const cached = storage.getString(CLANS_CACHE_KEY);
-            if (cached) {
-                const parsed = JSON.parse(cached);
-                CLANS_MEMORY_CACHE = parsed.data || [];
-                setClans(CLANS_MEMORY_CACHE);
-            }
-        }
-        fetchClans(1, search, true);
-    }, [storage]);
-
-    useEffect(() => {
-        if (searchTimeout.current) clearTimeout(searchTimeout.current);
-        searchTimeout.current = setTimeout(() => {
-            fetchClans(1, search, true);
-        }, 500);
-        return () => clearTimeout(searchTimeout.current);
-    }, [search, fetchClans]);
-
-    const showAlert = (title, message, type = 'error') => {
+    // ⚡️ HIGH-PERFORMANCE: Stable Alert Reference
+    const showAlert = useCallback((title, message, type = 'error') => {
         setAlertConfig({ visible: true, title, message, type });
-    };
+    }, []);
 
     const saveToDisk = useCallback((key, data) => {
         try {
@@ -135,9 +112,10 @@ export default function ClanDiscover() {
         }
     }, [storage]);
 
+    // ⚡️ HIGH-PERFORMANCE: Removed unstable dependencies (clans.length) so fetchClans is strictly locked
     const fetchClans = useCallback(async (pageNum = 1, searchQuery = '', isRefreshing = false) => {
         if (pageNum > 1) setLoadingMore(true);
-        else if (!isRefreshing && clans.length === 0) setLoading(true);
+        else if (!isRefreshing && pageNum === 1) setLoading(true);
 
         try {
             const res = await apiFetch(`/clans?page=${pageNum}&limit=10&search=${searchQuery}&fingerprint=${user?.deviceId || ''}`);
@@ -164,7 +142,27 @@ export default function ClanDiscover() {
             setLoading(false);
             setLoadingMore(false);
         }
-    }, [clans.length, saveToDisk, user?.deviceId]);
+    }, [saveToDisk, user?.deviceId]);
+
+    useEffect(() => {
+        if (CLANS_MEMORY_CACHE.length === 0) {
+            const cached = storage.getString(CLANS_CACHE_KEY);
+            if (cached) {
+                const parsed = JSON.parse(cached);
+                CLANS_MEMORY_CACHE = parsed.data || [];
+                setClans(CLANS_MEMORY_CACHE);
+            }
+        }
+        fetchClans(1, search, true);
+    }, [storage, fetchClans]);
+
+    useEffect(() => {
+        if (searchTimeout.current) clearTimeout(searchTimeout.current);
+        searchTimeout.current = setTimeout(() => {
+            fetchClans(1, search, true);
+        }, 500);
+        return () => clearTimeout(searchTimeout.current);
+    }, [search, fetchClans]);
 
     const handleLoadMore = () => {
         if (!loadingMore && hasMore && !loading) {
@@ -172,21 +170,20 @@ export default function ClanDiscover() {
         }
     };
 
-    const onRefresh = () => {
-        fetchClans(1, search, true);
-    };
+    // ⚡️ HIGH-PERFORMANCE: Uses state callback so it never depends on 'search' directly
+    const onRefresh = useCallback(() => {
+        setSearch(prevSearch => {
+            fetchClans(1, prevSearch, true);
+            return prevSearch;
+        });
+    }, [fetchClans]);
 
     const handlePressCreate = () => {
+        // ⚡️ Commented out requirements logic as requested originally, simply triggers modal
         setCreateModalVisible(true);
-        // const currentStreak = streakData?.streak || 0;
-        // // ⚡️ Check against new MIN_RANK_REQUIRED (Level 4) using the Context Level
-        // if (userRankLevel < MIN_RANK_REQUIRED || currentStreak < MIN_STREAK_REQUIRED) {
-        //      setShowReqModal(true);
-        // } else {
-        //      setCreateModalVisible(true);
-        // }
     };
 
+    // ⚡️ HIGH-PERFORMANCE: Purely stable renderItem (Prevents list lag when typing in SearchBar)
     const renderItem = useCallback(({ item, index }) => (
         <ClanCard
             clan={item}
@@ -195,7 +192,16 @@ export default function ClanDiscover() {
             refreshClans={onRefresh}
             showAlert={showAlert}
         />
-    ), [isDark, onRefresh]);
+    ), [isDark, onRefresh, showAlert]);
+
+    // ⚡️ Extracted to prevent rapid inline recreation
+    const ListFooter = useCallback(() => (
+        loadingMore ? (
+            <View className="py-10"><ActivityIndicator color="#2563eb" /></View>
+        ) : (
+            <View className="h-20" />
+        )
+    ), [loadingMore]);
 
     return (
         <View className={`flex-1 ${isDark ? "bg-black" : "bg-zinc-50"}`} style={{ paddingTop: insets.top }}>
@@ -209,7 +215,7 @@ export default function ClanDiscover() {
                     </View>
                 </View>
                 <TouchableOpacity
-                    onRefresh={onRefresh}
+                    onPress={onRefresh} // Fixed prop from onRefresh to onPress
                     className={`w-12 h-12 items-center justify-center rounded-2xl border ${isDark ? "bg-zinc-900 border-zinc-800" : "bg-white border-zinc-200 shadow-sm"}`}
                 >
                     <Ionicons name="refresh" size={20} color={isDark ? "#fff" : "#000"} />
@@ -275,11 +281,7 @@ export default function ClanDiscover() {
                         refreshing={loading && clans.length > 0}
                         onEndReached={handleLoadMore}
                         onEndReachedThreshold={0.5}
-                        ListFooterComponent={() => loadingMore ? (
-                            <View className="py-10"><ActivityIndicator color="#2563eb" /></View>
-                        ) : (
-                            <View className="h-20" />
-                        )}
+                        ListFooterComponent={ListFooter}
                     />
                 </View>
             )}
@@ -315,7 +317,6 @@ export default function ClanDiscover() {
 // ⚡️ UPDATED: Requirement Modal explicitly stating the Target Level and Rank Name
 const RequirementModal = memo(({ visible, onClose, stats, isDark }) => {
 
-    // ⚡️ Added flex-1 and text wrapping so long rank titles don't break the layout
     const RequirementRow = ({ label, currentStr, targetStr, progress, icon, activeColor }) => (
         <View className={`mb-6 p-5 rounded-[30px] border ${isDark ? "bg-black border-zinc-800" : "bg-zinc-50 border-zinc-200 shadow-sm"}`}>
             <View className="flex-row justify-between items-center mb-3">
@@ -340,14 +341,12 @@ const RequirementModal = memo(({ visible, onClose, stats, isDark }) => {
         </View>
     );
 
-    // ⚡️ Resolve the target rank dynamically so it automatically reads "B-Rank Elite"
     const targetRank = resolveUserRank(MIN_RANK_REQUIRED);
     const currRank = resolveUserRank(stats.rankLevel || 1);
 
     const targetAura = AURA_TIERS[MIN_RANK_REQUIRED - 1].req;
     const currentAura = stats.aura || 0;
 
-    // ⚡️ Dynamic Colors: Green if completed, otherwise use the color of their current Tier
     const auraColor = currentAura >= targetAura ? "#10b981" : currRank.color;
     const streakColor = stats.streak >= MIN_STREAK_REQUIRED ? "#10b981" : "#f97316";
 
@@ -363,7 +362,6 @@ const RequirementModal = memo(({ visible, onClose, stats, isDark }) => {
                         <Text className="text-blue-600 font-bold text-[10px] uppercase tracking-[2px] text-center mt-1">Foundational requirements not met</Text>
                     </View>
 
-                    {/* ⚡️ Now it explicitly tells them to reach Level 4 and shows the exact Rank Title */}
                     <RequirementRow
                         label={`Reach Lv.${MIN_RANK_REQUIRED} ${targetRank.title.replace(/_/g, ' ')}`}
                         currentStr={currentAura.toLocaleString()}
@@ -373,7 +371,6 @@ const RequirementModal = memo(({ visible, onClose, stats, isDark }) => {
                         activeColor={auraColor}
                     />
 
-                    {/* ⚡️ Updated the label here too for clarity */}
                     <RequirementRow
                         label={`Maintain a ${MIN_STREAK_REQUIRED}-Day Streak`}
                         currentStr={stats.streak}
@@ -438,7 +435,6 @@ const ClanCard = memo(({ clan, lbRank, isDark, refreshClans, showAlert }) => {
     const activeGlowColor = equippedGlow?.visualConfig?.primaryColor || equippedGlow?.visualData?.glowColor || null;
     const rankInfo = getRankInfo(clan.rank);
 
-    // ⚡️ SILENT BACKGROUND CHECK (Reads from fast RAM instead of spamming Server)
     useEffect(() => {
         const followedClansStr = storage.getString('followed_clans');
         if (followedClansStr) {
@@ -455,7 +451,6 @@ const ClanCard = memo(({ clan, lbRank, isDark, refreshClans, showAlert }) => {
         setTimeout(() => setCopied(false), 2000);
     };
 
-    // ⚡️ YOUR EXACT FUNCTION ADDED HERE
     const performFollowAction = async (action) => {
         if (!user) return;
         setActionLoading(true);
@@ -486,11 +481,9 @@ const ClanCard = memo(({ clan, lbRank, isDark, refreshClans, showAlert }) => {
                 storage.set('followed_clans', JSON.stringify(clanList));
                 storage.set('checked_clans', JSON.stringify(checkedList));
 
-                // Refresh the global list to update follower counts instantly
                 if (refreshClans) refreshClans();
             }
 
-            // 🛡️ THE 419 SYNC: If the server says we are already following, force sync the UI and Cache
             if (res.status === 419) {
                 setIsFollowing(true);
                 if (!clanList.includes(clan.tag)) clanList.push(clan.tag);
@@ -502,7 +495,6 @@ const ClanCard = memo(({ clan, lbRank, isDark, refreshClans, showAlert }) => {
                 showAlert("CLAN JOINED", `You are already following ${clan?.name}.`, "success");
             }
 
-            // Catch actual failures (not 419)
             if (!res.ok && res.status !== 419) {
                 const data = await res.json();
                 showAlert("ACTION FAILED", data.message || "Action could not be completed.");
@@ -543,7 +535,6 @@ const ClanCard = memo(({ clan, lbRank, isDark, refreshClans, showAlert }) => {
             className={`w-full rounded-[40px] border mb-6 overflow-hidden relative ${isDark ? "bg-zinc-900 border-zinc-800" : "bg-white border-zinc-200 shadow-xl shadow-zinc-200"}`}
             style={{ height: 400 }}
         >
-            {/* Top Stats Row */}
             <View className="flex-row justify-between items-center p-6 pb-2">
                 <View className="bg-blue-600/10 border border-blue-600/20 px-3 py-1.5 rounded-xl flex-row items-center">
                     <Ionicons name="trophy" size={10} color="#2563eb" />
@@ -555,7 +546,6 @@ const ClanCard = memo(({ clan, lbRank, isDark, refreshClans, showAlert }) => {
                 </View>
             </View>
 
-            {/* Avatar & Info Section */}
             <View className="items-center px-6">
                 <ClanCrest glowColor={activeGlowColor} rank={clan?.rank} size={120} />
                 <Text numberOfLines={1} className={`text-2xl mt-3 font-black text-center tracking-tight ${isDark ? "text-white" : "text-zinc-900"}`}>{clan.name}</Text>
@@ -576,7 +566,6 @@ const ClanCard = memo(({ clan, lbRank, isDark, refreshClans, showAlert }) => {
                 </View>
             </View>
 
-            {/* Actions Section */}
             <View className="mt-auto flex-row p-5 gap-3 border-t border-zinc-500/10 bg-zinc-500/5">
                 <TouchableOpacity
                     onPress={() => performFollowAction(isFollowing ? "unfollow" : "follow")}
@@ -610,6 +599,13 @@ const CreateClanModal = memo(({ visible, onClose, onSuccess, isDark, showAlert }
     const [name, setName] = useState('');
     const [desc, setDesc] = useState('');
     const [isCreating, setIsCreating] = useState(false);
+
+    // ⚡️ FEATURE WIN: Prevent emojis from being typed into the Clan Name
+    const handleNameChange = (text) => {
+        // This Regex removes all standard and extended pictorial emojis from the string
+        const noEmojiText = text.replace(/[\u{1F600}-\u{1F64F}\u{1F300}-\u{1F5FF}\u{1F680}-\u{1F6FF}\u{1F700}-\u{1F77F}\u{1F780}-\u{1F7FF}\u{1F800}-\u{1F8FF}\u{1F900}-\u{1F9FF}\u{1FA00}-\u{1FA6F}\u{1FA70}-\u{1FAFF}\u{1FB00}-\u{1FBFF}\u{2600}-\u{26FF}\u{2700}-\u{27BF}\u{2300}-\u{23FF}\u{2B50}\u{2B55}\u{2934}-\u{2935}\u{2B05}-\u{2B07}\u{2B1B}-\u{2B1C}\u{3297}\u{3299}\u{303D}\u{00A9}\u{00AE}\u{2122}]/gu, '');
+        setName(noEmojiText);
+    };
 
     const handleCreate = async () => {
         if (!name || !user) return;
@@ -659,7 +655,8 @@ const CreateClanModal = memo(({ visible, onClose, onSuccess, isDark, showAlert }
                                 placeholder="e.g. Phantom Troupe"
                                 placeholderTextColor={isDark ? "#3f3f46" : "#a1a1aa"}
                                 value={name}
-                                onChangeText={setName}
+                                maxLength={18}
+                                onChangeText={handleNameChange} // ⚡️ Now passing through the regex filter
                             />
                         </View>
 

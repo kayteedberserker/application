@@ -5,7 +5,7 @@ import * as Notifications from "expo-notifications";
 import * as Updates from 'expo-updates';
 import { AnimatePresence, MotiView } from 'moti';
 import { memo, useEffect, useState } from 'react';
-import { Linking, Modal, Platform, Pressable, Text as RNText, useColorScheme, View } from 'react-native';
+import { DeviceEventEmitter, Linking, Modal, Platform, Pressable, Text as RNText, useColorScheme, View } from 'react-native';
 import { useMMKV } from 'react-native-mmkv';
 import Animated, { Easing, useAnimatedStyle, useSharedValue, withRepeat, withSequence, withTiming } from 'react-native-reanimated';
 import apiFetch from "../utils/apiFetch";
@@ -106,10 +106,9 @@ const HypeIconDisplay = memo(({ tierKey, color, size = 26 }) => {
     );
 });
 
-
-export default function UpdateHandler({ fontsLoaded, isUpdating }) {
+export default function UpdateHandler() {
     const [visible, setVisible] = useState(false);
-    const [showWelcomeBack, setShowWelcomeBack] = useState(false)// ⚡️ Set to true for testing layout
+    const [showWelcomeBack, setShowWelcomeBack] = useState(false) // ⚡️ Set to true for testing layout
     const [latestVersion, setLatestVersion] = useState(null);
     const [isCritical, setIsCritical] = useState(false)
     const [countdown, setCountdown] = useState(10);
@@ -124,12 +123,20 @@ export default function UpdateHandler({ fontsLoaded, isUpdating }) {
     const isDark = colorScheme === "dark";
     const pulseAnim = useSharedValue(1);
 
+    // ⚡️ NEW: Listen for manual bootstrap triggers from anywhere in the app
     useEffect(() => {
-        if (!hasCheckedSessionUpdate && user?.deviceId && (!fontsLoaded || !isUpdating)) {
+        const subscription = DeviceEventEmitter.addListener('RUN_BOOTSTRAP', (data) => {
+            runSystemBootstrap(data?.deviceId);
+        });
+        return () => subscription.remove();
+    }, [user?.deviceId]);
+
+    useEffect(() => {
+        if (!hasCheckedSessionUpdate && user?.deviceId) {
             hasCheckedSessionUpdate = true;
             runSystemBootstrap();
         }
-    }, [user?.deviceId, fontsLoaded, isUpdating]);
+    }, [user?.deviceId]);
 
     useEffect(() => {
         if (visible || showWelcomeBack) {
@@ -148,8 +155,16 @@ export default function UpdateHandler({ fontsLoaded, isUpdating }) {
         return () => clearInterval(timer);
     }, [visible, isCritical, countdown]);
 
-    const runSystemBootstrap = async () => {
+    const runSystemBootstrap = async (customDeviceId = null) => {
         try {
+            // ⚡️ Use the customDeviceId if passed from the event emitter, otherwise fallback to context user
+            const activeDeviceId = customDeviceId || user?.deviceId;
+
+            if (!activeDeviceId) {
+                console.warn("System Bootstrap Aborted: No active device ID found.");
+                return;
+            }
+
             if (Platform.OS === 'android') {
                 await notifee.createChannel({ id: 'default', name: 'Default Channel', importance: AndroidImportance.HIGH });
             }
@@ -160,7 +175,7 @@ export default function UpdateHandler({ fontsLoaded, isUpdating }) {
             const response = await apiFetch(BOOTSTRAP_URL, {
                 method: "POST",
                 headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({ deviceId: user.deviceId, pushToken: pushToken, platform: Platform.OS })
+                body: JSON.stringify({ deviceId: activeDeviceId, pushToken: pushToken, platform: Platform.OS })
             });
 
             // ⚡️ SAFE PARSING

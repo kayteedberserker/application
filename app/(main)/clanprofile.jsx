@@ -1,8 +1,9 @@
 import { Feather, Ionicons, MaterialCommunityIcons } from "@expo/vector-icons";
+import { LegendList } from "@legendapp/list";
 import * as Clipboard from 'expo-clipboard';
 import { Image } from 'expo-image';
 import { Asset, requestPermissionsAsync } from 'expo-media-library';
-import { useLocalSearchParams, useRouter } from 'expo-router'; // ⚡️ Added useLocalSearchParams
+import { useLocalSearchParams, useRouter } from 'expo-router';
 import * as Sharing from 'expo-sharing';
 import React, { memo, useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import {
@@ -24,13 +25,11 @@ import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { SvgXml } from "react-native-svg";
 import ViewShot from "react-native-view-shot";
 import { Text } from "../../components/Text";
-// ⚡️ Swapped to LegendList for maximum performance
-import { LegendList } from "@legendapp/list";
 
-import * as Haptics from 'expo-haptics'; // ⚡️ ADD THIS
+import * as Haptics from 'expo-haptics';
 import { MotiView } from 'moti';
 import Animated, {
-    Easing, // ⚡️ ADD THIS
+    Easing,
     FadeIn,
     FadeInDown,
     useAnimatedStyle,
@@ -62,9 +61,7 @@ const AnimatedWord = memo(({ word, index, style, isLast }) => {
     const translateY = useSharedValue(8);
 
     useEffect(() => {
-        const delay = index * 50; // Snappier reveal
-
-        // Single haptic trigger per word
+        const delay = index * 50;
         const hapticTimer = setTimeout(() => {
             Haptics.selectionAsync();
         }, delay);
@@ -86,7 +83,6 @@ const AnimatedWord = memo(({ word, index, style, isLast }) => {
         transform: [{ translateY: translateY.value }]
     }));
 
-    // We use Animated.Text as an inline element
     return (
         <Animated.Text style={[style, animStyle]}>
             {word}{isLast ? "" : " "}
@@ -95,14 +91,10 @@ const AnimatedWord = memo(({ word, index, style, isLast }) => {
 });
 
 const PremiumTextReveal = memo(({ text, style }) => {
-    // Split by space and handle line breaks as actual characters or spaces
     const words = useMemo(() => text.split(/\s+/), [text]);
 
     return (
         <View style={styles.revealContainer}>
-            {/* CRITICAL FIX: Nesting Animated.Text inside a parent Text 
-      forces the layout engine to treat words as inline spans.
-      */}
             <Text style={[style, { textAlign: 'left' }]}>
                 {words.map((word, index) => (
                     <AnimatedWord
@@ -127,7 +119,7 @@ export const CinematicClanOnboarding = memo(({ visible, onClose, isLeader, appBl
     const ONBOARDING_STEPS = useMemo(() => {
         const baseSteps = [
             {
-                title: "THE_SYNDICATE_DOJO",
+                title: "THE_CLAN_DOJO",
                 intel: "SYS: COMMAND_CENTER",
                 desc: "Welcome to your Clan hub. Track Clan Rank, Clan Funds, and view your members from the Shinobi tab.",
                 icon: "shield",
@@ -341,7 +333,7 @@ const styles = StyleSheet.create({
     },
     revealContainer: {
         width: '100%',
-        minHeight: 100 // Prevents layout jump
+        minHeight: 100
     },
     descriptionText: {
         fontSize: 16,
@@ -401,6 +393,20 @@ const ClanTopHeaderSection = memo(({
     pulseStyle,
     spinStyle
 }) => {
+
+    // ⚡️ PERFORMANCE & FEATURE WIN: Stable callback with Emoji Filter
+    const handleNameChange = useCallback((text) => {
+        // Strip emojis from the clan name in real-time
+        const noEmojiText = text.replace(/[\u{1F600}-\u{1F64F}\u{1F300}-\u{1F5FF}\u{1F680}-\u{1F6FF}\u{1F700}-\u{1F77F}\u{1F780}-\u{1F7FF}\u{1F800}-\u{1F8FF}\u{1F900}-\u{1F9FF}\u{1FA00}-\u{1FA6F}\u{1FA70}-\u{1FAFF}\u{1FB00}-\u{1FBFF}\u{2600}-\u{26FF}\u{2700}-\u{27BF}\u{2300}-\u{23FF}\u{2B50}\u{2B55}\u{2934}-\u{2935}\u{2B05}-\u{2B07}\u{2B1B}-\u{2B1C}\u{3297}\u{3299}\u{303D}\u{00A9}\u{00AE}\u{2122}]/gu, '');
+        // Use functional state update so this callback never needs to be recreated
+        setEditData(prev => ({ ...prev, name: noEmojiText }));
+    }, [setEditData]);
+
+    // ⚡️ PERFORMANCE WIN: Stable callback for description to prevent typing lag
+    const handleDescChange = useCallback((text) => {
+        setEditData(prev => ({ ...prev, description: text }));
+    }, [setEditData]);
+
     return (
         <View className="p-8 px-2 mt-10 items-center border-b border-gray-100 dark:border-zinc-900">
             <View className="w-full flex-row justify-center items-center relative">
@@ -425,21 +431,21 @@ const ClanTopHeaderSection = memo(({
                         onPress={() => setCardPreviewVisible(true)}
                         className="p-3 bg-gray-100 dark:bg-zinc-800 rounded-full z-10 border border-gray-200 dark:border-zinc-700"
                     >
-                        <Ionicons name="card-outline" size={24} color={APP_BLUE} />
+                        <MaterialCommunityIcons name="card-account-details-outline" size={24} color={APP_BLUE} />
                     </TouchableOpacity>
 
                     <TouchableOpacity
                         onPress={() => setInventoryModalVisible(true)}
                         className="p-3 bg-gray-100 dark:bg-zinc-800 rounded-full z-10 border border-gray-200 dark:border-zinc-700"
                     >
-                        <MaterialCommunityIcons name="bag-personal-outline" size={24} color={APP_BLUE} />
+                        <MaterialCommunityIcons name="archive-outline" size={24} color={APP_BLUE} />
                     </TouchableOpacity>
 
                     <TouchableOpacity
                         onPress={() => setStoreModalVisible(true)}
                         className="p-3 bg-gray-100 dark:bg-zinc-800 rounded-full z-10 border border-gray-200 dark:border-zinc-700"
                     >
-                        <MaterialCommunityIcons name="storefront-outline" size={24} color={APP_BLUE} />
+                        <MaterialCommunityIcons name="cart-outline" size={24} color={APP_BLUE} />
                     </TouchableOpacity>
                 </View>
             </View>
@@ -449,13 +455,14 @@ const ClanTopHeaderSection = memo(({
                     <View className="w-full gap-y-2">
                         <TextInput
                             value={editData.name}
-                            onChangeText={(t) => setEditData({ ...editData, name: t })}
+                            onChangeText={handleNameChange} // ⚡️ Using optimized handler
+                            maxLength={18} // ⚡️ Enforces 15 character limit
                             className="text-1xl font-black text-blue-500 text-center italic border-b border-blue-500 w-full"
                             placeholder="Clan Name"
                         />
                         <TextInput
                             value={editData.description}
-                            onChangeText={(t) => setEditData({ ...editData, description: t })}
+                            onChangeText={handleDescChange} // ⚡️ Using optimized handler
                             multiline
                             className="text-gray-600 dark:text-gray-300 text-xs italic text-center p-2 border border-blue-200 rounded-lg"
                             placeholder="Village Motto..."
@@ -540,7 +547,6 @@ const ClanProgressSection = memo(({ fullData, decayAmount, safeProgress, decayPr
                 </Text>
             </View>
 
-            {/* Changed to flex-row so the bars stack side-by-side */}
             <View className="w-full h-[6px] flex-row bg-gray-100 dark:bg-zinc-900 rounded-full overflow-hidden">
                 {/* 1. Safe Points (Normal Color) */}
                 <View
@@ -714,6 +720,86 @@ const TabKageDesk = memo(({ fullData, canManageClan, triggerAction, isProcessing
     );
 });
 
+// ⚡️ PERFORMANCE WIN: Extracted post item into its own memoized component
+const ScrollPostItem = memo(({ item, isDark, onPress, onDelete }) => {
+    return (
+        <View className="px-6 mb-4">
+            <View className="bg-white dark:bg-[#1A1A1A] border border-gray-100 dark:border-gray-800 p-5 rounded-2xl shadow-sm">
+                <View className="flex-row justify-between items-start mb-3">
+                    <Pressable
+                        onPress={onPress}
+                        className="flex-1 pr-4"
+                    >
+                        <Text
+                            className="font-black text-base uppercase tracking-tight text-gray-900 dark:text-white"
+                            numberOfLines={2}
+                        >
+                            {item.title || item.message}
+                        </Text>
+                        <View className="flex-row items-center mt-2">
+                            <View className="bg-blue-500/10 px-2 py-0.5 rounded-md mr-2">
+                                <Text className="text-[9px] font-black text-blue-600 dark:text-blue-400 uppercase">
+                                    {new Date(item.createdAt).toLocaleDateString()}
+                                </Text>
+                            </View>
+                            {item.category && (
+                                <Text className="text-[10px] font-bold text-gray-400 uppercase tracking-widest">
+                                    • {item.category}
+                                </Text>
+                            )}
+                        </View>
+                    </Pressable>
+
+                    <TouchableOpacity
+                        onPress={onDelete}
+                        className="p-2 bg-red-50 dark:bg-red-500/10 rounded-lg"
+                    >
+                        <Ionicons name="trash-outline" size={16} color="#ef4444" />
+                    </TouchableOpacity>
+                </View>
+
+                {/* --- STATS BAR --- */}
+                <View className="flex-row items-center justify-between mt-4 pt-4 border-t border-gray-50 dark:border-gray-800/50">
+                    <View className="flex-row items-center gap-4">
+                        <View className="items-center flex-row gap-1">
+                            <Ionicons name="heart" size={14} color="#ef4444" />
+                            <Text className="text-gray-600 dark:text-gray-400 text-[11px] font-bold">
+                                {item.likesCount || 0}
+                            </Text>
+                        </View>
+                        <View className="items-center flex-row gap-1">
+                            <Ionicons name="chatbubble" size={14} color="#3b82f6" />
+                            <Text className="text-gray-600 dark:text-gray-400 text-[11px] font-bold">
+                                {item.commentsCount || 0}
+                            </Text>
+                        </View>
+                        <View className="items-center flex-row gap-1">
+                            <Ionicons name="chatbox-ellipses" size={14} color="#f59e0b" />
+                            <Text className="text-gray-600 dark:text-gray-400 text-[11px] font-bold">
+                                {item.discussionCount || 0}
+                            </Text>
+                        </View>
+                    </View>
+                    <View className="flex-row items-center gap-4">
+                        <View className="items-center flex-row gap-1">
+                            <Ionicons name="eye" size={14} color={isDark ? "#6b7280" : "#9ca3af"} />
+                            <Text className="text-gray-600 dark:text-gray-400 text-[11px] font-bold">
+                                {item.formattedViews || "0"}
+                            </Text>
+                        </View>
+                        <View className="items-center flex-row gap-1">
+                            <Ionicons name="share-social" size={14} color={isDark ? "#6b7280" : "#9ca3af"} />
+                            <Text className="text-gray-600 dark:text-gray-400 text-[11px] font-bold">
+                                {item.sharesCount || 0}
+                            </Text>
+                        </View>
+                    </View>
+                </View>
+            </View>
+        </View>
+    );
+});
+
 // =================================================================
 // MAIN COMPONENT
 // =================================================================
@@ -721,7 +807,7 @@ let HAS_SHOWN_SESSION_LOADER = false;
 
 const ClanProfile = () => {
     const storage = useMMKV();
-    const { tab: urlTab } = useLocalSearchParams(); // ⚡️ Extract tab param from route
+    const { tab: urlTab } = useLocalSearchParams();
     const CustomAlert = useAlert();
     const { user } = useUser();
     const { userClan, isLoading: clanLoading, canManageClan, userRole, hasUnreadChat, markChatAsRead } = useClan();
@@ -797,16 +883,11 @@ const ClanProfile = () => {
                 setIsSaving(true);
                 Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
 
-                // Capture the reference layout to a local URI string
                 const uri = await clanCardRef.current.capture();
 
-                // ✅ 1. Modern class-based permission check
                 const { status } = await requestPermissionsAsync();
                 if (status === 'granted') {
-
-                    // ✅ 2. Modern class-based method to save to the library
                     await Asset.create(uri);
-
                     Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
                     CustomAlert("Archived", "The Clan Scroll has been saved to your device.");
                 } else {
@@ -825,7 +906,7 @@ const ClanProfile = () => {
     const [warHistory, setWarHistory] = useState([]);
     const [loadingWars, setLoadingWars] = useState(false);
 
-    const { coins, clanCoins, processTransaction, isProcessingTransaction } = useCoins();
+    const { clanCoins, processTransaction } = useCoins();
 
     const CACHE_KEY = `@clan_data_${userClan?.tag}`;
     const ONBOARDING_KEY = `@has_seen_clan_onboarding`;
@@ -835,11 +916,8 @@ const ClanProfile = () => {
             setLocalMessages(fullData.messages);
         }
 
-        // ⚡️ Check Onboarding exactly when fullData is ready
         if (fullData && !loading) {
             const hasSeenOnboarding = storage.getBoolean(ONBOARDING_KEY);
-            if (__DEV__) console.log(hasSeenOnboarding, "ishas");
-
             if (!hasSeenOnboarding) {
                 setShowOnboarding(true);
             }
@@ -857,24 +935,39 @@ const ClanProfile = () => {
         }
     }, [activeTab, localMessages, markChatAsRead]);
 
+    useEffect(() => {
+        if (userClan?.tag) {
+            initializeClanData();
+            fetchPosts(1);
+            fetchWarHistory();
+        } else if (!clanLoading) {
+            setLoading(false);
+        }
+    }, [userClan?.tag]);
+
+    useEffect(() => {
+        scanAnim.value = withRepeat(withTiming(1, { duration: 10000, easing: Easing.linear }), -1, false);
+        pulseAnim.value = withRepeat(
+            withSequence(withTiming(1.05, { duration: 2500 }), withTiming(1, { duration: 2500 })),
+            -1, false
+        );
+    }, []);
+
     // =================================================================
     // ⚡️ UPGRADED REANIMATED LOGIC (Zero JS Thread Blocking)
     // =================================================================
     const scanAnim = useSharedValue(0);
     const pulseAnim = useSharedValue(1);
 
-    // Add your thresholds at the top of your file or inside the component
     const rankThresholds = [0, 5000, 20000, 50000, 100000, 300000];
     const decayAmounts = [200, 500, 1000, 2000, 5000, 30000];
 
-    // Replace your existing progressToNextRank useMemo with this:
     const { safeProgress, decayProgress, decayAmount } = useMemo(() => {
         if (!fullData || !fullData.nextThreshold) return { safeProgress: 0, decayProgress: 0, decayAmount: 0 };
 
         const points = fullData.totalPoints || 0;
         const nextThreshold = fullData.nextThreshold;
 
-        // 1. Find the current rank tier to apply the right decay
         let currentTierIndex = 0;
         for (let i = rankThresholds.length - 1; i >= 0; i--) {
             if (points >= rankThresholds[i]) {
@@ -884,13 +977,10 @@ const ClanProfile = () => {
         }
 
         const decay = decayAmounts[currentTierIndex];
-
-        // 2. Cap points at the next threshold so the progress bar doesn't break if it goes over 100%
         const cappedPoints = Math.min(points, nextThreshold);
 
-        // 3. Calculate safe points vs decay points
         const safePoints = Math.max(0, cappedPoints - decay);
-        const actualDecay = cappedPoints - safePoints; // Prevents decay from being larger than total points
+        const actualDecay = cappedPoints - safePoints;
 
         return {
             safeProgress: (safePoints / nextThreshold) * 100,
@@ -899,29 +989,9 @@ const ClanProfile = () => {
         };
     }, [fullData]);
 
-    useEffect(() => {
-        scanAnim.value = withRepeat(withTiming(1, { duration: 10000, easing: Easing.linear }), -1, false);
-        pulseAnim.value = withRepeat(
-            withSequence(withTiming(1.05, { duration: 2500 }), withTiming(1, { duration: 2500 })),
-            -1, false
-        );
-    }, []);
     const isVerified = fullData?.verifiedUntil && new Date(fullData?.verifiedUntil) > new Date();
     const spinStyle = useAnimatedStyle(() => ({ transform: [{ rotate: `${scanAnim.value * 360}deg` }] }));
     const pulseStyle = useAnimatedStyle(() => ({ transform: [{ scale: pulseAnim.value }] }));
-
-    // =================================================================
-
-    useEffect(() => {
-        if (userClan?.tag) {
-            initializeClanData();
-            fetchPosts(1);
-            fetchWarHistory();
-        } else if (!clanLoading) {
-            setLoading(false);
-        }
-        // eslint-disable-next-line react-hooks/exhaustive-deps
-    }, [userClan?.tag]);
 
     const initializeClanData = async () => {
         try {
@@ -1052,7 +1122,7 @@ const ClanProfile = () => {
                 if (action === "BUY_STORE_ITEM") CustomAlert("Success", `'${payload.itemName || 'Item'}' applied to the village.`);
                 if (action === "LEAVE_CLAN") {
                     storage.set(CACHE_KEY, "");
-                    storage.set(ONBOARDING_KEY, false); // Clean up onboarding flag on leave
+                    storage.set(ONBOARDING_KEY, false);
                     CustomAlert("Deserted", "You have left the village.");
                     router.replace('/screens/discover');
                 }
@@ -1154,6 +1224,100 @@ const ClanProfile = () => {
         }
     };
 
+    // ⚡️ PERFORMANCE WIN: Completely Memoized List Header Component
+    const listHeader = useMemo(() => {
+        return (
+            <View>
+                <ClanTopHeaderSection
+                    fullData={fullData}
+                    activeGlowColor={activeGlowColor}
+                    APP_BLUE={APP_BLUE}
+                    isVerified={isVerified}
+                    userRole={userRole}
+                    canManageClan={canManageClan}
+                    isEditing={isEditing}
+                    editData={editData}
+                    setEditData={setEditData}
+                    setIsEditing={setIsEditing}
+                    triggerAction={triggerAction}
+                    setCardPreviewVisible={setCardPreviewVisible}
+                    setInventoryModalVisible={setInventoryModalVisible}
+                    setStoreModalVisible={setStoreModalVisible}
+                    pulseStyle={pulseStyle}
+                    spinStyle={spinStyle}
+                />
+
+                <ClanAchievementsSection fullData={fullData} />
+
+                <ClanProgressSection
+                    fullData={fullData}
+                    decayAmount={decayAmount}
+                    safeProgress={safeProgress}
+                    decayProgress={decayProgress}
+                    activeGlowColor={activeGlowColor}
+                    APP_BLUE={APP_BLUE}
+                />
+
+                <ClanTabsHeader
+                    activeTab={activeTab}
+                    setActiveTab={setActiveTab}
+                    hasUnreadChat={hasUnreadChat}
+                    fullData={fullData}
+                    canManageClan={canManageClan}
+                    APP_BLUE={APP_BLUE}
+                />
+
+                {activeTab === 'Dojo' && (
+                    <TabDojo
+                        fullData={fullData}
+                        activeGlowColor={activeGlowColor}
+                        APP_BLUE={APP_BLUE}
+                        handleShareClan={handleShareClan}
+                        copyLinkToClipboard={copyLinkToClipboard}
+                        handleLeaveClan={handleLeaveClan}
+                    />
+                )}
+
+                {activeTab === 'Shinobi' && (
+                    <TabShinobi
+                        fullData={fullData}
+                        canManageClan={canManageClan}
+                        userRole={userRole}
+                        triggerAction={triggerAction}
+                        isProcessingAction={isProcessingAction}
+                        APP_BLUE={APP_BLUE}
+                        isDark={isDark}
+                    />
+                )}
+
+                {activeTab === 'Wars' && (
+                    <TabWars warHistory={warHistory} loadingWars={loadingWars} userClanTag={userClan.tag} />
+                )}
+
+                {activeTab === 'Kage Desk' && (
+                    <TabKageDesk
+                        fullData={fullData}
+                        canManageClan={canManageClan}
+                        triggerAction={triggerAction}
+                        isProcessingAction={isProcessingAction}
+                        APP_BLUE={APP_BLUE}
+                        isDark={isDark}
+                    />
+                )}
+
+                {activeTab === 'Hall' && (
+                    <View className="px-4 pb-4">
+                        <ClanChatInput onSend={handleSendMessage} copyText={selectedMessage} isDark={isDark} appBlue={APP_BLUE} />
+                    </View>
+                )}
+            </View>
+        );
+    }, [
+        fullData, activeGlowColor, APP_BLUE, isVerified, userRole, canManageClan,
+        isEditing, editData, activeTab, decayAmount, safeProgress, decayProgress,
+        hasUnreadChat, isProcessingAction, warHistory, loadingWars, selectedMessage, isDark, handleSendMessage
+    ]);
+
     if (loading || clanLoading) {
         return <AnimeLoading tipType={"clan"} message="Syncing Bloodline" subMessage="Consulting the Elder Scrolls..." />;
     }
@@ -1171,114 +1335,6 @@ const ClanProfile = () => {
             </View>
         );
     }
-
-    const listHeader = (
-        <View>
-            <View style={{ position: 'absolute', left: -10000, opacity: 0 }} pointerEvents="none">
-                <ViewShot ref={clanCardRef} options={{ format: "png", quality: 1 }}>
-                    <ClanCard clan={fullData} isDark={isDark} forSnapshot={true} />
-                </ViewShot>
-            </View>
-
-            <ClanTopHeaderSection
-                fullData={fullData}
-                activeGlowColor={activeGlowColor}
-                APP_BLUE={APP_BLUE}
-                isVerified={isVerified}
-                userRole={userRole}
-                canManageClan={canManageClan}
-                isEditing={isEditing}
-                editData={editData}
-                setEditData={setEditData}
-                setIsEditing={setIsEditing}
-                triggerAction={triggerAction}
-                setCardPreviewVisible={setCardPreviewVisible}
-                setInventoryModalVisible={setInventoryModalVisible}
-                setStoreModalVisible={setStoreModalVisible}
-                pulseStyle={pulseStyle}
-                spinStyle={spinStyle}
-            />
-
-            <ClanAchievementsSection fullData={fullData} />
-
-            <ClanProgressSection
-                fullData={fullData}
-                decayAmount={decayAmount}
-                safeProgress={safeProgress}
-                decayProgress={decayProgress}
-                activeGlowColor={activeGlowColor}
-                APP_BLUE={APP_BLUE}
-            />
-
-            <ClanTabsHeader
-                activeTab={activeTab}
-                setActiveTab={setActiveTab}
-                hasUnreadChat={hasUnreadChat}
-                fullData={fullData}
-                canManageClan={canManageClan}
-                APP_BLUE={APP_BLUE}
-            />
-
-            <Modal visible={cardPreviewVisible} transparent animationType="slide">
-                <View className="flex-1 bg-black/95">
-                    <Pressable style={{
-                        position: 'absolute',
-                        left: 0,
-                        right: 0,
-                        top: 0,
-                        bottom: 0
-                    }} onPress={() => setCardPreviewVisible(false)} />
-                    <ScrollView contentContainerStyle={{ flexGrow: 1, justifyContent: 'center', alignItems: 'center', padding: 20 }}>
-                        <View className="w-full items-center">
-                            <View className="w-full flex-row justify-between items-center pt-10">
-                                <View>
-                                    <Text className="text-white font-black text-xl italic uppercase tracking-widest">Clan Scroll</Text>
-                                    <Text className="text-gray-500 font-bold text-[9px] uppercase tracking-[0.4em] mt-1">Official Manifest</Text>
-                                </View>
-                                <Pressable onPress={() => setCardPreviewVisible(false)} className="w-12 h-12 bg-white/10 rounded-full items-center justify-center">
-                                    <Ionicons name="close" size={28} color="white" />
-                                </Pressable>
-                            </View>
-                            <View style={{ transform: [{ scale: Math.min(1, (width - 40) / 380) }], width: 380, alignItems: 'center' }}>
-                                <ClanCard clan={fullData} isDark={isDark} forSnapshot={true} />
-                            </View>
-                            <View className="w-full">
-                                <View className="flex-row gap-3 w-full">
-                                    <TouchableOpacity
-                                        onPress={captureAndSave}
-                                        disabled={isSaving}
-                                        className="flex-1 h-16 bg-gray-800 rounded-[30px] items-center justify-center border border-gray-700 active:scale-95"
-                                    >
-                                        {isSaving ? <ActivityIndicator size="small" color="white" /> : (
-                                            <View className="flex-row items-center gap-2">
-                                                <Feather name="download" size={20} color="white" />
-                                                <Text className="text-white font-black uppercase text-[10px] tracking-widest italic">Save</Text>
-                                            </View>
-                                        )}
-                                    </TouchableOpacity>
-
-                                    <TouchableOpacity
-                                        onPress={captureAndShare}
-                                        style={{ backgroundColor: APP_BLUE }}
-                                        className="flex-[2] h-16 rounded-[30px] flex-row items-center justify-center gap-3 shadow-lg active:scale-95"
-                                    >
-                                        <MaterialCommunityIcons name="share-variant" size={24} color="white" />
-                                        <Text className="text-white font-black uppercase tracking-[0.2em] text-sm italic">Dispatch Scroll</Text>
-                                    </TouchableOpacity>
-                                </View>
-                            </View>
-                        </View>
-                    </ScrollView>
-                </View>
-            </Modal>
-
-            {activeTab === 'Hall' && (
-                <View className="px-4 pb-4">
-                    <ClanChatInput onSend={handleSendMessage} copyText={selectedMessage} isDark={isDark} appBlue={APP_BLUE} />
-                </View>
-            )}
-        </View>
-    );
 
     return (
         <View style={{ flex: 1 }}>
@@ -1300,134 +1356,16 @@ const ClanProfile = () => {
                 contentContainerStyle={{
                     paddingBottom: insets.bottom + 100
                 }}
-                ListHeaderComponent={
-                    <View>
-                        {listHeader}
-                        {activeTab === 'Dojo' && (
-                            <TabDojo
-                                fullData={fullData}
-                                activeGlowColor={activeGlowColor}
-                                APP_BLUE={APP_BLUE}
-                                handleShareClan={handleShareClan}
-                                copyLinkToClipboard={copyLinkToClipboard}
-                                handleLeaveClan={handleLeaveClan}
-                            />
-                        )}
-
-                        {activeTab === 'Shinobi' && (
-                            <TabShinobi
-                                fullData={fullData}
-                                canManageClan={canManageClan}
-                                userRole={userRole}
-                                triggerAction={triggerAction}
-                                isProcessingAction={isProcessingAction}
-                                APP_BLUE={APP_BLUE}
-                                isDark={isDark}
-                            />
-                        )}
-
-                        {activeTab === 'Wars' && (
-                            <TabWars warHistory={warHistory} loadingWars={loadingWars} userClanTag={userClan.tag} />
-                        )}
-
-                        {activeTab === 'Kage Desk' && (
-                            <TabKageDesk
-                                fullData={fullData}
-                                canManageClan={canManageClan}
-                                triggerAction={triggerAction}
-                                isProcessingAction={isProcessingAction}
-                                APP_BLUE={APP_BLUE}
-                                isDark={isDark}
-                            />
-                        )}
-                    </View>
-                }
+                ListHeaderComponent={listHeader}
                 renderItem={({ item }) => {
                     if (activeTab === 'Scrolls') {
                         return (
-                            <View className="px-6 mb-4">
-                                <View className="bg-white dark:bg-[#1A1A1A] border border-gray-100 dark:border-gray-800 p-5 rounded-2xl shadow-sm">
-                                    <View className="flex-row justify-between items-start mb-3">
-                                        <Pressable
-                                            onPress={() => router.push(`/post/${item.slug || item._id}`)}
-                                            className="flex-1 pr-4"
-                                        >
-                                            <Text
-                                                className="font-black text-base uppercase tracking-tight text-gray-900 dark:text-white"
-                                                numberOfLines={2}
-                                            >
-                                                {item.title || item.message}
-                                            </Text>
-                                            <View className="flex-row items-center mt-2">
-                                                <View className="bg-blue-500/10 px-2 py-0.5 rounded-md mr-2">
-                                                    <Text className="text-[9px] font-black text-blue-600 dark:text-blue-400 uppercase">
-                                                        {new Date(item.createdAt).toLocaleDateString()}
-                                                    </Text>
-                                                </View>
-                                                {item.category && (
-                                                    <Text className="text-[10px] font-bold text-gray-400 uppercase tracking-widest">
-                                                        • {item.category}
-                                                    </Text>
-                                                )}
-                                            </View>
-                                        </Pressable>
-
-                                        <TouchableOpacity
-                                            onPress={() => handleDeletePost(item._id)}
-                                            className="p-2 bg-red-50 dark:bg-red-500/10 rounded-lg"
-                                        >
-                                            <Ionicons name="trash-outline" size={16} color="#ef4444" />
-                                        </TouchableOpacity>
-                                    </View>
-
-                                    {/* --- STATS BAR --- */}
-                                    <View className="flex-row items-center justify-between mt-4 pt-4 border-t border-gray-50 dark:border-gray-800/50">
-                                        <View className="flex-row items-center gap-4">
-                                            {/* Likes */}
-                                            <View className="items-center flex-row gap-1">
-                                                <Ionicons name="heart" size={14} color="#ef4444" />
-                                                <Text className="text-gray-600 dark:text-gray-400 text-[11px] font-bold">
-                                                    {item.likesCount || 0}
-                                                </Text>
-                                            </View>
-
-                                            {/* Comments */}
-                                            <View className="items-center flex-row gap-1">
-                                                <Ionicons name="chatbubble" size={14} color="#3b82f6" />
-                                                <Text className="text-gray-600 dark:text-gray-400 text-[11px] font-bold">
-                                                    {item.commentsCount || 0}
-                                                </Text>
-                                            </View>
-
-                                            {/* Discussions - Deep engagement */}
-                                            <View className="items-center flex-row gap-1">
-                                                <Ionicons name="chatbox-ellipses" size={14} color="#f59e0b" />
-                                                <Text className="text-gray-600 dark:text-gray-400 text-[11px] font-bold">
-                                                    {item.discussionCount || 0}
-                                                </Text>
-                                            </View>
-                                        </View>
-
-                                        <View className="flex-row items-center gap-4">
-                                            {/* Views */}
-                                            <View className="items-center flex-row gap-1">
-                                                <Ionicons name="eye" size={14} color={isDark ? "#6b7280" : "#9ca3af"} />
-                                                <Text className="text-gray-600 dark:text-gray-400 text-[11px] font-bold">
-                                                    {item.formattedViews || "0"}
-                                                </Text>
-                                            </View>
-
-                                            {/* Shares (Frontend UI Placeholder) */}
-                                            <View className="items-center flex-row gap-1">
-                                                <Ionicons name="share-social" size={14} color={isDark ? "#6b7280" : "#9ca3af"} />
-                                                <Text className="text-gray-600 dark:text-gray-400 text-[11px] font-bold">
-                                                    {item.sharesCount || 0}
-                                                </Text>
-                                            </View>
-                                        </View>
-                                    </View>
-                                </View>
-                            </View>
+                            <ScrollPostItem
+                                item={item}
+                                isDark={isDark}
+                                onPress={() => router.push(`/post/${item.slug || item._id}`)}
+                                onDelete={() => handleDeletePost(item._id)}
+                            />
                         );
                     }
                     if (activeTab === 'Wars') {
@@ -1436,7 +1374,7 @@ const ClanProfile = () => {
                     if (activeTab === 'Hall') {
                         return <ClanMessageItem onSelectMessage={(msg) => {
                             if (__DEV__) console.log("Captured message data:", msg);
-                            setSelectedMessage(msg); // Now 'msg' is accessible outside the component
+                            setSelectedMessage(msg);
                         }} message={item} isDark={isDark} isMe={item.authorId === user.deviceId} appBlue={APP_BLUE} />;
                     }
                     return null
@@ -1491,23 +1429,78 @@ const ClanProfile = () => {
                 </TouchableOpacity>
             )}
 
-            <ClanStoreModal fetchFullDetails={fetchFullDetails} isDark={isDark} onClose={() => setStoreModalVisible(false)} visible={storeModalVisible} />
-            <ClanInventoryModal
-                visible={inventoryModalVisible}
-                onClose={() => setInventoryModalVisible(false)}
-                clan={fullData}
-                isDark={isDark}
-                user={user}
-                fetchFullDetails={fetchFullDetails}
-            />
+            {/* ⚡️ PERFORMANCE WIN: Modals only mount if they are requested */}
+            {storeModalVisible && (
+                <ClanStoreModal fetchFullDetails={fetchFullDetails} isDark={isDark} onClose={() => setStoreModalVisible(false)} visible={true} clan={fullData} />
+            )}
 
-            {/* ⚡️ MOUNT THE CINEMATIC ONBOARDING MODAL */}
-            <CinematicClanOnboarding
-                visible={showOnboarding}
-                onClose={finishOnboarding}
-                isLeader={canManageClan}
-                appBlue={APP_BLUE}
-            />
+            {inventoryModalVisible && (
+                <ClanInventoryModal visible={true} onClose={() => setInventoryModalVisible(false)} clan={fullData} isDark={isDark} user={user} fetchFullDetails={fetchFullDetails} />
+            )}
+
+            {showOnboarding && (
+                <CinematicClanOnboarding visible={true} onClose={finishOnboarding} isLeader={canManageClan} appBlue={APP_BLUE} />
+            )}
+
+            {cardPreviewVisible && (
+                <Modal visible={true} transparent animationType="slide">
+                    <View className="flex-1 bg-black/95">
+                        <Pressable style={{
+                            position: 'absolute',
+                            left: 0,
+                            right: 0,
+                            top: 0,
+                            bottom: 0
+                        }} onPress={() => setCardPreviewVisible(false)} />
+                        <ScrollView contentContainerStyle={{ flexGrow: 1, justifyContent: 'center', alignItems: 'center', padding: 20 }}>
+                            <View className="w-full items-center">
+                                <View className="w-full flex-row justify-between items-center pt-10">
+                                    <View>
+                                        <Text className="text-white font-black text-xl italic uppercase tracking-widest">Clan Scroll</Text>
+                                        <Text className="text-gray-500 font-bold text-[9px] uppercase tracking-[0.4em] mt-1">Official Manifest</Text>
+                                    </View>
+                                    <Pressable onPress={() => setCardPreviewVisible(false)} className="w-12 h-12 bg-white/10 rounded-full items-center justify-center">
+                                        <Ionicons name="close" size={28} color="white" />
+                                    </Pressable>
+                                </View>
+
+                                {/* ⚡️ WIN 3: Wrapped ViewShot directly around the visible UI */}
+                                <View style={{ transform: [{ scale: Math.min(1, (width - 40) / 380) }], width: 380, alignItems: 'center', marginVertical: 20 }}>
+                                    <ViewShot ref={clanCardRef} options={{ format: "png", quality: 1 }}>
+                                        <ClanCard clan={fullData} isDark={isDark} forSnapshot={true} />
+                                    </ViewShot>
+                                </View>
+
+                                <View className="w-full mt-6">
+                                    <View className="flex-row gap-3 w-full">
+                                        <TouchableOpacity
+                                            onPress={captureAndSave}
+                                            disabled={isSaving}
+                                            className="flex-1 h-16 bg-gray-800 rounded-[30px] items-center justify-center border border-gray-700 active:scale-95"
+                                        >
+                                            {isSaving ? <ActivityIndicator size="small" color="white" /> : (
+                                                <View className="flex-row items-center gap-2">
+                                                    <Feather name="download" size={20} color="white" />
+                                                    <Text className="text-white font-black uppercase text-[10px] tracking-widest italic">Save</Text>
+                                                </View>
+                                            )}
+                                        </TouchableOpacity>
+
+                                        <TouchableOpacity
+                                            onPress={captureAndShare}
+                                            style={{ backgroundColor: APP_BLUE }}
+                                            className="flex-[2] h-16 rounded-[30px] flex-row items-center justify-center gap-3 shadow-lg active:scale-95"
+                                        >
+                                            <MaterialCommunityIcons name="share-variant" size={24} color="white" />
+                                            <Text className="text-white font-black uppercase tracking-[0.2em] text-sm italic">Dispatch Scroll</Text>
+                                        </TouchableOpacity>
+                                    </View>
+                                </View>
+                            </View>
+                        </ScrollView>
+                    </View>
+                </Modal>
+            )}
         </View>
     );
 };
@@ -1516,33 +1509,32 @@ const ClanChatInput = memo(({ onSend, isDark, appBlue, copyText }) => {
     const [text, setText] = useState('');
     const [isFocused, setIsFocused] = useState(false);
 
-    // ⚡️ Handle external copy events
     useEffect(() => {
         if (copyText && copyText.trim().length > 0) {
-            // Append the copied text to the existing text state
             setText(prev => {
                 const separator = prev.length > 0 ? " " : "";
-                // Kept your preferred order: copyText first
                 return `${copyText}${separator}${prev}`;
             });
         }
     }, [copyText]);
 
-    const handleSend = () => {
+    // ⚡️ PERFORMANCE WIN: Locked send handler
+    const handleSend = useCallback(() => {
         if (text.trim()) {
             onSend(text.trim());
-            setText(''); // Clear the state
+            setText('');
             Keyboard.dismiss();
         }
-    };
+    }, [text, onSend]);
+
+    // ⚡️ PERFORMANCE WIN: Locked focus handlers prevent micro-stutters while typing
+    const handleFocus = useCallback(() => setIsFocused(true), []);
+    const handleBlur = useCallback(() => setIsFocused(false), []);
 
     return (
-        <View
-            className="px-4 pb-4 pt-2" // Outer container to handle spacing
-        >
+        <View className="px-4 pb-4 pt-2">
             <View
                 style={{
-                    // ⚡️ Glassmorphism UI Style
                     backgroundColor: isDark
                         ? 'rgba(39, 39, 42, 0.8)'
                         : 'rgba(255, 255, 255, 0.9)',
@@ -1551,7 +1543,6 @@ const ClanChatInput = memo(({ onSend, isDark, appBlue, copyText }) => {
                         : (isDark ? 'rgba(255, 255, 255, 0.1)' : 'rgba(0, 0, 0, 0.05)'),
                     borderWidth: 1.5,
                     borderRadius: 32,
-                    // Glow effect when typing
                     shadowColor: isFocused ? appBlue : "#000",
                     shadowOffset: { width: 0, height: 4 },
                     shadowOpacity: isFocused ? 0.3 : 0.1,
@@ -1561,15 +1552,14 @@ const ClanChatInput = memo(({ onSend, isDark, appBlue, copyText }) => {
                 className="flex-row items-center p-1.5"
             >
                 <TextInput
-                    className={`flex-1 min-h-[48px] max-h-32 px-5 py-3 font-bold text-sm ${isDark ? 'text-white' : 'text-zinc-900'
-                        }`}
+                    className={`flex-1 min-h-[48px] max-h-32 px-5 py-3 font-bold text-sm ${isDark ? 'text-white' : 'text-zinc-900'}`}
                     placeholder="Speak to the village..."
                     placeholderTextColor={isDark ? 'rgba(255, 255, 255, 0.3)' : 'rgba(0, 0, 0, 0.3)'}
                     multiline
                     value={text}
-                    onChangeText={setText}
-                    onFocus={() => setIsFocused(true)}
-                    onBlur={() => setIsFocused(false)}
+                    onChangeText={setText} // setText from useState is naturally stable
+                    onFocus={handleFocus}  // ⚡️ Using optimized handler
+                    onBlur={handleBlur}    // ⚡️ Using optimized handler
                     keyboardAppearance={isDark ? "dark" : "light"}
                     autoCapitalize="sentences"
                     textAlignVertical="center"
@@ -1580,7 +1570,6 @@ const ClanChatInput = memo(({ onSend, isDark, appBlue, copyText }) => {
                     activeOpacity={0.7}
                     style={{
                         backgroundColor: text.trim() ? appBlue : (isDark ? 'rgba(255, 255, 255, 0.05)' : 'rgba(0, 0, 0, 0.05)'),
-                        // Send button glow
                         shadowColor: text.trim() ? appBlue : 'transparent',
                         shadowOpacity: 0.6,
                         shadowRadius: 10,
@@ -1600,7 +1589,7 @@ const ClanChatInput = memo(({ onSend, isDark, appBlue, copyText }) => {
             </View>
         </View>
     );
-})
+});
 
 const ClanMessageItem = memo(({ message, isMe, isDark, appBlue, onSelectMessage }) => {
 
@@ -1608,7 +1597,6 @@ const ClanMessageItem = memo(({ message, isMe, isDark, appBlue, onSelectMessage 
     const handleLongPress = async () => {
         await Clipboard.setStringAsync(message.text);
         if (onSelectMessage) {
-            // Appends the separator as you requested
             onSelectMessage(`${message.text} // `);
         }
     };
@@ -1619,19 +1607,16 @@ const ClanMessageItem = memo(({ message, isMe, isDark, appBlue, onSelectMessage 
                 onLongPress={handleLongPress}
                 delayLongPress={300}
                 style={{
-                    // ⚡️ Fix: Use slightly lighter tints for Dark Mode so it's not "just black"
                     backgroundColor: isMe
                         ? appBlue
                         : (isDark ? 'rgba(45, 45, 50, 0.8)' : 'rgba(255, 255, 255, 0.9)'),
 
-                    // ⚡️ Critical: High contrast borders make glass look real
                     borderColor: isMe
                         ? 'rgba(255, 255, 255, 0.3)'
                         : (isDark ? 'rgba(255, 255, 255, 0.15)' : 'rgba(0, 0, 0, 0.05)'),
 
                     borderWidth: 1.5,
 
-                    // Shadow for depth
                     shadowColor: "#000",
                     shadowOffset: { width: 0, height: 2 },
                     shadowOpacity: 0.1,
@@ -1683,11 +1668,11 @@ const RemoteSvgIcon = React.memo(({ xml, size = 150, color }) => {
 
 const getRarityColor = (rarity) => {
     switch (rarity?.toUpperCase()) {
-        case 'MYTHIC': return '#ef4444'; // Red
-        case 'LEGENDARY': return '#fbbf24'; // Gold
-        case 'EPIC': return '#a855f7'; // Purple
-        case 'RARE': return '#3b82f6'; // Blue
-        case 'COMMON': default: return '#9ca3af'; // Gray
+        case 'MYTHIC': return '#ef4444';
+        case 'LEGENDARY': return '#fbbf24';
+        case 'EPIC': return '#a855f7';
+        case 'RARE': return '#3b82f6';
+        case 'COMMON': default: return '#9ca3af';
     }
 };
 
@@ -1744,7 +1729,6 @@ const ClanItemPreviewModal = memo(({
     const itemCurrency = selectedProduct.currency || 'CC';
     const isCurrentlyEquipped = currentClan?.specialInventory?.find(i => i.itemId === (selectedProduct.id || selectedProduct.itemId))?.isEquipped;
 
-    // ⚡️ Check if this is an item that actually changes the visual look of the card
     const isVisualCosmetic = ['BORDER', 'BACKGROUND', 'GLOW', 'WATERMARK'].includes(selectedProduct.category?.toUpperCase());
 
     return (
@@ -1775,10 +1759,8 @@ const ClanItemPreviewModal = memo(({
                     </Text>
                 </View>
 
-                {/* ⚡️ THE STAGE: Uses ClanCard or a big Icon depending on category */}
                 <View style={previewStyles.stage}>
                     {isVisualCosmetic ? (
-                        // ⚡️ Increased scale from 0.70 to 0.85
                         <View style={{ transform: [{ scale: 0.85 }], alignItems: 'center', justifyContent: 'center', width: '100%' }}>
                             {previewClan && (
                                 <ClanCard
@@ -1788,7 +1770,6 @@ const ClanItemPreviewModal = memo(({
                             )}
                         </View>
                     ) : (
-                        // Fallback for Upgrades or Badges that don't need a full card preview
                         <View style={{ backgroundColor: `${rarityColor}15`, borderColor: `${rarityColor}50` }} className="w-40 h-40 rounded-3xl items-center justify-center border-2 shadow-xl">
                             {selectedProduct.visualConfig?.svgCode ? (
                                 <RemoteSvgIcon xml={selectedProduct.visualConfig.svgCode} size={80} color={selectedProduct.visualConfig.primaryColor} />
@@ -1891,7 +1872,7 @@ const previewStyles = StyleSheet.create({
         letterSpacing: 2,
     },
     stage: {
-        height: 380, // Kept this tall so the scaled-up ClanCard fits!
+        height: 380,
         justifyContent: 'center',
         alignItems: 'center',
         paddingVertical: 10,
@@ -1920,11 +1901,9 @@ const ClanStoreModal = memo(({ visible, fetchFullDetails, onClose, isDark, clan 
 
     const CustomAlert = useAlert();
 
-    // ⚡️ CACHE CONFIGURATION
     const CACHE_KEY = "CLAN_STORE_CATALOG";
     const hasFetchedThisSession = useRef(false);
 
-    // ⚡️ FIXED: Synchronously initialize from MMKV so there is zero flicker!
     const [catalog, setCatalog] = useState(() => {
         try {
             const cached = storage.getString(CACHE_KEY);
@@ -1934,7 +1913,6 @@ const ClanStoreModal = memo(({ visible, fetchFullDetails, onClose, isDark, clan 
         }
     });
 
-    // ⚡️ FIXED: Only start with loading screen if the cache is completely empty
     const [loading, setLoading] = useState(() => {
         try {
             const cached = storage.getString(CACHE_KEY);
@@ -1958,11 +1936,8 @@ const ClanStoreModal = memo(({ visible, fetchFullDetails, onClose, isDark, clan 
     }, [visible]);
 
     const fetchStoreData = async () => {
-        // We already loaded the cache synchronously in useState!
-        // Now, we just check if we need to fetch fresh data in the background.
         if (!hasFetchedThisSession.current) {
             try {
-                // Failsafe: just in case the catalog is empty
                 if (catalog.themes.length === 0 && catalog.standaloneItems.length === 0) {
                     setLoading(true);
                 }
@@ -1988,7 +1963,6 @@ const ClanStoreModal = memo(({ visible, fetchFullDetails, onClose, isDark, clan 
         }
     };
 
-    // ⚡️ CRITICAL FIX: Add a Confirmation Alert before purchasing!
     const handlePurchase = async (item) => {
         const itemCurrency = item.currency || 'CC';
         const currentBalance = itemCurrency === 'CC' ? clanCoins : coins;
@@ -1998,7 +1972,6 @@ const ClanStoreModal = memo(({ visible, fetchFullDetails, onClose, isDark, clan 
             return;
         }
 
-        // ⚡️ Show a confirmation dialog before doing the transaction
         CustomAlert(
             "Confirm Acquisition",
             `Do you want to unlock ${item.name} for ${item.price} ${itemCurrency}?`,
@@ -2047,13 +2020,11 @@ const ClanStoreModal = memo(({ visible, fetchFullDetails, onClose, isDark, clan 
         const isLottie = !!(visual.lottieUrl || visual.lottieJson);
         const cardRarityColor = getRarityColor(item.rarity);
 
-        // ⚡️ Check if it's a category that shouldn't open the preview modal
         const isDirectPurchase = ['VERIFIED', 'UPGRADE'].includes(item.category?.toUpperCase());
 
         return (
             <TouchableOpacity
                 key={item.id}
-                // ⚡️ Trigger direct purchase flow if it's an upgrade or verified badge
                 onPress={() => isDirectPurchase ? handlePurchase(item) : setItemToPreview(item)}
                 className="bg-gray-100 dark:bg-[#1a1a1a] mr-4 p-4 rounded-3xl w-40 border shadow-sm mb-4"
                 style={{ borderColor: `${cardRarityColor}40` }}
@@ -2089,7 +2060,6 @@ const ClanStoreModal = memo(({ visible, fetchFullDetails, onClose, isDark, clan 
                         <CoinIcon type={item.currency || "CC"} size={10} />
                     </View>
                     <View style={{ backgroundColor: cardRarityColor }} className="p-1.5 rounded-full shadow-lg shadow-blue-500/30">
-                        {/* ⚡️ Change icon based on action */}
                         <Ionicons name={isDirectPurchase ? "cart" : "eye"} size={12} color="white" />
                     </View>
                 </View>
@@ -2271,7 +2241,7 @@ const ClanInventoryModal = memo(({ visible, onClose, fetchFullDetails, clan, isD
             const data = await res.json();
             if (res.ok) {
                 if (typeof fetchFullDetails === 'function') fetchFullDetails();
-                setItemToPreview(null); // Close modal on success
+                setItemToPreview(null);
             } else {
                 throw new Error(data.message || "Jutsu failed to activate");
             }
@@ -2338,7 +2308,6 @@ const ClanInventoryModal = memo(({ visible, onClose, fetchFullDetails, clan, isD
                                             : 'bg-gray-50 dark:bg-[#161b22]'
                                             } ${isExpired ? 'opacity-50 border-red-500/30' : 'border-gray-100 dark:border-gray-800'}`}
                                     >
-                                        {/* ⚡️ Tap the Icon to Preview */}
                                         <TouchableOpacity onPress={() => setItemToPreview(item)} className="mr-4">
                                             <View className={`w-16 h-16 bg-black/20 items-center justify-center rounded-2xl overflow-hidden ${isBorder ? '' : 'border relative'}`} style={{ borderColor: `${rowRarityColor}40` }}>
                                                 {isBorder ? (
@@ -2415,7 +2384,7 @@ const ClanInventoryModal = memo(({ visible, onClose, fetchFullDetails, clan, isD
                 onClose={() => setItemToPreview(null)}
                 currentClan={clan}
                 selectedProduct={itemToPreview}
-                onAction={handleEquipToggle} // Passes the Equip function
+                onAction={handleEquipToggle}
                 isProcessing={isUpdating}
                 actionType="equip"
             />
@@ -2543,7 +2512,6 @@ const MemberItem = memo(({
             onPress={handleProfilePress}
             style={({ pressed }) => [
                 {
-                    // ⚡️ Glassmorphism simulation without expo-blur
                     backgroundColor: isDark
                         ? (pressed ? 'rgba(39, 39, 42, 0.98)' : 'rgba(24, 24, 27, 0.95)')
                         : (pressed ? 'rgba(244, 244, 245, 0.98)' : 'rgba(255, 255, 255, 0.95)'),
@@ -2552,13 +2520,12 @@ const MemberItem = memo(({
             ]}
             className="flex-row items-center mb-3 p-4 rounded-[24px] border border-gray-100 dark:border-zinc-800 shadow-sm"
         >
-            {/* ⚡️ Explicit width, height, and contentFit fix invisible expo-image bug */}
             <View
                 className="shadow-sm"
                 style={{
                     width: 52,
                     height: 52,
-                    borderRadius: 26, // Half of 52 for a perfect circle
+                    borderRadius: 26,
                 }}
             >
                 <Image
@@ -2591,7 +2558,6 @@ const MemberItem = memo(({
             </View>
 
             <View className="flex-row items-center gap-x-2">
-                {/* APPOINT BUTTON: Icon version */}
                 {isLeader && roleLabel !== "Kage" && roleLabel !== "Jonin" && (
                     <TouchableOpacity
                         onPress={onAppoint}
@@ -2606,7 +2572,6 @@ const MemberItem = memo(({
                     </TouchableOpacity>
                 )}
 
-                {/* BANISH BUTTON: Icon version */}
                 {canManage && (
                     <TouchableOpacity
                         onPress={onKick}
@@ -2621,7 +2586,6 @@ const MemberItem = memo(({
                     </TouchableOpacity>
                 )}
 
-                {/* PROFILE LINK INDICATOR */}
                 <View className="ml-1">
                     <MaterialCommunityIcons
                         name="chevron-right"
@@ -2646,7 +2610,6 @@ const AdminToggle = memo(({ label, status, onPress, appBlue, isDark }) => {
                     borderColor: isOpen ? appBlue : (isDark ? 'rgba(255,255,255,0.1)' : 'rgba(0,0,0,0.05)'),
                     borderWidth: 1.5,
                     transform: [{ scale: pressed ? 0.98 : 1 }],
-                    // Glow effect when the gate is OPEN
                     shadowColor: isOpen ? appBlue : "#000",
                     shadowOpacity: isOpen ? 0.4 : 0.1,
                     shadowRadius: 10,
@@ -2682,7 +2645,6 @@ const AdminToggle = memo(({ label, status, onPress, appBlue, isDark }) => {
 });
 
 const RequestItem = memo(({ user, onApprove, onDecline, appBlue, isDark, isProcessingAction }) => {
-    // Both buttons disable if either is processing
     const isDisabled = !!isProcessingAction;
     const [currentProcess, setCurrentProcess] = useState("")
     return (
@@ -2710,7 +2672,6 @@ const RequestItem = memo(({ user, onApprove, onDecline, appBlue, isDark, isProce
             </View>
 
             <View className="flex-row space-x-2">
-                {/* Approve Button */}
                 <Pressable
                     onPress={() => {
                         onApprove();
@@ -2733,7 +2694,6 @@ const RequestItem = memo(({ user, onApprove, onDecline, appBlue, isDark, isProce
                     )}
                 </Pressable>
 
-                {/* Decline Button */}
                 <Pressable
                     onPress={() => {
                         onDecline();

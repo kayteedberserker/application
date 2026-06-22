@@ -1,4 +1,4 @@
-import { Ionicons } from "@expo/vector-icons";
+import { Ionicons, MaterialCommunityIcons } from "@expo/vector-icons";
 import * as Haptics from "expo-haptics";
 import { useLocalSearchParams } from "expo-router";
 import { useEffect, useMemo, useRef, useState } from "react";
@@ -22,6 +22,7 @@ import Animated, {
     Easing,
     FadeIn,
     FadeOut,
+    interpolate,
     runOnJS,
     useAnimatedStyle,
     useSharedValue,
@@ -517,7 +518,62 @@ const getStickerBackgroundStyle = (rarity, isDark) => {
     }
 };
 
-const StickerPreview = ({ sticker, stickerId, isDark, size = 'medium', onPress }) => { // 🚀 ADDED onPress PROP
+// ⚡️ TIKTOK-STYLE SKELETON LOADER
+const StickerSkeleton = memo(({ size, isDark }) => {
+    const progress = useSharedValue(0);
+
+    useEffect(() => {
+        // Continuous smooth loop from 0 to 1
+        progress.value = withRepeat(
+            withTiming(1, { duration: 1200, easing: Easing.inOut(Easing.ease) }),
+            -1,
+            false
+        );
+    }, []);
+
+    const boxSize = size + 8; // Matching the minWidth/minHeight of the actual sticker
+
+    // Slides the shimmer from left (-boxSize) to right (boxSize)
+    const shimmerStyle = useAnimatedStyle(() => {
+        return {
+            transform: [
+                { translateX: interpolate(progress.value, [0, 1], [-boxSize, boxSize * 1.5]) },
+                { skewX: '-20deg' } // Angles the shimmer line for that premium look
+            ]
+        };
+    });
+
+    return (
+        <View
+            className={`self-start items-center justify-center overflow-hidden rounded-xl border ${isDark ? 'bg-zinc-900 border-zinc-800' : 'bg-zinc-100 border-zinc-200'
+                }`}
+            style={{ width: boxSize, height: boxSize }}
+        >
+            {/* Base Icon */}
+            <MaterialCommunityIcons
+                name="emoticon-happy-outline"
+                size={size * 0.5}
+                color={isDark ? '#27272a' : '#d4d4d8'}
+            />
+
+            {/* Shimmer Beam */}
+            <Animated.View
+                style={[
+                    {
+                        position: 'absolute',
+                        top: 0,
+                        bottom: 0,
+                        width: '50%',
+                        backgroundColor: isDark ? 'rgba(255,255,255,0.04)' : 'rgba(255,255,255,0.6)',
+                    },
+                    shimmerStyle
+                ]}
+            />
+        </View>
+    );
+});
+
+const StickerPreview = ({ sticker, stickerId, isDark, size = 'medium', onPress }) => {
     const [showDetails, setShowDetails] = useState(false);
     const stickerSize = size === 'large' ? 70 : size === 'small' ? 50 : 60;
     const containerPadding = size === 'large' ? 'p-1' : size === 'small' ? 'p-0' : 'p-0.5';
@@ -529,18 +585,15 @@ const StickerPreview = ({ sticker, stickerId, isDark, size = 'medium', onPress }
         setShowDetails(true);
     };
 
+    // 🚀 NEW FALLBACK: Premium Shimmer Skeleton
     if (!sticker?.url) {
-        return (
-            <View className={`self-start rounded-lg border px-2 py-1 ${isDark ? 'bg-gray-900 border-gray-700' : 'bg-gray-100 border-gray-300'}`}>
-                <Text className="text-[8px] text-gray-500 font-mono">#{stickerId}</Text>
-            </View>
-        );
+        return <StickerSkeleton size={stickerSize} isDark={isDark} />;
     }
 
     return (
         <>
             <Pressable
-                onPress={onPress} // 🚀 PASS IT HERE
+                onPress={onPress}
                 onLongPress={handleLongPress}
                 delayLongPress={500}
                 className="self-start"
@@ -574,10 +627,9 @@ const StickerPreview = ({ sticker, stickerId, isDark, size = 'medium', onPress }
                         from={{ opacity: 0, scale: 0.9 }}
                         animate={{ opacity: 1, scale: 1 }}
                         className="w-full max-w-sm rounded-[32px] overflow-hidden border-2"
-                        style={{ borderColor: theme.glow }} // Modal border matches Tier color
+                        style={{ borderColor: theme.glow }}
                     >
                         <LinearGradient
-                            // Correct use of isDark for the modal card itself
                             colors={isDark ? ['#121212', '#000000'] : ['#ffffff', '#f2f2f2']}
                             style={{ padding: 32 }}
                         >
@@ -599,7 +651,7 @@ const StickerPreview = ({ sticker, stickerId, isDark, size = 'medium', onPress }
                                 <Image source={{ uri: sticker.url }} style={{ width: 120, height: 120 }} contentFit="contain" />
                             </View>
 
-                            {/* Data Rows with isDark applied */}
+                            {/* Data Rows */}
                             <View className="gap-y-3">
                                 <DataRow label="CREATOR" value={sticker.author || "ROOT_USER"} icon="person" isDark={isDark} />
                                 {sticker.type === "free" && <DataRow label="SOURCE" value={sticker.source || "FLATICON"} icon="share-social" isDark={isDark} />}
@@ -1338,7 +1390,7 @@ export default function CommentSection({ postId, slug, discussionIdfromPage }) {
                         }}
                         className="bg-gray-100 dark:bg-gray-800/80 border border-gray-200 dark:border-gray-700 w-12 h-12 rounded-2xl items-center justify-center"
                     >
-                        <Ionicons name="happy" size={22} color={isDark ? "white" : "#374151"} />
+                        <MaterialCommunityIcons name="emoticon-happy-outline" size={22} color={isDark ? "white" : "#374151"} />
                     </Pressable>
                     <Pressable
                         onPress={() => {

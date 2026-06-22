@@ -1,14 +1,14 @@
 import { MaterialCommunityIcons } from "@expo/vector-icons"; // ⚡️ ADDED IMPORT
 import { BlurMask, Canvas, Circle } from "@shopify/react-native-skia";
-import React, { useEffect, useState } from 'react';
+import { useEffect, useState } from 'react';
 import { Dimensions, Text as RNText, View } from 'react-native';
 import Animated, {
-  useAnimatedStyle,
-  useSharedValue,
-  withRepeat,
-  withSequence,
-  withTiming,
-  FadeInDown,
+    FadeInDown,
+    useAnimatedStyle,
+    useSharedValue,
+    withRepeat,
+    withSequence,
+    withTiming,
 } from 'react-native-reanimated';
 
 const { width, height } = Dimensions.get('window');
@@ -25,20 +25,20 @@ const SYSTEM_TIPS = {
     post: [
         "SYSTEM: Monarchs of the network who hoard the most AURA emit a unique visual resonance on their Player Card.",
         "SYSTEM: Cross-comm engagement is vital. Comment on allied transmissions to boost your algorithm presence.",
-        "SYSTEM: Deploy Poll Transmissions to let the global network vote and settle syndicate disputes.",
+        "SYSTEM: Deploy Poll Transmissions to let the global network vote and settle Global disputes.",
         "SYSTEM: AURA is generated through network resonance. Broadcast high-value intel to farm it rapidly.",
         "SYSTEM: Consistency is power. Maintain a steady transmission rate to accelerate your Awakening."
     ],
     clan: [
-        "SYSTEM: Initiate Clan Wars to plunder rival syndicates and secure massive point spikes.",
+        "SYSTEM: Initiate Clan Wars to plunder rival clans and secure massive point spikes.",
         "SYSTEM: In debt? A single successful transmission triggers the REDEMPTION protocol, resetting your balance to zero.",
-        "WARNING: Syndicates that sink to -3,000 points are classified as dead weight and permanently purged by THE SYSTEM.",
-        "SYSTEM: Display your acquired Clan Badges on your scroll to flex your syndicate's combat history.",
+        "WARNING: Clans that sink to -3,000 points are classified as dead weight and permanently purged by THE SYSTEM.",
+        "SYSTEM: Display your acquired Clan Badges on your scroll to flex your clan's combat history.",
         "SYSTEM: Coordinate with your clanmates. The weekly point decay spares no one on the Global Leaderboard."
     ],
     wallet: [
         "SYSTEM: Burn OC in the Vault to decrypt exclusive player borders, backgrounds, and visual augments.",
-        "SYSTEM: Clan Coins (CC) are locked to the Syndicate Vault. Pool resources to buff your entire clan.",
+        "SYSTEM: Clan Coins (CC) are locked to the Clan Vault. Pool resources to buff your entire clan.",
         "SYSTEM: Ascend to Peak Level 10 to unlock MYTHIC status and rewrite your system permissions.",
         "SYSTEM: Injecting external funds to acquire OC yields Peak Points. Ascend the VIP ranks.",
         "SYSTEM: Need to fund an ally? Execute a peer-to-peer OC transfer to keep their operations active."
@@ -58,7 +58,7 @@ const AnimeLoading = ({ message = "FETCHING", subMessage = "Synchronizing Univer
     const pulse = useSharedValue(1);
     const float = useSharedValue(0);
     const wave = useSharedValue(0);
-    const barProgress = useSharedValue(-160); 
+    const barProgress = useSharedValue(-160);
 
     useEffect(() => {
         // Pick a random tip based on the passed tipType
@@ -85,7 +85,7 @@ const AnimeLoading = ({ message = "FETCHING", subMessage = "Synchronizing Univer
 
         // 5. Progress Bar
         barProgress.value = withRepeat(withTiming(160, { duration: 1200 }), -1, false);
-    }, [tipType, rotation, pulse, float, wave, barProgress]); 
+    }, [tipType, rotation, pulse, float, wave, barProgress]);
 
     // Animated Styles
     const outerRingStyle = useAnimatedStyle(() => ({
@@ -121,7 +121,7 @@ const AnimeLoading = ({ message = "FETCHING", subMessage = "Synchronizing Univer
 
     return (
         <View className="flex-1 justify-center items-center bg-[#f8fafc] dark:bg-[#020617] relative px-6">
-            
+
             {/* ⚡️ SKIA BACKGROUND GLOW */}
             <View className="absolute inset-0 pointer-events-none items-center justify-center">
                 <Canvas style={{ width: 300, height: 300 }}>
@@ -133,9 +133,9 @@ const AnimeLoading = ({ message = "FETCHING", subMessage = "Synchronizing Univer
 
             {/* --- YOUR ORIGINAL ANIMATION RINGS --- */}
             <View className="relative items-center justify-center">
-                
+
                 {/* Expanding Energy Wave */}
-                <Animated.View 
+                <Animated.View
                     style={[
                         waveStyle,
                         {
@@ -146,7 +146,7 @@ const AnimeLoading = ({ message = "FETCHING", subMessage = "Synchronizing Univer
                 />
 
                 {/* Outer Orbital */}
-                <Animated.View 
+                <Animated.View
                     style={[
                         outerRingStyle,
                         {
@@ -157,7 +157,7 @@ const AnimeLoading = ({ message = "FETCHING", subMessage = "Synchronizing Univer
                 />
 
                 {/* Inner Hex Frame */}
-                <Animated.View 
+                <Animated.View
                     style={[
                         innerRingStyle,
                         {
@@ -170,7 +170,7 @@ const AnimeLoading = ({ message = "FETCHING", subMessage = "Synchronizing Univer
                 />
 
                 {/* Core Power Crystal */}
-                <Animated.View 
+                <Animated.View
                     style={[
                         coreStyle,
                         {
@@ -186,37 +186,37 @@ const AnimeLoading = ({ message = "FETCHING", subMessage = "Synchronizing Univer
             <Animated.View style={floatTextStyle} className="mt-20 items-center">
                 <View>
                     <RNText className="absolute -top-0.5 -left-0.5 text-4xl font-black italic uppercase text-cyan-500 opacity-20">
-                         {message}
+                        {message}
                     </RNText>
                     <RNText className="text-4xl font-black italic uppercase text-slate-900 dark:text-cyan-50">
-                         {message}
+                        {message}
                     </RNText>
                 </View>
 
                 {/* Status Badge */}
-                <View 
+                <View
                     className="flex-row items-center mt-3 bg-cyan-600 dark:bg-blue-600 px-4 py-0.5"
                     style={{ transform: [{ skewX: '-15deg' }], shadowColor: '#06b6d4', shadowOpacity: 0.4, shadowRadius: 8 }}
                 >
-                     <RNText 
-                       className="text-[8px] font-bold text-white uppercase tracking-[0.4em]"
-                       style={{ transform: [{ skewX: '15deg' }] }}
-                     >
+                    <RNText
+                        className="text-[8px] font-bold text-white uppercase tracking-[0.4em]"
+                        style={{ transform: [{ skewX: '15deg' }] }}
+                    >
                         {subMessage}
-                     </RNText>
+                    </RNText>
                 </View>
 
                 {/* Experience Bar Style Loader */}
                 <View className="w-40 h-1 bg-slate-200 dark:bg-slate-800 mt-10 overflow-hidden rounded-full border border-slate-300/30 dark:border-blue-900/30">
-                    <Animated.View 
-                        className="h-full bg-cyan-500 w-full" 
+                    <Animated.View
+                        className="h-full bg-cyan-500 w-full"
                         style={[
                             progressBarStyle,
                             { shadowColor: '#06b6d4', shadowOpacity: 1, shadowRadius: 4 }
                         ]}
                     />
                 </View>
-                
+
                 {/* Tech Bits */}
                 <View className="flex-row gap-2 mt-4 opacity-40">
                     <View className="w-3 h-0.5 bg-cyan-500 rounded-full" />
@@ -237,11 +237,11 @@ const AnimeLoading = ({ message = "FETCHING", subMessage = "Synchronizing Univer
                                 color={prefixColor}
                             />
                         </View>
-                        
+
                         {/* ⚡️ Dynamic Text Coloring */}
                         <RNText className="text-slate-600 dark:text-slate-300 font-bold text-[10px] uppercase tracking-widest leading-relaxed flex-1">
                             <RNText style={{ color: prefixColor, fontWeight: '900' }}>
-                                {prefix} 
+                                {prefix}
                             </RNText>
                             {" " + cleanMessage}
                         </RNText>

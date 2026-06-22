@@ -27,9 +27,9 @@ initializeServerIndex();
 
 const getBaseUrl = () => {
     // "http://192.168.1.99:3000/api"
-    if (__DEV__) { return "http://192.168.1.99:3000/api"; }
-    return PRODUCTION_SERVERS[currentServerIndex];
-};
+    if (__DEV__) { return "http://192.168.1.99:3000/api" }
+    return PRODUCTION_SERVERS[currentServerIndex]
+}
 
 const handleServerFailover = async () => {
     if (__DEV__) return;

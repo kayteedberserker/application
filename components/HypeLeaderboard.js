@@ -90,7 +90,7 @@ const MetricBadge = ({ icon, value, color, isDark }) => (
 );
 
 // 🧱 UNIFIED INTERACTIVE CARD (Shine enabled for Top 5)
-const LeaderboardCard = ({ item, index, activeTab, maxScore, isDark, onPress }) => {
+const LeaderboardCard = ({ item, index, activeTab, maxScore, minScore, isDark, onPress }) => {
     const theme = getRankTheme(index, isDark);
 
     // Ranks #1 through #5 get the luxury animation treatment
@@ -99,7 +99,19 @@ const LeaderboardCard = ({ item, index, activeTab, maxScore, isDark, onPress }) 
 
     const [dimensions, setDimensions] = useState({ width: 0, height: 0 });
     const itemScore = item.score || 0;
-    const widthPercentage = maxScore > 0 ? Math.max(70, (itemScore / maxScore) * 100) : 100;
+
+    // ⚡️ DYNAMIC WIDTH CALCULATION: Interpolate perfectly between 75% and 100%
+    let widthPercentage = 100;
+    if (maxScore > minScore) {
+        const scoreRange = maxScore - minScore;
+        const currentOffset = itemScore - minScore;
+        // Safely clamp the ratio between 0 and 1 just in case
+        const fillRatio = Math.max(0, Math.min(1, currentOffset / scoreRange));
+        widthPercentage = 70 + (fillRatio * 25);
+    } else if (maxScore > 0) {
+        // Fallback if max and min are identical or something weird happens
+        widthPercentage = Math.max(70, (itemScore / maxScore) * 100);
+    }
 
     const renderMetrics = () => {
         if (activeTab === 'USER_GIVEN') {
@@ -131,7 +143,8 @@ const LeaderboardCard = ({ item, index, activeTab, maxScore, isDark, onPress }) 
             from={{ opacity: 0, translateX: -20 }}
             animate={{ opacity: 1, translateX: 0 }}
             transition={{ type: 'spring', delay: index * 50 }}
-            style={{ marginBottom: 12, alignItems: 'flex-start' }}
+            // ⚡️ FIXED: Added width: '100%' so the child percentage width resolves perfectly
+            style={{ marginBottom: 12, alignItems: 'flex-start', width: '100%' }}
         >
             <TouchableOpacity
                 activeOpacity={0.85}
@@ -224,8 +237,14 @@ export default function HypeLeaderboard() {
     const tabOffset = useSharedValue(0);
     const tabWidth = containerWidth / TABS.length;
 
+    // ⚡️ Grab Max Score
     const maxScore = useMemo(() => {
         return leaderboard.length > 0 ? (leaderboard[0].score || 1) : 1;
+    }, [leaderboard]);
+
+    // ⚡️ NEW: Grab Min Score to map our percentages beautifully
+    const minScore = useMemo(() => {
+        return leaderboard.length > 0 ? (leaderboard[leaderboard.length - 1].score || 0) : 0;
     }, [leaderboard]);
 
     useEffect(() => {
@@ -316,6 +335,7 @@ export default function HypeLeaderboard() {
                             index={index}
                             activeTab={activeTab}
                             maxScore={maxScore}
+                            minScore={minScore} // ⚡️ Passed new minScore
                             isDark={isDark}
                             onPress={() => handleCardPress(item)} // Passed action here
                         />
