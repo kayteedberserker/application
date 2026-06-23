@@ -120,7 +120,19 @@ export const CoinProvider = ({ children }) => {
             const requestBody = { deviceId: user.deviceId, action, type };
             if (typeof extraData === 'object' && extraData !== null) {
                 requestBody.payload = extraData;
-                Object.assign(requestBody, { itemId: extraData.itemId, price: extraData.price, name: extraData.name, category: extraData.category, rarity: extraData.rarity, visualConfig: extraData.visualData || extraData.visualConfig, coinType: extraData.currency, rewards: extraData.rewards, expiresInDays: extraData.expiresInDays });
+                Object.assign(requestBody, {
+                    itemId: extraData.itemId,
+                    price: extraData.price,
+                    name: extraData.name,
+                    category: extraData.category,
+                    rarity: extraData.rarity,
+                    visualConfig: extraData.visualData || extraData.visualConfig,
+                    coinType: extraData.currency,
+                    rewards: extraData.rewards,
+                    appUserId: extraData.appUserId,
+                    transactionId: extraData.transactionId,
+                    expiresInDays: extraData.expiresInDays
+                });
             }
             if (isClanCoin || clanTag) requestBody.clanTag = clanTag || userClan?.tag;
 
