@@ -10,7 +10,7 @@ import {
 } from "react-native";
 import { useMMKV } from "react-native-mmkv";
 import Animated, {
-    cancelAnimation, // ⚡️ Added to stop leaks
+    cancelAnimation,
     useAnimatedStyle,
     useSharedValue,
     withRepeat,
@@ -25,14 +25,16 @@ import CoinIcon from "./ClanIcon";
 import PeakBadge from "./PeakBadge";
 import { Text } from "./Text";
 
-// ⚡️ Global session flag: Resets to false only when the app is completely restarted.
 let hasShownThisSession = false;
 
 function TopBar({ isDark }) {
     const storage = useMMKV();
     const CustomAlert = useAlert();
     const { user, refreshUser, streak, loading, refreshStreak } = useUser();
-    const { coins, tokens, peakLevel, processTransaction, isProcessingTransaction } = useCoins();
+    const { coins, peakLevel } = useCoins();
+
+    // ⚡️ NEW: We manage loading state locally now since we dropped `isProcessingTransaction`
+    const [isRestoring, setIsRestoring] = useState(false);
 
     const pathName = usePathname();
 
@@ -40,37 +42,29 @@ function TopBar({ isDark }) {
     const hasActiveStreak = streak?.streak > 0;
     const showRestoreUI = streak?.canRestore;
     const isZeroStreak = !hasActiveStreak && !showRestoreUI;
-    // ⚡️ WALLET HINT STATE & ANIMATION
+
     const [showWalletHint, setShowWalletHint] = useState(false);
     const hintBounce = useSharedValue(0);
     const [isFirstPostFlow, setIsFirstPostFlow] = useState(false);
-    // =================================================================
-    // 1. INTERCEPT: CHECK FOR FIRST POST FLAG
-    // =================================================================
+
     useEffect(() => {
         const checkFirstPost = storage.getNumber("trigger_first_post");
-
         if (checkFirstPost !== 0 && checkFirstPost !== undefined) {
             setIsFirstPostFlow(true);
         }
     }, []);
-    // ⚡️ DEV TOOLS CHECK
-    // Shows if app is running locally in dev mode OR if it's your specific device in production
+
     const showDevTools = __DEV__ || user?.deviceId === "4bfe2b53-7591-462f-927e-68eedd7a6447";
 
     useEffect(() => {
-        // ⚡️ Check if we've already shown it during this active app session
         if (hasShownThisSession) return;
-
-        // ⚡️ Check how many times we've shown this hint overall
         const hintCount = storage.getNumber('wallet_hint_count2') || 0;
 
         if (hintCount < 10) {
-            hasShownThisSession = true; // Mark as shown for this session
+            hasShownThisSession = true;
             setShowWalletHint(true);
-            storage.set('wallet_hint_count2', hintCount + 1); // Increment lifetime count
+            storage.set('wallet_hint_count2', hintCount + 1);
 
-            // Start bouncing animation
             hintBounce.value = withRepeat(
                 withSequence(
                     withTiming(-8, { duration: 400 }),
@@ -78,15 +72,14 @@ function TopBar({ isDark }) {
                 ), -1, true
             );
 
-            // Auto-hide after 8 seconds 
             const hideTimer = setTimeout(() => {
                 setShowWalletHint(false);
-                cancelAnimation(hintBounce); // ⚡️ Stop background calculation loop
+                cancelAnimation(hintBounce);
             }, 8000);
 
             return () => {
                 clearTimeout(hideTimer);
-                cancelAnimation(hintBounce); // ⚡️ Ensure cleanup on component unmount
+                cancelAnimation(hintBounce);
             };
         }
     }, []);
@@ -110,28 +103,34 @@ function TopBar({ isDark }) {
         }
     }, [showRestoreUI]);
 
+    // ⚡️ UPDATED RESTORE LOGIC
     const handleRestoreStreak = async () => {
-        if (!user?.deviceId) return;
+        if (!user?.deviceId || isRestoring) return;
 
-        if (coins < 50) {
-            CustomAlert("Insufficient OC", "You need 50 OC 🪙 to revive your streak.");
+        // Check Inventory for Restore Pass
+        const hasRestorePass = user.inventory?.some(i => i.itemId === 'streak_restore');
+
+        // If they have no pass AND no money
+        if (!hasRestorePass && coins < 50) {
+            CustomAlert("Insufficient OC", "You need 50 OC 🪙 or a Restore Pass to revive your streak.");
             return;
         }
 
+        const alertTitle = hasRestorePass ? "Use Restore Pass?" : "Revive Streak?";
+        const alertBody = hasRestorePass
+            ? "Consume 1 Streak Restore Pass from your inventory to revive your streak?"
+            : "Spend 50 OC to restore your broken streak and keep your progress alive!";
+
         CustomAlert(
-            "Revive Streak?",
-            "Spend 50 OC to restore your broken streak and keep your progress alive!",
+            alertTitle,
+            alertBody,
             [
                 { text: "Cancel", style: "cancel" },
                 {
                     text: "Confirm",
                     onPress: async () => {
+                        setIsRestoring(true);
                         try {
-                            const result = await processTransaction('spend', 'streak_restore');
-                            if (!result.success) {
-                                CustomAlert("System Notification", result.error || "Unable to restore streak.");
-                                return;
-                            }
                             const response = await apiFetch("/users/streak/restore", {
                                 method: "POST",
                                 headers: { "Content-Type": "application/json" },
@@ -142,14 +141,15 @@ function TopBar({ isDark }) {
 
                             if (!response.ok) {
                                 CustomAlert("System Error", streakResult.message || "Streak failed to revive.");
-                                processTransaction('refund', 'streak_restore');
                             } else {
-                                CustomAlert("Streak Revived!", `50 OC spent. Your ${streakResult.streak} day streak is back!`);
+                                CustomAlert("Streak Revived!", streakResult.message);
                                 refreshStreak();
-                                if (refreshUser) refreshUser();
+                                if (refreshUser) refreshUser(); // This ensures the frontend coin balance updates
                             }
                         } catch (err) {
                             CustomAlert("Connection Error", "Failed to reach the server.");
+                        } finally {
+                            setIsRestoring(false);
                         }
                     }
                 }
@@ -157,10 +157,9 @@ function TopBar({ isDark }) {
         );
     };
 
-    // ⚡️ Intercept the click to immediately hide the hint and kill its loop thread
     const handleWalletClick = () => {
         setShowWalletHint(false);
-        cancelAnimation(hintBounce); // ⚡️ Safely tear down loop thread instantly
+        cancelAnimation(hintBounce);
         DeviceEventEmitter.emit("navigateSafely", "/screens/Wallet");
     };
 
@@ -182,7 +181,6 @@ function TopBar({ isDark }) {
             />
             <View className="flex-row items-center gap-1 relative">
 
-                {/* ⚡️ WRAPPED WALLET BUTTON IN A RELATIVE CONTAINER */}
                 <View className="relative z-50">
                     <TouchableOpacity
                         onPress={handleWalletClick}
@@ -196,12 +194,11 @@ function TopBar({ isDark }) {
                         <View className="flex-col items-end gap-[1px] justify-center">
                             <View className="flex-row items-center">
                                 <Text className="text-yellow-500 font-black text-[11px] mr-1">{coins || 0}</Text>
-                                {isProcessingTransaction ? <ActivityIndicator size={10} color="#ca8a04" /> : <CoinIcon type="OC" size={14} />}
+                                <CoinIcon type="OC" size={14} />
                             </View>
                         </View>
                     </TouchableOpacity>
 
-                    {/* ⚡️ THE FLOATING HUD HINT (UPDATED STYLING) */}
                     {!isFirstPostFlow && showWalletHint && (
                         <Animated.View
                             style={[hintAnimatedStyle, { position: 'absolute', top: '80%', right: 0, alignItems: 'flex-end', zIndex: 100 }]}
@@ -209,11 +206,11 @@ function TopBar({ isDark }) {
                             <Ionicons
                                 name="caret-up"
                                 size={24}
-                                color="#f59e0b" // ⚡️ Amber color to match OC
+                                color="#f59e0b"
                                 style={{
                                     marginBottom: -10,
                                     marginRight: 15,
-                                    textShadowColor: 'rgba(245, 158, 11, 0.5)', // Glow effect
+                                    textShadowColor: 'rgba(245, 158, 11, 0.5)',
                                     textShadowRadius: 6
                                 }}
                             />
@@ -232,7 +229,7 @@ function TopBar({ isDark }) {
 
                 {streak ? (
                     <TouchableOpacity
-                        disabled={(!showRestoreUI && !hasActiveStreak) || isProcessingTransaction}
+                        disabled={(!showRestoreUI && !hasActiveStreak) || isRestoring}
                         onPress={showRestoreUI ? handleRestoreStreak : () => CustomAlert("Streak", "Stay active to grow your streak!")}
                         activeOpacity={showRestoreUI ? 0.7 : 1}
                     >
@@ -251,7 +248,7 @@ function TopBar({ isDark }) {
                                 }
                             ]}
                         >
-                            {isProcessingTransaction ? (
+                            {isRestoring ? (
                                 <ActivityIndicator size="small" color="#ef4444" />
                             ) : (
                                 <View className="flex-row items-center">
@@ -269,7 +266,7 @@ function TopBar({ isDark }) {
                                     {showRestoreUI ? streak.recoverableStreak : (streak?.streak || 0)}
                                 </Text>
                             </View>
-                            {(showRestoreUI && !isProcessingTransaction) ? (
+                            {(showRestoreUI && !isRestoring) ? (
                                 <View className="bg-red-500 rounded-full h-1.5 w-1.5 absolute -top-1 -right-1 border border-white" />
                             ) : null}
                         </Animated.View>
@@ -277,7 +274,6 @@ function TopBar({ isDark }) {
                 ) : null}
 
                 <View className="flex-row items-center gap-1">
-                    {/* ⚡️ DEV TOOLS BUTTON (Only renders if condition is met) */}
                     {showDevTools && (
                         <>
                             <TouchableOpacity

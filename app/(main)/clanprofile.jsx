@@ -1077,40 +1077,68 @@ const ClanProfile = () => {
 
     const triggerAction = useCallback(async (action, payload = {}) => {
         setIsProcessingAction(true);
+
         if (action == "EDIT_CLAN") {
-            if (clanCoins < 200) {
-                CustomAlert("Insufficient Funds", "The village treasury is empty.");
-                setIsProcessingAction(false);
+            // Determine if the Clan Name is actually being changed
+            const isNameChanging = (payload.newName && payload.newName !== userClan.name);
+
+            // Determine if the Clan is currently Verified (Active subscription)
+            const isVerifiedActive = userClan.verifiedUntil && new Date(userClan.verifiedUntil) > new Date();
+
+            // Determine Economy Status
+            const hasFreeChange = isVerifiedActive && (userClan.allowances?.freeNameChanges > 0);
+            const ccCost = 200;
+
+            if (isNameChanging) {
+                if (hasFreeChange) {
+                    CustomAlert("Confirm Edit", "You have 1 Free Name Change remaining from your Verified Tier. Use it to update Clan Info?", [
+                        { text: "Cancel", style: "cancel", onPress: () => setIsProcessingAction(false) },
+                        {
+                            text: "Confirm",
+                            style: "default",
+                            onPress: async () => {
+                                // Execute update directly with the free change flag.
+                                // If it fails, we don't refund coins because none were spent.
+                                await executeClanUpdate(action, { ...payload, usingFreeChange: true }, false);
+                            }
+                        }
+                    ]);
+                    return; // Exit here, let the alert handle the rest
+                } else {
+                    if (clanCoins < ccCost) {
+                        CustomAlert("Insufficient Funds", `Changing the Village Name requires ${ccCost} CC. The treasury only has ${clanCoins} CC.`);
+                        setIsProcessingAction(false);
+                        return;
+                    }
+
+                    CustomAlert("Confirm Purchase", `Spend ${ccCost} CC to update Clan Info?`, [
+                        { text: "Cancel", style: "cancel", onPress: () => setIsProcessingAction(false) },
+                        {
+                            text: "Purchase",
+                            style: "default",
+                            onPress: async () => {
+                                // 1. Deduct CC locally via your existing handler
+                                const result = await processTransaction('spend', 'change_name_desc', "CC", userClan.tag);
+                                if (result.success) {
+                                    // 2. Execute server update. Pass `true` so if the server errors out, it refunds the CC
+                                    await executeClanUpdate(action, payload, true);
+                                } else {
+                                    CustomAlert("Transaction Failed", result.error || "The scroll could not be processed.");
+                                    setIsProcessingAction(false);
+                                }
+                            }
+                        }
+                    ]);
+                    return; // Exit here, let the alert handle the rest
+                }
+            } else {
+                // If they are ONLY changing the description, it's free. Skip CC checks.
+                await executeClanUpdate(action, payload, false);
                 return;
             }
-            CustomAlert("Confirm Purchase", `Spend 200 CC on Changing Clan Info?`, [
-                { text: "Cancel", style: "cancel", onPress: () => setIsProcessingAction(false) },
-                {
-                    text: "Purchase",
-                    style: "default",
-                    onPress: async () => {
-                        const result = await processTransaction('spend', 'change_name_desc', "CC", userClan.tag);
-                        if (result.success) {
-                            const res = await apiFetch(`/clans/${userClan.tag}`, {
-                                method: 'PATCH',
-                                body: JSON.stringify({ deviceId: user.deviceId, action, payload })
-                            });
-                            if (!res.ok) {
-                                await processTransaction('refund', 'change_name_desc', "CC");
-                            } else {
-                                CustomAlert("Transaction Done", "Clan Info Updated.");
-                                fetchFullDetails();
-                            }
-                        } else {
-                            CustomAlert("Transaction Failed", result.error || "The scroll could not be processed.");
-                        }
-                        setIsProcessingAction(false);
-                    }
-                }
-            ]);
-            setIsEditing(false);
-            return;
         }
+
+        // --- Standard Action Block (For Non-Edit Actions) ---
         try {
             const res = await apiFetch(`/clans/${userClan.tag}`, {
                 method: 'PATCH',
@@ -1118,7 +1146,6 @@ const ClanProfile = () => {
             });
             const data = await res.json();
             if (res.ok) {
-                if (action === "EDIT_CLAN") setIsEditing(false);
                 if (action === "BUY_STORE_ITEM") CustomAlert("Success", `'${payload.itemName || 'Item'}' applied to the village.`);
                 if (action === "LEAVE_CLAN") {
                     storage.set(CACHE_KEY, "");
@@ -1144,6 +1171,38 @@ const ClanProfile = () => {
         } finally {
             setIsProcessingAction(false);
         }
+
+        // --- Helper Function to handle the actual API call and refund logic ---
+        async function executeClanUpdate(actionType, actionPayload, requiresRefundIfFailed = false) {
+            try {
+                const res = await apiFetch(`/clans/${userClan.tag}`, {
+                    method: 'PATCH',
+                    body: JSON.stringify({ deviceId: user.deviceId, action: actionType, payload: actionPayload })
+                });
+                const data = await res.json();
+
+                if (!res.ok) {
+                    // Trigger the refund ONLY if coins were actually spent
+                    if (requiresRefundIfFailed) {
+                        await processTransaction('refund', 'change_name_desc', "CC");
+                    }
+                    CustomAlert("Update Failed", data.message || "The village archives rejected the update.");
+                } else {
+                    CustomAlert("Transaction Done", "Clan Info Updated.");
+                    fetchFullDetails();
+                    setIsEditing(false);
+                }
+            } catch (error) {
+                // Trigger the refund ONLY if coins were actually spent
+                if (requiresRefundIfFailed) {
+                    await processTransaction('refund', 'change_name_desc', "CC");
+                }
+                CustomAlert("Network Error", "Could not reach the village archives.");
+            } finally {
+                setIsProcessingAction(false);
+            }
+        }
+
     }, [clanCoins, userClan, user.deviceId, processTransaction, CustomAlert, router, storage, CACHE_KEY, ONBOARDING_KEY]);
 
     const handleDeletePost = useCallback((postId) => {
