@@ -33,14 +33,14 @@ const PlayerBackground = React.memo(({ equippedBg, themeColor, borderRadius = 48
     const primary = bgVisual.primaryColor || themeColor || '#22c55e';
     const secondary = bgVisual.secondaryColor || primary;
 
-    const bgOpacity = bgVisual.opacity !== undefined ? bgVisual.opacity : 0.6;
+    const bgOpacity = bgVisual.opacity !== undefined ? bgVisual.opacity : 0.3;
     const animationType = bgVisual.animationType || 'none';
 
     // ⚡️ IMAGE SUPPORT: Check for static image/webp URL
     const imageUrl = equippedBg?.url || bgVisual.imageUrl;
 
     // Determine animation rule: only kill animation when it IS in the feed AND NOT visible.
-    const shouldAnimate = !isFeed || isVisible;
+    const shouldAnimate = !isFeed || isVisible
 
     // ⚡️ PERFORMANCE: Memoize Lottie source to prevent re-initialization
     const lottieSource = useMemo(() =>

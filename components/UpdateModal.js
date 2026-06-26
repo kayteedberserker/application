@@ -133,8 +133,8 @@ export default function UpdateHandler() {
 
     useEffect(() => {
         if (!hasCheckedSessionUpdate && user?.deviceId) {
-            hasCheckedSessionUpdate = true;
             runSystemBootstrap();
+            hasCheckedSessionUpdate = true;
         }
     }, [user?.deviceId]);
 

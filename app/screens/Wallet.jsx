@@ -281,6 +281,8 @@ const WalletPage = () => {
     const { user } = useUser();
 
     const { coins, clanCoins, totalPurchasedCoins = 0, peakLevel = 0, processTransaction, isProcessingTransaction } = useCoins();
+    console.log(clanCoins);
+
     const { cCoins, isLoading: clanLoading, userClan, clanRank, isInClan } = useClan();
 
     const colorScheme = useColorScheme();

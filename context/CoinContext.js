@@ -50,10 +50,11 @@ export const CoinProvider = ({ children }) => {
     const updateTokens = useCallback((newVal) => {
         setTokens(newVal);
         storage.set(STORAGE_KEYS.TOKENS, String(newVal));
-    }, [storage]);
+    }, [storage])
 
     const updateClanCoins = useCallback((newVal) => {
         setClanCoins(newVal);
+        console.log("the new val is? ", newVal)
         storage.set(STORAGE_KEYS.CLAN_COINS, String(newVal));
     }, [storage]);
 
@@ -68,9 +69,9 @@ export const CoinProvider = ({ children }) => {
     // ⚡️ SINGLE INJECTION POINT FOR BOOTSTRAP
     const injectCoinData = useCallback((data) => {
         if (!data) return;
+        console.log(data, "is returned")
         if (data.balance !== undefined) updateCoins(data.balance);
         if (data.tokens !== undefined) updateTokens(data.tokens);
-        if (data.clanBalance !== undefined) updateClanCoins(data.clanBalance);
         if (data.totalPurchasedCoins !== undefined) updateTotalPurchased(data.totalPurchasedCoins);
     }, [updateCoins, updateTokens, updateClanCoins, updateTotalPurchased]);
 
@@ -98,14 +99,16 @@ export const CoinProvider = ({ children }) => {
     }, [storage, updateCoins, updateTokens, updateTotalPurchased]);
 
     useEffect(() => {
-        console.log(cCoins, "is ccoins");
+        console.log(cCoins, "is ccoins", !userClan);
 
         // Because `userClan` is synchronously initialized now, this safely locks the coins without erasing them!
         if (!userClan) {
+            console.log("The user wasnt in clan for a sec");
+
             setClanCoins(0);
             storage.set(STORAGE_KEYS.CLAN_COINS, "");
         } else {
-            updateClanCoins(cCoins || 0);
+            updateClanCoins(cCoins)
         }
     }, [userClan, cCoins, storage, updateClanCoins]);
 
@@ -140,11 +143,22 @@ export const CoinProvider = ({ children }) => {
             const data = await response.json();
 
             if (data.success) {
-                if (isClanCoin) updateClanCoins(data.newClanBalance ?? data.newBalance ?? 0);
-                else updateCoins(data.newBalance || 0);
+                // FALLBACK FIX: Check for both newClanBalance/newBalance and clanBalance/balance
+                if (isClanCoin) {
+                    updateClanCoins(data.newClanBalance ?? data.clanBalance ?? data.newBalance ?? data.balance ?? 0);
+                } else {
+                    updateCoins(data.newBalance ?? data.balance ?? 0);
+                }
+
                 if (data.totalPurchasedCoins !== undefined) updateTotalPurchased(data.totalPurchasedCoins);
                 setIsProcessingTransaction(false);
-                return { success: true, balance: data.newBalance, inventory: data.inventory };
+
+                // Return the resolved balance here as well
+                return {
+                    success: true,
+                    balance: data.newBalance ?? data.balance,
+                    inventory: data.inventory
+                };
             } else {
                 throw new Error(data.error || "Transaction failed");
             }

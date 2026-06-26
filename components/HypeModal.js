@@ -22,19 +22,19 @@ const HYPE_TIERS = {
         glow: '#94a3b8' // Gray Thunder
     },
     STANDARD: {
-        cost: 20, points: 50,
+        cost: 50, points: 50,
         label: 'STANDARD', rarity: 'RARE', abbr: 'SH',
         colors: ['#0284c7', '#0369a1', '#082f49'],
         glow: '#38bdf8' // Blue Thunder
     },
     SUPER: {
-        cost: 100, points: 250,
+        cost: 200, points: 250,
         label: 'SUPER HYPE', rarity: 'EPIC', abbr: 'SP',
         colors: ['#9333ea', '#6b21a8', '#3b0764'],
         glow: '#c084fc' // Purple Thunder
     },
     MEGA: {
-        cost: 400, points: 700,
+        cost: 500, points: 700,
         label: 'MEGA BLAST', rarity: 'LEGENDARY', abbr: 'ME',
         colors: ['#d97706', '#92400e', '#451a03'],
         glow: '#fbbf24' // Gold Thunder
