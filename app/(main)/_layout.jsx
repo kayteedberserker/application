@@ -406,6 +406,9 @@ export default function MainLayout() {
     const goldNeon = "#fcd34d";
     const deepVoid = "#050A18";
 
+    // ⚡️ Determine if there is a pending war notification
+    const hasWarNotification = warActionsCount > 0 && canManageClan;
+
     return (
         <View style={{ flex: 1, backgroundColor: isDark ? "#000" : "#fff" }}>
             <StatusBar barStyle={isDark ? "light-content" : "dark-content"} />
@@ -778,18 +781,32 @@ export default function MainLayout() {
                         style={[
                             styles.mainFab,
                             {
-                                borderColor: showClanMenu ? (isDark ? "#fff" : "#3b82f6") : (isDark ? "#1e293b" : "#e2e8f0"),
+                                // ⚡️ DYNAMIC BORDER FOR WAR NOTIFICATION
+                                borderColor: showClanMenu
+                                    ? (isDark ? "#fff" : "#3b82f6")
+                                    : (hasWarNotification ? "#ef4444" : (isDark ? "#1e293b" : "#e2e8f0")),
                                 borderWidth: 2,
-                                backgroundColor: showClanMenu ? (isDark ? "#1e293b" : "#3b82f6") : (isDark ? "#111111" : "#f8fafc")
+                                backgroundColor: showClanMenu
+                                    ? (isDark ? "#1e293b" : "#3b82f6")
+                                    : (isDark ? "#111111" : "#f8fafc")
                             }
                         ]}
                     >
                         <Animated.View style={mainFabIconStyle}>
-                            <Ionicons
-                                name={showClanMenu ? "close" : "shield-half"}
-                                size={24}
-                                color={showClanMenu ? "#fff" : "#3b82f6"}
-                            />
+                            {/* ⚡️ DYNAMIC ICON SWAP FOR WAR NOTIFICATION */}
+                            {showClanMenu || !hasWarNotification ? (
+                                <Ionicons
+                                    name={showClanMenu ? "close" : "shield-half"}
+                                    size={24}
+                                    color={showClanMenu ? "#fff" : (hasWarNotification ? "#ef4444" : "#3b82f6")}
+                                />
+                            ) : (
+                                <MaterialCommunityIcons
+                                    name="sword-cross"
+                                    size={24}
+                                    color="#ef4444"
+                                />
+                            )}
                         </Animated.View>
 
                         {(!showClanMenu && canManageClan && (warActionsCount > 0 || fullData > 0)) || hasUnreadChat && (

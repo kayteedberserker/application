@@ -9,6 +9,7 @@ import { useRouter } from "expo-router";
 import { useEffect, useRef, useState } from "react";
 import {
     ActivityIndicator,
+    DeviceEventEmitter,
     Dimensions,
     Image,
     LayoutAnimation,
@@ -436,6 +437,7 @@ export default function FirstLaunchScreen() {
             if (refreshStreak) refreshStreak();
             if (refreshClanStatus) refreshClanStatus();
             if (syncProfile) syncProfile(); // Ensure we have the freshest profile data, including inventory and clan status
+            DeviceEventEmitter.emit('RUN_BOOTSTRAP', { deviceId: userData?.deviceId });
             setRecoveredUid(data.user?.uid);
             setShowAwakeningModal(true);
             setTimeout(() => {
@@ -560,6 +562,7 @@ export default function FirstLaunchScreen() {
             }
             if (refreshStreak) refreshStreak();
             if (syncProfile) syncProfile(); // Ensure we have the freshest profile data, including inventory and clan status
+            DeviceEventEmitter.emit('RUN_BOOTSTRAP', { deviceId: userData?.deviceId })
             Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
             if (isRecoveryMode) {
                 setRecoveredUid(data.user?.uid);

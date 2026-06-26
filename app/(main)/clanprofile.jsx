@@ -600,12 +600,15 @@ const ClanTabsHeader = memo(({ activeTab, setActiveTab, hasUnreadChat, fullData,
 });
 
 const TabDojo = memo(({ fullData, activeGlowColor, APP_BLUE, handleShareClan, copyLinkToClipboard, handleLeaveClan }) => {
+    const lastIndex = fullData?.weeklyPointHistory.length - 1
+    const rank = fullData?.weeklyPointHistory[lastIndex].rankAtTime
+
     return (
         <View className="px-6 pb-10">
             <View className="flex-row flex-wrap justify-between">
                 <StatCard glowColor={activeGlowColor} label="Followers" value={fullData?.followerCount} icon="account-group" />
                 <StatCard glowColor={activeGlowColor} label="Clan Funds" value={fullData?.spendablePoints} isCoin={true} icon="cash-multiple" />
-                <StatCard glowColor={activeGlowColor} label="World Rank" value={`#${fullData?.rank}`} icon="seal" />
+                <StatCard glowColor={activeGlowColor} label="World Rank" value={`#${rank}`} icon="seal" />
                 <StatCard glowColor={activeGlowColor} label="Shinobi Count" value={`${fullData?.members?.length}/${fullData?.maxSlots}`} icon="account-multiple" />
             </View>
 
@@ -1023,6 +1026,9 @@ const ClanProfile = () => {
     const APP_BLUE = activeGlowColor || highlightColor || "#3b82f6";
 
     const fetchFullDetails = async () => {
+        if (!user) {
+            return null
+        }
         const shouldShowHeavyLoader = !fullData && !HAS_SHOWN_SESSION_LOADER;
         if (shouldShowHeavyLoader) setLoading(true);
         try {

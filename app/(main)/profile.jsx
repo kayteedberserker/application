@@ -637,7 +637,8 @@ const AuthorInventoryModal = memo(({ visible, onClose, user, setUser, isDark, th
     const [itemToPreview, setItemToPreview] = useState(null);
     const CustomAlert = useAlert();
 
-    const inventory = theinventory || user?.inventory || [];
+    const inventory = theinventory.length > 0 ? theinventory : user?.inventory || [];
+
     const categories = ['ALL', 'TITLE', 'GLOW', 'BORDER', 'WATERMARK', "AVATAR", 'AVATAR_VFX', 'HYPE'];
 
     const handleEquipToggle = async (selectedItem) => {
@@ -1642,7 +1643,7 @@ export default function MobileProfilePage() {
             )}
 
             {inventoryVisible && (
-                <AuthorInventoryModal setUser={setUser} visible={inventoryVisible} onClose={() => setInventoryVisible(false)} user={user} inventory={theinventory} isDark={isDark} />
+                <AuthorInventoryModal setUser={setUser} visible={inventoryVisible} onClose={() => setInventoryVisible(false)} user={user} theinventory={theinventory} isDark={isDark} />
             )}
 
             {prefsVisible && (
