@@ -601,7 +601,7 @@ const ClanTabsHeader = memo(({ activeTab, setActiveTab, hasUnreadChat, fullData,
 
 const TabDojo = memo(({ fullData, activeGlowColor, APP_BLUE, handleShareClan, copyLinkToClipboard, handleLeaveClan }) => {
     const lastIndex = fullData?.weeklyPointHistory.length - 1
-    const rank = fullData?.weeklyPointHistory[lastIndex].rankAtTime
+    const rank = fullData?.weeklyPointHistory?.[lastIndex]?.rankAtTime ?? 'N/A';
 
     return (
         <View className="px-6 pb-10">
