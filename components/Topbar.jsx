@@ -1,7 +1,7 @@
 import { Ionicons } from "@expo/vector-icons";
 import { Image } from "expo-image";
 import { usePathname } from "expo-router";
-import { memo, useEffect, useState } from "react";
+import { memo, useEffect, useMemo, useState } from "react";
 import {
     ActivityIndicator,
     DeviceEventEmitter,
@@ -22,10 +22,25 @@ import { useCoins } from "../context/CoinContext";
 import { useUser } from "../context/UserContext";
 import apiFetch from "../utils/apiFetch";
 import CoinIcon from "./ClanIcon";
+import AnimatedItemIcon from "./ConsumableSkiaIcon";
 import PeakBadge from "./PeakBadge";
 import { Text } from "./Text";
 
 let hasShownThisSession = false;
+
+const getFrozenTimeRemaining = (frozenUntil) => {
+    if (!frozenUntil) return null;
+    const diff = new Date(frozenUntil) - new Date();
+    if (diff <= 0) return null;
+
+    const days = Math.floor(diff / (1000 * 60 * 60 * 24));
+    const hours = Math.floor((diff / (1000 * 60 * 60)) % 24);
+    const minutes = Math.floor((diff / 1000 / 60) % 60);
+
+    if (days > 0) return `${days}d`;
+    if (hours > 0) return `${hours}h`;
+    return `${minutes}m`;
+};
 
 function TopBar({ isDark }) {
     const storage = useMMKV();
@@ -42,6 +57,9 @@ function TopBar({ isDark }) {
     const hasActiveStreak = streak?.streak > 0;
     const showRestoreUI = streak?.canRestore;
     const isZeroStreak = !hasActiveStreak && !showRestoreUI;
+    const isFrozen = streak?.frozenUntil && new Date(streak.frozenUntil) > new Date();
+    // Calculate freeze time on every render
+    const frozenTime = useMemo(() => isFrozen ? getFrozenTimeRemaining(streak.frozenUntil) : null, [isFrozen, streak]);
 
     const [showWalletHint, setShowWalletHint] = useState(false);
     const hintBounce = useSharedValue(0);
@@ -230,45 +248,36 @@ function TopBar({ isDark }) {
                 {streak ? (
                     <TouchableOpacity
                         disabled={(!showRestoreUI && !hasActiveStreak) || isRestoring}
-                        onPress={showRestoreUI ? handleRestoreStreak : () => CustomAlert("Streak", "Stay active to grow your streak!")}
-                        activeOpacity={showRestoreUI ? 0.7 : 1}
+                        onPress={showRestoreUI ? handleRestoreStreak : () => CustomAlert("Streak", isFrozen ? `Streak Protected by Freeze Protocol for ${frozenTime}` : "Stay active to grow your streak!")}
+                        activeOpacity={0.7}
                     >
                         <Animated.View
                             style={[
                                 showRestoreUI ? urgentButtonStyle : {},
                                 {
-                                    paddingHorizontal: 6,
-                                    paddingVertical: 4,
-                                    borderRadius: 12,
-                                    flexDirection: 'row',
-                                    alignItems: 'center',
-                                    borderWidth: 2,
-                                    backgroundColor: showRestoreUI ? 'rgba(239,68,68,0.2)' : isZeroStreak ? 'rgba(107,114,128,0.05)' : 'rgba(249,115,22,0.1)',
-                                    borderColor: showRestoreUI ? '#ef4444' : isZeroStreak ? 'rgba(107,114,128,0.1)' : 'rgba(249,115,22,0.2)'
+                                    paddingHorizontal: 8, paddingVertical: 4, borderRadius: 12, borderWidth: 2, flexDirection: 'row', alignItems: 'center',
+                                    // ⚡️ Logic: Restore (Red) > Frozen (Cyan/Blue) > Zero (Grey) > Active (Orange)
+                                    backgroundColor: isFrozen ? 'rgba(6, 182, 212, 0.2)' : showRestoreUI ? 'rgba(239,68,68,0.2)' : isZeroStreak ? 'rgba(107,114,128,0.05)' : 'rgba(249,115,22,0.1)',
+                                    borderColor: isFrozen ? '#06b6d4' : showRestoreUI ? '#ef4444' : isZeroStreak ? 'rgba(107,114,128,0.1)' : 'rgba(249,115,22,0.2)'
                                 }
                             ]}
                         >
-                            {isRestoring ? (
-                                <ActivityIndicator size="small" color="#ef4444" />
-                            ) : (
+                            {isRestoring ? <ActivityIndicator size="small" color="#ef4444" /> : (
                                 <View className="flex-row items-center">
-                                    <View>
+                                    {isFrozen ? (
+                                        <AnimatedItemIcon itemId="streak_freeze" primaryColor="#06b6d4" secondaryColor="#bae6fd" size={20} />
+                                    ) : (
                                         <Ionicons
                                             name={showRestoreUI ? "bonfire-outline" : "flame"}
                                             size={showRestoreUI ? 16 : 14}
                                             color={showRestoreUI ? "#ef4444" : isZeroStreak ? "#9ca3af" : "#f97316"}
                                         />
-                                    </View>
+                                    )}
+                                    <Text className={`ml-1 text-[13px] font-black leading-none ${isFrozen ? 'text-cyan-400' : showRestoreUI ? 'text-red-500' : isZeroStreak ? 'text-gray-400' : 'text-orange-500'}`}>
+                                        {showRestoreUI ? streak.recoverableStreak : (streak?.streak || 0)}
+                                    </Text>
                                 </View>
                             )}
-                            <View className="flex-row items-center ml-0.5">
-                                <Text className={`text-[13px] font-black leading-none ${showRestoreUI ? 'text-red-500 text-base' : isZeroStreak ? 'text-gray-400' : isDark ? 'text-white' : 'text-black'}`}>
-                                    {showRestoreUI ? streak.recoverableStreak : (streak?.streak || 0)}
-                                </Text>
-                            </View>
-                            {(showRestoreUI && !isRestoring) ? (
-                                <View className="bg-red-500 rounded-full h-1.5 w-1.5 absolute -top-1 -right-1 border border-white" />
-                            ) : null}
                         </Animated.View>
                     </TouchableOpacity>
                 ) : null}

@@ -23,7 +23,7 @@ const initializeServerIndex = async () => {
         }
     } catch (e) { console.error("❌ Failed to read server index from SecureStore:", e); }
 };
-initializeServerIndex();
+initializeServerIndex()
 
 const getBaseUrl = () => {
     // "http://192.168.1.99:3000/api"

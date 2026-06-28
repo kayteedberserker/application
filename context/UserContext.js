@@ -7,10 +7,12 @@ import { useMMKV } from "react-native-mmkv";
 import apiFetch, { setSessionExpiredHandler, syncApiUser } from "../utils/apiFetch";
 import { getFingerprint } from "../utils/device";
 import { useAlert } from './AlertContext';
+
 const UserContext = createContext();
 const STREAK_CACHE_KEY = "streak_local_cache";
 const APP_SECRET = "thisismyrandomsuperlongsecretkey";
 const STREAK_NOTIF_IDS = ["streak-24h", "streak-2h", "streak-lost"];
+
 const scheduleStreakReminders = async (expiresAt) => {
     if (!expiresAt) return [];
     try {
@@ -62,10 +64,12 @@ const scheduleStreakReminders = async (expiresAt) => {
         return [];
     }
 };
+
 export const UserProvider = ({ children }) => {
     const storage = useMMKV();
     const CustomAlert = useAlert();
     const [isLoggingOut, setIsLoggingOut] = useState(false);
+
     // ⚡️ USER INIT
     const [user, setInternalUser] = useState(() => {
         try {
@@ -78,24 +82,29 @@ export const UserProvider = ({ children }) => {
         } catch (e) { console.error("Parse user error", e); }
         return null;
     });
+
     const userRef = useRef(user);
     useEffect(() => { userRef.current = user; }, [user]);
+
     const [pinModalVisible, setPinModalVisible] = useState(false);
     const [pinSuccess, setPinSuccess] = useState(false);
     const hasSyncedIdentity = useRef(false);
-    // ⚡️ STREAK INIT
+
+    // ⚡️ STREAK INIT - Added frozenUntil default state
     const [streakData, setStreakDataLocal] = useState(() => {
         try {
             const saved = storage.getString(STREAK_CACHE_KEY);
             if (saved) return JSON.parse(saved);
         } catch (e) { console.error("Cache Read Error", e); }
-        return { streak: 0, lastPostDate: null, canRestore: false, recoverableStreak: 0, expiresAt: null };
+        return { streak: 0, lastPostDate: null, canRestore: false, recoverableStreak: 0, expiresAt: null, frozenUntil: null };
     });
+
     const [scheduledList, setScheduledList] = useState([]);
     const isScheduling = useRef(false);
     const [loading, setLoading] = useState(() => {
         return !storage.getString("mobileUser") || !storage.getString(STREAK_CACHE_KEY);
     });
+
     // ⚡️ SETTERS
     const updateUserData = useCallback((newData) => {
         setInternalUser(newData);
@@ -112,6 +121,7 @@ export const UserProvider = ({ children }) => {
         if (newData?.securityLevel < 2 && !pinSuccess) setPinModalVisible(true);
         setLoading(false);
     }, [storage, pinSuccess]);
+
     const updateStreakData = useCallback(async (newStreak) => {
         setStreakDataLocal(newStreak);
         storage.set(STREAK_CACHE_KEY, JSON.stringify(newStreak));
@@ -123,7 +133,8 @@ export const UserProvider = ({ children }) => {
         }
         setLoading(false);
     }, [storage]);
-    // ⚡️ MERGED FETCH PROTOCOL (Hits the new combined `/users/me` route)
+
+    // ⚡️ MERGED FETCH PROTOCOL
     const syncProfile = useCallback(async () => {
         const currentUser = userRef.current;
         if (!currentUser?.deviceId) return null;
@@ -151,19 +162,21 @@ export const UserProvider = ({ children }) => {
         } catch (fetchErr) { console.error("Failed to sync fresh profile values:", fetchErr); }
         return null;
     }, [updateUserData, updateStreakData]);
-    // Standalone Streak Refresh (Kept for strict refresh gestures)
-    const refreshStreak = useCallback(async () => {
+
+    // Standalone Streak Refresh
+    const refreshStreak = useCallback(async (devId) => {
         const currentUser = userRef.current;
-        if (!currentUser?.deviceId) return;
+        if (!currentUser?.deviceId && !devId) return
         try {
-            const res = await apiFetch(`/users/streak/${currentUser.deviceId}`, { headers: { "Content-Type": "application/json", "x-oreblogda-secret": APP_SECRET } });
+            const res = await apiFetch(`/users/streak/${devId || currentUser.deviceId}`, { headers: { "Content-Type": "application/json", "x-oreblogda-secret": APP_SECRET } });
             if (res.ok) {
                 const data = await res.json();
                 updateStreakData(data);
             }
         } catch (e) { console.error("Streak Fetch Error:", e); }
     }, [updateStreakData]);
-    // ⚡️ LOGOUT PROTOCOL (Combined)
+
+    // ⚡️ LOGOUT PROTOCOL
     const handleInternalLogout = useCallback(async (isSystemKick = false) => {
         if (isLoggingOut) return;
         const performCleanup = async () => {
@@ -190,7 +203,8 @@ export const UserProvider = ({ children }) => {
                 await Promise.all(STREAK_NOTIF_IDS.map(id => Notifications.cancelScheduledNotificationAsync(id).catch(() => { })));
                 await AsyncStorage.clear().catch(() => { });
                 setInternalUser(null);
-                setStreakDataLocal({ streak: 0, lastPostDate: null, canRestore: false, recoverableStreak: 0, expiresAt: null });
+                // Reset to default with frozenUntil: null
+                setStreakDataLocal({ streak: 0, lastPostDate: null, canRestore: false, recoverableStreak: 0, expiresAt: null, frozenUntil: null });
                 hasSyncedIdentity.current = false;
                 router.replace("/screens/FirstLaunchScreen");
             } catch (error) {
@@ -206,10 +220,11 @@ export const UserProvider = ({ children }) => {
             performCleanup();
         }
     }, [isLoggingOut, storage, CustomAlert]);
+
     useEffect(() => {
         setSessionExpiredHandler(() => { handleInternalLogout(true); });
     }, [handleInternalLogout]);
-    // ⚡️ IDENTITY SYNC (Preserved, but profile auto-fetch removed)
+
     useEffect(() => {
         const backgroundSyncIdentity = async () => {
             const currentUser = userRef.current;
@@ -236,10 +251,11 @@ export const UserProvider = ({ children }) => {
         };
         backgroundSyncIdentity();
     }, [updateUserData]);
+
     const updateUserDataWrapper = useCallback((newData) => { updateUserData(newData); }, [updateUserData]);
     const handleLogoutExternal = useCallback(() => { handleInternalLogout(false); }, [handleInternalLogout]);
+
     const contextValue = useMemo(() => ({
-        // User API
         user,
         setUser: updateUserDataWrapper,
         syncProfile,
@@ -250,16 +266,17 @@ export const UserProvider = ({ children }) => {
         setPinSuccess,
         isLoggingOut,
         handleLogout: handleLogoutExternal,
-        // Streak API
         streak: streakData,
         setStreak: updateStreakData,
         refreshStreak,
         scheduledList,
     }), [user, updateUserDataWrapper, syncProfile, loading, pinModalVisible, pinSuccess, isLoggingOut, handleLogoutExternal, streakData, updateStreakData, refreshStreak, scheduledList]);
+
     return (
         <UserContext.Provider value={contextValue}>
             {children}
         </UserContext.Provider>
     );
 };
+
 export const useUser = () => useContext(UserContext);

@@ -85,7 +85,7 @@ const PlayerWatermark = memo(({ equippedWatermark, isDark, isFeed = false, isVis
                         right: -20,
                         transform: [
                             { rotate: watermarkVisual.rotation || '-15deg' },
-                            { scale: watermarkVisual.zoom || 1 }
+                            { scale: Number(watermarkVisual.zoom) || 1 }
                         ]
                     }
                 ]}

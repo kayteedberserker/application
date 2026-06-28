@@ -54,7 +54,6 @@ export const CoinProvider = ({ children }) => {
 
     const updateClanCoins = useCallback((newVal) => {
         setClanCoins(newVal);
-        console.log("the new val is? ", newVal)
         storage.set(STORAGE_KEYS.CLAN_COINS, String(newVal));
     }, [storage]);
 
@@ -69,7 +68,6 @@ export const CoinProvider = ({ children }) => {
     // ⚡️ SINGLE INJECTION POINT FOR BOOTSTRAP
     const injectCoinData = useCallback((data) => {
         if (!data) return;
-        console.log(data, "is returned")
         if (data.balance !== undefined) updateCoins(data.balance);
         if (data.tokens !== undefined) updateTokens(data.tokens);
         if (data.totalPurchasedCoins !== undefined) updateTotalPurchased(data.totalPurchasedCoins);
@@ -99,12 +97,9 @@ export const CoinProvider = ({ children }) => {
     }, [storage, updateCoins, updateTokens, updateTotalPurchased]);
 
     useEffect(() => {
-        console.log(cCoins, "is ccoins", !userClan);
 
         // Because `userClan` is synchronously initialized now, this safely locks the coins without erasing them!
         if (!userClan) {
-            console.log("The user wasnt in clan for a sec");
-
             setClanCoins(0);
             storage.set(STORAGE_KEYS.CLAN_COINS, "");
         } else {
@@ -134,8 +129,10 @@ export const CoinProvider = ({ children }) => {
                     rewards: extraData.rewards,
                     appUserId: extraData.appUserId,
                     transactionId: extraData.transactionId,
-                    expiresInDays: extraData.expiresInDays
-                });
+                    expiresInDays: extraData.expiresInDays,
+                    description: extraData.description,
+                    url: extraData.url,
+                })
             }
             if (isClanCoin || clanTag) requestBody.clanTag = clanTag || userClan?.tag;
 

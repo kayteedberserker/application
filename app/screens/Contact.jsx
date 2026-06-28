@@ -72,7 +72,6 @@ export default function Contact() {
             });
 
             const data = await res.json();
-            console.log("Contact form response:", data);
 
             if (res.ok) {
                 setStatus({ loading: false, success: "Message sent! We'll get back to you soon.", error: "" });

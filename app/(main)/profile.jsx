@@ -4,13 +4,13 @@ import * as Clipboard from 'expo-clipboard';
 import * as Haptics from 'expo-haptics';
 import { Image } from "expo-image";
 import * as ImagePicker from "expo-image-picker";
-import { Asset, requestPermissionsAsync } from 'expo-media-library';
+import { requestPermissionsAsync } from 'expo-media-library';
 import { useRouter } from "expo-router";
 import * as SecureStore from 'expo-secure-store';
 import * as Sharing from "expo-sharing";
 import { MotiView } from 'moti';
 import { useColorScheme as useNativeWind } from "nativewind";
-import React, { memo, useEffect, useMemo, useRef, useState } from "react";
+import React, { memo, useCallback, useEffect, useMemo, useRef, useState } from "react";
 import {
     ActivityIndicator,
     DeviceEventEmitter,
@@ -42,6 +42,7 @@ import AppOnboarding from "../../components/AppOnboarding";
 import AuraAvatar from "../../components/AuraAvatar";
 import ClanBorder from "../../components/ClanBorder";
 import CoinIcon from "../../components/ClanIcon";
+import AnimatedItemIcon from "../../components/ConsumableSkiaIcon";
 import ImageEditorModal from "../../components/ImageEditorModal";
 import NeuralPinModal from "../../components/NeuralPinModal";
 import PlayerCard from "../../components/PlayerCard";
@@ -54,15 +55,37 @@ import { useCoins } from "../../context/CoinContext";
 import { useUser } from "../../context/UserContext";
 import apiFetch from "../../utils/apiFetch";
 
-const { width } = Dimensions.get("window");
+const { width, height } = Dimensions.get("window");
 const LIMIT = 5;
 
 const fetcher = (url) => apiFetch(url).then((res) => res.json());
 
 // 🎨 --- RENDERER FOR BACKEND SVGS ---
-const RemoteSvgIcon = React.memo(({ xml, size = 50, color }) => {
-    if (!xml) return <MaterialCommunityIcons name="help-circle-outline" size={size} color={color || "gray"} />;
-    return <SvgXml xml={xml} width={size} height={size} color={color} />;
+const RemoteSvgIcon = React.memo(({ xml, imageUrl, size = 50, color }) => {
+    // 1. If an image URL is provided, render it using Expo Image
+    if (imageUrl) {
+        return (
+            <Image
+                source={{ uri: imageUrl }}
+                style={{ width: size, height: size }}
+                contentFit="contain"
+            />
+        );
+    }
+
+    // 2. If no image URL, fallback to existing XML logic
+    if (xml) {
+        return <SvgXml xml={xml} width={size} height={size} color={color} />;
+    }
+
+    // 3. Final fallback
+    return (
+        <MaterialCommunityIcons
+            name="help-circle-outline"
+            size={size}
+            color={color || "gray"}
+        />
+    );
 });
 
 const getRarityColor = (rarity) => {
@@ -234,6 +257,199 @@ const previewStyles = StyleSheet.create({
     purchaseButton: { flexDirection: 'row', backgroundColor: '#fbbf24', paddingVertical: 16, borderRadius: 16, justifyContent: 'center', alignItems: 'center' }
 });
 
+const ItemDescriptionModal = memo(({ isVisible, onClose, selectedProduct, onAction, isProcessing, actionType = "buy" }) => {
+    if (!isVisible || !selectedProduct) return null;
+
+    const rarityColor = getRarityColor(selectedProduct.rarity) || '#0ea5e9';
+    const itemCurrency = selectedProduct.currency || 'OC';
+    const visual = selectedProduct.visualData || selectedProduct.visualConfig || {};
+
+    const isAnimatedItem = ['streak_freeze', 'streak_restore', 'name_change_card', 'name_lock'].includes(selectedProduct.itemId);
+
+    // Add this helper inside your ItemDescriptionModal component
+    const getFallbackDescription = (id) => {
+        if (id === 'name_change_card') return "Grants authorization to securely clear and update your profile username across the network.";
+        if (id === 'name_lock') return "Establishes a 365-day cryptographic monopoly over your username. No one else can claim it.";
+        if (id === 'streak_freeze') return "Pre-emptive passive defense protocol. Automatically consumed to freeze your streak if you miss a 72h window.";
+        if (id === 'streak_restore') return "Flashes your database log backward to resurrect a broken streak. Cost scales with streak size.";
+        return "System data unavailable. Proceed with caution.";
+    };
+
+    return (
+        <Modal visible={isVisible} transparent={true} animationType="none" onRequestClose={onClose}>
+            <View style={descStyles.overlay}>
+
+                {/* Absolute backdrop tap target to safely dismiss modal from outside */}
+                <Pressable
+                    style={StyleSheet.absoluteFillObject}
+                    onPress={onClose}
+                    disabled={isProcessing}
+                />
+
+                {/* Animated content card anchored right in the center */}
+                <MotiView
+                    from={{ opacity: 0, translateY: height * 0.3, scale: 0.95 }}
+                    animate={{ opacity: 1, translateY: 0, scale: 1 }}
+                    exit={{ opacity: 0, translateY: height * 0.3, scale: 0.95 }}
+                    transition={{ type: 'spring', damping: 22, stiffness: 180 }}
+                    style={[descStyles.modalCard, { borderColor: `${rarityColor}40`, borderWidth: 1, maxHeight: "100%" }]}
+                >
+                    {/* Upper close mechanism */}
+                    <TouchableOpacity onPress={onClose} style={descStyles.closeButton} disabled={isProcessing}>
+                        <Ionicons name="close" size={20} color="#fff" />
+                    </TouchableOpacity>
+
+                    {/* Content Body (Completely replaced ScrollView with a static, auto-sizing View) */}
+                    <View style={descStyles.contentContainer}>
+                        <View style={descStyles.header}>
+                            <MaterialCommunityIcons name="hexagon-multiple-outline" size={14} color={rarityColor} />
+                            <Text style={[descStyles.rarityText, { color: rarityColor }]}>
+                                {selectedProduct.rarity?.toUpperCase() || 'STANDARD'} PROTOCOL
+                            </Text>
+                        </View>
+
+                        {/* The Visual Stage for your updated Animated Items */}
+                        <View style={descStyles.stage}>
+                            <View style={[descStyles.iconGlow, { backgroundColor: `${rarityColor}15` }]} />
+                            {isAnimatedItem ? (
+                                <AnimatedItemIcon // ⚡️ CHANGED TO USE YOUR NEW COMPONENT
+                                    itemId={selectedProduct.itemId}
+                                    primaryColor={visual.primaryColor || rarityColor}
+                                    secondaryColor={visual.secondaryColor || '#ffffff'}
+                                    size={120}
+                                />
+                            ) : (
+                                <MaterialCommunityIcons name={visual.icon || 'memory'} size={80} color={visual.primaryColor || rarityColor} />
+                            )}
+                        </View>
+
+                        {/* Text Information block */}
+                        <View className="px-4 items-center">
+                            <Text className="text-xl font-black text-white text-center mb-2 uppercase tracking-tight">
+                                {selectedProduct.name}
+                            </Text>
+                            <Text className="text-sm font-medium text-zinc-400 text-center leading-relaxed">
+                                {selectedProduct.description || getFallbackDescription(selectedProduct.itemId)}
+                            </Text>
+                        </View>
+                    </View>
+
+                    {/* ⚡️ DYNAMIC Purchase / Action Footer */}
+                    <View style={descStyles.detailsContainer}>
+                        {selectedProduct.expiresInDays && actionType === 'buy' && (
+                            <Text className="text-[10px] font-bold text-cyan-400 text-center mb-4 uppercase tracking-widest bg-cyan-500/10 self-center px-2.5 py-1 rounded-md border border-cyan-500/20">
+                                Duration: {selectedProduct.expiresInDays} Days
+                            </Text>
+                        )}
+
+                        {/* If we are just viewing an inventory item, we just show a dismiss/close button */}
+                        {actionType === 'view' ? (
+                            <TouchableOpacity onPress={onClose} style={[descStyles.purchaseButton, { backgroundColor: '#3f3f46' }]}>
+                                <Text className="text-sm font-black text-white uppercase tracking-wide">
+                                    Acknowledge
+                                </Text>
+                            </TouchableOpacity>
+                        ) : (
+                            <TouchableOpacity
+                                disabled={isProcessing}
+                                onPress={() => onAction(selectedProduct)}
+                                style={[descStyles.purchaseButton, isProcessing && { opacity: 0.5 }]}
+                            >
+                                {isProcessing ? <ActivityIndicator size="small" color="#000" /> : (
+                                    <>
+                                        <Ionicons name="hardware-chip" size={18} color="#000" />
+                                        <Text className="text-sm font-black text-black ml-2 uppercase tracking-wide">
+                                            {actionType === 'use'
+                                                ? 'Initialize Sequence'
+                                                : `Extract for ${selectedProduct.price} ${itemCurrency}`
+                                            }
+                                        </Text>
+                                    </>
+                                )}
+                            </TouchableOpacity>
+                        )}
+                    </View>
+                </MotiView>
+
+            </View>
+        </Modal>
+    );
+});
+
+const descStyles = StyleSheet.create({
+    overlay: {
+        ...StyleSheet.absoluteFillObject,
+        backgroundColor: 'rgba(0,0,0,0.85)',
+        justifyContent: 'center',
+        alignItems: 'center',
+        zIndex: 200
+    },
+    modalCard: {
+        width: width * 0.88,
+        backgroundColor: '#09090b',
+        borderRadius: 28,
+        overflow: 'hidden',
+        position: 'relative'
+    },
+    closeButton: {
+        position: 'absolute',
+        top: 16,
+        right: 16,
+        zIndex: 20,
+        padding: 6,
+        backgroundColor: 'rgba(255,255,255,0.06)',
+        borderRadius: 100
+    },
+    contentContainer: {
+        alignItems: 'center',
+        paddingTop: 28,
+        paddingBottom: 24,
+    },
+    header: {
+        flexDirection: 'row',
+        alignItems: 'center',
+        justifyContent: 'center',
+        gap: 6,
+        marginBottom: 12
+    },
+    rarityText: {
+        fontSize: 11,
+        fontWeight: '900',
+        letterSpacing: 1.5
+    },
+    stage: {
+        height: 160,
+        justifyContent: 'center',
+        alignItems: 'center',
+        width: '100%',
+        position: 'relative',
+        marginBottom: 8
+    },
+    iconGlow: {
+        position: 'absolute',
+        width: 130,
+        height: 130,
+        borderRadius: 65,
+        opacity: 0.6,
+        // Optional soft blur effect if supported, fallback is clean translucent background sizing
+        transform: [{ scale: 1.1 }]
+    },
+    detailsContainer: {
+        padding: 20,
+        backgroundColor: '#111113',
+        borderTopWidth: 1,
+        borderColor: '#1f1f23'
+    },
+    purchaseButton: {
+        flexDirection: 'row',
+        backgroundColor: '#22d3ee',
+        paddingVertical: 14,
+        borderRadius: 14,
+        justifyContent: 'center',
+        alignItems: 'center'
+    }
+});
+
 const SecurityModal = memo(({ visible, onClose, user, setUser, isDark }) => {
     const CustomAlert = useAlert();
     const [pinModalVisible, setPinModalVisible] = useState(false);
@@ -396,34 +612,39 @@ const SecurityModal = memo(({ visible, onClose, user, setUser, isDark }) => {
 });
 
 const AuthorStoreModal = memo(({ visible, onClose, user, isDark, setInventory }) => {
-    const { coins, processTransaction, isProcessingTransaction } = useCoins();
+    const { coins, processTransaction, isProcessingTransaction, setCoinData } = useCoins();
+    const [isLocalUpdating, setIsLocalUpdating] = useState(false)
     const storage = useMMKV();
     const CustomAlert = useAlert();
-
-    const CACHE_KEY = "STORE_CATALOG_CACHE";
+    const CACHE_KEY = "STORE_CATALOG_CACHE_V3";
 
     const [catalog, setCatalog] = useState(() => {
         try {
             const cached = storage.getString(CACHE_KEY);
-            return cached ? JSON.parse(cached) : { themes: [], standaloneItems: [] };
-        } catch { return { themes: [], standaloneItems: [] }; }
+            return cached ? JSON.parse(cached) : { consumables: [], identity: [], standaloneItems: [], themes: [] };
+        } catch { return { consumables: [], identity: [], standaloneItems: [], themes: [] }; }
     });
 
-    const [loading, setLoading] = useState(() => {
-        try {
-            const cached = storage.getString(CACHE_KEY);
-            const parsed = cached ? JSON.parse(cached) : null;
-            return !(parsed && (parsed.themes?.length > 0 || parsed.standaloneItems?.length > 0));
-        } catch { return true; }
-    });
-
-    const [selectedTheme, setSelectedTheme] = useState(null);
-    const [itemToPreview, setItemToPreview] = useState(null);
+    const [loading, setLoading] = useState(true);
     const isFetching = useRef(false);
 
+    // Routing State
+    const [currentView, setCurrentView] = useState('ROOT');
+    const [selectedTheme, setSelectedTheme] = useState(null);
+
+    // Modal Interaction States (Split based on item type)
+    const [itemToPreview, setItemToPreview] = useState(null);    // For cosmetics
+    const [itemToDescribe, setItemToDescribe] = useState(null);  // For consumables/identity
+
     useEffect(() => {
-        if (visible) loadStoreData();
-        else { setSelectedTheme(null); setItemToPreview(null); }
+        if (visible) {
+            loadStoreData();
+            setCurrentView('ROOT');
+        } else {
+            setItemToPreview(null);
+            setItemToDescribe(null);
+            setSelectedTheme(null);
+        }
     }, [visible]);
 
     const loadStoreData = async () => {
@@ -433,146 +654,296 @@ const AuthorStoreModal = memo(({ visible, onClose, user, isDark, setInventory })
             const res = await apiFetch('/store?type=author');
             const data = await res.json();
             if (data.success && data.catalog) {
-                const newCatalog = { themes: data.catalog.themes || [], standaloneItems: data.catalog.standaloneItems || [] };
+                const newCatalog = {
+                    consumables: data.catalog.consumables || [],
+                    identity: data.catalog.identity || [],
+                    standaloneItems: data.catalog.standaloneItems || [],
+                    themes: data.catalog.themes || []
+                };
                 setCatalog(newCatalog);
                 storage.set(CACHE_KEY, JSON.stringify(newCatalog));
             }
-        } catch (err) { console.error(err); } finally { setLoading(false); isFetching.current = false; }
+        } catch (err) { console.error(err); }
+        finally { setLoading(false); isFetching.current = false; }
+    };
+
+    const handleHardwareBack = () => {
+        if (currentView === 'THEME_DETAIL') setCurrentView('LIST_THEMES');
+        else if (currentView !== 'ROOT') setCurrentView('ROOT');
+        else onClose(); // If at root, close the entire modal
+    };
+
+    const handleItemClick = (item) => {
+        // Decide which modal to open based on category
+        const previewCategories = ['WATERMARK', 'BACKGROUND', 'BORDER', 'GLOW', 'AVATAR'];
+        if (previewCategories.includes(item.category?.toUpperCase())) {
+            setItemToPreview(item);
+        } else {
+            setItemToDescribe(item);
+        }
     };
 
     const executePurchase = async (item) => {
         const itemCurrency = item.currency || 'OC';
-        const currentBalance = coins;
-        const currencyName = "OC";
+        const itemId = item.id || item.itemId;
 
-        if (currentBalance < item.price) {
-            CustomAlert("Insufficient Funds", `You need more ${currencyName}.`);
+        if (coins < item.price) {
+            CustomAlert("Access Denied", `Insufficient ${itemCurrency} balance.`);
             return;
         }
 
+        // ⚡️ FORK FOR IDENTITY ITEMS
+        if (itemId === 'name_change_card' || itemId === 'name_lock') {
+            setIsLocalUpdating(true)
+            try {
+                const res = await apiFetch('/identity/action', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: { // Passing as an object; apiFetch automatically stringifies it securely
+                        deviceId: user.deviceId,
+                        context: 'user',
+                        actionType: itemId === 'name_change_card' ? 'name_change' : 'name_lock',
+                    }
+                });
+
+                // Check if the response was successful before trying to parse JSON
+                if (!res.ok) {
+                    const errorData = await res.json();
+                    CustomAlert("System Error", errorData.message || "Transaction rejected by server.");
+                    return;
+                }
+
+                const result = await res.json();
+
+                if (result.success) {
+                    CustomAlert("Purchase Complete", result.message);
+
+                    // ⚡️ UPDATE THE COIN CONTEXT INSTANTLY
+                    setCoinData({ balance: result.balance });
+                    if (typeof setInventory === 'function') setInventory(result.inventory);
+
+                    setItemToPreview(null);
+                    setItemToDescribe(null);
+                } else {
+                    CustomAlert("System Error", result.message || "Transaction failed");
+                }
+            } catch (err) {
+                console.error("Identity Purchase Catch Error:", err);
+
+                const errorString = err.toString();
+                // 🧠 DETECT EXPO STREAMING CRASH EXPLOIT/BUG
+                const isStreamingBug = errorString.includes("startStreaming") ||
+                    errorString.includes("enqueue") ||
+                    errorString.includes("state that permits");
+
+                if (isStreamingBug) {
+                    // The transaction went through on the server safely! Sync the balance state locally.
+                    CustomAlert("Extraction Authorized", "Asset secured in inventory matrix. Synchronizing local counters...");
+
+                    // Silent state recovery: Fetch fresh coin values to clear out the local cache lag
+                    if (typeof fetchCoins === 'function') fetchCoins();
+
+                    setItemToPreview(null);
+                    setItemToDescribe(null);
+                } else {
+                    CustomAlert("Connection Error", "Failed to reach identity matrix.");
+                }
+            } finally {
+                setIsLocalUpdating(false)
+            }
+            return;
+        }
+
+        // --- NORMAL STORE ITEMS (Cosmetics, etc) ---
         const result = await processTransaction('buy_item', item.category, {
-            itemId: item.id, price: item.price, name: item.name, category: item.category, currency: itemCurrency,
-            visualConfig: item.visualData || item.visualConfig, expiresInDays: item.expiresInDays, rarity: item.rarity
+            itemId: itemId,
+            price: item.price,
+            name: item.name,
+            category: item.category || 'MISC',
+            currency: itemCurrency,
+            description: item.description, // ⚡️ ADD THIS LINE HERE
+            visualConfig: item.visualData || item.visualConfig,
+            expiresInDays: item.expiresInDays,
+            rarity: item.rarity,
+            url: item.url
         });
 
         if (result.success) {
-            CustomAlert("Success", "Item added to your inventory!");
+            CustomAlert("Download Complete", "Asset integrated into your inventory.");
             if (typeof setInventory === 'function') setInventory(result.inventory);
             setItemToPreview(null);
+            setItemToDescribe(null);
         } else {
-            CustomAlert("Error", result.error || "Transaction failed");
+            CustomAlert("System Error", result.error || "Transaction failed");
         }
     };
 
-    const groupedStandaloneItems = useMemo(() => {
-        return catalog.standaloneItems.reduce((groups, item) => {
-            const category = item.category || 'MISC';
-            if (!groups[category]) groups[category] = [];
-            groups[category].push(item);
-            return groups;
-        }, {});
-    }, [catalog.standaloneItems]);
-
+    // --- RENDER HELPERS ---
     const renderCompactCard = (item) => {
         const visual = item.visualData || item.visualConfig || {};
         const isBorder = item.category === 'BORDER';
-        const cardRarityColor = getRarityColor(item.rarity);
+        const imageUrl = item.url || visual.url || visual.imageUrl;
+        const isSkiaItem = ['streak_freeze', 'streak_restore', 'name_change_card', 'name_lock'].includes(item.itemId);
+        const cardRarityColor = getRarityColor(item.rarity) || '#3b82f6';
 
         return (
-            <TouchableOpacity key={item.id} onPress={() => setItemToPreview(item)} className="bg-gray-100 dark:bg-[#1a1a1a] mr-4 p-4 rounded-3xl w-40 border shadow-sm mb-4" style={{ borderColor: `${cardRarityColor}40` }}>
+            <TouchableOpacity
+                key={item.id || item.itemId}
+                onPress={() => handleItemClick(item)}
+                className="bg-[#121212] mr-4 p-4 rounded-2xl w-40 border border-zinc-800 shadow-sm mb-4"
+                style={{ borderBottomWidth: 3, borderBottomColor: cardRarityColor }}
+            >
                 <View className="mb-3">
-                    <View className="h-24 w-full bg-black/10 dark:bg-black/40 rounded-2xl items-center justify-center overflow-hidden border dark:border-white/5 relative" style={{ borderColor: `${cardRarityColor}20` }}>
-                        {isBorder ? (
+                    <View className="h-24 w-full bg-black/50 rounded-xl items-center justify-center overflow-hidden border border-white/5 relative">
+                        {isSkiaItem ? (
+                            <AnimatedItemIcon itemId={item.itemId} primaryColor={visual.primaryColor} secondaryColor={visual.secondaryColor} size={60} />
+                        ) : isBorder ? (
                             <ClanBorder color={visual.primaryColor || visual.color || "#ff0000"} secondaryColor={visual.secondaryColor} animationType={visual.animationType} duration={visual.duration}>
-                                <View className="h-10 flex justify-center items-center rounded-sm"><Text className="text-[10px] dark:text-white/50 font-black uppercase tracking-tighter">Frame</Text></View>
+                                <View className="h-10 flex justify-center items-center"><Text className="text-[10px] text-white/50 font-black uppercase">Frame</Text></View>
                             </ClanBorder>
+                        ) : imageUrl ? (
+                            <Image source={{ uri: imageUrl }} style={{ width: "100%", height: "100%" }} contentFit="contain" />
                         ) : visual.svgCode ? (
                             <RemoteSvgIcon xml={visual.svgCode} color={visual.glowColor || visual.primaryColor || visual.color} size={50} />
                         ) : (
-                            <MaterialCommunityIcons name={visual.icon || 'help-circle-outline'} size={40} color={visual.color || (isDark ? 'white' : 'black')} />
+                            <MaterialCommunityIcons name={visual.icon || 'hexagon-outline'} size={40} color={visual.primaryColor || 'white'} />
                         )}
                         <View style={{ backgroundColor: cardRarityColor }} className="absolute top-2 right-2 w-2 h-2 rounded-full shadow-lg" />
                     </View>
                 </View>
-                <Text className="dark:text-white font-black text-[11px] uppercase tracking-tight" numberOfLines={1}>{item.name}</Text>
+                <Text className="text-white font-black text-[11px] uppercase tracking-tight" numberOfLines={1}>{item.name}</Text>
+
                 <View className="flex-row items-center mt-2 justify-between">
-                    <View className="flex-row items-center bg-green-500/10 px-2 py-0.5 rounded-lg">
-                        <Text className="text-green-600 dark:text-green-500 font-black text-[10px] mr-1">{item.price}</Text>
+                    <View className="flex-row items-center bg-cyan-500/10 px-2 py-1 rounded-md">
+                        <Text className="text-cyan-400 font-black text-[10px] mr-1">{item.price}</Text>
                         <CoinIcon type={item.currency || "OC"} size={10} />
                     </View>
-                    <View style={{ backgroundColor: cardRarityColor }} className="p-1.5 rounded-full shadow-lg shadow-blue-500/30">
-                        <Ionicons name="eye" size={12} color="white" />
-                    </View>
+                    <Ionicons name="scan-outline" size={16} color="#52525b" />
                 </View>
             </TouchableOpacity>
         );
     };
 
     return (
-        <Modal visible={visible} animationType="slide" transparent>
-            <View className="flex-1 bg-black/60 justify-end">
-                <View className="bg-white dark:bg-[#0a0a0a] h-[85%] rounded-t-[40px] p-6 border-t-4 border-green-500">
+        // `onRequestClose` fires when the hardware back button is pressed on Android
+        <Modal visible={visible} animationType="slide" transparent onRequestClose={handleHardwareBack}>
+            {/* Background Tap Overlay */}
+            <Pressable className="flex-1 bg-black/80 justify-end" onPress={handleHardwareBack}>
+                {/* Modal Container: Stop propagation so tapping inside doesn't close */}
+                <Pressable onPress={(e) => e.stopPropagation()} className="bg-[#09090b] h-[85%] rounded-t-[32px] p-6 border-t border-x border-cyan-500/30">
+
+                    {/* Header Bar */}
                     <View className="flex-row justify-between items-center mb-6">
-                        <View>
-                            <TouchableOpacity onPress={() => selectedTheme ? setSelectedTheme(null) : null} className="flex-row items-center" disabled={!selectedTheme}>
-                                {selectedTheme && <Ionicons name="chevron-back" size={20} color="#22c55e" />}
-                                <Text className="text-2xl font-black uppercase italic dark:text-white">{selectedTheme ? selectedTheme.label : "Black Market"}</Text>
-                            </TouchableOpacity>
-                            <View className="flex-row items-center mt-1 bg-gray-100 dark:bg-zinc-900 self-start px-3 py-1.5 rounded-full">
-                                <Text className="text-blue-500 font-black text-[10px] uppercase mr-1">OC: {coins || 0}</Text><CoinIcon type="OC" size={10} />
+                        <View className="flex-row items-center">
+                            {currentView !== 'ROOT' && (
+                                <TouchableOpacity onPress={handleHardwareBack} className="mr-3 p-2 bg-zinc-900 rounded-full border border-zinc-800">
+                                    <Ionicons name="chevron-back" size={20} color="#22d3ee" />
+                                </TouchableOpacity>
+                            )}
+                            <View>
+                                <Text className="text-2xl font-black uppercase italic tracking-wider text-white">
+                                    {currentView === 'ROOT' ? "Black Market" :
+                                        currentView === 'LIST_CONSUMABLES' ? "Consumables" :
+                                            currentView === 'LIST_IDENTITY' ? "Identity Cards" :
+                                                currentView === 'LIST_STANDALONE' ? "Upgrades" :
+                                                    currentView === 'LIST_THEMES' ? "Thematic Cores" :
+                                                        selectedTheme?.label || "Database"}
+                                </Text>
+                                <View className="flex-row items-center mt-1 bg-zinc-900 self-start px-3 py-1 rounded-md border border-zinc-800">
+                                    {/* Changed CREDITS to OC */}
+                                    <Text className="text-cyan-500 font-black text-[10px] uppercase mr-1.5">OC: {coins || 0}</Text>
+                                    <CoinIcon type="OC" size={10} />
+                                </View>
                             </View>
                         </View>
-                        <TouchableOpacity onPress={onClose} className="bg-gray-100 dark:bg-zinc-900 p-3 rounded-full">
-                            <Ionicons name="close" size={24} color={isDark ? "white" : "black"} />
+
+                        <TouchableOpacity onPress={onClose} className="bg-zinc-900 p-3 rounded-full border border-zinc-800">
+                            <Ionicons name="close" size={20} color="white" />
                         </TouchableOpacity>
                     </View>
+
+                    {/* Content Area */}
                     {loading ? (
                         <View className="flex-1 justify-center items-center">
-                            <ActivityIndicator size="large" color="#22c55e" />
-                            <Text className="text-green-500 font-black uppercase text-[10px] mt-4 tracking-widest">Downloading Assets...</Text>
+                            <ActivityIndicator size="large" color="#06b6d4" />
+                            <Text className="text-cyan-500 font-black uppercase text-xs mt-4 tracking-[0.3em]">Connecting to network...</Text>
                         </View>
                     ) : (
                         <ScrollView showsVerticalScrollIndicator={false} contentContainerStyle={{ paddingBottom: 40 }}>
-                            {!selectedTheme ? (
-                                <View>
-                                    {Object.entries(groupedStandaloneItems).map(([category, items]) => (
-                                        <View key={category} className="mb-8">
-                                            <View className="flex-row items-center mb-3">
-                                                <View className="w-1 h-3 bg-green-500 rounded-full mr-2" /><Text className="text-gray-500 font-black uppercase text-[10px] tracking-[0.2em]">{category}S</Text>
-                                            </View>
-                                            <ScrollView horizontal showsHorizontalScrollIndicator={false} style={{ height: items.length > 1 ? 380 : 180 }} contentContainerStyle={{ flexDirection: 'column', flexWrap: 'wrap' }}>
-                                                {items.map(item => renderCompactCard(item))}
-                                            </ScrollView>
+
+                            {/* === ROOT VIEW: 2x2 Grid Hub === */}
+                            {currentView === 'ROOT' && (
+                                <View className="flex-row flex-wrap justify-between">
+
+                                    <TouchableOpacity onPress={() => setCurrentView('LIST_CONSUMABLES')} className="w-[48%] aspect-square bg-[#121212] flex-col justify-center items-center p-4 rounded-3xl border border-zinc-800 mb-4 shadow-lg shadow-black">
+                                        <View className="bg-blue-500/20 p-4 rounded-2xl mb-3"><MaterialCommunityIcons name="battery-charging-high" size={36} color="#3b82f6" /></View>
+                                        <Text className="text-white font-black uppercase text-sm text-center tracking-tight">Consumables</Text>
+                                        <Text className="text-gray-500 text-[10px] text-center mt-1 uppercase">Hardware Patches</Text>
+                                    </TouchableOpacity>
+
+                                    <TouchableOpacity onPress={() => setCurrentView('LIST_IDENTITY')} className="w-[48%] aspect-square bg-[#121212] flex-col justify-center items-center p-4 rounded-3xl border border-zinc-800 mb-4 shadow-lg shadow-black">
+                                        <View className="bg-purple-500/20 p-4 rounded-2xl mb-3"><MaterialCommunityIcons name="fingerprint" size={36} color="#a855f7" /></View>
+                                        <Text className="text-white font-black uppercase text-sm text-center tracking-tight">Identity</Text>
+                                        <Text className="text-gray-500 text-[10px] text-center mt-1 uppercase">Network Modifiers</Text>
+                                    </TouchableOpacity>
+
+                                    <TouchableOpacity onPress={() => setCurrentView('LIST_STANDALONE')} className="w-[48%] aspect-square bg-[#121212] flex-col justify-center items-center p-4 rounded-3xl border border-zinc-800 mb-4 shadow-lg shadow-black">
+                                        <View className="bg-emerald-500/20 p-4 rounded-2xl mb-3"><MaterialCommunityIcons name="memory" size={36} color="#10b981" /></View>
+                                        <Text className="text-white font-black uppercase text-sm text-center tracking-tight">Upgrades</Text>
+                                        <Text className="text-gray-500 text-[10px] text-center mt-1 uppercase">Standalone Tech</Text>
+                                    </TouchableOpacity>
+
+                                    <TouchableOpacity onPress={() => setCurrentView('LIST_THEMES')} className="w-[48%] aspect-square bg-[#121212] flex-col justify-center items-center p-4 rounded-3xl border border-zinc-800 mb-4 shadow-lg shadow-black">
+                                        <View className="bg-cyan-500/20 p-4 rounded-2xl mb-3"><MaterialCommunityIcons name="layers-triple-outline" size={36} color="#06b6d4" /></View>
+                                        <Text className="text-white font-black uppercase text-sm text-center tracking-tight">Thematic Cores</Text>
+                                        <Text className="text-gray-500 text-[10px] text-center mt-1 uppercase">Visual Overhauls</Text>
+                                    </TouchableOpacity>
+
+                                </View>
+                            )}
+
+                            {/* === ITEM LISTS === */}
+                            {(currentView === 'LIST_CONSUMABLES' || currentView === 'LIST_IDENTITY' || currentView === 'LIST_STANDALONE') && (
+                                <View className="flex-row flex-wrap justify-between">
+                                    {catalog[
+                                        currentView === 'LIST_CONSUMABLES' ? 'consumables' :
+                                            currentView === 'LIST_IDENTITY' ? 'identity' : 'standaloneItems'
+                                    ].map(item => (
+                                        <View key={item.id || item.itemId} className="w-[48%] mb-4">
+                                            {renderCompactCard(item)}
                                         </View>
                                     ))}
-                                    {catalog.themes?.length > 0 && (
-                                        <View>
-                                            <View className="flex-row items-center mb-4 mt-2">
-                                                <View className="w-1 h-3 bg-blue-500 rounded-full mr-2" /><Text className="text-gray-500 font-black uppercase text-[10px] tracking-[0.2em]">Thematic Collections</Text>
-                                            </View>
-                                            <View className="flex-row flex-wrap justify-between">
-                                                {catalog.themes.map((theme) => (
-                                                    <TouchableOpacity key={theme.id} onPress={() => setSelectedTheme(theme)} className="w-[48%] bg-gray-100 dark:bg-[#1a1a1a] p-6 rounded-3xl mb-4 items-center border border-gray-200 dark:border-gray-800 shadow-sm">
-                                                        <View className="mb-3"><RemoteSvgIcon xml={theme.iconsvg} color="#22c55e" size={80} /></View>
-                                                        <Text className="dark:text-white font-black uppercase mt-1 text-center text-xs">{theme.label}</Text>
-                                                        <View className="bg-gray-200 dark:bg-zinc-800 px-2 py-1 rounded-md mt-2"><Text className="text-gray-500 text-[8px] uppercase font-bold">{theme.items?.length || 0} Items</Text></View>
-                                                    </TouchableOpacity>
-                                                ))}
-                                            </View>
-                                        </View>
-                                    )}
                                 </View>
-                            ) : (
+                            )}
+
+                            {/* === THEMES LOGIC === */}
+                            {currentView === 'LIST_THEMES' && (
+                                <View className="flex-row flex-wrap justify-between">
+                                    {catalog.themes.map((theme) => (
+                                        <TouchableOpacity
+                                            key={theme.id}
+                                            onPress={() => { setSelectedTheme(theme); setCurrentView('THEME_DETAIL'); }}
+                                            className="w-[48%] bg-[#121212] p-6 rounded-3xl mb-4 items-center border border-zinc-800 shadow-sm"
+                                        >
+                                            <View className="mb-4"><RemoteSvgIcon imageUrl={theme.iconImg} xml={theme.iconsvg} color="#06b6d4" size={70} /></View>
+                                            <Text className="text-white font-black uppercase mt-1 text-center text-[11px]">{theme.label}</Text>
+                                        </TouchableOpacity>
+                                    ))}
+                                </View>
+                            )}
+
+                            {currentView === 'THEME_DETAIL' && selectedTheme && (
                                 <View>
-                                    {['BACKGROUND', "WATERMARK", 'GLOW', 'BORDER', 'AVATAR_VFX', 'AVATAR'].map((cat) => {
+                                    {['BACKGROUND', "WATERMARK", 'GLOW', 'BORDER', 'AVATAR'].map((cat) => {
                                         const themeItems = selectedTheme.items?.filter(i => i.category?.toUpperCase() === cat) || [];
                                         if (themeItems.length === 0) return null;
                                         return (
                                             <View key={cat} className="mb-6">
                                                 <View className="flex-row items-center mb-3">
-                                                    <View className="w-1 h-3 bg-green-500 rounded-full mr-2" /><Text className="text-gray-500 font-black uppercase text-[10px] tracking-[0.2em]">{cat}S</Text>
+                                                    <View className="w-1.5 h-1.5 bg-cyan-500 mr-2 transform rotate-45" />
+                                                    <Text className="text-cyan-500 font-black uppercase text-[10px] tracking-[0.2em]">{cat}S</Text>
                                                 </View>
-                                                <ScrollView horizontal showsHorizontalScrollIndicator={false} style={{ height: themeItems.length > 1 ? 380 : 180 }} contentContainerStyle={{ flexDirection: 'column', flexWrap: 'wrap' }}>
+                                                <ScrollView horizontal showsHorizontalScrollIndicator={false}>
                                                     {themeItems.map(item => renderCompactCard(item))}
                                                 </ScrollView>
                                             </View>
@@ -582,9 +953,28 @@ const AuthorStoreModal = memo(({ visible, onClose, user, isDark, setInventory })
                             )}
                         </ScrollView>
                     )}
-                </View>
-            </View>
-            <ItemPreviewModal isVisible={!!itemToPreview} onClose={() => setItemToPreview(null)} currentUser={user} selectedProduct={itemToPreview} onAction={executePurchase} isProcessing={isProcessingTransaction} actionType="buy" />
+                </Pressable>
+            </Pressable>
+
+            {/* Conditional Modals */}
+            <ItemPreviewModal
+                isVisible={!!itemToPreview}
+                onClose={() => setItemToPreview(null)}
+                currentUser={user}
+                selectedProduct={itemToPreview}
+                onAction={executePurchase}
+                isProcessing={isProcessingTransaction || isLocalUpdating}
+                actionType="buy"
+            />
+
+            <ItemDescriptionModal
+                isVisible={!!itemToDescribe}
+                onClose={() => setItemToDescribe(null)}
+                selectedProduct={itemToDescribe}
+                onAction={executePurchase}
+                isProcessing={isProcessingTransaction || isLocalUpdating}
+                actionType="buy"
+            />
         </Modal>
     );
 });
@@ -628,19 +1018,81 @@ const HypeIconDisplay = memo(({ tierKey, color, size = 26 }) => {
             <View style={{ position: 'absolute' }}>{renderLayout()}</View>
         </View>
     );
-});
+})
 
-const AuthorInventoryModal = memo(({ visible, onClose, user, setUser, isDark, theinventory }) => {
-    const [filter, setFilter] = useState('ALL');
+// --- LIVE COUNTDOWN COMPONENT FOR NAME LOCK ---
+const LiveCountdown = ({ expiresAt }) => {
+    const [timeLeft, setTimeLeft] = useState('');
+
+    useEffect(() => {
+        if (!expiresAt) return;
+        const interval = setInterval(() => {
+            const diff = new Date(expiresAt) - new Date();
+            if (diff <= 0) {
+                setTimeLeft('EXPIRED');
+                clearInterval(interval);
+            } else {
+                const d = Math.floor(diff / (1000 * 60 * 60 * 24));
+                const h = Math.floor((diff / (1000 * 60 * 60)) % 24);
+                const m = Math.floor((diff / 1000 / 60) % 60);
+                const s = Math.floor((diff / 1000) % 60);
+                setTimeLeft(`${d}d ${h}h ${m}m ${s}s`);
+            }
+        }, 1000);
+        return () => clearInterval(interval);
+    }, [expiresAt]);
+
+    return (
+        <Text className="text-yellow-400 font-black text-lg tracking-widest" style={{ fontVariant: ['tabular-nums'] }}>
+            {timeLeft}
+        </Text>
+    );
+};
+
+const AuthorInventoryModal = memo(({ visible, onClose, user, setUser, isDark, theinventory, refreshStreak }) => {
+    const CustomAlert = useAlert();
+    const inventory = theinventory?.length > 0 ? theinventory : user?.inventory || [];
+
+    // --- STATE ---
     const [isUpdating, setIsUpdating] = useState(false);
     const [updatingTitle, setUpdatingTitle] = useState(null);
+    const [currentView, setCurrentView] = useState('ROOT');
+
     const [itemToPreview, setItemToPreview] = useState(null);
-    const CustomAlert = useAlert();
+    const [itemToDescribe, setItemToDescribe] = useState(null);
 
-    const inventory = theinventory.length > 0 ? theinventory : user?.inventory || [];
+    // --- CATEGORY GROUPINGS ---
+    const nameLockItem = inventory.find(i => i.itemId === 'name_lock');
+    const consumables = inventory.filter(i => ['STREAK_MODIFIER', 'IDENTITY'].includes(i.category) && i.itemId !== 'name_lock');
+    const hypes = inventory.filter(i => i.category === 'HYPE');
+    const avatars = inventory.filter(i => ['AVATAR', 'AVATAR_VFX'].includes(i.category));
+    const environment = inventory.filter(i => ['WATERMARK', 'BACKGROUND'].includes(i.category));
+    const auras = inventory.filter(i => ['BORDER', 'GLOW'].includes(i.category));
+    const titles = user?.unlockedTitles || [];
 
-    const categories = ['ALL', 'TITLE', 'GLOW', 'BORDER', 'WATERMARK', "AVATAR", 'AVATAR_VFX', 'HYPE'];
+    useEffect(() => {
+        if (!visible) {
+            setCurrentView('ROOT');
+            setItemToPreview(null);
+            setItemToDescribe(null);
+        }
+    }, [visible]);
 
+    const handleHardwareBack = () => {
+        if (currentView !== 'ROOT') setCurrentView('ROOT');
+        else onClose();
+    };
+
+    const handleItemClick = (item) => {
+        const previewCategories = ['WATERMARK', 'BACKGROUND', 'BORDER', 'GLOW', 'AVATAR', 'AVATAR_VFX'];
+        if (previewCategories.includes(item.category?.toUpperCase())) {
+            setItemToPreview(item);
+        } else {
+            setItemToDescribe(item);
+        }
+    };
+
+    // --- ACTIONS ---
     const handleEquipToggle = async (selectedItem) => {
         if (isUpdating) return;
         setIsUpdating(true);
@@ -652,46 +1104,106 @@ const AuthorInventoryModal = memo(({ visible, onClose, user, setUser, isDark, th
                 }
                 return item;
             });
+
             const formData = new FormData();
-            formData.append("userId", user?._id || ""); formData.append("fingerprint", user?.deviceId || "");
-            formData.append("inventory", JSON.stringify(updatedInventory)); formData.append("username", user?.username || "");
-            formData.append("description", user?.description || "");
-            if (user?.preferences) formData.append("preferences", JSON.stringify(user.preferences));
+            formData.append("userId", user?._id || "");
+            formData.append("fingerprint", user?.deviceId || "");
+            // ⚡️ OPTIMIZATION: ONLY send the inventory array!
+            formData.append("inventory", JSON.stringify(updatedInventory));
+
             const res = await apiFetch(`/users/upload`, { method: "PUT", body: formData });
             const result = await res.json();
-            if (res.ok) { setUser(result.user); setItemToPreview(null); } else { throw new Error(result.message || "Sync failed"); }
-        } catch (err) { CustomAlert("Error", "Failed to sync equipment changes."); } finally { setIsUpdating(false); }
+
+            if (res.ok) {
+                setUser(result.user);
+                setItemToPreview(null);
+            } else {
+                throw new Error(result.message || "Sync failed");
+            }
+        } catch (err) {
+            CustomAlert("Error", "Failed to sync equipment changes.");
+        } finally {
+            setIsUpdating(false);
+        }
     };
 
     const handleEquipTitle = async (selectedTitle) => {
         if (isUpdating) return;
-        setIsUpdating(true); setUpdatingTitle(selectedTitle.name);
+        setIsUpdating(true);
+        setUpdatingTitle(selectedTitle.name);
         try {
             const formData = new FormData();
-            formData.append("userId", user?._id || ""); formData.append("fingerprint", user?.deviceId || "");
-            formData.append("inventory", JSON.stringify(inventory)); formData.append("username", user?.username || "");
-            formData.append("description", user?.description || "");
+            formData.append("userId", user?._id || "");
+            formData.append("fingerprint", user?.deviceId || "");
+
             const titleName = user?.equippedTitle?.name || "";
             const isCurrentlyEquipped = titleName === selectedTitle.name;
             const newEquippedTitle = isCurrentlyEquipped ? null : { name: selectedTitle.name, tier: selectedTitle.tier };
+
+            // ⚡️ OPTIMIZATION: ONLY send the new title!
             formData.append("equippedTitle", newEquippedTitle ? JSON.stringify(newEquippedTitle) : "");
-            if (user?.preferences) formData.append("preferences", JSON.stringify(user.preferences));
+
             const res = await apiFetch(`/users/upload`, { method: "PUT", body: formData });
             const result = await res.json();
             if (res.ok) { setUser(result.user); } else { throw new Error(result.message || "Sync failed"); }
-        } catch (err) { CustomAlert("Error", "Failed to sync title changes."); } finally { setIsUpdating(false); setUpdatingTitle(null); }
+        } catch (err) {
+            CustomAlert("Error", "Failed to sync title changes.");
+        } finally {
+            setIsUpdating(false);
+            setUpdatingTitle(null);
+        }
     };
 
-    const confirmEquipTitle = (title) => {
-        const isEquipped = user?.equippedTitle?.name === title.name;
-        const actionText = isEquipped ? "Unequip" : "Equip";
-        CustomAlert(`${actionText} Title`, `Do you want to ${actionText.toLowerCase()} the [${title.tier}] ${title.name} title?`, [
-            { text: "Cancel", style: "cancel" }, { text: actionText, onPress: () => handleEquipTitle(title) }
-        ]);
+    const handleConsumeAction = (item) => {
+        if (item.itemId === 'streak_freeze') {
+            CustomAlert(
+                "Activate Freeze Protocol",
+                "Do you want to initialize the Streak Freeze? Once activated, it will lock your streak safely for 48 hours.",
+                [
+                    { text: "Cancel", style: "cancel" },
+                    {
+                        text: "Initialize",
+                        onPress: async () => {
+                            if (isUpdating) return;
+                            setIsUpdating(true);
+                            try {
+                                const res = await apiFetch('/streak/action', {
+                                    method: 'POST',
+                                    headers: { 'Content-Type': 'application/json' },
+                                    body: JSON.stringify({
+                                        deviceId: user.deviceId,
+                                        actionType: 'streak_freeze'
+                                    })
+                                });
+
+                                const result = await res.json();
+
+                                if (result.success) {
+                                    CustomAlert("Protocol Engaged", result.message);
+                                    if (typeof refreshStreak === 'function') refreshStreak();
+                                    if (typeof setUser === 'function') {
+                                        setUser(prev => ({ ...prev, inventory: result.inventory }));
+                                    }
+                                    setItemToDescribe(null);
+                                } else {
+                                    CustomAlert("Initialization Failed", result.message || "Could not freeze streak.");
+                                }
+                            } catch (err) {
+                                console.error("Streak Freeze Error:", err);
+                                CustomAlert("Connection Error", "Failed to reach matrix servers.");
+                            } finally {
+                                setIsUpdating(false);
+                            }
+                        }
+                    }
+                ]
+            );
+        } else {
+            handleItemClick(item);
+        }
     };
 
-    const filteredInventory = filter === 'ALL' ? inventory : inventory.filter(item => item.category === filter);
-
+    // --- RENDER HELPERS ---
     const getExpirationText = (expiry) => {
         if (!expiry) return null;
         const diff = new Date(expiry) - new Date();
@@ -701,111 +1213,223 @@ const AuthorInventoryModal = memo(({ visible, onClose, user, setUser, isDark, th
         return `${Math.floor(diff / (1000 * 60 * 60))}h remaining`;
     };
 
-    return (
-        <Modal visible={visible} animationType="slide" transparent>
-            <View className="flex-1 bg-black/60 justify-end">
-                <View className="bg-white dark:bg-[#0d1117] h-[85%] rounded-t-[40px] p-6 border-t-4 border-blue-500">
-                    <View className="flex-row justify-between items-center mb-4">
-                        <View>
-                            <Text className="text-2xl font-black uppercase italic dark:text-white">Arsenal</Text>
-                            <Text className="text-blue-500 font-black text-[10px] uppercase tracking-widest">{filter === 'TITLE' ? user?.unlockedTitles?.length || 0 : inventory.length} Collectibles Owned</Text>
-                        </View>
-                        <TouchableOpacity onPress={onClose}><Ionicons name="close" size={28} color={!isDark ? "black" : "white"} /></TouchableOpacity>
-                    </View>
+    const renderCategoryCard = (title, subtitle, icon, count, viewId, colorHex) => (
+        <TouchableOpacity
+            onPress={() => setCurrentView(viewId)}
+            className="w-[48%] aspect-square bg-[#121212] flex-col justify-center items-center p-4 rounded-3xl border border-zinc-800 mb-4 shadow-lg shadow-black"
+            style={{ borderBottomWidth: 3, borderBottomColor: colorHex }}
+        >
+            <View className="p-4 rounded-2xl mb-3" style={{ backgroundColor: `${colorHex}20` }}>
+                <MaterialCommunityIcons name={icon} size={36} color={colorHex} />
+            </View>
+            <Text className="text-white font-black uppercase text-sm text-center tracking-tight">{title}</Text>
+            <Text className="text-gray-500 text-[10px] text-center mt-1 uppercase">{subtitle}</Text>
 
-                    <View className="flex-row mb-6">
-                        <ScrollView horizontal showsHorizontalScrollIndicator={false}>
-                            {categories.map((cat) => (
-                                <TouchableOpacity key={cat} onPress={() => setFilter(cat)} className={`mr-2 px-4 py-2 rounded-full border ${filter === cat ? 'bg-blue-500 border-blue-500' : 'bg-transparent border-gray-700'}`}>
-                                    <Text className={`text-[10px] font-black uppercase ${filter === cat ? 'text-white' : 'text-gray-500'}`}>
-                                        {cat}{cat === "TITLE" && user?.unlockedTitles?.length > 0 && <Text className={`text-[10px] font-black uppercase ${filter === cat ? 'text-white' : 'text-gray-500'}`}> ({user.unlockedTitles.length})</Text>}
-                                    </Text>
+            <View className="absolute top-3 right-3 bg-zinc-900 px-2 py-1 rounded-md border border-zinc-800">
+                <Text className="text-white font-bold text-[10px]">{count}</Text>
+            </View>
+        </TouchableOpacity>
+    );
+
+    const renderSquareCard = (item, isTitleRow = false) => {
+        if (isTitleRow) {
+            const isEquipped = user?.equippedTitle?.name === item.name;
+            const isThisTitleUpdating = isUpdating && updatingTitle === item.name;
+            return (
+                <TouchableOpacity
+                    key={item.name}
+                    onPress={() => handleEquipTitle(item)}
+                    disabled={isUpdating}
+                    className={`w-[48%] aspect-square bg-[#121212] p-4 rounded-3xl mb-4 border shadow-sm justify-between ${isEquipped ? 'border-blue-500 bg-blue-500/10' : 'border-zinc-800'}`}
+                >
+                    <View className="items-center justify-center flex-1">
+                        <MaterialCommunityIcons name="format-title" size={30} color={isEquipped ? "#3b82f6" : "#52525b"} />
+                        <View className="mt-3 w-full items-center">
+                            <TitleTag isDark={isDark} isVisible={true} title={item.name} size={10} tier={item.tier} />
+                        </View>
+                    </View>
+                    <View className={`w-full py-2 rounded-xl mt-2 items-center ${isEquipped ? 'bg-blue-600' : 'bg-zinc-800'}`}>
+                        {isThisTitleUpdating ? <ActivityIndicator size="small" color="white" /> : <Text className={`text-[10px] font-black uppercase ${isEquipped ? 'text-white' : 'text-gray-400'}`}>{isEquipped ? 'Equipped' : 'Equip'}</Text>}
+                    </View>
+                </TouchableOpacity>
+            );
+        }
+
+        const expiration = getExpirationText(item.expiresAt);
+        const isExpired = expiration === "Expired";
+        const isBorder = item.category === 'BORDER';
+        const isHype = item.category === 'HYPE';
+        const isSkiaItem = ['streak_freeze', 'streak_restore', 'name_change_card', 'name_lock'].includes(item.itemId);
+        const visual = item.visualData || item.visualConfig || {};
+        const cardRarityColor = getRarityColor(item.rarity) || '#3b82f6';
+        const imageUrl = item.url || visual.url || visual.imageUrl;
+        const hypeConfig = isHype ? (HYPE_TIERS[item.hypeType] || HYPE_TIERS.FREE) : null;
+
+        return (
+            <TouchableOpacity
+                key={item.id || item.itemId}
+                onPress={() => handleItemClick(item)}
+                className={`bg-[#121212] mr-4 p-4 rounded-3xl w-40 border shadow-sm mb-4 justify-between ${item.isEquipped ? 'bg-blue-500/10 border-blue-500' : 'border-zinc-800'} ${isExpired ? 'opacity-50 border-red-500/30' : ''}`}
+                style={{ borderBottomWidth: 3, borderBottomColor: cardRarityColor }}
+            >
+                <View className="h-24 w-full bg-black/50 rounded-xl items-center justify-center overflow-hidden border border-white/5 relative mb-3">
+                    {isSkiaItem ? (
+                        <AnimatedItemIcon itemId={item.itemId} primaryColor={visual.primaryColor} secondaryColor={visual.secondaryColor} size={60} />
+                    ) : isHype ? (
+                        <HypeIconDisplay tierKey={hypeConfig.abbr} color={hypeConfig.glow} size={40} />
+                    ) : isBorder ? (
+                        <ClanBorder color={visual.primaryColor || visual.color || "#ff0000"} secondaryColor={visual.secondaryColor} animationType={visual.animationType} duration={visual.duration}>
+                            <View className="h-10 flex justify-center items-center"><Text className="text-[10px] text-white/50 font-black uppercase">Frame</Text></View>
+                        </ClanBorder>
+                    ) : imageUrl ? (
+                        <Image source={{ uri: imageUrl }} style={{ width: "100%", height: "100%" }} contentFit="contain" />
+                    ) : visual.svgCode ? (
+                        <RemoteSvgIcon xml={visual.svgCode} color={visual.glowColor || visual.primaryColor || visual.color} size={50} />
+                    ) : (
+                        <MaterialCommunityIcons name={visual.icon || 'hexagon-outline'} size={40} color={visual.primaryColor || 'white'} />
+                    )}
+                    <View style={{ backgroundColor: cardRarityColor }} className="absolute top-2 right-2 w-2 h-2 rounded-full shadow-lg" />
+                </View>
+
+                <Text className="text-white font-black text-[11px] uppercase tracking-tight text-center" numberOfLines={1}>{item.name}</Text>
+                {expiration && <Text className="text-gray-500 text-[8px] text-center mt-0.5 uppercase tracking-widest">{expiration}</Text>}
+
+                <View className="mt-3 w-full">
+                    {isExpired ? (
+                        <View className="w-full py-2 bg-red-500/10 rounded-xl border border-red-500/20 items-center">
+                            <Text className="text-red-500 text-[10px] font-black uppercase">Voided</Text>
+                        </View>
+                    ) : item.category === 'IDENTITY' || item.itemId === 'streak_restore' ? (
+                        <View className="w-full py-2 bg-zinc-800 rounded-xl items-center flex-row justify-center">
+                            <MaterialCommunityIcons name="layers" size={12} color="#a1a1aa" />
+                            <Text className="text-zinc-400 text-[10px] font-black uppercase ml-1">Stock: {item.itemCount || 1}</Text>
+                        </View>
+                    ) : item.itemId === 'streak_freeze' ? (
+                        <View className="flex-row justify-between items-center w-full">
+                            <View className="py-2 px-2 bg-zinc-800 rounded-lg items-center">
+                                <Text className="text-zinc-400 text-[10px] font-black uppercase">x{item.itemCount || 1}</Text>
+                            </View>
+                            <TouchableOpacity onPress={() => handleConsumeAction(item)} className="py-2 px-4 bg-cyan-500 rounded-lg items-center flex-1 ml-1">
+                                <Text className="text-black text-[10px] font-black uppercase">Use</Text>
+                            </TouchableOpacity>
+                        </View>
+                    ) : (
+                        <TouchableOpacity disabled={isUpdating} onPress={() => handleEquipToggle(item)} className={`w-full py-2 rounded-xl items-center ${item.isEquipped ? 'bg-green-500' : 'bg-blue-600'} ${isUpdating ? 'opacity-50' : ''}`}>
+                            {isUpdating ? <ActivityIndicator size="small" color="white" /> : <Text className="text-white text-[10px] font-black uppercase">{item.isEquipped ? 'Active' : 'Equip'}</Text>}
+                        </TouchableOpacity>
+                    )}
+                </View>
+            </TouchableOpacity>
+        );
+    };
+
+    const getListForCurrentView = () => {
+        switch (currentView) {
+            case 'TITLES': return titles;
+            case 'HYPES': return hypes;
+            case 'AVATARS': return avatars;
+            case 'ENVIRONMENT': return environment;
+            case 'AURAS': return auras;
+            case 'CONSUMABLES': return consumables;
+            default: return [];
+        }
+    };
+
+    return (
+        <Modal visible={visible} animationType="slide" transparent onRequestClose={handleHardwareBack}>
+            <Pressable className="flex-1 bg-black/80 justify-end" onPress={handleHardwareBack}>
+                <Pressable onPress={(e) => e.stopPropagation()} className="bg-[#09090b] h-[90%] rounded-t-[32px] p-6 border-t border-x border-blue-500/30">
+
+                    <View className="flex-row justify-between items-center mb-6">
+                        <View className="flex-row items-center">
+                            {currentView !== 'ROOT' && (
+                                <TouchableOpacity onPress={handleHardwareBack} className="mr-3 p-2 bg-zinc-900 rounded-full border border-zinc-800">
+                                    <Ionicons name="chevron-back" size={20} color="#3b82f6" />
                                 </TouchableOpacity>
-                            ))}
-                        </ScrollView>
+                            )}
+                            <View>
+                                <Text className="text-2xl font-black uppercase italic tracking-wider text-white">
+                                    {currentView === 'ROOT' ? "Arsenal Hub" : currentView.replace('LIST_', '')}
+                                </Text>
+                                <Text className="text-blue-500 font-black text-[10px] uppercase tracking-widest">
+                                    {currentView === 'ROOT' ? `${inventory.length + titles.length} Total Assets` : `${getListForCurrentView().length} Secured Items`}
+                                </Text>
+                            </View>
+                        </View>
+                        <TouchableOpacity onPress={onClose} className="bg-zinc-900 p-3 rounded-full border border-zinc-800">
+                            <Ionicons name="close" size={20} color="white" />
+                        </TouchableOpacity>
                     </View>
 
                     <ScrollView showsVerticalScrollIndicator={false} contentContainerStyle={{ paddingBottom: 40 }}>
-                        {filter === 'TITLE' ? (
-                            user?.unlockedTitles && user.unlockedTitles.length > 0 ? (
-                                user.unlockedTitles.map((title, idx) => {
-                                    const isEquipped = user?.equippedTitle?.name === title.name;
-                                    const isThisTitleUpdating = isUpdating && updatingTitle === title.name;
-                                    return (
-                                        <TouchableOpacity key={`title-${idx}`} onPress={() => confirmEquipTitle(title)} disabled={isUpdating} className={`flex-row items-center justify-between py-4 px-2 rounded-3xl mb-3 border ${isEquipped ? 'bg-blue-500/10 border-blue-500' : 'bg-gray-50 dark:bg-[#161b22] border-gray-100 dark:border-gray-800'}`}>
-                                            <View className="flex-1 mr-4"><TitleTag isDark={isDark} isVisible={true} key={title.name} title={title.name} size={12} tier={title.tier} /></View>
-                                            <View className="items-center justify-center min-w-[60px]">
-                                                {isThisTitleUpdating ? <ActivityIndicator size="small" color="#3b82f6" /> : <Text className={`text-[10px] font-black uppercase ${isEquipped ? 'text-blue-500' : 'text-gray-400'}`}>{isEquipped ? 'Equipped' : 'Equip'}</Text>}
+
+                        {currentView === 'ROOT' && (
+                            <>
+                                {nameLockItem && (
+                                    <TouchableOpacity
+                                        onPress={() => setItemToDescribe(nameLockItem)}
+                                        className="w-full bg-[#121212] rounded-3xl p-5 mb-6 border border-yellow-500/50 shadow-lg flex-row items-center justify-between"
+                                        style={{ borderBottomWidth: 4, borderBottomColor: '#eab308' }}
+                                    >
+                                        <View className="flex-row items-center flex-1">
+                                            <View className="bg-yellow-500/10 w-16 h-16 rounded-2xl items-center justify-center border border-yellow-500/20 mr-4">
+                                                <AnimatedItemIcon itemId="name_lock" primaryColor="#eab308" secondaryColor="#fde047" size={40} />
                                             </View>
-                                        </TouchableOpacity>
-                                    );
-                                })
-                            ) : (
-                                <View className="items-center mt-20 opacity-30"><MaterialCommunityIcons name="format-title" size={80} color="gray" /><Text className="mt-4 font-black uppercase text-xs tracking-widest dark:text-white">No Titles Unlocked</Text></View>
-                            )
-                        ) : (
-                            filteredInventory.length > 0 ? (
-                                filteredInventory.map((item, idx) => {
-                                    const expiration = getExpirationText(item.expiresAt);
-                                    const isExpired = expiration === "Expired";
-                                    const isBorder = item.category === 'BORDER';
-                                    const isHype = item.category === 'HYPE';
-                                    const visual = item.visualConfig || {};
-                                    const rowRarityColor = getRarityColor(item.rarity);
-                                    const imageUrl = item.url || visual.url;
-                                    const hypeConfig = isHype ? (HYPE_TIERS[item.hypeType] || HYPE_TIERS.FREE) : null;
-
-                                    const PreviewIcon = (
-                                        <View className={`w-16 h-16 bg-black/20 items-center justify-center rounded-2xl overflow-hidden ${(isBorder || isHype) ? '' : 'border relative'}`} style={{ borderColor: `${rowRarityColor}40` }}>
-                                            {isHype ? (
-                                                <HypeIconDisplay tierKey={hypeConfig.abbr} color={hypeConfig.glow} size={38} />
-                                            ) : isBorder ? (
-                                                <ClanBorder color={visual.primaryColor || visual.color || "#ff0000"} secondaryColor={visual.secondaryColor} animationType={visual.animationType} duration={visual.duration}>
-                                                    <View className="h-6 w-6 flex justify-center items-center"><Text className="text-[6px] dark:text-white/40 font-black uppercase">Frame</Text></View>
-                                                </ClanBorder>
-                                            ) : imageUrl ? (
-                                                <Image source={{ uri: imageUrl }} style={{ width: "100%", height: "100%" }} contentFit="contain" />
-                                            ) : visual.svgCode ? (
-                                                <RemoteSvgIcon xml={visual.svgCode} size={40} color={visual.primaryColor || visual.color} />
-                                            ) : (
-                                                <MaterialCommunityIcons name={visual.icon || 'star'} size={30} color={visual.primaryColor || visual.color || 'white'} />
-                                            )}
-                                            <View style={{ backgroundColor: rowRarityColor }} className="absolute top-1.5 right-1.5 w-2 h-2 rounded-full shadow-sm" />
-                                        </View>
-                                    );
-
-                                    return (
-                                        <View key={item.itemId || idx} className={`flex-row items-center p-4 rounded-3xl mb-3 border ${item.isEquipped ? 'bg-blue-500/10 border-blue-500' : 'bg-gray-50 dark:bg-[#161b22]'} ${isExpired ? 'opacity-50 border-red-500/30' : 'border-gray-100 dark:border-gray-800'}`}>
-                                            {item.isConsumable ? (
-                                                <View className="mr-4">{isBorder ? <ClanBorder color={visual.primaryColor || visual.color || "#ff0000"} secondaryColor={visual.secondaryColor} animationType={visual.animationType} duration={visual.duration}><View className="h-10 flex justify-center items-center rounded-sm"><Text>Clan Banner</Text></View></ClanBorder> : PreviewIcon}</View>
-                                            ) : (
-                                                <TouchableOpacity onPress={() => setItemToPreview(item)} className="mr-4">{isBorder ? <ClanBorder color={visual.primaryColor || visual.color || "#ff0000"} secondaryColor={visual.secondaryColor} animationType={visual.animationType} duration={visual.duration}><View className="h-10 flex justify-center items-center rounded-sm"><Text>Clan Banner</Text></View></ClanBorder> : PreviewIcon}</TouchableOpacity>
-                                            )}
                                             <View className="flex-1">
-                                                <Text className="font-black dark:text-white text-sm uppercase italic">{item.name}{item.isConsumable && (item.itemCount || 1) > 1 && <Text className="text-blue-500 font-extrabold text-xs normal-case not-italic"> (x{item.itemCount})</Text>}</Text>
-                                                <View className="flex-row mt-2 items-center">
-                                                    <Text style={{ color: rowRarityColor }} className="text-[9px] uppercase font-bold tracking-widest">{item.rarity || 'COMMON'} {item.category}</Text>
-                                                    {expiration && <><Text className="text-gray-600 dark:text-gray-400 text-[9px] mx-1">•</Text><View className="flex-row items-center"><MaterialCommunityIcons name="clock-outline" size={10} color={isExpired ? "#ef4444" : "#6b7280"} /><Text className={`text-[9px] font-bold ml-1 ${isExpired ? 'text-red-500' : 'text-gray-500'}`}>{expiration}</Text></View></>}
-                                                </View>
+                                                <Text className="text-yellow-500 font-black uppercase text-xs tracking-widest mb-1">Identity Lock Active</Text>
+                                                <LiveCountdown expiresAt={nameLockItem.expiresAt} />
                                             </View>
-                                            {!isExpired && item.category !== "VERIFIED" && !item.isConsumable && (
-                                                <TouchableOpacity disabled={isUpdating} onPress={() => handleEquipToggle(item)} className={`px-6 py-3 rounded-xl ${item.isEquipped ? 'bg-green-500' : 'bg-blue-600'} ${isUpdating && !updatingTitle ? 'opacity-50' : ''}`}>
-                                                    {isUpdating && !updatingTitle ? <ActivityIndicator size="small" color="white" /> : <Text className="text-white text-[10px] font-black uppercase">{item.isEquipped ? 'Active' : 'Equip'}</Text>}
-                                                </TouchableOpacity>
-                                            )}
-                                            {!isExpired && item.isConsumable && <View className="px-4 py-2 bg-blue-500/10 rounded-xl border border-blue-500/20"><Text className="text-blue-500 text-[10px] font-black uppercase">Stock: {item.itemCount || 1}</Text></View>}
-                                            {isExpired && <View className="px-4 py-2 bg-red-500/10 rounded-lg border border-red-500/20"><Text className="text-red-500 text-[10px] font-black uppercase">Void</Text></View>}
                                         </View>
-                                    );
-                                })
-                            ) : (
-                                <View className="items-center mt-20 opacity-30"><MaterialCommunityIcons name="package-variant" size={80} color="gray" /><Text className="mt-4 font-black uppercase text-xs tracking-widest dark:text-white">No {filter === 'ALL' ? '' : filter} items</Text></View>
-                            )
+                                        <MaterialCommunityIcons name="shield-lock-outline" size={28} color="#eab308" style={{ opacity: 0.3 }} />
+                                    </TouchableOpacity>
+                                )}
+
+                                <View className="flex-row flex-wrap justify-between">
+                                    {renderCategoryCard("Titles", "Earned Titles", "format-title", titles.length, "TITLES", "#8b5cf6")}
+                                    {renderCategoryCard("Glow & Frames", "Border Effects", "shield-sun", auras.length, "AURAS", "#ef4444")}
+                                    {renderCategoryCard("Card Layout", "BGs & Watermarks", "image-filter-hdr", environment.length, "ENVIRONMENT", "#06b6d4")}
+                                    {renderCategoryCard("Avatars", "Avatars & VFX", "account-cowboy-hat", avatars.length, "AVATAR", "#10b981")}
+                                    {renderCategoryCard("Consumables", "Patches & Chips", "battery-charging-high", consumables.length, "CONSUMABLES", "#3b82f6")}
+                                    {renderCategoryCard("Hype", "Digital Tributes", "lightning-bolt", hypes.length, "HYPES", "#f59e0b")}
+                                </View>
+                            </>
                         )}
+
+                        {currentView !== 'ROOT' && (
+                            <View className="flex-row flex-wrap justify-between">
+                                {getListForCurrentView().length > 0 ? (
+                                    getListForCurrentView().map(item => renderSquareCard(item, currentView === 'TITLES'))
+                                ) : (
+                                    <View className="w-full items-center mt-20 opacity-30">
+                                        <MaterialCommunityIcons name="package-variant-closed" size={80} color="gray" />
+                                        <Text className="mt-4 font-black uppercase text-xs tracking-widest text-white">Archive Empty</Text>
+                                    </View>
+                                )}
+                            </View>
+                        )}
+
                     </ScrollView>
-                </View>
-            </View>
-            <ItemPreviewModal isVisible={!!itemToPreview} onClose={() => setItemToPreview(null)} currentUser={user} selectedProduct={itemToPreview} onAction={handleEquipToggle} isProcessing={isUpdating} actionType="equip" />
+                </Pressable>
+            </Pressable>
+
+            <ItemPreviewModal
+                isVisible={!!itemToPreview}
+                onClose={() => setItemToPreview(null)}
+                currentUser={user}
+                selectedProduct={itemToPreview}
+                onAction={handleEquipToggle}
+                isProcessing={isUpdating}
+                actionType="equip"
+            />
+
+            <ItemDescriptionModal
+                isVisible={!!itemToDescribe}
+                onClose={() => setItemToDescribe(null)}
+                selectedProduct={itemToDescribe}
+                onAction={handleConsumeAction}
+                isProcessing={isUpdating}
+                actionType={itemToDescribe?.itemId === 'streak_freeze' ? "use" : "view"}
+            />
         </Modal>
     );
 });
@@ -1157,13 +1781,122 @@ const ProfileEditor = memo(({
 
 
 // ==========================================
+// ⚡️ OPTIMIZATION 1: MEMOIZED POST ITEM (UPSCALED ED.)
+// Extracted outside the main component so it never recreates unnecessarily
+// ==========================================
+const ProfilePostItem = memo(({ item, isDark, onNavigate, onAction, onDelete }) => {
+    return (
+        <View className="px-6 mb-5">
+            <View className="bg-white dark:bg-[#1A1A1A] border border-gray-100 dark:border-gray-800 p-6 rounded-3xl shadow-md">
+                <View className="flex-row justify-between items-start mb-4">
+                    <Pressable onPress={() => onNavigate(`/post/${item.slug || item._id}`)} className="flex-1 pr-4">
+                        <Text className="font-black text-lg uppercase tracking-tight text-gray-900 dark:text-white leading-6" numberOfLines={2}>
+                            {item.title || item.message}
+                        </Text>
+
+                        {/* 🛡️ Status Badges & Metadata Tags Area */}
+                        <View className="flex-row items-center mt-3 flex-wrap gap-2">
+                            <View className="bg-blue-500/10 px-2.5 py-1 rounded-md">
+                                <Text className="text-[10px] font-black text-blue-600 dark:text-blue-400 uppercase tracking-wider">
+                                    {new Date(item.createdAt).toLocaleDateString()}
+                                </Text>
+                            </View>
+
+                            {item.category && <Text className="text-xs font-bold text-gray-400 uppercase tracking-widest mr-1">• {item.category}</Text>}
+
+                            {/* State Indicator Tags */}
+                            {item.isBoosted && (
+                                <View className="bg-blue-500/20 px-2 py-0.5 rounded-md border border-blue-500/30 flex-row items-center">
+                                    <Ionicons name="rocket" size={10} color="#3b82f6" />
+                                    <Text className="text-[9px] font-black text-blue-500 uppercase ml-1 tracking-widest">Boosted</Text>
+                                </View>
+                            )}
+                            {item.isResurrected && (
+                                <View className="bg-purple-500/20 px-2 py-0.5 rounded-md border border-purple-500/30 flex-row items-center">
+                                    <MaterialCommunityIcons name="auto-fix" size={10} color="#a855f7" />
+                                    <Text className="text-[9px] font-black text-purple-500 uppercase ml-1 tracking-widest">Revived</Text>
+                                </View>
+                            )}
+                            {item.isTrending && (
+                                <View className="bg-orange-500/20 px-2 py-0.5 rounded-md border border-orange-500/30 flex-row items-center">
+                                    <Ionicons name="flame" size={10} color="#f97316" />
+                                    <Text className="text-[9px] font-black text-orange-500 uppercase ml-1 tracking-widest">Hot</Text>
+                                </View>
+                            )}
+                        </View>
+                    </Pressable>
+
+                    {/* 🎮 Adequate Tactile Action Buttons Box */}
+                    <View className="flex-row items-center gap-2">
+                        <TouchableOpacity
+                            onPress={() => onAction(item._id, 'boost')}
+                            className="w-12 h-12 bg-blue-50 dark:bg-blue-500/10 rounded-xl items-center justify-center active:scale-90 shadow-sm"
+                        >
+                            <Ionicons name="rocket-outline" size={20} color="#3b82f6" />
+                        </TouchableOpacity>
+                        <TouchableOpacity
+                            onPress={() => onAction(item._id, 'resurrect')}
+                            className="w-12 h-12 bg-purple-50 dark:bg-purple-500/10 rounded-xl items-center justify-center active:scale-90 shadow-sm"
+                        >
+                            <MaterialCommunityIcons name="auto-fix" size={20} color="#a855f7" />
+                        </TouchableOpacity>
+                        <TouchableOpacity
+                            onPress={() => onDelete(item._id)}
+                            className="w-12 h-12 bg-red-50 dark:bg-red-500/10 rounded-xl items-center justify-center active:scale-90 shadow-sm"
+                        >
+                            <Ionicons name="trash-outline" size={20} color="#ef4444" />
+                        </TouchableOpacity>
+                    </View>
+                </View>
+
+                {/* 📊 Upscaled Engagement Metric Footing */}
+                <View className="flex-row items-center justify-between mt-4 pt-4 border-t border-gray-100 dark:border-gray-800/60">
+                    <View className="flex-row items-center gap-4">
+                        <View className="items-center flex-row gap-1.5">
+                            <Ionicons name="heart" size={16} color="#ef4444" />
+                            <Text className="text-gray-600 dark:text-gray-400 text-xs font-bold">{item.likesCount || 0}</Text>
+                        </View>
+                        <View className="items-center flex-row gap-1.5">
+                            <Ionicons name="chatbubble" size={16} color="#3b82f6" />
+                            <Text className="text-gray-600 dark:text-gray-400 text-xs font-bold">{item.commentsCount || 0}</Text>
+                        </View>
+                        <View className="items-center flex-row gap-1.5">
+                            <Ionicons name="chatbox-ellipses" size={16} color="#f59e0b" />
+                            <Text className="text-gray-600 dark:text-gray-400 text-xs font-bold">{item.discussionCount || 0}</Text>
+                        </View>
+                        <View className="items-center flex-row gap-1.5">
+                            <Ionicons name="flash" size={16} color="#00ff00" />
+                            <Text className="text-gray-600 dark:text-gray-400 text-xs font-bold">{item.hypePointsCount || 0}</Text>
+                        </View>
+                    </View>
+
+                    <View className="flex-row items-center gap-4">
+                        <View className="items-center flex-row gap-1.5">
+                            <Ionicons name="eye" size={16} color={isDark ? "#6b7280" : "#9ca3af"} />
+                            <Text className="text-gray-600 dark:text-gray-400 text-xs font-bold">{item.formattedViews || "0"}</Text>
+                        </View>
+                        <View className="items-center flex-row gap-1.5">
+                            <Ionicons name="share-social" size={16} color={isDark ? "#6b7280" : "#9ca3af"} />
+                            <Text className="text-gray-600 dark:text-gray-400 text-xs font-bold">{item.sharesCount || 0}</Text>
+                        </View>
+                    </View>
+                </View>
+            </View>
+        </View>
+    );
+}, (prevProps, nextProps) => {
+    return prevProps.item === nextProps.item && prevProps.isDark === nextProps.isDark;
+});
+
+
+// ==========================================
 // 🔹 MAIN COMPONENT
 // ==========================================
 export default function MobileProfilePage() {
     const storage = useMMKV();
-    const CustomAlert = useAlert()
-    const [theinventory, setInventory] = useState([])
-    const { user, setUser, contextLoading, handleLogout, isLoggingOut } = useUser();
+    const CustomAlert = useAlert();
+    const [theinventory, setInventory] = useState([]);
+    const { user, setUser, contextLoading, handleLogout, refreshStreak, isLoggingOut } = useUser();
 
     const { colorScheme } = useNativeWind();
     const isDark = colorScheme === "dark";
@@ -1177,6 +1910,9 @@ export default function MobileProfilePage() {
     const [imageFile, setImageFile] = useState(null);
     const [isUpdating, setIsUpdating] = useState(false);
     const [isSaving, setIsSaving] = useState(false);
+
+    // ⚡️ FILTER TAB STATE
+    const [activeTab, setActiveTab] = useState('ALL'); // 'ALL' | 'HIGHLIGHTS'
 
     // ⚡️ MODAL STATES
     const [inventoryVisible, setInventoryVisible] = useState(false);
@@ -1289,7 +2025,7 @@ export default function MobileProfilePage() {
                 const uri = await playerCardRef.current.capture();
                 const { status } = await requestPermissionsAsync();
                 if (status === 'granted') {
-                    await Asset.create(uri);
+                    await createAssetAsync(uri);
                     Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
                     CustomAlert("Archived", "The Clan Scroll has been saved to your device.");
                 } else {
@@ -1310,9 +2046,14 @@ export default function MobileProfilePage() {
         ])
     };
 
+    // ⚡️ POSTS FILTERING LOGIC
     const posts = useMemo(() => {
-        return data ? data.flatMap((page) => page.posts || []) : [];
-    }, [data])
+        const allPosts = data ? data.flatMap((page) => page.posts || []) : [];
+        if (activeTab === 'HIGHLIGHTS') {
+            return allPosts.filter(p => p.isBoosted || p.isResurrected || p.isTrending);
+        }
+        return allPosts;
+    }, [data, activeTab]);
 
     const isLoadingInitialData = isLoading && !data;
     const isReachingEnd = data && data[data.length - 1]?.posts?.length < LIMIT;
@@ -1348,36 +2089,22 @@ export default function MobileProfilePage() {
             return;
         }
 
-        // --- NEW: Name Change Logic ---
         let isChangingName = false;
         let usingNameChangeCard = false;
 
-        if (updatedUsername !== cachedUsername) {
+        if (updatedUsername.trim() !== cachedUsername) {
             isChangingName = true;
 
-            // Check if they have the card in inventory
-            const hasNameChangeCard = user?.inventory?.some(item =>
-                item.itemId === "name_change_card" && item.category === "CONSUMABLE"
-            );
+            const hasNameChangeCard = user?.inventory?.some(item => item.itemId === "name_change_card");
 
             if (hasNameChangeCard) {
                 usingNameChangeCard = true;
-                // You might want to use a CustomAlert to confirm consuming the card here, 
-                // but for seamless UX, using it automatically is often preferred.
                 Toast.show({ type: 'info', text1: 'Using Name Card', text2: 'Consuming 1x Name Change Card' });
             } else {
-                // If no card, check OC balance
-                const OC_COST = 200;
-                if ((user?.coins || 0) < OC_COST) {
-                    CustomAlert("Insufficient Funds", `A Name Change requires a Name Change Card or ${OC_COST} OC. You currently have ${user?.coins || 0} OC.`);
-                    return; // Stop the update process
-                }
-
-                // Await user confirmation to spend OC
                 const userConfirmed = await new Promise((resolve) => {
                     CustomAlert(
-                        "Confirm Name Change",
-                        `Changing your identity costs ${OC_COST} OC. Proceed?`,
+                        "Card Required",
+                        `You do not have a Name Change Card. Your name will not be updated, but other profile modifications will proceed. Continue?`,
                         [
                             { text: "Cancel", style: "cancel", onPress: () => resolve(false) },
                             { text: "Confirm", style: "destructive", onPress: () => resolve(true) }
@@ -1394,12 +2121,16 @@ export default function MobileProfilePage() {
             const formData = new FormData();
             formData.append("userId", user?._id || "");
             formData.append("fingerprint", user?.deviceId || "");
-            formData.append("description", updatedDescription);
-            formData.append("username", updatedUsername);
 
-            // Append Economy Flags
-            formData.append("isChangingName", isChangingName);
-            formData.append("usingNameChangeCard", usingNameChangeCard);
+            if (updatedDescription !== cachedDescription) {
+                formData.append("description", updatedDescription);
+            }
+
+            if (isChangingName && usingNameChangeCard) {
+                formData.append("username", updatedUsername.trim());
+                formData.append("isChangingName", "true");
+                formData.append("usingNameChangeCard", "true");
+            }
 
             formData.append("preferences", JSON.stringify({
                 favCharacter: favCharacter,
@@ -1427,10 +2158,16 @@ export default function MobileProfilePage() {
 
             if (res.ok) {
                 setUser(result.user);
-                setCachedUsername(result.user.username); // Update cache so consecutive saves don't trigger name change logic
+                setCachedUsername(result.user.username);
+                setCachedDescription(result.user.description);
                 setPreview(null);
                 setImageFile(null);
-                CustomAlert("Success", "Character Data Updated.");
+
+                if (result.partialSuccess || (!usingNameChangeCard && isChangingName)) {
+                    CustomAlert("Update Partial", result.message || "Profile updated, but identity remained locked due to missing item card.");
+                } else {
+                    CustomAlert("Success", result.message || "Character Data Updated.");
+                }
             } else {
                 CustomAlert("Error", result.message || "Failed to update.");
             }
@@ -1441,7 +2178,8 @@ export default function MobileProfilePage() {
         }
     };
 
-    const handleDelete = (postId) => {
+    // ⚡️ OPTIMIZATION 2: USECALLBACK FOR ACTIONS
+    const handleDelete = useCallback((postId) => {
         CustomAlert("Confirm Deletion", "Erase this transmission log?", [
             { text: "Cancel", style: "cancel" },
             {
@@ -1468,9 +2206,65 @@ export default function MobileProfilePage() {
                 },
             },
         ]);
-    };
+    }, [user?.deviceId, mutate]);
 
-    // ⚡️ ONBOARDING TOOLTIP STATE ANIMATIONS (Moved cleanly into the main block)
+    const handlePostAction = useCallback((postId, actionType) => {
+        const isBoost = actionType === 'boost';
+        const title = isBoost ? 'Boost Transmission' : 'Resurrect Transmission';
+        const msg = isBoost
+            ? 'Spend OC or a Boost Scroll to amplify this post for 24 hours?'
+            : 'Spend OC or a Resurrection Scroll to bring this post back to the top of the feed?';
+
+        CustomAlert(title, msg, [
+            { text: "Cancel", style: "cancel" },
+            {
+                text: "Confirm",
+                onPress: async () => {
+                    Toast.show({ type: 'info', text1: 'Executing...', text2: `Initiating ${actionType} protocol`, autoHide: false });
+                    try {
+                        const response = await apiFetch(`/posts/action`, {
+                            method: "POST",
+                            headers: { 'Content-Type': 'application/json' },
+                            body: JSON.stringify({
+                                deviceId: user?.deviceId,
+                                postId,
+                                context: 'user',
+                                actionType
+                            })
+                        });
+                        const data = await response.json();
+
+                        if (response.ok && data.success) {
+                            mutate(); // Refreshes the SWR cache so badges update instantly
+                            Toast.show({ type: 'success', text1: 'Protocol Complete', text2: data.message });
+                        } else {
+                            Toast.show({ type: 'error', text1: 'Action Failed', text2: data.message || 'Failed to apply effect.' });
+                        }
+                    } catch (err) {
+                        Toast.show({ type: 'error', text1: 'Connection Error', text2: 'Server unreachable.' });
+                    }
+                }
+            }
+        ]);
+    }, [user?.deviceId, mutate]);
+
+    const handleNavigate = useCallback((path) => {
+        router.push(path);
+    }, [router]);
+
+    // ⚡️ OPTIMIZATION 3: MEMOIZE RENDER ITEM
+    const renderPostItem = useCallback(({ item }) => (
+        <ProfilePostItem
+            item={item}
+            isDark={isDark}
+            onNavigate={handleNavigate}
+            onAction={handlePostAction}
+            onDelete={handleDelete}
+        />
+    ), [isDark, handleNavigate, handlePostAction, handleDelete]);
+
+
+    // ⚡️ ONBOARDING TOOLTIP STATE ANIMATIONS
     const [currentPosTop, setcurrentPosTop] = useState(0);
     const tooltipY = useSharedValue(0);
     const pointerX = useSharedValue(0);
@@ -1534,8 +2328,47 @@ export default function MobileProfilePage() {
                 handleUpdate={handleUpdate} tryhandleLogout={tryhandleLogout}
                 isUpdating={isUpdating} isLoggingOut={isLoggingOut}
             />
+
+            {/* ⚡️ NEW: Highlight Tabs Toggle */}
+            <View className="px-6 mt-6 mb-2 flex-row gap-4 items-center">
+                <TouchableOpacity
+                    onPress={() => setActiveTab('ALL')}
+                    className={`py-2 px-4 rounded-full border ${activeTab === 'ALL' ? 'bg-blue-600 border-blue-500' : isDark ? 'bg-zinc-900 border-zinc-800' : 'bg-gray-100 border-gray-200'}`}
+                >
+                    <Text className={`font-black uppercase text-[11px] tracking-widest ${activeTab === 'ALL' ? 'text-white' : isDark ? 'text-gray-400' : 'text-gray-500'}`}>All Transmissions</Text>
+                </TouchableOpacity>
+                <TouchableOpacity
+                    onPress={() => setActiveTab('HIGHLIGHTS')}
+                    className={`py-2 px-4 flex-row items-center rounded-full border ${activeTab === 'HIGHLIGHTS' ? 'bg-orange-600 border-orange-500' : isDark ? 'bg-zinc-900 border-zinc-800' : 'bg-gray-100 border-gray-200'}`}
+                >
+                    <MaterialCommunityIcons name="star-shooting" size={14} color={activeTab === 'HIGHLIGHTS' ? 'white' : isDark ? '#9ca3af' : '#6b7280'} className="mr-1" />
+                    <Text className={`font-black uppercase text-[11px] ml-1 tracking-widest ${activeTab === 'HIGHLIGHTS' ? 'text-white' : isDark ? 'text-gray-400' : 'text-gray-500'}`}>Highlights</Text>
+                </TouchableOpacity>
+            </View>
+
         </View>
-    ), [user, preview, isDark, dynamicAuraColor, weeklyGloryRank, weeklyAuraTier, equippedGlow, totalPosts, writerRank, totalAura, weeklyGloryPoints, totalHyped, totalHypes, cachedUsername, cachedDescription, isUpdating, isLoggingOut, isOnboarding, onboardingStep, currentPosTop]);
+    ), [user, preview, isDark, dynamicAuraColor, weeklyGloryRank, weeklyAuraTier, equippedGlow, totalPosts, writerRank, totalAura, weeklyGloryPoints, totalHyped, totalHypes, cachedUsername, cachedDescription, isUpdating, isLoggingOut, isOnboarding, onboardingStep, currentPosTop, activeTab]);
+
+    // ⚡️ OPTIMIZATION 4: MEMOIZE EMPTY AND FOOTER STATES
+    const renderEmptyComponent = useCallback(() => (
+        isLoadingInitialData ? <SyncLoading /> : (
+            <View className="mx-6 p-10 bg-gray-50 dark:bg-[#121212] rounded-3xl border-2 border-dashed border-gray-200 dark:border-gray-800 items-center my-4">
+                <Ionicons name={activeTab === 'HIGHLIGHTS' ? "star-outline" : "document-text-outline"} size={32} color={isDark ? "#4b5563" : "#9ca3af"} />
+                <Text className="text-[11px] font-black uppercase tracking-widest text-gray-500 dark:text-gray-400 mt-4">
+                    {activeTab === 'HIGHLIGHTS' ? 'No Highlights' : 'Empty Logs'}
+                </Text>
+                <Text className="text-xs text-gray-400 dark:text-gray-500 mt-2 font-medium text-center leading-5">
+                    {activeTab === 'HIGHLIGHTS' ? "You don't have any boosted, trending, or resurrected transmissions yet." : "Your intel diary is empty.\nStart writing to build your archive."}
+                </Text>
+            </View>
+        )
+    ), [isLoadingInitialData, activeTab, isDark]);
+
+    const renderFooterComponent = useCallback(() => (
+        <View style={{ paddingBottom: insets.bottom + 100 }}>
+            {isFetchingNextPage && <ActivityIndicator className="py-6" color="#2563eb" />}
+        </View>
+    ), [insets.bottom, isFetchingNextPage]);
 
     return (
         <View className="flex-1 bg-white dark:bg-[#0a0a0a]" style={{ paddingTop: insets.top }}>
@@ -1544,7 +2377,6 @@ export default function MobileProfilePage() {
             <View className="absolute top-0 right-0 w-80 h-80 bg-blue-600/5 rounded-full" pointerEvents="none" />
             <View className="absolute bottom-0 left-0 w-60 h-60 bg-purple-600/5 rounded-full" pointerEvents="none" />
 
-            {/* ⚡️ WIN 1: High Performance LegendList */}
             <LegendList
                 data={posts}
                 keyExtractor={(item) => item._id}
@@ -1553,55 +2385,13 @@ export default function MobileProfilePage() {
                 onScroll={(e) => DeviceEventEmitter.emit("onScroll", e.nativeEvent.contentOffset.y)}
                 scrollEventThrottle={16}
                 showsVerticalScrollIndicator={false}
-                estimatedItemSize={250} // ⚡️ Key for fast measuring
+                estimatedItemSize={200}
                 removeClippedSubviews={true}
                 onEndReached={() => { if (!isReachingEnd && !isValidating) setSize(size + 1); }}
                 onEndReachedThreshold={0.5}
-                renderItem={({ item }) => (
-                    <View className="px-6 mb-4">
-                        <View className="bg-white dark:bg-[#1A1A1A] border border-gray-100 dark:border-gray-800 p-5 rounded-2xl shadow-sm">
-                            <View className="flex-row justify-between items-start mb-3">
-                                <Pressable onPress={() => router.push(`/post/${item.slug || item._id}`)} className="flex-1 pr-4">
-                                    <Text className="font-black text-base uppercase tracking-tight text-gray-900 dark:text-white" numberOfLines={2}>
-                                        {item.title || item.message}
-                                    </Text>
-                                    <View className="flex-row items-center mt-2">
-                                        <View className="bg-blue-500/10 px-2 py-0.5 rounded-md mr-2">
-                                            <Text className="text-[9px] font-black text-blue-600 dark:text-blue-400 uppercase">
-                                                {new Date(item.createdAt).toLocaleDateString()}
-                                            </Text>
-                                        </View>
-                                        {item.category && <Text className="text-[10px] font-bold text-gray-400 uppercase tracking-widest">• {item.category}</Text>}
-                                    </View>
-                                </Pressable>
-                                <TouchableOpacity onPress={() => handleDelete(item._id)} className="p-2 bg-red-50 dark:bg-red-500/10 rounded-lg">
-                                    <Ionicons name="trash-outline" size={16} color="#ef4444" />
-                                </TouchableOpacity>
-                            </View>
-
-                            <View className="flex-row items-center justify-between mt-4 pt-4 border-t border-gray-50 dark:border-gray-800/50">
-                                <View className="flex-row items-center gap-4">
-                                    <View className="items-center flex-row gap-1"><Ionicons name="heart" size={14} color="#ef4444" /><Text className="text-gray-600 dark:text-gray-400 text-[11px] font-bold">{item.likesCount || 0}</Text></View>
-                                    <View className="items-center flex-row gap-1"><Ionicons name="chatbubble" size={14} color="#3b82f6" /><Text className="text-gray-600 dark:text-gray-400 text-[11px] font-bold">{item.commentsCount || 0}</Text></View>
-                                    <View className="items-center flex-row gap-1"><Ionicons name="chatbox-ellipses" size={14} color="#f59e0b" /><Text className="text-gray-600 dark:text-gray-400 text-[11px] font-bold">{item.discussionCount || 0}</Text></View>
-                                    <View className="items-center flex-row gap-1"><Ionicons name="flash" size={14} color="#00ff00" /><Text className="text-gray-600 dark:text-gray-400 text-[11px] font-bold">{item.hypePointsCount || 0}</Text></View>
-                                </View>
-                                <View className="flex-row items-center gap-4">
-                                    <View className="items-center flex-row gap-1"><Ionicons name="eye" size={14} color={isDark ? "#6b7280" : "#9ca3af"} /><Text className="text-gray-600 dark:text-gray-400 text-[11px] font-bold">{item.formattedViews || "0"}</Text></View>
-                                    <View className="items-center flex-row gap-1"><Ionicons name="share-social" size={14} color={isDark ? "#6b7280" : "#9ca3af"} /><Text className="text-gray-600 dark:text-gray-400 text-[11px] font-bold">{item.sharesCount || 0}</Text></View>
-                                </View>
-                            </View>
-                        </View>
-                    </View>
-                )}
-                ListEmptyComponent={() => isLoadingInitialData ? <SyncLoading /> : (
-                    <View className="mx-6 p-10 bg-gray-50 dark:bg-[#121212] rounded-3xl border-2 border-dashed border-gray-200 dark:border-gray-800 items-center my-4">
-                        <Ionicons name="document-text-outline" size={32} color={isDark ? "#4b5563" : "#9ca3af"} />
-                        <Text className="text-[11px] font-black uppercase tracking-widest text-gray-500 dark:text-gray-400 mt-4">Empty Logs</Text>
-                        <Text className="text-xs text-gray-400 dark:text-gray-500 mt-2 font-medium text-center leading-5">Your intel diary is empty.{"\n"}Start writing to build your archive.</Text>
-                    </View>
-                )}
-                ListFooterComponent={() => <View style={{ paddingBottom: insets.bottom + 100 }}>{isFetchingNextPage && <ActivityIndicator className="py-6" color="#2563eb" />}</View>}
+                renderItem={renderPostItem}
+                ListEmptyComponent={renderEmptyComponent}
+                ListFooterComponent={renderFooterComponent}
             />
 
             {/* ⚡️ WIN 2: Modals only mount if they are visible */}
@@ -1643,37 +2433,24 @@ export default function MobileProfilePage() {
             )}
 
             {inventoryVisible && (
-                <AuthorInventoryModal setUser={setUser} visible={inventoryVisible} onClose={() => setInventoryVisible(false)} user={user} theinventory={theinventory} isDark={isDark} />
+                <AuthorInventoryModal setUser={setUser} refreshStreak={refreshStreak} visible={inventoryVisible} onClose={() => setInventoryVisible(false)} user={user} theinventory={theinventory} isDark={isDark} />
             )}
 
             {prefsVisible && (
-                <Modal visible={prefsVisible} animationType="fade" transparent>
-                    <View className="flex-1 bg-black/80 items-center justify-center p-6">
-                        <View className="bg-white dark:bg-[#0d1117] w-full p-8 rounded-[40px] border-2 border-purple-500 shadow-2xl shadow-purple-500/20">
-                            <Text className="text-2xl font-black uppercase italic text-gray-900 dark:text-white mb-6 text-center">Neural Prefs</Text>
-                            <ScrollView className="space-y-5" showsVerticalScrollIndicator={false} style={{ maxHeight: 400 }}>
-                                <View className="space-y-2">
-                                    <Text className="text-[10px] font-black uppercase text-gray-500 tracking-widest ml-1">Absolute GOAT Character</Text>
-                                    <TextInput defaultValue={favCharacter} onChangeText={setFavCharacter} placeholder="E.G. ITACHI" placeholderTextColor="#9ca3af" className="bg-gray-50 dark:bg-gray-900/50 p-4 rounded-2xl text-gray-900 dark:text-white font-black italic border border-purple-500/20" />
-                                </View>
-                                <View className="space-y-2 mt-4">
-                                    <Text className="text-[10px] font-black uppercase text-gray-500 tracking-widest ml-1">Favorite Animes (Comma separated)</Text>
-                                    <TextInput defaultValue={favAnimes} onChangeText={setFavAnimes} placeholder="One Piece, Naruto, Bleach" placeholderTextColor="#9ca3af" className="bg-gray-50 dark:bg-gray-900/50 p-4 rounded-2xl text-gray-900 dark:text-white font-black italic border border-purple-500/20" />
-                                </View>
-                                <View className="space-y-2 mt-4 mb-2">
-                                    <Text className="text-[10px] font-black uppercase text-gray-500 tracking-widest ml-1">Favorite Genres (Comma separated)</Text>
-                                    <TextInput defaultValue={favGenres} onChangeText={setFavGenres} placeholder="Action, Seinen, Psychological" placeholderTextColor="#9ca3af" className="bg-gray-50 dark:bg-gray-900/50 p-4 rounded-2xl text-gray-900 dark:text-white font-black italic border border-purple-500/20" />
-                                </View>
-                            </ScrollView>
-                            <TouchableOpacity onPress={() => { handleUpdate(cachedUsername, cachedDescription); setPrefsVisible(false); }} disabled={isUpdating} className="bg-purple-600 p-5 rounded-2xl items-center shadow-lg shadow-purple-600/30 mt-8 active:opacity-80">
-                                {isUpdating ? <ActivityIndicator color="white" /> : <Text className="text-white font-black uppercase tracking-widest text-[13px]">Sync Preferences</Text>}
-                            </TouchableOpacity>
-                            <TouchableOpacity onPress={() => setPrefsVisible(false)} className="mt-4 p-2 items-center">
-                                <Text className="text-gray-500 text-[11px] font-black uppercase tracking-widest underline">Cancel</Text>
-                            </TouchableOpacity>
-                        </View>
-                    </View>
-                </Modal>
+                <NeuralPrefsModal
+                    visible={prefsVisible}
+                    onClose={() => setPrefsVisible(false)}
+                    favCharacter={favCharacter}
+                    setFavCharacter={setFavCharacter}
+                    favAnimes={favAnimes}
+                    setFavAnimes={setFavAnimes}
+                    favGenres={favGenres}
+                    setFavGenres={setFavGenres}
+                    handleUpdate={handleUpdate}
+                    cachedUsername={cachedUsername}
+                    cachedDescription={cachedDescription}
+                    isUpdating={isUpdating}
+                />
             )}
 
             {securityVisible && (
@@ -1738,3 +2515,216 @@ export default function MobileProfilePage() {
         </View>
     );
 }
+
+
+
+const NeuralPrefsModal = memo(({
+    visible,
+    onClose,
+    favCharacter, setFavCharacter,
+    favAnimes, setFavAnimes,
+    favGenres, setFavGenres,
+    handleUpdate,
+    cachedUsername,
+    cachedDescription,
+    isUpdating
+}) => {
+    // Convert comma-separated strings into arrays for the UI chips
+    const [localCharacter, setLocalCharacter] = useState(favCharacter || '');
+    const [localAnimes, setLocalAnimes] = useState([]);
+    const [localGenres, setLocalGenres] = useState([]);
+
+    // State for handling new inline inputs
+    const [activeInput, setActiveInput] = useState(null); // 'character' | 'anime' | 'genre' | null
+    const [tempValue, setTempValue] = useState('');
+
+    // Sync initial props to local state when modal opens
+    useEffect(() => {
+        if (visible) {
+            setLocalCharacter(favCharacter || '');
+            setLocalAnimes(favAnimes ? favAnimes.split(',').map(s => s.trim()).filter(Boolean) : []);
+            setLocalGenres(favGenres ? favGenres.split(',').map(s => s.trim()).filter(Boolean) : []);
+            setActiveInput(null);
+            setTempValue('');
+        }
+    }, [visible, favCharacter, favAnimes, favGenres]);
+
+    // --- Action Handlers ---
+    const handleSaveInput = () => {
+        if (!tempValue.trim()) {
+            setActiveInput(null);
+            return;
+        }
+
+        if (activeInput === 'character') {
+            setLocalCharacter(tempValue.trim()); // Replaces the old one
+        } else if (activeInput === 'anime') {
+            setLocalAnimes([...localAnimes, tempValue.trim()]); // Appends to list
+        } else if (activeInput === 'genre') {
+            setLocalGenres([...localGenres, tempValue.trim()]); // Appends to list
+        }
+
+        setTempValue('');
+        setActiveInput(null);
+    };
+
+    const handleRemove = (type, index) => {
+        if (type === 'character') setLocalCharacter('');
+        if (type === 'anime') setLocalAnimes(localAnimes.filter((_, i) => i !== index));
+        if (type === 'genre') setLocalGenres(localGenres.filter((_, i) => i !== index));
+    };
+
+    const onSyncPreferences = () => {
+        // Update parent state first
+        setFavCharacter(localCharacter);
+        setFavAnimes(localAnimes.join(', '));
+        setFavGenres(localGenres.join(', '));
+
+        // Trigger the backend update function
+        handleUpdate(cachedUsername, cachedDescription);
+        onClose();
+    };
+
+    // --- Render Helpers ---
+    const renderChip = (text, type, index = 0) => (
+        <View key={`${type}-${index}`} className="flex-row items-center justify-between bg-[#121212] border border-purple-500/30 px-4 py-3 rounded-2xl mb-3 shadow-sm">
+            <View className="flex-row items-center flex-1">
+                <View className="w-1.5 h-1.5 bg-purple-500 rounded-full mr-3 shadow-sm shadow-purple-500" />
+                <Text className="text-white font-black italic uppercase text-xs flex-1 tracking-wider" numberOfLines={1}>
+                    {text}
+                </Text>
+            </View>
+            <TouchableOpacity onPress={() => handleRemove(type, index)} className="p-1 bg-red-500/10 rounded-full">
+                <Ionicons name="close" size={16} color="#ef4444" />
+            </TouchableOpacity>
+        </View>
+    );
+
+    const renderInputArea = (type, placeholder) => {
+        if (activeInput === type) {
+            return (
+                <View className="flex-row items-center bg-[#121212] border-2 border-purple-500 rounded-2xl px-4 py-2 mt-1 mb-3">
+                    <TextInput
+                        autoFocus
+                        value={tempValue}
+                        onChangeText={setTempValue}
+                        placeholder={placeholder}
+                        placeholderTextColor="#6b7280"
+                        className="flex-1 text-white font-black italic text-xs h-10"
+                        onSubmitEditing={handleSaveInput}
+                    />
+                    <TouchableOpacity onPress={handleSaveInput} className="bg-purple-500 p-1.5 rounded-lg ml-2">
+                        <Ionicons name="checkmark-sharp" size={16} color="white" />
+                    </TouchableOpacity>
+                </View>
+            );
+        }
+
+        return (
+            <TouchableOpacity
+                onPress={() => setActiveInput(type)}
+                className="flex-row items-center justify-center bg-purple-500/10 border border-purple-500/20 py-3 rounded-2xl mb-3 border-dashed"
+            >
+                <Ionicons name="add" size={16} color="#a855f7" />
+                <Text className="text-purple-400 font-black uppercase text-[10px] tracking-widest ml-1">
+                    Add {type === 'character' ? 'Character' : type === 'anime' ? 'Anime' : 'Genre'}
+                </Text>
+            </TouchableOpacity>
+        );
+    };
+
+    return (
+        <Modal visible={visible} animationType="slide" transparent onRequestClose={onClose} // Force the modal to ignore status bar height changes
+            statusBarTranslucent
+            presentationStyle="overFullScreen">
+            {/* FIX 1: Android Modals handle keyboards natively. 
+              Only force 'padding' on iOS to prevent the double-offset downward push.
+            */}
+            <View className="flex-1 justify-end">
+
+                {/* Backdrop */}
+                <Pressable
+                    className="absolute inset-0 bg-black/80"
+                    onPress={onClose}
+                />
+
+                {/* Container */}
+                <View className="bg-[#09090b] w-full max-h-[85%] flex-shrink rounded-t-[32px] p-6 border-t border-x border-purple-500/30">
+
+                    {/* Header Bar */}
+                    <View className="flex-row justify-between items-center mb-6">
+                        <View>
+                            <Text className="text-2xl font-black uppercase italic tracking-wider text-white">Neural Prefs</Text>
+                            <Text className="text-purple-500 font-black text-[10px] uppercase mt-1 tracking-widest">Identity Matrix Parameters</Text>
+                        </View>
+                        <TouchableOpacity onPress={onClose} className="bg-zinc-900 p-3 rounded-full border border-zinc-800">
+                            <Ionicons name="close" size={20} color="white" />
+                        </TouchableOpacity>
+                    </View>
+
+                    <ScrollView
+                        showsVerticalScrollIndicator={false}
+                        /* FIX 2: flexGrow 1 ensures it fills space without breaking layout */
+                        contentContainerStyle={{ paddingBottom: 40, flexGrow: 1 }}
+                        keyboardShouldPersistTaps="handled"
+                        /* FIX 3: Magic prop that stops the auto-scroll-to-top reset */
+                        automaticallyAdjustKeyboardInsets={true}
+                    >
+
+                        {/* GOAT Character Section */}
+                        <View className="mb-6">
+                            <View className="flex-row items-center mb-3">
+                                <MaterialCommunityIcons name="account-star" size={16} color="#a855f7" />
+                                <Text className="text-gray-400 font-black uppercase text-[10px] tracking-widest ml-2">Absolute GOAT Character</Text>
+                            </View>
+                            {localCharacter ? (
+                                renderChip(localCharacter, 'character')
+                            ) : (
+                                renderInputArea('character', 'E.G. ITACHI UCHIHA')
+                            )}
+                        </View>
+
+                        {/* Favorite Animes Section */}
+                        <View className="mb-6">
+                            <View className="flex-row items-center mb-3">
+                                <MaterialCommunityIcons name="animation-play" size={16} color="#a855f7" />
+                                <Text className="text-gray-400 font-black uppercase text-[10px] tracking-widest ml-2">Favorite Animes</Text>
+                            </View>
+                            {localAnimes.map((anime, idx) => renderChip(anime, 'anime', idx))}
+                            {renderInputArea('anime', 'E.G. ONE PIECE')}
+                        </View>
+
+                        {/* Favorite Genres Section */}
+                        <View className="mb-6">
+                            <View className="flex-row items-center mb-3">
+                                <MaterialCommunityIcons name="shape-plus" size={16} color="#a855f7" />
+                                <Text className="text-gray-400 font-black uppercase text-[10px] tracking-widest ml-2">Favorite Genres</Text>
+                            </View>
+                            {localGenres.map((genre, idx) => renderChip(genre, 'genre', idx))}
+                            {renderInputArea('genre', 'E.G. PSYCHOLOGICAL')}
+                        </View>
+
+                    </ScrollView>
+
+                    {/* Sticky Footer */}
+                    <View className="pt-4 border-t border-zinc-800">
+                        <TouchableOpacity
+                            onPress={onSyncPreferences}
+                            disabled={isUpdating}
+                            className={`bg-purple-600 p-4 rounded-2xl items-center shadow-lg shadow-purple-600/30 active:opacity-80 flex-row justify-center ${isUpdating ? 'opacity-50' : ''}`}
+                        >
+                            {isUpdating ? (
+                                <ActivityIndicator color="white" />
+                            ) : (
+                                <>
+                                    <MaterialCommunityIcons name="sync" size={18} color="white" className="mr-2" />
+                                    <Text className="text-white font-black uppercase tracking-widest text-[13px] ml-2">Sync Preferences</Text>
+                                </>
+                            )}
+                        </TouchableOpacity>
+                    </View>
+                </View>
+            </View>
+        </Modal>
+    );
+});

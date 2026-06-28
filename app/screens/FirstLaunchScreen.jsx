@@ -354,7 +354,6 @@ export default function FirstLaunchScreen() {
             if (typeof pin == "string") {
                 realPin = pin
             }
-            if (__DEV__) console.log(session.deviceId, "is the session deviceID");
 
             // 2. 🔗 CALL BACKEND TO RESTORE SESSION
             // This now returns sessionData with followedClans, onboarding flags
@@ -434,7 +433,7 @@ export default function FirstLaunchScreen() {
             }
 
             // 7. 🔄 REFRESH APP STATE
-            if (refreshStreak) refreshStreak();
+            if (refreshStreak) refreshStreak(userData?.deviceId);
             if (refreshClanStatus) refreshClanStatus();
             if (syncProfile) syncProfile(); // Ensure we have the freshest profile data, including inventory and clan status
             DeviceEventEmitter.emit('RUN_BOOTSTRAP', { deviceId: userData?.deviceId });
@@ -560,7 +559,7 @@ export default function FirstLaunchScreen() {
                 storage.set("HAS_SEEN_STORE_V4", onboardingFlags.HAS_SEEN_STORE_V4 || "true");
                 storage.set("HAS_SEEN_WELCOME", onboardingFlags.HAS_SEEN_WELCOME || "true");
             }
-            if (refreshStreak) refreshStreak();
+            if (refreshStreak) refreshStreak(userData?.deviceId);
             if (syncProfile) syncProfile(); // Ensure we have the freshest profile data, including inventory and clan status
             DeviceEventEmitter.emit('RUN_BOOTSTRAP', { deviceId: userData?.deviceId })
             Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
